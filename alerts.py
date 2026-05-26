@@ -29,11 +29,7 @@ DISCORD_WEBHOOK = os.environ.get("DISCORD_WEBHOOK_URL", "")
 
 USER_PRICE_ALERTS = {
     # Example — edit these to your actual targets:
-    2361:  {"above": 15000,    "below": 8000},      # Runite bar
-    9738:  {"above": 12000,    "below": 6000},      # Runite ore
-    2440:  {"above": 15000,    "below": 8000},      # Super restore (4)
-    15272: {"above": 10000,    "below": 5000},      # Snapdragon
-    3040:  {"above": 80000,    "below": 40000},     # Overload (4)
+    2361:  {"above": 5000,    "below": 4500},      # Runite bar
     # High value examples:
     # 33088: {"flip_above": 3_000_000_000, "flip_below": 2_000_000_000},  # Tumeken's shadow
 }
