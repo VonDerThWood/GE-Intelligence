@@ -1,0 +1,435 @@
+{
+  "fetched_at": "2026-05-26T01:32:19.126742+00:00",
+  "dxp_phase": {
+    "phase": "none"
+  },
+  "indices": {
+    "common": {
+      "name": "GE Common Trade Index",
+      "value": 173,
+      "timestamp": "2026-05-25T03:30:20.000Z"
+    },
+    "metal": {
+      "name": "GE Metal Index",
+      "value": 358,
+      "timestamp": "2026-05-25T03:30:20.000Z"
+    },
+    "rune": {
+      "name": "GE Rune Index",
+      "value": 344,
+      "timestamp": "2026-05-25T03:30:20.000Z"
+    },
+    "log": {
+      "name": "GE Log Index",
+      "value": 2284,
+      "timestamp": "2026-05-25T03:30:20.000Z"
+    },
+    "food": {
+      "name": "GE Food Index",
+      "value": 1112,
+      "timestamp": "2026-05-25T03:30:20.000Z"
+    },
+    "herb": {
+      "name": "GE Herb Index",
+      "value": 290,
+      "timestamp": "2026-05-25T03:30:20.000Z"
+    }
+  },
+  "items": [
+    {
+      "item_id": 1514,
+      "name": "Logs",
+      "category": "liquidity",
+      "skill": "Woodcutting",
+      "timestamp": "2026-05-26T01:31:52.868093+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": null,
+      "ge_volume": null,
+      "sector_index_key": "log",
+      "sector_index_name": "GE Log Index",
+      "sector_index_value": 2284,
+      "history": []
+    },
+    {
+      "item_id": 1521,
+      "name": "Oak logs",
+      "category": "liquidity",
+      "skill": "Woodcutting",
+      "timestamp": "2026-05-26T01:31:53.487611+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 1176,
+      "ge_volume": 156928,
+      "sector_index_key": "log",
+      "sector_index_name": "GE Log Index",
+      "sector_index_value": 2284,
+      "history": []
+    },
+    {
+      "item_id": 453,
+      "name": "Coal",
+      "category": "liquidity",
+      "skill": "Mining",
+      "timestamp": "2026-05-26T01:31:54.105972+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 228,
+      "ge_volume": 2504263,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 444,
+      "name": "Iron ore",
+      "category": "liquidity",
+      "skill": "Mining",
+      "timestamp": "2026-05-26T01:31:54.756016+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 1050,
+      "ge_volume": 747501,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 2349,
+      "name": "Iron bar",
+      "category": "chain",
+      "skill": "Smithing",
+      "timestamp": "2026-05-26T01:31:55.409729+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 2420,
+      "ge_volume": 69534,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 2351,
+      "name": "Steel bar",
+      "category": "chain",
+      "skill": "Smithing",
+      "timestamp": "2026-05-26T01:31:56.267398+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 2150,
+      "ge_volume": 50384,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 2353,
+      "name": "Mithril bar",
+      "category": "chain",
+      "skill": "Smithing",
+      "timestamp": "2026-05-26T01:31:56.882929+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 1482,
+      "ge_volume": 881270,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 2359,
+      "name": "Adamantite bar",
+      "category": "chain",
+      "skill": "Smithing",
+      "timestamp": "2026-05-26T01:31:57.604370+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 2265,
+      "ge_volume": 68640,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 2361,
+      "name": "Runite bar",
+      "category": "event_driven",
+      "skill": "Smithing",
+      "timestamp": "2026-05-26T01:31:59.159304+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 4198,
+      "ge_volume": 83988,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 554,
+      "name": "Fire rune",
+      "category": "liquidity",
+      "skill": "Magic",
+      "timestamp": "2026-05-26T01:31:59.801982+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 56,
+      "ge_volume": 11961807,
+      "sector_index_key": "rune",
+      "sector_index_name": "GE Rune Index",
+      "sector_index_value": 344,
+      "history": []
+    },
+    {
+      "item_id": 556,
+      "name": "Air rune",
+      "category": "liquidity",
+      "skill": "Magic",
+      "timestamp": "2026-05-26T01:32:00.407286+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 31,
+      "ge_volume": 11410357,
+      "sector_index_key": "rune",
+      "sector_index_name": "GE Rune Index",
+      "sector_index_value": 344,
+      "history": []
+    },
+    {
+      "item_id": 558,
+      "name": "Mind rune",
+      "category": "liquidity",
+      "skill": "Magic",
+      "timestamp": "2026-05-26T01:32:01.031151+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 14,
+      "ge_volume": 5526214,
+      "sector_index_key": "rune",
+      "sector_index_name": "GE Rune Index",
+      "sector_index_value": 344,
+      "history": []
+    },
+    {
+      "item_id": 562,
+      "name": "Chaos rune",
+      "category": "liquidity",
+      "skill": "Magic",
+      "timestamp": "2026-05-26T01:32:01.674244+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 128,
+      "ge_volume": 3662267,
+      "sector_index_key": "rune",
+      "sector_index_name": "GE Rune Index",
+      "sector_index_value": 344,
+      "history": []
+    },
+    {
+      "item_id": 565,
+      "name": "Blood rune",
+      "category": "liquidity",
+      "skill": "Magic",
+      "timestamp": "2026-05-26T01:32:02.510046+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 457,
+      "ge_volume": 4597049,
+      "sector_index_key": "rune",
+      "sector_index_name": "GE Rune Index",
+      "sector_index_value": 344,
+      "history": []
+    },
+    {
+      "item_id": 1759,
+      "name": "Flax",
+      "category": "chain",
+      "skill": "Crafting",
+      "timestamp": "2026-05-26T01:32:03.140927+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 2316,
+      "ge_volume": 18789,
+      "history": []
+    },
+    {
+      "item_id": 1779,
+      "name": "Bowstring",
+      "category": "chain",
+      "skill": "Fletching",
+      "timestamp": "2026-05-26T01:32:03.907149+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 76,
+      "ge_volume": 427042,
+      "sector_index_key": "log",
+      "sector_index_name": "GE Log Index",
+      "sector_index_value": 2284,
+      "history": []
+    },
+    {
+      "item_id": 9739,
+      "name": "Adamantite ore",
+      "category": "event_driven",
+      "skill": "Mining",
+      "timestamp": "2026-05-26T01:32:05.434553+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 888,
+      "ge_volume": 375,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 9738,
+      "name": "Runite ore",
+      "category": "event_driven",
+      "skill": "Mining",
+      "timestamp": "2026-05-26T01:32:06.990150+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": null,
+      "ge_volume": null,
+      "sector_index_key": "metal",
+      "sector_index_name": "GE Metal Index",
+      "sector_index_value": 358,
+      "history": []
+    },
+    {
+      "item_id": 1632,
+      "name": "Raw shark",
+      "category": "event_driven",
+      "skill": "Fishing",
+      "timestamp": "2026-05-26T01:32:09.003769+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": null,
+      "ge_volume": null,
+      "sector_index_key": "food",
+      "sector_index_name": "GE Food Index",
+      "sector_index_value": 1112,
+      "history": []
+    },
+    {
+      "item_id": 15272,
+      "name": "Snapdragon",
+      "category": "event_driven",
+      "skill": "Herblore",
+      "timestamp": "2026-05-26T01:32:10.582947+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation",
+        "Flipaholics: 500 Server Error: Internal Server Error for url: https://flipaholics.pro/pricecheck/Snapdragon"
+      ],
+      "ge_price": 479,
+      "ge_volume": 417995,
+      "sector_index_key": "herb",
+      "sector_index_name": "GE Herb Index",
+      "sector_index_value": 290,
+      "history": []
+    },
+    {
+      "item_id": 2440,
+      "name": "Super restore (4)",
+      "category": "event_driven",
+      "skill": "Herblore",
+      "timestamp": "2026-05-26T01:32:12.161033+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 12446,
+      "ge_volume": 23769,
+      "sector_index_key": "herb",
+      "sector_index_name": "GE Herb Index",
+      "sector_index_value": 290,
+      "history": []
+    },
+    {
+      "item_id": 139,
+      "name": "Prayer potion (4)",
+      "category": "event_driven",
+      "skill": "Herblore",
+      "timestamp": "2026-05-26T01:32:14.102095+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 3322,
+      "ge_volume": 21411,
+      "sector_index_key": "herb",
+      "sector_index_name": "GE Herb Index",
+      "sector_index_value": 290,
+      "history": []
+    },
+    {
+      "item_id": 3040,
+      "name": "Overload (4)",
+      "category": "event_driven",
+      "skill": "Herblore",
+      "timestamp": "2026-05-26T01:32:15.674413+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": 12933,
+      "ge_volume": 23330,
+      "sector_index_key": "herb",
+      "sector_index_name": "GE Herb Index",
+      "sector_index_value": 290,
+      "history": []
+    },
+    {
+      "item_id": 33088,
+      "name": "Tumeken's shadow",
+      "category": "high_value",
+      "skill": "Magic",
+      "timestamp": "2026-05-26T01:32:17.253940+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": null,
+      "ge_volume": null,
+      "sector_index_key": "rune",
+      "sector_index_name": "GE Rune Index",
+      "sector_index_value": 344,
+      "history": []
+    },
+    {
+      "item_id": 90000,
+      "name": "Noxious scythe",
+      "category": "high_value",
+      "skill": "Melee",
+      "timestamp": "2026-05-26T01:32:19.126487+00:00",
+      "limitations": [
+        "Insufficient history for baseline calculation"
+      ],
+      "ge_price": null,
+      "ge_volume": null,
+      "history": []
+    }
+  ]
+}

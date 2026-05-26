@@ -1,0 +1,51 @@
+{
+  "generated_at": "2026-05-26T01:32:19.155580+00:00",
+  "total": 3,
+  "alerts": [
+    {
+      "item_id": 2361,
+      "item_name": "Runite bar",
+      "category": "event_driven",
+      "skill": "Smithing",
+      "alert_type": "price_floor_breach",
+      "reason": "GE price **4.2K gp** dropped below your alert floor of **8.0K gp**",
+      "severity": "high",
+      "metrics": {
+        "ge_price": 4198,
+        "threshold": 8000,
+        "delta_pct": null
+      },
+      "timestamp": "2026-05-26T01:32:19.155039+00:00"
+    },
+    {
+      "item_id": 15272,
+      "item_name": "Snapdragon",
+      "category": "event_driven",
+      "skill": "Herblore",
+      "alert_type": "price_floor_breach",
+      "reason": "GE price **479 gp** dropped below your alert floor of **5.0K gp**",
+      "severity": "high",
+      "metrics": {
+        "ge_price": 479,
+        "threshold": 5000,
+        "delta_pct": null
+      },
+      "timestamp": "2026-05-26T01:32:19.155067+00:00"
+    },
+    {
+      "item_id": 3040,
+      "item_name": "Overload (4)",
+      "category": "event_driven",
+      "skill": "Herblore",
+      "alert_type": "price_floor_breach",
+      "reason": "GE price **12.9K gp** dropped below your alert floor of **40.0K gp**",
+      "severity": "high",
+      "metrics": {
+        "ge_price": 12933,
+        "threshold": 40000,
+        "delta_pct": null
+      },
+      "timestamp": "2026-05-26T01:32:19.155076+00:00"
+    }
+  ]
+}

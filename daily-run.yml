@@ -1,0 +1,51 @@
+name: GE Intelligence — Daily Run
+
+on:
+  # Runs every day at 8:00 AM UTC (adjust to your timezone if needed)
+  schedule:
+    - cron: "0 8 * * *"
+
+  # Also runs whenever you push changes to GitHub
+  push:
+    branches: [main]
+
+  # Lets you trigger a run manually from GitHub's website
+  workflow_dispatch:
+
+jobs:
+  fetch-and-alert:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Check out your code
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Set up Python
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      # 3. Install dependencies
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # 4. Run the full fetch + alert cycle
+      #    The Discord webhook URL comes from GitHub Secrets (never stored in code)
+      - name: Run GE Intelligence
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_WEBHOOK_URL }}
+        run: python run.py
+
+      # 5. Save the output data files so the dashboard can use them
+      #    This commits latest.json and alerts.json back to your repo
+      - name: Commit updated data
+        run: |
+          git config --global user.name  "GE Intelligence Bot"
+          git config --global user.email "ge-bot@users.noreply.github.com"
+          git add data/latest.json data/alerts.json || true
+          git diff --staged --quiet || git commit -m "chore: update market data $(date -u +'%Y-%m-%d %H:%M UTC')"
+          git push || true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
