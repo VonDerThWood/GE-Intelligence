@@ -1,0 +1,63 @@
+name: Build GEnius .exe
+
+on:
+  push:
+    tags:
+      - 'v*'          # triggers on: git tag v1.0.1 && git push --tags
+  workflow_dispatch:  # allows manual trigger from GitHub Actions UI
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build .exe
+        run: npm run build
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get version from package.json
+        id: pkg
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          echo "version=$version" >> $env:GITHUB_OUTPUT
+        shell: pwsh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: "GEnius v${{ steps.pkg.outputs.version }}"
+          body: |
+            ## GEnius v${{ steps.pkg.outputs.version }}
+
+            ### Install
+            1. Download `GEnius-Setup-${{ steps.pkg.outputs.version }}.exe` below
+            2. Run the installer
+            3. Make sure Python 3.10+ is installed: https://python.org
+            4. Run `pip install requests beautifulsoup4` once in a terminal
+            5. Launch GEnius from your desktop shortcut
+
+            ### What's included
+            - Full RS3 Grand Exchange market intelligence
+            - Price tracking with RSI, Bollinger Bands, MA signals
+            - Discord webhook alerts
+            - News feed: RS3 official + Wiki + Reddit
+          files: |
+            dist/*.exe
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
