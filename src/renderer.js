@@ -1,4 +1,4 @@
-/* ═══════════════════════════════════════════════════════════════
+﻿/* ═══════════════════════════════════════════════════════════════
    GEnius Renderer — Grand Exchange skin
    Inline React (UMD), no build step required
 ═══════════════════════════════════════════════════════════════ */
@@ -44,6 +44,10 @@ body {
   background: linear-gradient(180deg, #3d2c0f 0%, #2b1e0a 100%);
   border-bottom: 2px solid ${T.border}; padding: 0 16px; height: 44px;
   display: flex; align-items: center; gap: 12px; flex-shrink: 0;
+  -webkit-app-region: drag;
+}
+.ge-header button, .ge-header input, .ge-header select, .ge-header a, .ge-header .ge-search-wrap {
+  -webkit-app-region: no-drag;
 }
 .ge-logo { font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700; color: ${T.goldBright}; letter-spacing: 3px; text-shadow: 0 1px 3px rgba(0,0,0,0.8), 0 0 12px rgba(255,215,0,0.3); flex-shrink: 0; }
 .ge-logo span { color: ${T.copper}; }
@@ -94,6 +98,9 @@ body {
 .ge-table tr:hover td { background: rgba(201,168,76,0.07); }
 .ge-table tr.selected td { background: rgba(201,168,76,0.14); border-left: 3px solid ${T.gold}; }
 .ge-table tr.selected td:first-child { padding-left: 7px; }
+.ge-table tr.multi-selected td { background: rgba(100,181,246,0.15) !important; border-left: 3px solid #64b5f6 !important; }
+.ge-table tr.multi-selected td:first-child { padding-left: 7px; }
+.ge-table tr.search-highlight td { background: rgba(201,168,76,0.35) !important; border-left: 3px solid ${T.gold} !important; transition: background 0.3s; }
 
 /* ── Detail panel ── */
 .detail-panel { width: 296px; min-width: 296px; background: ${T.panel}; border-left: 2px solid ${T.border}; display: flex; flex-direction: column; overflow-y: auto; }
@@ -119,20 +126,37 @@ body {
 .chart-modal-title { font-family: 'Cinzel', serif; font-size: 15px; color: ${T.goldBright}; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
 .chart-modal-close { background: none; border: none; color: ${T.textDim}; font-size: 18px; cursor: pointer; padding: 0 4px; }
 .chart-modal-close:hover { color: ${T.text}; }
+.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 600; display: flex; align-items: center; justify-content: center; }
+.modal { background: ${T.panel}; border: 1px solid ${T.border}; border-radius: 6px; width: 540px; max-width: 96vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.8); }
+.modal-header { padding: 12px 16px; border-bottom: 1px solid ${T.border}; display: flex; justify-content: space-between; align-items: center; }
+.modal-body { padding: 16px; }
+.form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
+.form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 12px; }
+.alloc-bar-bg { height: 6px; background: rgba(255,255,255,0.06); border-radius: 3px; margin-top: 3px; }
+.alloc-bar-fg { height: 100%; background: ${T.gold}; border-radius: 3px; transition: width 0.3s; }
+.drag-item { display: flex; align-items: center; gap: 8px; padding: 6px 10px; border: 1px solid ${T.border}; border-radius: 3px; margin-bottom: 4px; cursor: grab; user-select: none; }
+.drag-item:hover { border-color: ${T.gold}; background: rgba(201,168,76,0.06); }
+.drag-item.drag-over { border-color: ${T.goldBright}; background: rgba(201,168,76,0.12); }
 
 /* ── Signal badges ── */
 .signal-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .signal-badge { font-size: 10px; padding: 2px 6px; border-radius: 2px; letter-spacing: 0.5px; border: 1px solid; }
-.signal-badge.SURGE   { background: rgba(76,175,80,0.15); border-color: rgba(76,175,80,0.4); color: ${T.green}; }
-.signal-badge.DUMP    { background: rgba(229,57,53,0.15); border-color: rgba(229,57,53,0.4); color: ${T.red}; }
-.signal-badge.MARGIN  { background: rgba(201,168,76,0.15); border-color: rgba(201,168,76,0.4); color: ${T.gold}; }
-.signal-badge.HIGH_VOL{ background: rgba(100,181,246,0.15); border-color: rgba(100,181,246,0.4); color: ${T.blue}; }
+.signal-badge.SURGE        { background: rgba(76,175,80,0.15);   border-color: rgba(76,175,80,0.4);   color: ${T.green}; }
+.signal-badge.DUMP         { background: rgba(229,57,53,0.15);   border-color: rgba(229,57,53,0.4);   color: ${T.red}; }
+.signal-badge.ACCUMULATION { background: rgba(0,188,212,0.12);   border-color: rgba(0,188,212,0.4);   color: #4dd0e1; }
+.signal-badge.DISTRIBUTION { background: rgba(255,152,0,0.12);   border-color: rgba(255,152,0,0.4);   color: #ffb74d; }
+.signal-badge.FRENZY       { background: rgba(255,64,129,0.15);  border-color: rgba(255,64,129,0.5);  color: #ff80ab; }
+.signal-badge.HIGH_VOL     { background: rgba(100,181,246,0.15); border-color: rgba(100,181,246,0.4); color: ${T.blue}; }
+.signal-badge.ACTIVE       { background: rgba(100,181,246,0.08); border-color: rgba(100,181,246,0.25); color: #90caf9; }
+.signal-badge.QUIET        { background: rgba(158,158,158,0.1);  border-color: rgba(158,158,158,0.3); color: #bdbdbd; }
+.signal-badge.THIN         { background: rgba(229,57,53,0.08);   border-color: rgba(229,57,53,0.25);  color: #ef9a9a; }
+.signal-badge.ALCH         { background: rgba(156,39,176,0.15);  border-color: rgba(156,39,176,0.5);  color: #ce93d8; }
 
 /* ── Star button ── */
-.star-btn { background: none; border: none; cursor: pointer; font-size: 16px; padding: 2px 4px; transition: transform 0.1s; line-height: 1; }
-.star-btn:hover { transform: scale(1.25); }
-.star-on  { color: ${T.goldBright}; }
-.star-off { color: ${T.borderDim}; }
+.star-btn { background: none; border: none; cursor: pointer; font-size: 20px; padding: 2px 6px; transition: transform 0.15s; line-height: 1; }
+.star-btn:hover { transform: scale(1.3); }
+.star-on  { color: ${T.goldBright}; text-shadow: 0 0 6px ${T.goldBright}; }
+.star-off { color: rgba(201,168,76,0.45); }
 
 /* ── Market overview ── */
 .overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
@@ -239,13 +263,123 @@ body { background: #f4e9d0 !important; color: #2a1a05 !important; background-ima
 ::-webkit-scrollbar-thumb { background: #8b6914 !important; }
 `;
 
+const BLACK_CSS = `
+body { background: #000 !important; }
+.app { background: #000 !important; }
+.sidebar { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+.ge-header { background: linear-gradient(180deg, #111 0%, #0a0a0a 100%) !important; border-color: #1c1c1c !important; }
+.nav-btn { color: ${T.gold} !important; }
+.nav-btn:hover { background: rgba(201,168,76,0.08) !important; }
+.nav-btn.active { background: rgba(201,168,76,0.1) !important; border-left-color: ${T.gold} !important; }
+.content { background: #000 !important; }
+.ge-table th { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+.ge-table td { border-color: #1c1c1c !important; }
+.ge-table tr:nth-child(even) td { background: rgba(255,255,255,0.02) !important; }
+.ge-table tr:hover td { background: rgba(201,168,76,0.06) !important; }
+.ge-table tr.selected td { background: rgba(201,168,76,0.1) !important; }
+.detail-panel { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+.detail-top { background: linear-gradient(180deg, #111 0%, #0a0a0a 100%) !important; border-color: #1c1c1c !important; }
+.sparkline-wrap { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+.ov-card { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+.ge-btn { background: #111 !important; border-color: #2a2a2a !important; color: ${T.gold} !important; }
+.ge-btn:hover { background: #1a1a1a !important; color: ${T.goldBright} !important; }
+.ge-btn.gold { background: rgba(201,168,76,0.15) !important; border-color: ${T.gold} !important; color: ${T.goldBright} !important; }
+.ge-btn.danger { color: ${T.red} !important; border-color: rgba(229,57,53,0.4) !important; }
+.ge-input { background: #0a0a0a !important; border-color: #2a2a2a !important; color: ${T.text} !important; }
+.ge-search-input { background: #0a0a0a !important; border-color: #2a2a2a !important; }
+.ge-search-results { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+.cat-tag { background: rgba(201,168,76,0.08) !important; border-color: rgba(201,168,76,0.2) !important; }
+.toast { background: #111 !important; border-color: #2a2a2a !important; }
+.modal { background: #0a0a0a !important; border-color: #1c1c1c !important; }
+::-webkit-scrollbar-track { background: #0a0a0a !important; }
+::-webkit-scrollbar-thumb { background: #2a2a2a !important; }
+`;
+
+/* ─── Signal info ────────────────────────────────────────────── */
+const SIGNAL_INFO = {
+  SURGE:        'Price is up 5%+ today with above-average volume — buyers are actively pushing the price higher.',
+  DUMP:         'Price is down 5%+ today with above-average volume — sellers are offloading heavily.',
+  ACCUMULATION: 'Price is flat while volume quietly builds — often signals that someone is loading up before a move.',
+  DISTRIBUTION: 'Price is flat but volume is extremely elevated — large quantities are changing hands, which can precede a sharp drop.',
+  FRENZY:       'Volume is 250%+ above average — an extreme trading spike. Something is driving unusual attention to this item.',
+  HIGH_VOL:     'Volume is 150–249% above average — significantly more trading than usual.',
+  ACTIVE:       'Volume is 10–49% above average — slightly elevated trading activity.',
+  QUIET:        'Volume is 10–50% below average — trading has slowed down compared to normal.',
+  THIN:         'Volume is 50%+ below average — very few trades. This market is illiquid; prices may be unreliable.',
+  ALCH:         'High alchemy yields more than selling on the GE after the 2% tax and the cost of a nature rune. Profitable to alch.',
+};
+
+function SignalBadge({signal, style: extraStyle}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  const info = SIGNAL_INFO[signal];
+  return h('span', {ref, style:{position:'relative', display:'inline-block', ...extraStyle}},
+    h('span', {
+      className: `signal-badge ${signal}`,
+      onClick: e => { e.stopPropagation(); if (info) setOpen(o => !o); },
+      style: {cursor: info ? 'pointer' : 'default'},
+    }, signal),
+    open && info && h('div', {
+      style: {
+        position:'absolute', bottom:'calc(100% + 6px)', left:'50%',
+        transform:'translateX(-50%)', zIndex:300,
+        background:T.panel2, border:`1px solid ${T.border}`,
+        borderRadius:4, padding:'8px 10px',
+        fontSize:11, color:T.text, lineHeight:1.5,
+        width:210, boxShadow:'0 4px 16px rgba(0,0,0,0.7)',
+        pointerEvents:'none',
+      }
+    },
+      h('div', {style:{fontWeight:'bold', color:T.gold, marginBottom:4, letterSpacing:'0.5px'}}, signal),
+      info
+    )
+  );
+}
+
 /* ─── Helpers ────────────────────────────────────────────────── */
 const fmt = {
   gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
   pct: n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
   num: n => n ? n.toLocaleString() : '—',
 };
-const pctClass = n => !n ? 'pct-flat' : n > 0 ? 'pct-up' : 'pct-down';
+const pctClass = n => (n == null) ? 'pct-flat' : n > 0 ? 'pct-up' : n < 0 ? 'pct-down' : 'pct-flat';
+const showPct  = n => n != null ? fmt.pct(n) : '—';
+
+// Shows percentage change + raw gp change stacked
+function ChangeDisplay({change_1d, price}) {
+  if (change_1d == null) return h('span', {style:{color:'#555'}}, '—');
+  const cls = pctClass(change_1d);
+  const gpChange = price ? Math.round(price - (price / (1 + change_1d / 100))) : null;
+  return h('div', {style:{lineHeight:1.2}},
+    h('span', {className:cls}, fmt.pct(change_1d)),
+    gpChange != null && h('div', {style:{fontSize:10, opacity:0.8, className:cls}},
+      h('span', {className:cls}, (gpChange > 0 ? '+' : '') + fmt.gp(gpChange) + 'gp')
+    )
+  );
+}
+// GE tax: 2% on items over 50gp, capped at 5,000,000gp
+const applyTax = price => price <= 50 ? price : Math.min(Math.floor(price * 0.98), price - Math.min(Math.floor(price * 0.02), 5000000));
+
+// Parse human-readable price input: "2m" -> 2000000, "1.5b" -> 1500000000, "500k" -> 500000
+function parseGP(str) {
+  if (!str && str !== 0) return '';
+  const s = String(str).trim().toLowerCase().replace(/,/g, '');
+  if (s === '') return '';
+  const match = s.match(/^([0-9.]+)\s*([kmb]?)$/);
+  if (!match) return s; // return as-is if doesn't match (let browser validate)
+  const num = parseFloat(match[1]);
+  if (isNaN(num)) return s;
+  const mult = {k: 1e3, m: 1e6, b: 1e9}[match[2]] || 1;
+  return Math.round(num * mult);
+}
 
 function useToast() {
   const [toasts, setToasts] = useState([]);
@@ -264,9 +398,14 @@ function VolDisplay({volume, avgVolume}) {
   const isLow  = avgVolume && volume && volume < avgVolume * 0.5;
   const cls = isHigh ? 'vol-high' : isLow ? 'vol-low' : '';
   if (avgVolume && avgVolume !== volume) {
+    const diff = volume - Math.round(avgVolume);
+    const pct  = ((diff / avgVolume) * 100).toFixed(1);
+    const diffCls = diff > 0 ? 'pct-up' : diff < 0 ? 'pct-down' : 'pct-flat';
+    const diffStr = (diff > 0 ? '+' : '') + fmt.num(diff) + ' (' + (diff > 0 ? '+' : '') + pct + '%)';
     return h('div', {className:'vol-wrap'},
       h('span', {className:`vol-last ${cls}`}, fmt.num(volume)),
-      h('span', {className:'vol-avg'}, 'avg ' + fmt.num(Math.round(avgVolume)))
+      h('span', {className:'vol-avg'}, 'avg ' + fmt.num(Math.round(avgVolume))),
+      h('span', {className:`vol-avg ${diffCls}`}, diffStr)
     );
   }
   return h('span', {className:cls}, fmt.num(volume));
@@ -293,35 +432,177 @@ function SparklineSVG({data, color, w, ht}) {
 
 /* ─── Chart modal ────────────────────────────────────────────── */
 function ChartModal({item, onClose}) {
+  const [range, setRange] = useState(30);
+  const [history, setHistory] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    if (!item?.id) return;
+    setLoading(true); setError(false); setHistory(null);
+    window.genius?.getItemHistory(item.id).then(data => {
+      if (data && data.length) {
+        setHistory(data);
+      } else {
+        setError(true);
+      }
+      setLoading(false);
+    }).catch(() => { setError(true); setLoading(false); });
+  }, [item?.id]);
+
   if (!item) return null;
-  const chg = item.change_1d;
-  const color = chg < 0 ? T.red : T.green;
-  const mockHistory = useMemo(() => {
-    const base = item.high || 100000;
-    return Array.from({length:90}, (_,i) => base * (0.85 + Math.random()*0.3) * (1+(i-45)*0.002));
-  }, [item.id]);
-  const mn = Math.min(...mockHistory), mx = Math.max(...mockHistory);
-  const labels = ['90d ago','75d','60d','45d','30d','15d','Now'];
+
+  // Filter to selected range
+  const points = useMemo(() => {
+    if (!history) return [];
+    const cutoff = Date.now() - range * 24 * 60 * 60 * 1000;
+    return history.filter(p => {
+      const ts = typeof p.timestamp === 'number'
+        ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1)
+        : new Date(p.timestamp).getTime();
+      return ts >= cutoff;
+    });
+  }, [history, range]);
+
+  const prices  = points.map(p => p.price);
+  const volumes = points.map(p => p.volume || 0);
+  const minP = Math.min(...prices), maxP = Math.max(...prices);
+  const maxV = Math.max(...volumes, 1);
+  const YLAB = 52; // width reserved for Y-axis labels on left
+  const W = 620, PH = 160, VH = 60, PAD = 8;
+  const CW = W - YLAB; // chart width after Y-axis
+
+  const px = (i) => YLAB + PAD + (i / Math.max(points.length - 1, 1)) * (CW - PAD * 2);
+  const py = (v) => PH - PAD - ((v - minP) / Math.max(maxP - minP, 1)) * (PH - PAD * 2);
+  const vy = (v) => VH - (v / maxV) * (VH - 4);
+
+  // Y-axis grid levels: min, 25%, 50%, 75%, max
+  const gridLevels = [0, 0.25, 0.5, 0.75, 1].map(t => ({
+    t,
+    val: minP + t * (maxP - minP),
+    y: PAD + (1 - t) * (PH - PAD * 2)
+  }));
+
+  const priceColor = prices.length > 1 && prices[prices.length-1] >= prices[0] ? T.green : T.red;
+
+  const pricePath = prices.length > 1
+    ? `M ${px(0)} ${py(prices[0])} ` + prices.slice(1).map((v,i) => `L ${px(i+1)} ${py(v)}`).join(' ')
+    : '';
+
+  const areaPath = prices.length > 1
+    ? `${pricePath} L ${px(prices.length-1)} ${PH} L ${px(0)} ${PH} Z`
+    : '';
+
+  // Date label helpers
+  const labelCount = Math.min(points.length, 6);
+  const labelIdxs = Array.from({length: labelCount}, (_, i) =>
+    Math.round(i * (points.length - 1) / Math.max(labelCount - 1, 1))
+  );
+  const fmtDate = ts => {
+    const d = new Date(typeof ts === 'number' ? ts * (ts < 1e12 ? 1000 : 1) : ts);
+    return `${d.getMonth()+1}/${d.getDate()}`;
+  };
 
   return h('div', {className:'chart-modal-overlay', onClick:onClose},
-    h('div', {className:'chart-modal', onClick:e=>e.stopPropagation()},
+    h('div', {className:'chart-modal', style:{width:680}, onClick:e=>e.stopPropagation()},
+
+      // Header
       h('div', {className:'chart-modal-title'},
-        h('span', null, item.name + ' — 90 Day Price History'),
-        h('button', {className:'chart-modal-close', onClick:onClose}, 'X')
-      ),
-      h('div', {style:{background:T.inset, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:12}},
-        h(SparklineSVG, {data:mockHistory, color, w:620, ht:180}),
-        h('div', {style:{display:'flex',justifyContent:'space-between',marginTop:6}},
-          labels.map(l => h('span',{key:l,style:{fontSize:9,color:T.textDim,letterSpacing:0.5}},l))
+        h('span', null, item.name),
+        h('div', {style:{display:'flex', gap:6, alignItems:'center'}},
+          [7,30,90].map(r => h('button', {
+            key:r, onClick:()=>setRange(r),
+            style:{
+              padding:'2px 10px', fontSize:11, cursor:'pointer', borderRadius:3,
+              background: range===r ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${range===r ? T.gold : T.border}`,
+              color: range===r ? T.goldBright : T.textDim,
+            }
+          }, `${r}d`)),
+          h('button', {className:'chart-modal-close', onClick:onClose, style:{marginLeft:8}}, '✕')
         )
       ),
-      h('div', {style:{display:'flex',gap:20,marginTop:12,fontSize:12}},
-        h('span',null, h('span',{style:{color:T.textDim}},'90d Low: '), h('span',{style:{color:T.red}}, fmt.gp(mn)+'gp')),
-        h('span',null, h('span',{style:{color:T.textDim}},'90d High: '), h('span',{style:{color:T.green}}, fmt.gp(mx)+'gp')),
-        h('span',null, h('span',{style:{color:T.textDim}},'Current: '), h('span',{style:{color:T.gold}}, fmt.gp(item.high)+'gp')),
-        chg != null && h('span',null, h('span',{style:{color:T.textDim}},'24h: '), h('span',{className:pctClass(chg)}, fmt.pct(chg)))
+
+      // Chart body
+      loading && h('div', {style:{height:240, display:'flex', alignItems:'center', justifyContent:'center', color:T.textDim, fontSize:12}},
+        h('span', null, '⏳ Fetching price history...')
       ),
-      h('div',{style:{fontSize:10,color:T.textDim,marginTop:8}},'* Price history is illustrative — live 90-day history coming in a future update.')
+
+      error && h('div', {style:{height:240, display:'flex', alignItems:'center', justifyContent:'center', color:T.textDim, fontSize:12}},
+        h('span', null, 'Historical data unavailable for this item.')
+      ),
+
+      !loading && !error && points.length === 0 && h('div', {style:{height:240, display:'flex', alignItems:'center', justifyContent:'center', color:T.textDim, fontSize:12}},
+        h('span', null, `No data in the last ${range} days.`)
+      ),
+
+      !loading && !error && points.length > 0 && h('div', null,
+        // Price chart
+        h('div', {style:{background:'rgba(0,0,0,0.25)', borderRadius:4, padding:'8px 4px 0'}},
+          h('div', {style:{fontSize:9, color:T.textDim, marginLeft:YLAB+PAD, marginBottom:2}}, 'PRICE'),
+          h('svg', {viewBox:`0 0 ${W} ${PH}`, style:{width:'100%', display:'block'}},
+            // Y-axis labels on left
+            gridLevels.map((g, i) =>
+              h('text', {key:i, x:YLAB-4, y:g.y+3, fontSize:9, fill:T.textDim, textAnchor:'end'},
+                fmt.gp(g.val)+'gp'
+              )
+            ),
+            // Vertical divider line
+            h('line', {x1:YLAB, x2:YLAB, y1:PAD, y2:PH-PAD, stroke:'rgba(255,255,255,0.1)', strokeWidth:1}),
+            // Horizontal gridlines with values
+            gridLevels.map((g, i) =>
+              h('line', {key:i, x1:YLAB, x2:W-PAD, y1:g.y, y2:g.y,
+                stroke:'rgba(255,255,255,0.05)', strokeWidth:1,
+                strokeDasharray: g.t===0||g.t===1 ? 'none' : '3,3'
+              })
+            ),
+            // Area fill
+            h('path', {d:areaPath, fill:`${priceColor}18`, stroke:'none'}),
+            // Price line
+            h('path', {d:pricePath, fill:'none', stroke:priceColor, strokeWidth:1.5}),
+            // Hover targets with tooltips
+            prices.map((v, i) =>
+              h('circle', {key:i, cx:px(i), cy:py(v), r:5, fill:'transparent', stroke:'none', style:{cursor:'crosshair'}},
+                h('title', null, `${fmtDate(points[i].timestamp)}: ${fmt.gp(v)}gp`)
+              )
+            ),
+            // Current price dot
+            prices.length > 0 && h('circle', {cx:px(prices.length-1), cy:py(prices[prices.length-1]), r:3, fill:priceColor, pointerEvents:'none'}),
+          ),
+          // Volume bars
+          h('div', {style:{fontSize:9, color:T.textDim, marginLeft:YLAB+PAD, marginTop:4}}, 'VOLUME'),
+          h('svg', {viewBox:`0 0 ${W} ${VH}`, style:{width:'100%', display:'block', marginBottom:4}},
+            h('line', {x1:YLAB, x2:YLAB, y1:0, y2:VH, stroke:'rgba(255,255,255,0.1)', strokeWidth:1}),
+            volumes.map((v, i) => {
+              const bw = Math.max(1, (CW - PAD*2) / volumes.length - 1);
+              const bh = vy(v);
+              return h('g', {key:i},
+                h('rect', {x:px(i)-bw/2, y:bh, width:bw, height:Math.max(0,VH-bh), fill:`${T.blue}55`, style:{cursor:'crosshair'}},
+                  h('title', null, `${fmtDate(points[i].timestamp)}: ${v!=null?v.toLocaleString():'—'}`)
+                )
+              );
+            })
+          ),
+          h('div', {style:{display:'flex', justifyContent:'space-between', padding:`2px ${PAD}px 6px ${YLAB+PAD}px`, fontSize:9, color:T.textDim}},
+            labelIdxs.map(i => h('span', {key:i}, fmtDate(points[i].timestamp)))
+          )
+        ),
+
+        // Stats row
+        h('div', {style:{display:'flex', gap:20, marginTop:10, fontSize:12, flexWrap:'wrap'}},
+          h('span',null, h('span',{style:{color:T.textDim}},`${range}d Low: `), h('span',{style:{color:T.red}}, fmt.gp(minP)+'gp')),
+          h('span',null, h('span',{style:{color:T.textDim}},`${range}d High: `), h('span',{style:{color:T.green}}, fmt.gp(maxP)+'gp')),
+          h('span',null, h('span',{style:{color:T.textDim}},'Current: '), h('span',{style:{color:T.gold}}, fmt.gp(item.high||item.low)+'gp')),
+          item.change_1d != null && h('span',null,
+            h('span',{style:{color:T.textDim}},'Daily Δ: '),
+            h('span',{className:pctClass(item.change_1d)}, fmt.pct(item.change_1d))
+          ),
+          item.volume != null && h('span',null,
+            h('span',{style:{color:T.textDim}},'Volume: '),
+            h('span',{style:{color:T.blue}}, item.volume.toLocaleString())
+          )
+        )
+      )
     )
   );
 }
@@ -361,7 +642,7 @@ function GESearchBar({items, onSelect}) {
   return h('div', {className:'ge-search-wrap'},
     h('input', {
       className:'ge-search-input',
-      placeholder:'Search any item — Dragon bones, Overload, Abyssal whip...',
+      placeholder:'Search any item — or press S or / to focus here',
       value:s.query, ref:s.ref,
       onChange:e=>s.setQuery(e.target.value),
       onFocus:()=>s.setFocused(true),
@@ -378,16 +659,159 @@ function GESearchBar({items, onSelect}) {
         },
           h('div',{className:'ge-result-name'},it.name),
           it.high && h('div',{className:'ge-result-price'},fmt.gp(it.high)+'gp'),
-          it.categories&&it.categories[0]&&h('div',{className:'ge-result-category'},it.categories[0])
+          it.categories&&it.categories[0]&&h('div',{className:'ge-result-category'},({materials:'Misc',mining:'Gathering',treasure_trails:'Treasure Trails',low_tier:'Low Tier'}[it.categories[0]]||it.categories[0]))
         )
       )
     )
   );
 }
 
+/* ─── Price trend badges ─────────────────────────────────────── */
+function PriceTrendBadges({itemId, currentPrice, onOpenChart}) {
+  const [trends, setTrends] = useState(null);
+
+  useEffect(() => {
+    if (!itemId || !currentPrice) return;
+    window.genius?.getItemHistoryLocal(itemId).then(history => {
+      if (!history || history.length < 2) return;
+      const sorted = [...history].sort((a,b) => {
+        const ta = typeof a.timestamp==='number' ? a.timestamp*(a.timestamp<1e12?1000:1) : new Date(a.timestamp).getTime();
+        const tb = typeof b.timestamp==='number' ? b.timestamp*(b.timestamp<1e12?1000:1) : new Date(b.timestamp).getTime();
+        return ta - tb;
+      });
+      const now = Date.now();
+      const calc = (days) => {
+        const cutoff = now - days*24*60*60*1000;
+        const pt = sorted.find(p => {
+          const t = typeof p.timestamp==='number' ? p.timestamp*(p.timestamp<1e12?1000:1) : new Date(p.timestamp).getTime();
+          return t >= cutoff;
+        });
+        if (!pt || !pt.price) return null;
+        const chg = ((currentPrice - pt.price) / pt.price) * 100;
+        const gp  = Math.round(currentPrice - pt.price);
+        return {chg: Math.round(chg*100)/100, gp};
+      };
+      setTrends({d7:calc(7), d30:calc(30), d90:calc(90)});
+    });
+  }, [itemId, currentPrice]);
+
+  if (!trends) return null;
+  const entries = [
+    ['7d',  trends.d7],
+    ['30d', trends.d30],
+    ['90d', trends.d90],
+  ].filter(([,v]) => v != null);
+  if (!entries.length) return null;
+
+  return h('div', {style:{marginTop:8, display:'flex', gap:6, flexWrap:'wrap'}},
+    entries.map(([label, {chg, gp}]) =>
+      h('div', {
+        key:label,
+        onClick: onOpenChart,
+        style:{
+          cursor:'pointer', padding:'3px 8px', borderRadius:3, fontSize:10,
+          background:'rgba(0,0,0,0.25)', border:`1px solid ${T.border}`,
+          display:'flex', flexDirection:'column', alignItems:'center', gap:1
+        },
+        title:`Click to open chart`
+      },
+        h('span', {style:{color:T.textDim, fontSize:9}}, label),
+        h('span', {className:pctClass(chg)}, (chg>0?'+':'')+chg.toFixed(2)+'%'),
+        h('span', {className:pctClass(gp), style:{fontSize:9}}, (gp>0?'+':'')+fmt.gp(gp)+'gp')
+      )
+    )
+  );
+}
+
 /* ─── Detail panel ───────────────────────────────────────────── */
-function DetailPanel({item, watchlist, onToggleWatch, onClose}) {
-  const [chartOpen, setChartOpen] = useState(false);
+function RecipeSection({item, allItems}) {
+  const recipe = COMBINATION_RECIPES.find(r => r.name.toLowerCase() === item.name.toLowerCase());
+  if (!recipe) return null;
+
+  const findIngItem = name => {
+    const lower = name.toLowerCase();
+    // Try exact match first
+    let it = (allItems||[]).find(i => i.name.toLowerCase() === lower);
+    if (it) return it;
+    // Try stripping dose suffix e.g. "Elder overload potion (6)" → "Elder overload potion"
+    const stripped = lower.replace(/\s*\(\d+\)\s*$/, '').trim();
+    return (allItems||[]).find(i => i.name.toLowerCase() === stripped) || null;
+  };
+
+  const rows = recipe.ingredients.map(ing => {
+    const ingItem = findIngItem(ing.name);
+    const price = ingItem ? (ingItem.high || ingItem.low || null) : null;
+    return {...ing, price, isUntrade: ingItem?.untradeable};
+  });
+
+  const total = rows.every(r => r.price != null) ? rows.reduce((s,r) => s + r.price * r.qty, 0) : null;
+  const doses = recipe.name.match(/\((\d)\)/)?.[1] || 4;
+
+  return h('div',{style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
+    h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:8}}, 'RECIPE'),
+    rows.map(ing =>
+      h('div',{key:ing.name, style:{display:'flex', justifyContent:'space-between', alignItems:'center',
+        padding:'4px 0', borderBottom:`1px solid ${T.borderDim}`, fontSize:12}},
+        h('div',{style:{display:'flex', alignItems:'center', gap:5}},
+          h('span',{style:{
+            fontSize:9, padding:'1px 4px', borderRadius:2,
+            background: ing.isUntrade ? 'rgba(255,180,0,0.08)' : 'rgba(201,168,76,0.1)',
+            border:`1px solid ${ing.isUntrade ? 'rgba(255,180,0,0.25)' : 'rgba(201,168,76,0.2)'}`,
+            color: ing.isUntrade ? T.gold : T.textDim
+          }}, ing.isUntrade ? 'made' : 'GE'),
+          h('span',{style:{color:T.text}}, ing.qty > 1 ? `${ing.qty}× ${ing.name}` : ing.name)
+        ),
+        h('span',{style:{color: ing.price != null ? T.textBright : T.textDim}},
+          ing.price != null ? fmt.gp(ing.price * ing.qty)+' gp' : '—')
+      )
+    ),
+    h('div',{style:{display:'flex', justifyContent:'space-between', padding:'6px 0 0',
+      fontSize:12, fontWeight:'bold', color:T.gold}},
+      h('span',null,'Total'),
+      h('span',null, total != null ? fmt.gp(total)+' gp' : '—')
+    ),
+    total != null && h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}},
+      `Per dose: ${fmt.gp(Math.round(total / doses))} gp`)
+  );
+}
+
+function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems}) {
+  const [chartOpen, setChartOpen]     = useState(false);
+  const [wikiStats, setWikiStats]     = useState(null);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [iconUrl, setIconUrl]         = useState(null);
+  const [editingCats, setEditingCats] = useState(false);
+  const [draftCats, setDraftCats]     = useState([]);
+  const [savingCats, setSavingCats]   = useState(false);
+  const [noteText, setNoteText]       = useState('');
+
+  useEffect(() => {
+    if (!item) return;
+    setWikiStats(null);
+    setStatsLoading(true);
+    setEditingCats(false);
+    setDraftCats(item.categories || []);
+    setNoteText((notes && notes[item.id]) || '');
+    window.genius?.getItemStats(item.name).then(stats => {
+      setWikiStats(stats);
+      setStatsLoading(false);
+    }).catch(() => setStatsLoading(false));
+    const wikiName = item.name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
+    setIconUrl(`https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`);
+  }, [item?.id]);
+
+  const saveCats = async () => {
+    setSavingCats(true);
+    const ov = await window.genius?.getOverrides() || {};
+    ov[item.name.toLowerCase()] = draftCats;
+    const res = await window.genius?.saveOverrides(ov);
+    setSavingCats(false);
+    if (res?.success) {
+      setEditingCats(false);
+      onCategoryChange && onCategoryChange(item.name, draftCats);
+    }
+  };
+
   if (!item) return null;
   const inWatch = watchlist.includes(item.id);
   const chg = item.change_1d;
@@ -397,85 +821,436 @@ function DetailPanel({item, watchlist, onToggleWatch, onClose}) {
     return Array.from({length:24}, (_,i) => base*(0.9+Math.random()*0.2)*(1+(i-12)*0.003));
   }, [item.id]);
 
+  const slotLabel = (slot) => {
+    if (!slot) return null;
+    const s = slot.toLowerCase();
+    if (s.includes('2h') || s.includes('two')) return 'Two-handed';
+    if (s.includes('off')) return 'Off-hand';
+    if (s.includes('weapon') || s.includes('main')) return 'Main hand';
+    return slot;
+  };
+
   return h('div', {className:'detail-panel'},
     chartOpen && h(ChartModal, {item, onClose:()=>setChartOpen(false)}),
     h('div', {className:'detail-top'},
       h('div', {className:'row-between', style:{marginBottom:6}},
-        h('div', {className:'detail-name'}, item.name),
+        h('div', {className:'row', style:{gap:8, alignItems:'center'}},
+          iconUrl && h('img', {
+            src: iconUrl,
+            alt: '',
+            onError: () => setIconUrl(null),
+            style: {width:32, height:32, imageRendering:'pixelated', flexShrink:0}
+          }),
+          h('div', {className:'detail-name'}, item.name)
+        ),
         h('div', {className:'row', style:{gap:4}},
           h('button', {
             className:'star-btn',
             title: inWatch ? 'Remove from watchlist' : 'Add to watchlist',
-            onClick: e => { e.stopPropagation(); onToggleWatch(item.id); }
-          }, h('span', {className: inWatch ? 'star-on' : 'star-off'}, inWatch ? '★' : '☆')),
+            onClick: e => { e.stopPropagation(); onToggleWatch(item.id); },
+            style: { display:'flex', alignItems:'center', gap:3, fontSize:13, color: inWatch ? T.goldBright : 'rgba(201,168,76,0.55)', border: `1px solid ${inWatch ? T.goldBright : 'rgba(201,168,76,0.3)'}`, borderRadius:4, padding:'3px 8px', background: inWatch ? 'rgba(201,168,76,0.12)' : 'none' }
+          },
+            h('span', {style:{fontSize:18, lineHeight:1}}, inWatch ? '★' : '☆'),
+            h('span', null, inWatch ? 'Watching' : 'Watch')
+          ),
+          h('button', {
+            className:'ge-btn',
+            title: 'Hide this item from all tabs',
+            style:{padding:'3px 8px', fontSize:12, color:T.textDim},
+            onClick: () => onToggleHide && onToggleHide(item.id)
+          }, '🚫 Hide'),
           h('button', {className:'ge-btn', style:{padding:'3px 8px',fontSize:12}, onClick:onClose}, 'X')
         )
       ),
       item.categories && h('div', {className:'detail-cats'},
-        item.categories.map(c => h('span',{key:c,className:'cat-tag'},c))
+        item.categories.map(c => h('span',{key:c,className:'cat-tag'},{materials:'Misc',mining:'Gathering',treasure_trails:'Treasure Trails',low_tier:'Low Tier'}[c]||c)),
+        item.members && h('span',{className:'cat-tag',style:{color:T.gold,borderColor:T.gold}},'P2P'),
+        !item.untradeable && h('span',{
+          className:'cat-tag', title:'Edit categories',
+          style:{cursor:'pointer',opacity:0.6,borderStyle:'dashed'},
+          onClick:()=>setEditingCats(v=>!v)
+        }, editingCats ? '✕ cancel' : '✎ edit')
+      ),
+      editingCats && h('div',{style:{padding:'6px 0 2px'}},
+        h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginBottom:6}},
+          ALL_CATS.map(c=>h('span',{key:c,
+            onClick:()=>setDraftCats(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c]),
+            style:{fontSize:10,padding:'2px 6px',borderRadius:2,cursor:'pointer',userSelect:'none',
+              background: draftCats.includes(c) ? T.gold : 'rgba(255,255,255,0.05)',
+              color: draftCats.includes(c) ? '#1a1208' : T.textDim,
+              border:`1px solid ${draftCats.includes(c) ? T.gold : T.border}`
+            }
+          },c))
+        ),
+        h('button',{className:'ge-btn gold',style:{fontSize:11,padding:'3px 10px'},
+          onClick:saveCats,disabled:savingCats},
+          savingCats ? 'Saving…' : 'Save — takes effect on Fetch Now')
       ),
       h('div', {className:'detail-price'}, fmt.gp(item.high||item.low)+' gp'),
-      chg != null && h('div', {className:pctClass(chg), style:{fontSize:12,marginTop:2}}, fmt.pct(chg)+' today')
+        item.untradeable
+          ? h('div', {style:{marginTop:4}},
+              h('span', {style:{fontSize:11, padding:'2px 7px', borderRadius:3, background:'rgba(255,180,0,0.15)', color:T.gold, border:`1px solid ${T.gold}`, fontWeight:600, letterSpacing:'0.04em'}}, 'UNTRADEABLE'),
+              h('span', {style:{fontSize:11, color:T.textDim, marginLeft:8}}, 'Calculated production cost')
+            )
+          : item.change_1d != null && h('div', {className:pctClass(item.change_1d), style:{fontSize:12,marginTop:2}},
+              fmt.pct(item.change_1d),
+              item.high && h('span', {style:{fontSize:11, marginLeft:6, opacity:0.85}},
+                '(' + (item.change_1d > 0 ? '+' : '') + fmt.gp(Math.round(item.high - (item.high / (1 + item.change_1d / 100)))) + 'gp)'
+              )
+            )
     ),
     h('div', {className:'detail-body'},
       h('div', {className:'sparkline-wrap', onClick:()=>setChartOpen(true), title:'Click to enlarge'},
         h(SparklineSVG, {data:mockHistory, color:sparkColor, w:260, ht:52}),
         h('span', {className:'sparkline-expand-hint'}, 'click to expand')
       ),
-      [
-        ['Buy price',  fmt.gp(item.high)+' gp'],
-        ['Sell price', fmt.gp(item.low)+' gp'],
-        ['Margin',     item.high&&item.low ? fmt.gp(item.high-item.low)+' gp' : '—'],
-        ['GE Limit',   item.limit ? item.limit.toLocaleString() : '—'],
-      ].map(([l,v]) => h('div',{className:'stat-row',key:l},
-        h('span',{className:'stat-lbl'},l),
-        h('span',{className:'stat-val'},v)
-      )),
-      h('div', {className:'stat-row'},
+      item.untradeable
+        ? [
+            ['Production cost', fmt.gp(item.high || item.low)+' gp'],
+            item.rarity && ['Rarity', item.rarity[0].toUpperCase() + item.rarity.slice(1)],
+          ].filter(Boolean).map(([l,v]) => h('div',{className:'stat-row',key:l},
+            h('span',{className:'stat-lbl'},l),
+            h('span',{className:'stat-val'},v)
+          ))
+        : [
+            ['Price',         fmt.gp(item.high || item.low)+' gp'],
+            ['After 2% tax', item.low ? fmt.gp(applyTax(item.low))+' gp' : '—'],
+            ['Daily Change',  (() => {
+              const price = item.high || item.low;
+              const chg = item.change_1d;
+              if (!price || chg == null) return '—';
+              const prevPrice = price / (1 + chg / 100);
+              const diff = Math.round(price - prevPrice);
+              return h('span', {className: pctClass(diff)}, (diff > 0 ? '+' : '') + fmt.gp(diff) + ' gp');
+            })()],
+            ['High alch',    item.alch ? fmt.gp(item.alch)+' gp' : '—'],
+            ['GE Limit',     item.limit ? item.limit.toLocaleString() : '—'],
+          ].map(([l,v]) => h('div',{className:'stat-row',key:l},
+            h('span',{className:'stat-lbl'},l),
+            h('span',{className:'stat-val'},v)
+          )),
+      !item.untradeable && h('div', {className:'stat-row'},
         h('span',{className:'stat-lbl'},'Volume'),
         h('span',{className:'stat-val'}, h(VolDisplay,{volume:item.volume, avgVolume:item.avgVolume}))
       ),
-      item.signals&&item.signals.length>0 && h('div',{className:'signal-list'},
-        item.signals.map(s=>h('span',{key:s,className:`signal-badge ${s}`},s))
+      !item.untradeable && item.signals&&item.signals.length>0 && h('div',{className:'signal-list'},
+        item.signals.map(s=>h(SignalBadge,{key:s,signal:s}))
       ),
+
+      // Price trend badges from history
+      item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true)}),
+
+      // Examine text — use dump data first, fall back to wiki fetch
+      statsLoading && !item.examine && h('div',{style:{marginTop:12,fontSize:11,color:T.textDim}},'Loading item info...'),
+      (item.examine || wikiStats?.examine) && h('div',{style:{marginTop:12,padding:'8px 10px',background:'rgba(0,0,0,0.2)',borderRadius:4,fontSize:11,color:T.textDim,fontStyle:'italic',lineHeight:1.5}},
+        '"', item.examine || wikiStats.examine, '"'
+      ),
+
+      // Equipment stats table
+      wikiStats?.isGear && h('div',{style:{marginTop:12}},
+        h('div',{style:{fontSize:11,fontWeight:'bold',color:T.gold,textTransform:'uppercase',letterSpacing:1,marginBottom:6}},
+          'Combat Stats'
+        ),
+        h('table',{style:{width:'100%',borderCollapse:'collapse',fontSize:11}},
+          h('tbody',null,
+            // Requirements / Tier / Class / Slot row
+            wikiStats.tier && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Tier'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, wikiStats.tier)
+            ),
+            wikiStats.combatClass && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Class'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, wikiStats.combatClass)
+            ),
+            wikiStats.slot && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Slot'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, slotLabel(wikiStats.slot) || wikiStats.slot)
+            ),
+            wikiStats.type && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Type'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, wikiStats.type)
+            ),
+            // Separator
+            h('tr',null, h('td',{colSpan:2, style:{padding:'4px 0'}},
+              h('div',{style:{borderTop:`1px solid ${T.border}`,margin:'2px 0'}})
+            )),
+            // Offensive stats
+            wikiStats.damage && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Damage'),
+              h('td',{style:{color:T.green,textAlign:'right',padding:'3px 0'}}, wikiStats.damage)
+            ),
+            wikiStats.accuracy && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Accuracy'),
+              h('td',{style:{color:T.green,textAlign:'right',padding:'3px 0'}}, wikiStats.accuracy)
+            ),
+            wikiStats.style && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Style'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, wikiStats.style)
+            ),
+            wikiStats.speed && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Speed'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, wikiStats.speed)
+            ),
+            wikiStats.range && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Range'),
+              h('td',{style:{color:T.gold,textAlign:'right',padding:'3px 0'}}, wikiStats.range)
+            ),
+            // Defensive stats
+            (wikiStats.armour || wikiStats.lp || wikiStats.prayer) && h('tr',null,
+              h('td',{colSpan:2, style:{padding:'4px 0'}},
+                h('div',{style:{borderTop:`1px solid ${T.border}`,margin:'2px 0'}})
+              )
+            ),
+            wikiStats.armour && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Armour'),
+              h('td',{style:{color:T.blue,textAlign:'right',padding:'3px 0'}}, wikiStats.armour)
+            ),
+            wikiStats.lp && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Life Points'),
+              h('td',{style:{color:T.blue,textAlign:'right',padding:'3px 0'}}, wikiStats.lp)
+            ),
+            wikiStats.prayer && h('tr',null,
+              h('td',{style:{color:T.textDim,padding:'3px 0'}}, 'Prayer'),
+              h('td',{style:{color:T.blue,textAlign:'right',padding:'3px 0'}}, wikiStats.prayer)
+            ),
+          )
+        )
+      ),
+
       h('div',{style:{marginTop:12}},
-        h('a',{
-          href:'#', style:{fontSize:11,color:T.blue},
-          onClick:e=>{e.preventDefault(); window.genius?.openExternal(`https://runescape.wiki/w/${encodeURIComponent(item.name)}`);}
-        },'RS Wiki')
+        h('button',{
+          className:'ge-btn',
+          style:{fontSize:11, padding:'3px 10px'},
+          onClick:()=>{
+            const url = `https://runescape.wiki/w/${encodeURIComponent(item.name.replace(/ /g,'_'))}`;
+            window.genius?.openExternal(url);
+          }
+        },'📖 RS Wiki')
+      ),
+
+      h(RecipeSection, {item, allItems}),
+
+      h('div',{style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
+        h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:6}}, 'NOTES'),
+        h('textarea',{
+          value: noteText,
+          onChange: e => setNoteText(e.target.value),
+          onBlur: () => onSaveNote && onSaveNote(item.id, noteText),
+          placeholder: 'Personal notes on this item…',
+          rows: 4,
+          style:{
+            width:'100%', boxSizing:'border-box', resize:'vertical',
+            background:'rgba(0,0,0,0.2)', border:`1px solid ${T.border}`,
+            borderRadius:3, color:T.text, fontSize:12, padding:'6px 8px',
+            fontFamily:'inherit', lineHeight:1.5,
+          }
+        }),
+        noteText && h('div',{style:{fontSize:10,color:T.textDim,marginTop:3,textAlign:'right'}},'Auto-saved on blur')
       )
     )
   );
 }
 
 /* ─── Item table ─────────────────────────────────────────────── */
-function ItemTable({items, selected, onSelect, watchlist, onToggleWatch}) {
+function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description}) {
   const [sort, setSort] = useState({key:'name',dir:1});
+  const [ctxMenu, setCtxMenu] = useState(null); // {x, y, item}
+
+  const openCtx = (e, it) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const x = Math.min(e.clientX, window.innerWidth  - 180);
+    const y = Math.min(e.clientY, window.innerHeight - 160);
+    setCtxMenu({x, y, item: it});
+  };
+  const closeCtx = () => setCtxMenu(null);
+
+  const [multiSelect, setMultiSelect] = useState(new Set());
+  const toggleMulti = (id) => setMultiSelect(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+  const clearMulti = () => setMultiSelect(new Set());
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') clearMulti(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
+  const [minPrice, setMinPrice] = useState(0);
+  const [customVal, setCustomVal] = useState('');
+  const [showCustom, setShowCustom] = useState(false);
+
+  const isLarge = items.length > 300;
+  const FILTER_OPTIONS = [
+    {label:'All',   value:0},
+    {label:'1K+',   value:1000},
+    {label:'10K+',  value:10000},
+    {label:'100K+', value:100000},
+    {label:'1M+',   value:1000000},
+    {label:'Custom',value:'custom'},
+  ];
+
+  const handleFilterClick = opt => {
+    if (opt.value === 'custom') {
+      setShowCustom(true);
+    } else {
+      setShowCustom(false);
+      setCustomVal('');
+      setMinPrice(opt.value);
+    }
+  };
+
+  const handleCustomApply = () => {
+    const parsed = parseGP(customVal);
+    if (typeof parsed === 'number' && parsed > 0) setMinPrice(parsed);
+  };
+
+  const activeFilter = showCustom ? 'custom' : minPrice;
+
+  const filtered = useMemo(() => {
+    if (!minPrice) return items;
+    return items.filter(it => (it.high || it.low || 0) >= minPrice);
+  }, [items, minPrice]);
+
   const sorted = useMemo(() => {
-    return [...items].sort((a,b) => {
+    return [...filtered].sort((a,b) => {
       const av=a[sort.key]??0, bv=b[sort.key]??0;
       return typeof av==='string' ? av.localeCompare(bv)*sort.dir : (av-bv)*sort.dir;
     });
-  }, [items, sort]);
+  }, [filtered, sort]);
+
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
   const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
   if (!items.length) return h('div',{className:'empty'},h('div',{className:'icon'},'◎'),h('p',null,'No items in this category yet.'));
-  return h('div',{className:'ge-table-wrap'},
+  return h('div',{className:'ge-table-wrap', onClick: ctxMenu ? closeCtx : undefined},
+    ctxMenu && h('div', {
+      style:{
+        position:'fixed', zIndex:9999, left:ctxMenu.x, top:ctxMenu.y,
+        background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:4,
+        minWidth:170, boxShadow:'0 4px 16px rgba(0,0,0,0.6)', overflow:'hidden',
+      },
+      onClick: e => e.stopPropagation(),
+    },
+      [
+        {
+          label: watchlist.includes(ctxMenu.item.id) ? '★ Unwatch' : '☆ Watch',
+          action: () => { onToggleWatch(ctxMenu.item.id); closeCtx(); },
+          color: T.gold,
+        },
+        {
+          label: '📋 Copy price',
+          action: () => {
+            const price = ctxMenu.item.high || ctxMenu.item.low;
+            navigator.clipboard?.writeText(String(price));
+            closeCtx();
+          },
+        },
+        {
+          label: '🔗 Open on wiki',
+          action: () => {
+            const slug = ctxMenu.item.name.replace(/ /g, '_');
+            window.genius?.openExternal(`https://runescape.wiki/w/${encodeURIComponent(slug)}`);
+            closeCtx();
+          },
+        },
+        {
+          label: '⇌ Add to compare',
+          action: () => { onAddCompare && onAddCompare(ctxMenu.item); closeCtx(); },
+        },
+        {
+          label: '🚫 Hide item',
+          action: () => { onToggleHide && onToggleHide(ctxMenu.item.id); closeCtx(); },
+          color: T.textDim,
+        },
+      ].map((opt, i) => h('div', {
+        key: i,
+        onClick: opt.action,
+        style:{
+          padding:'8px 14px', cursor:'pointer', fontSize:13,
+          color: opt.color || T.text,
+          borderBottom: i < 3 ? `1px solid ${T.borderDim}` : 'none',
+        },
+        onMouseEnter: e => e.currentTarget.style.background = T.panel,
+        onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+      }, opt.label))
+    ),
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div',{style:{display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderBottom:`1px solid ${T.border}`, fontSize:11, flexWrap:'wrap'}},
+      h('span',{style:{color:T.textDim}}, `${sorted.length}${minPrice?` of ${items.length}`:''} items`),
+      isLarge && h('span',{style:{color:T.textDim, marginLeft:'auto'}}, 'Min price:'),
+      isLarge && FILTER_OPTIONS.map(opt =>
+        h('button',{
+          key: opt.value,
+          onClick: () => handleFilterClick(opt),
+          style:{
+            padding:'2px 8px', fontSize:10, cursor:'pointer', borderRadius:3,
+            background: activeFilter===opt.value ? 'rgba(201,168,76,0.2)' : 'transparent',
+            border: `1px solid ${activeFilter===opt.value ? T.gold : T.border}`,
+            color: activeFilter===opt.value ? T.goldBright : T.textDim,
+          }
+        }, opt.label)
+      ),
+      isLarge && showCustom && h('div',{style:{display:'flex', gap:4, alignItems:'center'}},
+        h('input',{
+          className:'ge-input',
+          style:{width:90, padding:'2px 6px', fontSize:11},
+          placeholder:'e.g. 500k',
+          value:customVal,
+          onChange:e=>setCustomVal(e.target.value),
+          onKeyDown:e=>e.key==='Enter'&&handleCustomApply(),
+          autoFocus:true,
+        }),
+        h('button',{
+          className:'ge-btn',
+          style:{padding:'2px 8px', fontSize:10},
+          onClick:handleCustomApply
+        },'Apply')
+      )
+    ),
+    multiSelect.size > 0 && h('div', {style:{
+      display:'flex', alignItems:'center', gap:8, padding:'6px 12px',
+      background:T.panel2, borderBottom:`1px solid ${T.borderGold}`,
+      fontSize:12,
+    }},
+      h('span',{style:{color:T.gold, fontWeight:'bold'}}, `${multiSelect.size} selected`),
+      h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},
+        onClick:()=>{ onToggleHide&&onToggleHide([...multiSelect]); clearMulti(); }
+      }, '🚫 Hide all'),
+      h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},
+        onClick:()=>{ multiSelect.forEach(id=>onToggleWatch(id)); clearMulti(); }
+      }, '★ Watch all'),
+      onAddCompare && h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},
+        onClick:()=>{
+          sorted.filter(it=>multiSelect.has(it.id)).slice(0,4).forEach(it=>onAddCompare(it));
+          clearMulti();
+        }
+      }, '⇌ Compare all'),
+      h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},onClick:clearMulti},'✕ Clear')
+    ),
     h('table',{className:'ge-table'},
       h('thead',null,h('tr',null,
         h('th',{onClick:()=>tog('name')},'Item'+arr('name')),
-        h('th',{onClick:()=>tog('high')},'Buy'+arr('high')),
-        h('th',{onClick:()=>tog('low')},'Sell'+arr('low')),
-        h('th',{onClick:()=>tog('change_1d')},'24h'+arr('change_1d')),
+        h('th',{onClick:()=>tog('high')},'Price'+arr('high')),
+        h('th',{onClick:()=>tog('change_1d')},'Change'+arr('change_1d')),
         h('th',{onClick:()=>tog('volume')},'Volume'+arr('volume')),
         h('th',{style:{width:30}},null)
       )),
       h('tbody',null, sorted.map(it =>
-        h('tr',{key:it.id, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect(it)},
+        h('tr',{
+          key:it.id, 'data-item-id':it.id,
+          className: multiSelect.has(it.id) ? 'selected multi-selected' : selected?.id===it.id ? 'selected' : '',
+          onClick: e => {
+            if (e.ctrlKey || e.metaKey) { e.preventDefault(); toggleMulti(it.id); }
+            else { clearMulti(); onSelect(it); }
+          },
+          onContextMenu: e => openCtx(e, it),
+        },
           h('td',null,it.name),
-          h('td',{style:{color:T.gold}},fmt.gp(it.high)+'gp'),
-          h('td',null,fmt.gp(it.low)+'gp'),
-          h('td',{className:pctClass(it.change_1d)},it.change_1d?fmt.pct(it.change_1d):'—'),
+          h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+          h('td',null, h(ChangeDisplay,{change_1d:it.change_1d, price:it.high||it.low})),
           h('td',null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
           h('td',{onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center',padding:'6px 6px'}},
             h('button',{className:'star-btn'},
@@ -488,39 +1263,575 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch}) {
   );
 }
 
+/* ─── Dashboard tab ──────────────────────────────────────────── */
+function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio}) {
+  const [activeSignal, setActiveSignal] = useState(null);
+  const tradeableItems = useMemo(() => items.filter(it => !it.untradeable), [items]);
+
+  const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000)
+    .sort((a,b) => (b.change_1d||0)-(a.change_1d||0)).slice(0,6), [tradeableItems]);
+  const fallers = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) < 0 && it.high > 1000)
+    .sort((a,b) => (a.change_1d||0)-(b.change_1d||0)).slice(0,6), [tradeableItems]);
+  const volume  = useMemo(() => [...tradeableItems]
+    .filter(it => it.signals && (it.signals.includes('FRENZY') || it.signals.includes('HIGH_VOL')))
+    .sort((a,b) => {
+      const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
+      const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
+      return rb - ra;
+    }).slice(0,6), [tradeableItems]);
+
+  const signalCounts = useMemo(() => {
+    const counts = {SURGE:0,DUMP:0,ACCUMULATION:0,DISTRIBUTION:0,FRENZY:0,HIGH_VOL:0};
+    for (const it of tradeableItems) {
+      for (const s of (it.signals||[])) { if (s in counts) counts[s]++; }
+    }
+    return counts;
+  }, [tradeableItems]);
+
+  const totalWithChange = tradeableItems.filter(it => it.change_1d != null).length;
+  const rising  = tradeableItems.filter(it => (it.change_1d||0) > 0).length;
+  const falling = tradeableItems.filter(it => (it.change_1d||0) < 0).length;
+
+  // Personal — watchlist movers
+  const watchlistItems = useMemo(() => items.filter(it => watchlist.includes(it.id)), [items, watchlist]);
+  const watchlistMovers = useMemo(() =>
+    [...watchlistItems].filter(it => it.change_1d != null)
+      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))
+      .slice(0, 6),
+  [watchlistItems]);
+
+  // Personal — portfolio
+  const positions = portfolio?.positions || [];
+  const openPositions = positions.filter(p => p.status !== 'sold');
+  const {totalInvested, totalCurrent, unrealizedPL, unrealizedPct} = useMemo(() => {
+    let inv = 0, cur = 0;
+    for (const pos of openPositions) {
+      const it = items.find(i => i.name.toLowerCase() === pos.item_name.toLowerCase());
+      const price = it ? (it.high || it.low || 0) : 0;
+      inv += pos.cost_basis * pos.quantity;
+      cur += price * pos.quantity;
+    }
+    const pl = cur - inv;
+    const pct = inv > 0 ? (pl / inv) * 100 : 0;
+    return {totalInvested:inv, totalCurrent:cur, unrealizedPL:pl, unrealizedPct:pct};
+  }, [openPositions, items]);
+
+  // Personal — alerts
+  const alertCount = (alerts||[]).length;
+  const triggeredAlerts = useMemo(() => (alerts||[]).filter(a => {
+    const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+    if (!it) return false;
+    const price = it.high || it.low || 0;
+    if (a.condition === 'above') return price >= a.price;
+    if (a.condition === 'below') return price <= a.price;
+    if (a.condition === 'signal') return (it.signals||[]).includes(a.signal);
+    return false;
+  }), [alerts, items]);
+
+  const sectionStyle = {marginBottom:20};
+  const headingStyle = {fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase',
+    color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:10};
+  const cardRowStyle = {display:'flex', flexWrap:'wrap', gap:8};
+
+  // Index card
+  const IndexCard = ({idx}) => {
+    const up = idx.direction === 'up';
+    const dn = idx.direction === 'down';
+    const chgColor = up ? T.green : dn ? T.red : T.textDim;
+    const arrow = up ? '▲' : dn ? '▼' : '●';
+    const sign = idx.change > 0 ? '+' : '';
+    return h('div', {style:{
+      background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+      padding:'10px 14px', minWidth:150, flex:'1 1 140px',
+    }},
+      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:4}}, idx.name),
+      h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright, marginBottom:2}},
+        idx.value.toFixed(2)),
+      h('div', {style:{fontSize:12, color:chgColor}},
+        `${arrow} ${sign}${idx.change.toFixed(2)}`)
+    );
+  };
+
+  // Mini item row
+  const MiniRow = ({it, showChange}) => {
+    const price = it.high || it.low;
+    const chg = it.change_1d;
+    return h('div', {
+      style:{display:'flex', alignItems:'center', justifyContent:'space-between',
+        padding:'5px 8px', borderRadius:3, cursor:'pointer',
+        background: selected?.id===it.id ? T.panel2 : 'transparent'},
+      onClick: () => onSelect(it),
+    },
+      h('div', {style:{fontSize:12, color:T.text, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
+      h('div', {style:{fontSize:12, color:T.textDim, marginLeft:8, whiteSpace:'nowrap'}}, fmt.gp(price)+'gp'),
+      showChange && chg != null && h('div', {
+        style:{fontSize:11, color: chg>0?T.green:T.red, marginLeft:8, minWidth:46, textAlign:'right'}
+      }, (chg>0?'+':'')+chg.toFixed(2)+'%')
+    );
+  };
+
+  // Signal pill
+  const SIG_COLORS = {
+    SURGE:{bg:'#1a3a1a',border:'#4caf50',text:'#4caf50'},
+    DUMP:{bg:'#3a1a1a',border:'#e53935',text:'#e53935'},
+    ACCUMULATION:{bg:'#1a2a3a',border:'#64b5f6',text:'#64b5f6'},
+    DISTRIBUTION:{bg:'#2a1a3a',border:'#ce93d8',text:'#ce93d8'},
+    FRENZY:{bg:'#3a2a0a',border:'#ffd700',text:'#ffd700'},
+    HIGH_VOL:{bg:'#2a2a1a',border:'#c9a84c',text:'#c9a84c'},
+  };
+  const SignalPill = ({signal, count}) => {
+    const c = SIG_COLORS[signal] || {bg:T.panel,border:T.border,text:T.text};
+    const active = activeSignal === signal;
+    return h('div', {
+      onClick: () => setActiveSignal(s => s === signal ? null : signal),
+      style:{
+        background: active ? c.border : c.bg,
+        border:`1px solid ${c.border}`, borderRadius:4,
+        padding:'6px 12px', display:'flex', flexDirection:'column', alignItems:'center',
+        minWidth:90, flex:'1 1 80px', cursor:'pointer',
+        transition:'background 0.15s',
+      }
+    },
+      h('div', {style:{fontSize:18, fontWeight:'bold', color: active ? T.bg : c.text}}, count),
+      h('div', {style:{fontSize:10, color: active ? T.bg : c.text, opacity: active ? 1 : 0.8, marginTop:2}}, signal)
+    );
+  };
+
+  // Signal drill-down view
+  if (activeSignal) {
+    const sigItems = tradeableItems
+      .filter(it => (it.signals||[]).includes(activeSignal))
+      .sort((a,b) => {
+        if (activeSignal === 'DUMP') return (a.change_1d||0) - (b.change_1d||0);
+        if (activeSignal === 'SURGE') return (b.change_1d||0) - (a.change_1d||0);
+        const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
+        const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
+        return rb - ra;
+      });
+    const c = SIG_COLORS[activeSignal] || {bg:T.panel, border:T.border, text:T.text};
+    return h('div', {style:{display:'flex', flexDirection:'column', height:'100%'}},
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0}},
+        h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:12}, onClick:()=>setActiveSignal(null)}, '← Back'),
+        h('div', {style:{fontSize:12, fontWeight:'bold', color:c.text, letterSpacing:'0.08em'}}, activeSignal),
+        h('div', {style:{fontSize:11, color:T.textDim}}, `${sigItems.length} items`)
+      ),
+      h('div', {style:{flex:1, overflowY:'auto'}},
+        h(ItemTable, {items:sigItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+
+      )
+    );
+  }
+
+  return h('div', {style:{padding:'12px 14px', overflowY:'auto', height:'100%'}},
+    description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
+
+    // ── Personal command center ──────────────────────────────────
+
+    // Watchlist movers
+    h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Your Watchlist'),
+      watchlistItems.length === 0
+        ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
+            'No items watched yet. Star any item to track it here.')
+        : watchlistMovers.length === 0
+          ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No price movement on watched items today.')
+          : watchlistMovers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
+    ),
+
+    // Portfolio snapshot
+    openPositions.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Portfolio'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, fmt.gp(totalCurrent)+'gp'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, `Current Value (${openPositions.length} positions)`)),
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color: unrealizedPL >= 0 ? T.green : T.red}},
+            (unrealizedPL >= 0 ? '+' : '') + fmt.gp(unrealizedPL) + 'gp'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
+            `Unrealized P&L (${unrealizedPct >= 0 ? '+' : ''}${unrealizedPct.toFixed(1)}%)`))
+      )
+    ),
+
+    // Alerts status
+    alertCount > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Alerts'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, alertCount),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Alerts Set')),
+        triggeredAlerts.length > 0 && h('div', {style:{background:T.panel, border:`1px solid ${T.gold}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.gold}}, triggeredAlerts.length),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Conditions Met'))
+      ),
+      triggeredAlerts.length > 0 && h('div', {style:{marginTop:8}},
+        triggeredAlerts.slice(0,3).map(a =>
+          h('div', {key:a.id, style:{fontSize:12, color:T.gold, padding:'3px 0'}},
+            `⚡ ${a.item_name} — ${a.condition === 'above' ? 'above' : a.condition === 'below' ? 'below' : 'signal'} ${a.price ? fmt.gp(a.price)+'gp' : a.signal||''}`)
+        )
+      )
+    ),
+
+    h('div', {style:{borderTop:`1px solid ${T.borderDim}`, marginBottom:16}}),
+
+    // Market indexes
+    indexes.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Market Indexes'),
+      h('div', {style:cardRowStyle},
+        indexes.map(idx => h(IndexCard, {key:idx.name, idx}))
+      )
+    ),
+
+    // Stat pills
+    h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Market Pulse'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright}}, tradeableItems.length.toLocaleString()),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Items Tracked')),
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright}}, totalWithChange.toLocaleString()),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'With Price Data')),
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.green}}, rising.toLocaleString()),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Rising Today')),
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.red}}, falling.toLocaleString()),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Falling Today'))
+      )
+    ),
+
+    // Active signals
+    h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Active Signals'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        Object.entries(signalCounts).map(([sig, cnt]) => h(SignalPill, {key:sig, signal:sig, count:cnt}))
+      )
+    ),
+
+    // Top movers
+    h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', marginBottom:20}},
+      h('div', {style:{flex:'1 1 200px', minWidth:200}},
+        h('div', {style:headingStyle}, 'Top Gainers'),
+        risers.length
+          ? risers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
+          : h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No data yet')
+      ),
+      h('div', {style:{flex:'1 1 200px', minWidth:200}},
+        h('div', {style:headingStyle}, 'Top Losers'),
+        fallers.length
+          ? fallers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
+          : h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No data yet')
+      )
+    ),
+
+    // Volume anomalies
+    volume.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Volume Anomalies'),
+      volume.map(it => h(MiniRow, {key:it.id, it, showChange:false}))
+    )
+  );
+}
+
+/* ─── Compare tab ────────────────────────────────────────────── */
+function CompareTab({compareList, onRemove, onClear, allItems, description}) {
+  const [search, setSearch] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+
+  const handleSearch = e => {
+    const q = e.target.value;
+    setSearch(q);
+    if (q.length < 2) { setSearchResults([]); return; }
+    const ql = q.toLowerCase();
+    setSearchResults(allItems.filter(it => it.name.toLowerCase().includes(ql)).slice(0, 8));
+  };
+
+  const ROWS = [
+    {label: 'Price',    render: it => fmt.gp(it.high||it.low)+'gp', color: it => T.gold},
+    {label: 'Change',   render: it => it.change_1d != null ? (it.change_1d>0?'+':'')+it.change_1d.toFixed(2)+'%' : '—',
+                        color:  it => it.change_1d == null ? T.textDim : it.change_1d>0 ? T.green : T.red},
+    {label: 'Volume',   render: it => it.volume ? fmt.gp(it.volume) : '—', color: () => T.text},
+    {label: 'Avg Vol',  render: it => it.avgVolume ? fmt.gp(it.avgVolume) : '—', color: () => T.textDim},
+    {label: 'Vol Ratio',render: it => it.volume&&it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—',
+                        color:  it => {
+                          if (!it.volume||!it.avgVolume) return T.textDim;
+                          const r = it.volume/it.avgVolume;
+                          return r>=2.5?T.gold:r>=1.5?T.green:r<=0.5?T.red:T.text;
+                        }},
+    {label: 'Alch',     render: it => it.alch ? fmt.gp(it.alch)+'gp' : '—', color: () => T.textDim},
+    {label: 'Score',    render: it => it.score != null ? it.score.toFixed(1) : '—',
+                        color:  it => {
+                          const s = it.score||0;
+                          return s>=70?T.green:s>=40?T.gold:T.textDim;
+                        }},
+    {label: 'Buy Limit',render: it => it.limit ? it.limit.toLocaleString() : '—', color: () => T.textDim},
+    {label: 'Signals',  render: null, color: () => T.text},
+  ];
+
+  const colW = compareList.length === 0 ? 0 : Math.floor(80 / compareList.length);
+
+  return h('div', {style:{display:'flex',flexDirection:'column',height:'100%'}},
+    description && h('div',{style:{padding:'8px 14px',borderBottom:`1px solid ${T.border}`,fontSize:12,color:T.textDim,fontStyle:'italic',lineHeight:1.5}}, description),
+
+    // Search bar to add items
+    h('div',{style:{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',alignItems:'center',gap:8,flexWrap:'wrap'}},
+      h('span',{style:{fontSize:11,color:T.textDim}},'Add item:'),
+      h('div',{style:{position:'relative',flex:'1',maxWidth:280}},
+        h('input',{className:'ge-input',placeholder:'Search item name...',value:search,
+          onChange:handleSearch, style:{width:'100%'}}),
+        searchResults.length>0 && h('div',{style:{
+          position:'absolute',top:'100%',left:0,right:0,zIndex:100,
+          background:T.panel2,border:`1px solid ${T.borderGold}`,borderRadius:4,maxHeight:200,overflowY:'auto'
+        }},
+          searchResults.map(it => h('div',{
+            key:it.id,
+            style:{padding:'6px 10px',cursor:'pointer',fontSize:12,color:T.text},
+            onMouseEnter:e=>e.currentTarget.style.background=T.panel,
+            onMouseLeave:e=>e.currentTarget.style.background='transparent',
+            onClick:()=>{
+              if (compareList.length>=4){return;}
+              if (!compareList.find(c=>c.id===it.id)) {
+                compareList.push(it);
+                // trigger re-render via onRemove pattern — handled in App
+                onRemove({...it, _add:true});
+              }
+              setSearch(''); setSearchResults([]);
+            }
+          }, it.name))
+        )
+      ),
+      compareList.length>0&&h('button',{className:'ge-btn',style:{fontSize:11,padding:'3px 8px'},onClick:onClear},'Clear all'),
+      h('span',{style:{fontSize:11,color:T.textDim}}, `${compareList.length}/4 items`)
+    ),
+
+    compareList.length === 0
+      ? h('div',{className:'empty'},
+          h('div',{className:'icon'},'⇌'),
+          h('p',null,'Search for items above, or right-click any item and choose Compare.')
+        )
+      : h('div',{style:{overflowX:'auto',flex:1}},
+          h('table',{className:'ge-table',style:{tableLayout:'fixed',width:'100%'}},
+            h('thead',null,
+              h('tr',null,
+                h('th',{style:{width:'20%'}},'Stat'),
+                compareList.map(it=>h('th',{key:it.id,style:{width:`${colW}%`}},
+                  h('div',{style:{display:'flex',alignItems:'center',justifyContent:'space-between',gap:4}},
+                    h('span',{style:{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}},it.name),
+                    h('button',{
+                      style:{background:'none',border:'none',color:T.textDim,cursor:'pointer',fontSize:12,flexShrink:0},
+                      onClick:()=>onRemove(it)
+                    },'×')
+                  )
+                ))
+              )
+            ),
+            h('tbody',null,
+              ROWS.map(row=>h('tr',{key:row.label},
+                h('td',{style:{color:T.textDim,fontSize:11,fontWeight:'bold'}},row.label),
+                compareList.map(it=>h('td',{key:it.id},
+                  row.render === null
+                    ? h('div',{style:{display:'flex',flexWrap:'wrap',gap:2}},
+                        (it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s}))
+                      )
+                    : h('span',{style:{color:row.color(it)}}, row.render(it))
+                ))
+              ))
+            )
+          )
+        )
+  );
+}
+
 /* ─── Tab views ──────────────────────────────────────────────── */
-function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch}) {
+function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, description}) {
   const watched = items.filter(it=>watchlist.includes(it.id));
-  if (!watched.length) return h('div',{className:'empty'},h('div',{className:'icon'},'★'),h('p',null,'Star any item from any category to add it here.'));
-  return h('div',{className:'offer-grid'},
+  return h('div',null,
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    !watched.length
+      ? h('div',{className:'empty'},
+          h('div',{className:'icon'},'★'),
+          h('p',null,'Your watchlist is empty.'),
+          h('div',{style:{fontSize:12,color:T.textDim,marginTop:8,lineHeight:1.7,maxWidth:340,textAlign:'center'}},
+            'Browse any category tab and click the ★ on an item to add it here.',h('br',null),
+            'Watched items show live prices and signals all in one place.'
+          )
+        )
+      : h('div',{className:'offer-grid'},
     watched.map(it =>
       h('div',{key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
         h('div',{className:'offer-slot-name'},it.name),
         h('div',{className:'offer-slot-price'},fmt.gp(it.high||it.low)+'gp'),
-        h('div',{className:'offer-slot-change '+pctClass(it.change_1d)},it.change_1d?fmt.pct(it.change_1d):''),
+        h('div',{className:'offer-slot-change '+pctClass(it.change_1d)},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('div',{className:'offer-slot-star'},
           h('button',{
             className:'star-btn',
             onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}
           }, h('span',{className:'star-on'},'★'))
         ),
-        it.signals&&it.signals.map(s=>h('span',{key:s,className:`signal-badge ${s}`,style:{marginTop:4,display:'inline-block',marginRight:2}},s))
+        it.signals&&it.signals.map(s=>h(SignalBadge,{key:s,signal:s,style:{marginTop:4,marginRight:2}}))
       )
     )
+  ));
+}
+
+/* ─── SplitTab — tradeable items + untradeable sub-tab ───────── */
+const COMBINATION_RECIPES = [
+  {name:'Super melee potion',            ingredients:[{name:'Super defence (4)',qty:1},{name:'Super strength (4)',qty:1},{name:'Super attack (4)',qty:1}]},
+  {name:'Super warmaster\'s potion',     ingredients:[{name:'Super ranging potion (4)',qty:1},{name:'Super magic potion (4)',qty:1},{name:'Super defence (4)',qty:1},{name:'Super strength (4)',qty:1},{name:'Super attack (4)',qty:1}]},
+  {name:'Super prayer renewal potion',   ingredients:[{name:'Prayer renewal (4)',qty:1},{name:'Prayer potion (4)',qty:1}]},
+  {name:'Grand attack potion',           ingredients:[{name:'Super attack (4)',qty:1},{name:'Attack potion (4)',qty:1}]},
+  {name:'Grand strength potion',         ingredients:[{name:'Super strength (4)',qty:1},{name:'Strength potion (4)',qty:1}]},
+  {name:'Grand defence potion',          ingredients:[{name:'Super defence (4)',qty:1},{name:'Defence potion (4)',qty:1}]},
+  {name:'Grand ranging potion',          ingredients:[{name:'Super ranging potion (4)',qty:1},{name:'Ranging potion (4)',qty:1}]},
+  {name:'Grand magic potion',            ingredients:[{name:'Super magic potion (4)',qty:1},{name:'Magic potion (4)',qty:1}]},
+  {name:'Extreme brawler\'s potion',     ingredients:[{name:'Extreme attack (4)',qty:1},{name:'Extreme defence (4)',qty:1},{name:'Extreme strength (4)',qty:1}]},
+  {name:'Extreme sharpshooter\'s potion',ingredients:[{name:'Extreme ranging (4)',qty:1},{name:'Extreme defence (4)',qty:1}]},
+  {name:'Extreme battlemage\'s potion',  ingredients:[{name:'Extreme magic (4)',qty:1},{name:'Extreme defence (4)',qty:1}]},
+  {name:'Extreme warmaster\'s potion',   ingredients:[{name:'Extreme attack (4)',qty:1},{name:'Extreme defence (4)',qty:1},{name:'Extreme strength (4)',qty:1},{name:'Extreme ranging (4)',qty:1},{name:'Extreme magic (4)',qty:1}]},
+  {name:'Holy overload potion',          ingredients:[{name:'Overload (4)',qty:1},{name:'Prayer renewal (4)',qty:1}]},
+  {name:'Searing overload potion',       ingredients:[{name:'Overload (4)',qty:1},{name:'Super antifire (4)',qty:1}]},
+  {name:'Overload salve',                ingredients:[{name:'Overload (4)',qty:1},{name:'Super antifire (4)',qty:1},{name:'Antifire (4)',qty:1},{name:'Prayer renewal (4)',qty:1},{name:'Prayer potion (4)',qty:1},{name:'Super antipoison (4)',qty:1}]},
+  {name:'Aggroverload',                  ingredients:[{name:'Overload (4)',qty:1},{name:'Aggression potion (4)',qty:1},{name:'Clean arbuck',qty:1}]},
+  {name:'Holy aggroverload',             ingredients:[{name:'Overload (4)',qty:1},{name:'Aggression potion (4)',qty:1},{name:'Prayer renewal (4)',qty:1},{name:'Spider venom',qty:1}]},
+  {name:'Supreme attack potion',         ingredients:[{name:'Extreme attack (4)',qty:1},{name:'Super attack (4)',qty:1}]},
+  {name:'Supreme strength potion',       ingredients:[{name:'Extreme strength (4)',qty:1},{name:'Super strength (4)',qty:1}]},
+  {name:'Supreme defence potion',        ingredients:[{name:'Extreme defence (4)',qty:1},{name:'Super defence (4)',qty:1}]},
+  {name:'Supreme ranging potion',        ingredients:[{name:'Extreme ranging (4)',qty:1},{name:'Super ranging potion (4)',qty:1}]},
+  {name:'Supreme magic potion',          ingredients:[{name:'Extreme magic (4)',qty:1},{name:'Super magic potion (4)',qty:1}]},
+  {name:'Supreme overload potion',       ingredients:[{name:'Overload (4)',qty:1},{name:'Super attack (4)',qty:1},{name:'Super strength (4)',qty:1},{name:'Super defence (4)',qty:1},{name:'Super ranging potion (4)',qty:1},{name:'Super magic potion (4)',qty:1},{name:'Super necromancy (4)',qty:1}]},
+  {name:'Supreme overload salve',        ingredients:[{name:'Supreme overload potion (6)',qty:1},{name:'Super antifire (4)',qty:1},{name:'Antifire (4)',qty:1},{name:'Prayer renewal (4)',qty:1},{name:'Prayer potion (4)',qty:1},{name:'Super antipoison (4)',qty:1}]},
+  {name:'Elder overload potion',         ingredients:[{name:'Supreme overload potion (6)',qty:1},{name:'Primal extract',qty:1},{name:'Clean fellstalk',qty:1}]},
+  {name:'Elder overload salve',          ingredients:[{name:'Elder overload potion (6)',qty:1},{name:'Prayer renewal (4)',qty:1},{name:'Prayer potion (4)',qty:1},{name:'Super antipoison (4)',qty:1},{name:'Antifire (4)',qty:1},{name:'Super antifire (4)',qty:1},{name:'Primal extract',qty:1},{name:'Clean fellstalk',qty:1}]},
+  {name:'Replenishment potion',          ingredients:[{name:'Adrenaline potion (4)',qty:1},{name:'Super restore (4)',qty:1}]},
+  {name:'Enhanced replenishment potion', ingredients:[{name:'Replenishment potion (6)',qty:1},{name:'Adrenaline crystal',qty:1}]},
+  {name:'Wyrmfire potion',               ingredients:[{name:'Super antifire (4)',qty:1},{name:'Antifire (4)',qty:1}]},
+  {name:'Brightfire potion',             ingredients:[{name:'Prayer renewal (4)',qty:1},{name:'Super antifire (4)',qty:1}]},
+  {name:'Perfect plus potion',           ingredients:[{name:'Overload (4)',qty:1},{name:'Harmony moss',qty:1},{name:'Crystal tree blossom',qty:1}]},
+  {name:'Spiritual prayer potion',       ingredients:[{name:'Primal extract',qty:1},{name:'Prayer potion (4)',qty:1},{name:'Summoning potion (4)',qty:1}]},
+];
+
+function RecipePane({allItems}) {
+  const [expanded, setExpanded] = useState(null);
+
+  const findItem = name => {
+    const lower = name.toLowerCase();
+    return allItems.find(it => it.name.toLowerCase() === lower);
+  };
+
+  const getPrice = name => {
+    const it = findItem(name);
+    if (!it) return null;
+    return it.high || it.low || null;
+  };
+
+  const calcTotal = ingredients => {
+    let total = 0;
+    for (const ing of ingredients) {
+      const p = getPrice(ing.name);
+      if (p == null) return null;
+      total += p * ing.qty;
+    }
+    return total;
+  };
+
+  return h('div', {style:{padding:'0 0 12px'}},
+    COMBINATION_RECIPES.map(recipe => {
+      const isOpen   = expanded === recipe.name;
+      const total    = calcTotal(recipe.ingredients);
+      const wikiItem = findItem(recipe.name);
+      const wikiCost = wikiItem ? (wikiItem.high || wikiItem.low) : null;
+      const doses    = recipe.name.match(/\((\d)\)/)?.[1] || 4;
+
+      return h('div', {key:recipe.name, style:{borderBottom:`1px solid ${T.borderDim}`}},
+        h('div', {
+          style:{display:'flex', justifyContent:'space-between', alignItems:'center',
+            padding:'10px 14px', cursor:'pointer', userSelect:'none'},
+          onClick: () => setExpanded(isOpen ? null : recipe.name)
+        },
+          h('div', null,
+            h('div', {style:{fontSize:13, color:T.textBright, fontWeight:600}}, recipe.name),
+            total != null
+              ? h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
+                  'Calculated cost: ',
+                  h('span', {style:{color:T.gold}}, fmt.gp(total) + ' gp'))
+              : h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Some prices unavailable')
+          ),
+          h('span', {style:{fontSize:11, color:T.textDim}}, isOpen ? '▼' : '▶')
+        ),
+
+        isOpen && h('div', {style:{padding:'0 14px 12px'}},
+          h('div', {style:{fontSize:10, color:T.textDim, letterSpacing:'0.06em', marginBottom:8}}, 'INGREDIENTS'),
+          recipe.ingredients.map(ing => {
+            const price = getPrice(ing.name);
+            const ingItem = findItem(ing.name);
+            const isUntrade = ingItem?.untradeable;
+            return h('div', {key:ing.name,
+              style:{display:'flex', justifyContent:'space-between', alignItems:'center',
+                padding:'5px 0', borderBottom:`1px solid ${T.borderDim}`, fontSize:12}},
+              h('div', {style:{display:'flex', alignItems:'center', gap:6}},
+                h('span', {style:{
+                  fontSize:10, padding:'1px 5px', borderRadius:2,
+                  background: isUntrade ? 'rgba(255,180,0,0.08)' : 'rgba(201,168,76,0.1)',
+                  border: `1px solid ${isUntrade ? 'rgba(255,180,0,0.25)' : 'rgba(201,168,76,0.2)'}`,
+                  color: isUntrade ? T.gold : T.textDim
+                }}, isUntrade ? 'made' : 'GE'),
+                h('span', {style:{color:T.text}}, ing.qty > 1 ? `${ing.qty}× ${ing.name}` : ing.name)
+              ),
+              h('span', {style:{color: price != null ? T.textBright : T.textDim}},
+                price != null ? fmt.gp(price * ing.qty) + ' gp' : '—')
+            );
+          }),
+
+          h('div', {style:{display:'flex', justifyContent:'space-between', padding:'8px 0 0',
+            fontSize:13, fontWeight:600, color:T.gold}},
+            h('span', null, 'Total'),
+            h('span', null, total != null ? fmt.gp(total) + ' gp' : '—')
+          ),
+
+          (total != null || wikiCost != null) && h('div', {
+            style:{display:'flex', gap:16, marginTop:8, paddingTop:8,
+              borderTop:`1px solid ${T.borderDim}`, fontSize:11, color:T.textDim}},
+            wikiCost && h('span', null, 'Wiki cost: ', h('span',{style:{color:T.textBright}}, fmt.gp(wikiCost)+'gp')),
+            total != null && h('span', null, 'Per dose: ', h('span',{style:{color:T.textBright}}, fmt.gp(Math.round(total/doses))+'gp'))
+          )
+        )
+      );
+    })
+  );
+}
+
+function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel}) {
+  const [view, setView] = useState('items');
+  const tradeableItems    = useMemo(() => (items||[]).filter(it => !it.untradeable), [items]);
+  const untradeableItems  = useMemo(() => (items||[]).filter(it =>  it.untradeable), [items]);
+  const displayItems = view === 'items' ? tradeableItems : untradeableItems;
+  return h('div', null,
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    untradeableItems.length > 0 && h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
+      h('button', {className: view==='items' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('items')},
+        `Items (${tradeableItems.length})`),
+      h('button', {className: view==='split' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('split')},
+        `${splitLabel} (${untradeableItems.length})`)
+    ),
+    h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
   );
 }
 
 /* ─── Market tab ─────────────────────────────────────────────── */
-function MarketTab({items}) {
+function MarketTab({items, selected, onSelect, description}) {
   const [filter, setFilter] = useState(null);
   const [sort, setSort] = useState({key:'name',dir:1});
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
   const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
-  const movers  = useMemo(()=>[...items].sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
-  const volTop  = useMemo(()=>[...items].sort((a,b)=>(b.volume||0)-(a.volume||0)).slice(0,10),[items]);
+  const movers  = useMemo(()=>[...items].filter(it=>it.change_1d!=null).sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
+  const volTop  = useMemo(()=>[...items].filter(it=>it.volume&&it.avgVolume&&it.volume>it.avgVolume*1.3).sort((a,b)=>(b.volume/b.avgVolume)-(a.volume/a.avgVolume)).slice(0,10),[items]);
   const rising  = useMemo(()=>items.filter(it=>(it.change_1d||0)>0),[items]);
   const falling = useMemo(()=>items.filter(it=>(it.change_1d||0)<0),[items]);
-  const signals = useMemo(()=>items.filter(it=>it.signals&&it.signals.length),[items]);
+  // Exclude ALCH from Market signals — they have their own tab
+  const MARKET_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL','ACTIVE','QUIET','THIN'];
+  const signals = useMemo(()=>items.filter(it=>
+    it.signals && it.signals.some(s => MARKET_SIGNALS.includes(s))
+  ),[items]);
   const filterMap = {rising,falling,signals};
   const filteredItems = useMemo(()=>{
     if (!filter) return null;
@@ -533,6 +1844,7 @@ function MarketTab({items}) {
   },[filter,rising,falling,signals,sort]);
   const cardStyle = key=>({cursor:'pointer',outline:filter===key?`2px solid ${T.gold}`:'none'});
   return h('div',null,
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
     h('div',{className:'overview-grid'},
       h('div',{className:'ov-card'},h('div',{className:'ov-val'},items.length),h('div',{className:'ov-lbl'},'Items tracked')),
       h('div',{className:'ov-card',style:cardStyle('rising'),onClick:()=>setFilter(f=>f==='rising'?null:'rising')},
@@ -558,12 +1870,16 @@ function MarketTab({items}) {
           filter==='signals'&&h('th',{onClick:()=>tog('signals')},'Signals'+arr('signals'))
         )),
         h('tbody',null, filteredItems.map(it=>
-          h('tr',{key:it.id},
+          h('tr',{key:it.id, style:{cursor:'pointer'}, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it)},
             h('td',null,it.name),
             h('td',{style:{color:T.gold}},fmt.gp(it.high)+'gp'),
-            h('td',{className:pctClass(it.change_1d)},it.change_1d?fmt.pct(it.change_1d):'—'),
+            h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
             h('td',null,h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-            filter==='signals'&&h('td',null,(it.signals||[]).map(s=>h('span',{key:s,className:`signal-badge ${s}`,style:{marginRight:3}},s)))
+            filter==='signals'&&h('td',null,
+              (it.signals||[])
+                .filter(s => MARKET_SIGNALS.includes(s))
+                .map(s=>h(SignalBadge,{key:s,signal:s,style:{marginRight:3}}))
+            )
           )
         ))
       )
@@ -572,87 +1888,285 @@ function MarketTab({items}) {
       h('div',null,
         h('div',{className:'ge-section-head'},'Top movers'),
         h('table',{className:'ge-table'},
-          h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'24h'),h('th',null,'Price'))),
-          h('tbody',null,movers.map(it=>h('tr',{key:it.id},h('td',null,it.name),h('td',{className:pctClass(it.change_1d)},it.change_1d?fmt.pct(it.change_1d):'—'),h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'))))
+          h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Change'),h('th',null,'Price'))),
+          h('tbody',null,movers.length
+            ? movers.map(it=>h('tr',{key:it.id,style:{cursor:'pointer'},className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},h('td',null,it.name),h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp')))
+            : h('tr',null,h('td',{colSpan:3,style:{color:T.textDim,textAlign:'center',padding:'12px'}},'No significant price movement detected.'))
+          )
         )
       ),
       h('div',null,
-        h('div',{className:'ge-section-head'},'Highest volume'),
+        h('div',{className:'ge-section-head'},'Unusual volume'),
+        h('div',{style:{fontSize:10,color:T.textDim,marginBottom:6}},'Items trading 30%+ above their average'),
         h('table',{className:'ge-table'},
-          h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Volume'),h('th',null,'Price'))),
-          h('tbody',null,volTop.map(it=>h('tr',{key:it.id},h('td',null,it.name),h('td',null,h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'))))
+          h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Vol / Avg'),h('th',null,'Price'))),
+          h('tbody',null,volTop.length
+            ? volTop.map(it=>h('tr',{key:it.id,style:{cursor:'pointer'},className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},
+                h('td',null,it.name),
+                h('td',null,h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
+                h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp')
+              ))
+            : h('tr',null,h('td',{colSpan:3,style:{color:T.textDim,textAlign:'center',padding:'12px'}},'No unusual volume detected.'))
+          )
         )
       )
     )
   );
 }
 
-function NewsTab({news, onOpen}) {
-  if (!news||!news.length) return h('div',{className:'empty'},h('div',{className:'icon'},'◎'),h('p',null,'No news yet — click Fetch Now.'));
+const APP_NEWS = [
+  {
+    version: 'Coming Soon',
+    items: [
+      'Opportunity Score — single composite ranking for flip potential',
+      'Wishlist — set target buy prices and track how close the market gets',
+      'Price history charts — 7-day and 30-day in-app price graphs',
+      'Portfolio analytics — value over time, profit by category, hold time',
+      'Expanded untradeable items — Dungeoneering, Barbarian Assault, minigame rewards',
+      'DXP Intelligence — track items that historically move before and during DXP weekends',
+    ]
+  },
+  {
+    version: 'v1.3.0',
+    items: [
+      'Fixed crash that blanked the entire app when opening Watchlist, Settings, or other tabs',
+      'Compare tab — side-by-side price and stat comparison for multiple items',
+      'RS3 News feed — live news from the official RuneScape RSS feed',
+      'Item notes — write and save freeform notes on any item from its detail panel',
+      'Combination recipe panel — live ingredient cost breakdown for combination potions',
+      'Category editor — reassign any item\'s category directly from its detail panel',
+      'Dashboard personal sections — Watchlist Movers, Portfolio P&L, Triggered Alerts',
+      'Alerts moved up in the sidebar to sit below Portfolio',
+      'Press S or / anywhere to instantly focus the search bar',
+      'Items under 900gp excluded from all signals — reduces noise',
+      'Empty state hints on Watchlist, Alerts, and Portfolio for new users',
+    ]
+  },
+  {
+    version: 'v1.2.0',
+    items: [
+      'Dashboard tab — market indexes, pulse stats, top movers, volume anomalies',
+      'Invention components sub-tab — all 86 components with production cost and rarity',
+      'Combination Potions sub-tab — 23 untradeable combo potions with production costs',
+      'Untradeable item badge in detail panel; hides irrelevant fields for untradeable items',
+      'Treasure Trails items now dual-listed in their combat/skill tab and the TT tab',
+      'Renamed Overrides/Titles to Cosmetics/Titles',
+      'Corrected Anima Core of Zamorak (ranged), Anima Core of Zaros (melee)',
+      'Corrected Divine/Elysian spirit shield categories',
+      'Tab descriptions added across all tabs',
+      'Numerous item category fixes and overrides',
+    ]
+  },
+  {
+    version: 'v1.1.0',
+    items: [
+      'Portfolio tab — track GE positions, profit/loss, tax statistics',
+      'High Value tab — configurable threshold for expensive item filtering',
+      'Price alerts with optional Discord webhook integration',
+      'Global search bar across all items',
+      'Hidden items — hide items you never want to see, manage in Settings',
+      'Volume EMA smoothing and history-based price change tracking',
+      'Market signals engine (SURGE, DUMP, ACCUMULATION, DISTRIBUTION, FRENZY, etc.)',
+    ]
+  },
+  {
+    version: 'v1.0.0',
+    items: [
+      'Initial release',
+      'Live GE price data via WeirdGloop GazBot',
+      'Category tabs for all combat styles, skills, and item types',
+      'Watchlist, Market, Opportunities, Alch tabs',
+      'RS game news feed',
+      'Dark theme runescape-inspired UI',
+    ]
+  },
+];
+
+function NewsTab({news, onOpen, description}) {
+  const [sub, setSub] = useState('rs3');
   return h('div',null,
-    news.map((n,i)=>h('div',{key:i,className:'news-item'},
-      h('div',{className:'row',style:{gap:6,marginBottom:2}},h('span',{className:'news-src'},n.source),h('span',{style:{fontSize:10,color:T.textDim}},n.date)),
-      h('div',{className:'news-title',onClick:()=>n.url&&onOpen(n.url)},n.title),
-      n.mentions&&n.mentions.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}},n.mentions.map(m=>h('span',{key:m,className:'news-tag'},m)))
-    ))
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+
+    // Sub-tab pills
+    h('div',{style:{display:'flex', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`}},
+      h('button',{
+        onClick:()=>setSub('rs3'),
+        style:{padding:'5px 14px', fontSize:12, fontWeight:'bold', letterSpacing:'0.05em',
+          background: sub==='rs3' ? T.gold : 'transparent',
+          color: sub==='rs3' ? '#1a1208' : T.textDim,
+          border:`1px solid ${sub==='rs3' ? T.gold : T.border}`,
+          borderRadius:3, cursor:'pointer'}
+      }, `RS3 News${news&&news.length ? ` (${news.length})` : ''}`),
+      h('button',{
+        onClick:()=>setSub('app'),
+        style:{padding:'5px 14px', fontSize:12, fontWeight:'bold', letterSpacing:'0.05em',
+          background: sub==='app' ? T.gold : 'transparent',
+          color: sub==='app' ? '#1a1208' : T.textDim,
+          border:`1px solid ${sub==='app' ? T.gold : T.border}`,
+          borderRadius:3, cursor:'pointer'}
+      }, `App Updates (${APP_NEWS.length})`)
+    ),
+
+    // RS3 News pane
+    sub==='rs3' && h('div',{style:{padding:'0 14px'}},
+      (!news||!news.length)
+        ? h('div',{className:'empty-state'},
+            h('div',{style:{fontSize:32, marginBottom:8}}, '📰'),
+            h('div',null,'No RS news loaded yet.'),
+            h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Fetch Now to load.')
+          )
+        : news.map((n,i)=>h('div',{key:i,className:'news-item'},
+            h('div',{className:'row',style:{gap:6,marginBottom:2}},h('span',{className:'news-src'},n.source),h('span',{style:{fontSize:10,color:T.textDim}},n.date)),
+            h('div',{className:'news-title',onClick:()=>n.url&&onOpen(n.url)},n.title),
+            n.mentions&&n.mentions.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}},n.mentions.map(m=>h('span',{key:m,className:'news-tag'},m)))
+          ))
+    ),
+
+    // App Updates pane
+    sub==='app' && h('div',{style:{padding:'0 14px 12px'}},
+      APP_NEWS.map(section => h('div',{key:section.version, style:{marginBottom:14, paddingTop:12}},
+        h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textBright, marginBottom:6,
+          paddingBottom:3, borderBottom:`1px solid ${T.borderDim}`}}, section.version),
+        h('ul',{style:{listStyle:'none', margin:0, padding:0}},
+          section.items.map((item,i) => h('li',{key:i, style:{
+            fontSize:12, color:T.text, padding:'2px 0 2px 12px',
+            position:'relative', lineHeight:1.5
+          }},
+            h('span',{style:{position:'absolute',left:0,color:T.textDim}}, '·'),
+            item
+          ))
+        )
+      ))
+    )
   );
 }
 
-function AlertsTab({items, alerts, onSave, onDelete, toast}) {
-  const [form, setForm] = useState({item_name:'',condition:'above',price:''});
+const ALERT_CONDITIONS = [
+  {value:'above',      label:'Price rises above'},
+  {value:'below',      label:'Price falls below'},
+  {value:'pct_up',     label:'Price change % rises above'},
+  {value:'pct_down',   label:'Price change % falls below'},
+  {value:'signal',     label:'Signal triggers'},
+  {value:'alch',       label:'Becomes alch-profitable'},
+];
+const ALERT_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL'];
+
+function alertSummary(a) {
+  switch(a.condition) {
+    case 'above':    return `price > ${fmt.gp(a.price)}gp`;
+    case 'below':    return `price < ${fmt.gp(a.price)}gp`;
+    case 'pct_up':   return `change > +${a.pct}%`;
+    case 'pct_down': return `change < -${a.pct}%`;
+    case 'signal':   return `signal: ${a.signal_type||''}`;
+    case 'alch':     return 'alch profit';
+    default:         return a.condition;
+  }
+}
+
+function AlertsTab({items, alerts, onSave, onDelete, toast, description}) {
+  const BLANK = {item_name:'', condition:'above', price:'', pct:'', signal_type:'SURGE'};
+  const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
+
+  const needsPrice  = ['above','below'].includes(form.condition);
+  const needsPct    = ['pct_up','pct_down'].includes(form.condition);
+  const needsSignal = form.condition === 'signal';
+
   const submit = async () => {
-    if (!form.item_name||!form.price) { toast('Fill in all fields','error'); return; }
-    const a = {...form, id:editId||Date.now().toString(), price:Number(form.price)};
+    if (!form.item_name) { toast('Enter an item name','error'); return; }
+    if (needsPrice  && !form.price)  { toast('Enter a price','error'); return; }
+    if (needsPct    && !form.pct)    { toast('Enter a % value','error'); return; }
+    if (needsSignal && !form.signal_type) { toast('Choose a signal','error'); return; }
+    const a = {
+      ...form,
+      id: editId || Date.now().toString(),
+      price:  needsPrice  ? Number(form.price) : 0,
+      pct:    needsPct    ? Number(form.pct)   : 0,
+    };
     await window.genius?.saveAlert(a);
     onSave(a);
-    setForm({item_name:'',condition:'above',price:''});
+    setForm(BLANK);
     setEditId(null);
     toast('Alert saved','success');
   };
-  return h('div',{className:'two-col'},
-    h('div',null,
-      h('div',{className:'ge-section-head'},editId?'Edit alert':'New alert'),
-      h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
-        h('div',null,
-          h('label',{className:'form-lbl'},'Item name'),
-          h('input',{className:'ge-input',list:'al-items',placeholder:'Dragon bones...',value:form.item_name,onChange:set('item_name')}),
-          h('datalist',{id:'al-items'},items.slice(0,100).map(it=>h('option',{key:it.id,value:it.name})))
-        ),
-        h('div',null,
-          h('label',{className:'form-lbl'},'Condition'),
-          h('select',{className:'ge-input',value:form.condition,onChange:set('condition')},
-            h('option',{value:'above'},'Price rises above'),
-            h('option',{value:'below'},'Price falls below')
+
+  const startEdit = a => {
+    setEditId(a.id);
+    setForm({...BLANK, ...a, price: a.price||'', pct: a.pct||''});
+  };
+  const cancelEdit = () => { setEditId(null); setForm(BLANK); };
+
+  return h('div',null,
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div',{className:'two-col'},
+      h('div',null,
+        h('div',{className:'ge-section-head'}, editId ? 'Edit alert' : 'New alert'),
+        h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+          h('div',null,
+            h('label',{className:'form-lbl'},'Item name'),
+            h(ItemAutocomplete,{items, value:form.item_name, onChange:name=>setForm(f=>({...f,item_name:name})), placeholder:'Search item...'})
+          ),
+          h('div',null,
+            h('label',{className:'form-lbl'},'Condition'),
+            h('select',{className:'ge-input',value:form.condition,onChange:set('condition')},
+              ALERT_CONDITIONS.map(c => h('option',{key:c.value,value:c.value},c.label))
+            )
+          ),
+          needsPrice && h('div',null,
+            h('label',{className:'form-lbl'},'Price threshold'),
+            h(GpInput,{value:form.price, placeholder:'e.g. 500m', onChange:v=>setForm(f=>({...f,price:v}))})
+          ),
+          needsPct && h('div',null,
+            h('label',{className:'form-lbl'},'% threshold'),
+            h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+              h('input',{className:'ge-input',type:'number',min:0,step:0.1,value:form.pct,
+                onChange:set('pct'),placeholder:'e.g. 5', style:{width:80}}),
+              h('span',{style:{color:T.textDim,fontSize:12}},'%')
+            )
+          ),
+          needsSignal && h('div',null,
+            h('label',{className:'form-lbl'},'Signal type'),
+            h('select',{className:'ge-input',value:form.signal_type,onChange:set('signal_type')},
+              ALERT_SIGNALS.map(s => h('option',{key:s,value:s},s))
+            )
+          ),
+          form.condition === 'alch' && h('div',{style:{fontSize:11,color:T.textDim,fontStyle:'italic'}},
+            'Triggers when alch value beats GE sell price after tax + nature rune cost.'
+          ),
+          h('div',{className:'row'},
+            h('button',{className:'ge-btn gold',onClick:submit}, editId?'Update':'Add alert'),
+            editId && h('button',{className:'ge-btn',onClick:cancelEdit},'Cancel')
           )
-        ),
-        h('div',null,
-          h('label',{className:'form-lbl'},'Price (gp)'),
-          h('input',{className:'ge-input',type:'number',placeholder:'1000000',value:form.price,onChange:set('price')})
-        ),
-        h('div',{className:'row'},
-          h('button',{className:'ge-btn gold',onClick:submit},editId?'Update':'Add alert'),
-          editId&&h('button',{className:'ge-btn',onClick:()=>{setEditId(null);setForm({item_name:'',condition:'above',price:''})}}, 'Cancel')
         )
+      ),
+      h('div',null,
+        h('div',{className:'ge-section-head'},`Active alerts (${alerts.length})`),
+        !alerts.length
+          ? h('div',{className:'empty',style:{padding:'20px 0'}},
+              h('div',{className:'icon'},'◉'),
+              h('p',null,'No alerts set yet.'),
+              h('div',{style:{fontSize:12,color:T.textDim,marginTop:6,lineHeight:1.7,maxWidth:280,textAlign:'center'}},
+                'Use the form on the left to set a price, % change, or signal alert on any item.',h('br',null),
+                'Alerts can optionally ping a Discord webhook when they trigger.'
+              )
+            )
+          : alerts.map(a => h('div',{key:a.id,className:'alert-row'},
+              h('span',{style:{flex:1,color:T.text,fontSize:12}},a.item_name),
+              h('span',{className:'alert-cond',style:{
+                fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
+                background:'rgba(201,168,76,0.1)', border:`1px solid ${T.borderDim}`, color:T.textDim
+              }}, alertSummary(a)),
+              h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:11},onClick:()=>startEdit(a)},'Edit'),
+              h('button',{className:'ge-btn danger',style:{padding:'2px 8px',fontSize:11},
+                onClick:async()=>{await window.genius?.deleteAlert(a.id);onDelete(a.id);toast('Deleted','info')}},'Del')
+            ))
       )
-    ),
-    h('div',null,
-      h('div',{className:'ge-section-head'},`Active alerts (${alerts.length})`),
-      !alerts.length
-        ? h('div',{className:'empty',style:{padding:'20px 0'}},h('p',null,'No alerts set.'))
-        : alerts.map(a=>h('div',{key:a.id,className:'alert-row'},
-          h('span',{style:{flex:1,color:T.text,fontSize:12}},a.item_name),
-          h('span',{className:`alert-cond ${a.condition}`},a.condition==='above'?'above':'below'),
-          h('span',{style:{color:T.gold,fontSize:12,minWidth:60,textAlign:'right'}},fmt.gp(a.price)+'gp'),
-          h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:11},onClick:()=>{setEditId(a.id);setForm(a)}},'Edit'),
-          h('button',{className:'ge-btn danger',style:{padding:'2px 8px',fontSize:11},onClick:async()=>{await window.genius?.deleteAlert(a.id);onDelete(a.id);toast('Deleted','info')}},'Del')
-        ))
     )
   );
 }
 
-function SettingsTab({settings, onChange, toast}) {
+function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items}) {
   const [s, setS] = useState(settings);
   useEffect(()=>setS(settings),[settings]);
   const set = k => e => setS(x=>({...x,[k]:e.target.value}));
@@ -679,87 +2193,1182 @@ function SettingsTab({settings, onChange, toast}) {
       )
     ),
     h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Expensive items threshold'),
+      h('label',{className:'form-lbl'},'Show items at or above this price in the High Value tab'),
+      h('input',{
+        className:'ge-input', type:'number', min:1000000, step:10000000,
+        placeholder:'500000000',
+        value: s.expensiveThreshold || 500000000,
+        onChange: set('expensiveThreshold'),
+        style:{marginBottom:4}
+      }),
+      h('div',{style:{fontSize:11,color:T.textDim}},
+        `Currently: ${fmt.gp(s.expensiveThreshold || 500000000)}gp`
+      )
+    ),
+    h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Theme'),
       h('select',{className:'ge-input',value:s.theme||'dark',onChange:set('theme')},
         h('option',{value:'dark'},'Dark (default)'),
+        h('option',{value:'black'},'Black'),
         h('option',{value:'parchment'},'Parchment (light)')
       )
+    ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Sidebar Order'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},'Drag to reorder. Save settings to apply.'),
+      h(SidebarOrderEditor, {
+        navItems: NAV.filter(n=>n.id),
+        order: s.navOrder||[],
+        onChange: order => setS(x=>({...x,navOrder:order}))
+      }),
+      h('button',{className:'ge-btn',style:{marginTop:8},onClick:()=>setS(x=>({...x,navOrder:[]}))}, 'Reset to Default')
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Notifications'),
       h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
         h('input',{type:'checkbox',checked:!!s.notifications,onChange:setChk('notifications')}),
         h('span',null,'Desktop notifications for price alerts')
-      )
+      ),
+      h('button',{
+        className:'ge-btn',
+        style:{marginTop:8},
+        onClick: async () => {
+          const result = await window.genius?.testNotification({
+            title:'GEnius — Test Notification',
+            body:'Notifications are working correctly!'
+          });
+          if (result?.success === false) toast('Notification failed: ' + result.error, 'error');
+          else toast('Test notification sent!', 'success');
+        }
+      },'Test notification')
     ),
-    h('button',{className:'ge-btn gold',onClick:save},'Save settings')
+    h('button',{className:'ge-btn gold',onClick:save},'Save settings'),
+
+
+    hiddenItems && hiddenItems.length > 0 && h('div',{style:{marginTop:24}},
+      h('div',{className:'ge-section-head'},'Hidden Items'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
+        `${hiddenItems.length} item${hiddenItems.length!==1?'s':''} hidden from all tabs.`
+      ),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:4}},
+        hiddenItems.map(id => {
+          const item = items?.find(it => it.id === id);
+          const name = item?.name || `Item #${id}`;
+          return h('div',{key:id, style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',background:'rgba(0,0,0,0.2)',borderRadius:3,fontSize:12}},
+            h('span',{style:{color:T.text}}, name),
+            h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:10},onClick:()=>onUnhide&&onUnhide(id)},'Unhide')
+          );
+        })
+      )
+    )
   );
 }
 
+/* ─── Category Editor ────────────────────────────────────────── */
+const ALL_CATS = [
+  'melee','magic','ranged','necromancy','hybrid','ammo','boss',
+  'invention','herblore','smithing','crafting','fletching','food',
+  'farming','mining','prayer','archaeology','runes','summoning','construction',
+  'treasure_trails','rares','overrides','codex',
+  'low_tier','materials','supplies','misc'
+];
+
+
+/* ─── Expensive tab ───────────────────────────────────────────── */
+function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, threshold, description}) {
+  const [sort, setSort] = useState({key:'high', dir:-1});
+
+  const expThreshold = Number(threshold) || 500000000;
+
+  const expItems = useMemo(() => {
+    return items.filter(it => (it.high || it.low || 0) >= expThreshold);
+  }, [items, expThreshold]);
+
+  const sorted = useMemo(() => {
+    return [...expItems].sort((a,b) => {
+      if (sort.key === 'name') return sort.dir * a.name.localeCompare(b.name);
+      const av = a[sort.key] ?? 0;
+      const bv = b[sort.key] ?? 0;
+      return sort.dir * (av < bv ? -1 : av > bv ? 1 : 0);
+    });
+  }, [expItems, sort]);
+
+  const Th = ({k, label}) => h('th', {
+    style:{cursor:'pointer', userSelect:'none'},
+    onClick: () => setSort(s => ({key:k, dir: s.key===k ? -s.dir : -1}))
+  }, label + (sort.key===k ? (sort.dir>0 ? ' ↑' : ' ↓') : ''));
+
+  if (!expItems.length) return h('div', {className:'empty-state'},
+    h('div', {style:{fontSize:32, marginBottom:8}}, '💎'),
+    h('div', null, `No items at or above ${fmt.gp(expThreshold)}gp.`),
+    h('div', {style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Adjust the threshold in Settings.')
+  );
+
+  return h('div', {className:'tab-content'},
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div', {style:{padding:'8px 12px', fontSize:11, color:T.textDim, borderBottom:`1px solid ${T.border}`, display:'flex', gap:16}},
+      h('span', null, `${expItems.length} items at or above ${fmt.gp(expThreshold)}gp`),
+      h('span', {style:{color:T.textDim, fontSize:10}}, 'Adjust threshold in Settings')
+    ),
+    h('table', {className:'ge-table'},
+      h('thead', null,
+        h('tr', null,
+          h(Th, {k:'name',      label:'Item'}),
+          h(Th, {k:'high',      label:'Price'}),
+          h(Th, {k:'change_1d', label:'24h'}),
+          h(Th, {k:'volume',    label:'Volume'}),
+          h('th', null, '')
+        )
+      ),
+      h('tbody', null, sorted.map(it =>
+        h('tr', {key:it.id, 'data-item-id':it.id,
+          className: selected?.id===it.id ? 'selected' : '',
+          onClick: () => onSelect(it)
+        },
+          h('td', null, it.name),
+          h('td', {style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp'),
+          h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
+          h('td', null, h(VolDisplay, {volume:it.volume, avgVolume:it.avgVolume})),
+          h('td', null,
+            h('button', {
+              className:'star-btn',
+              onClick: e => { e.stopPropagation(); onToggleWatch(it.id); }
+            }, h('span', {className: watchlist.includes(it.id)?'star-on':'star-off'},
+              watchlist.includes(it.id)?'★':'☆'
+            ))
+          )
+        )
+      ))
+    )
+  );
+}
+
+/* ─── Alch tab ────────────────────────────────────────────────── */
+function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, description}) {
+  const [sort, setSort] = useState({key:'alchProfit', dir:-1});
+
+  const natureRunePrice = useMemo(() => {
+    const nr = items.find(it => it.natureRunePrice);
+    return nr ? nr.natureRunePrice : 0;
+  }, [items]);
+
+  const divineChargePrice = useMemo(() => {
+    const dc = items.find(it => it.name && it.name.toLowerCase() === 'divine charge');
+    return dc ? (dc.high || dc.low || 0) : 0;
+  }, [items]);
+
+  const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
+
+  const alchItems = useMemo(() => {
+    return items
+      .filter(it => it.signals && it.signals.includes('ALCH'))
+      .map(it => {
+        const price = it.high || it.low || 0;
+        const alch = it.alch || 0;
+        const afterTax = applyTax(price);
+        const alchProfit = alch - price - natureRunePrice;
+        const alchemiserProfit = alch - price - natureRunePrice - chargePerItem;
+        return {...it, afterTax, alchProfit, alchemiserProfit};
+      });
+  }, [items, natureRunePrice, chargePerItem]);
+
+  const Th = ({k, label}) => h('th', {
+    className:'sortable', style:{cursor:'pointer', userSelect:'none'},
+    onClick: () => setSort(s => ({key:k, dir: s.key===k ? -s.dir : -1}))
+  }, label + (sort.key===k ? (sort.dir>0 ? ' ↑' : ' ↓') : ''));
+
+  const sorted = useMemo(() => {
+    return [...alchItems].sort((a,b) => {
+      if (sort.key === 'name') {
+        return sort.dir * a.name.localeCompare(b.name);
+      }
+      const av = a[sort.key] ?? 0;
+      const bv = b[sort.key] ?? 0;
+      return sort.dir * (av < bv ? -1 : av > bv ? 1 : 0);
+    });
+  }, [alchItems, sort]);
+
+  const descStrip = description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description);
+
+  if (!alchItems.length) return h('div', null,
+    descStrip,
+    h('div', {className:'empty-state'},
+      h('div', {style:{fontSize:32, marginBottom:8}}, '🔥'),
+      h('div', null, 'No alch opportunities right now.'),
+      h('div', {style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Items appear here when their alch value exceeds GE sell price (after 2% tax) plus the cost of a nature rune.')
+    )
+  );
+
+  return h('div', {className:'tab-content'},
+    descStrip,
+    h('div', {style:{padding:'8px 12px', fontSize:11, color:T.textDim, borderBottom:`1px solid ${T.border}`, display:'flex', gap:16}},
+      h('span', null, `${alchItems.length} item${alchItems.length!==1?'s':''} worth alching`),
+      natureRunePrice ? h('span', null, `Nature rune: ${fmt.gp(natureRunePrice)}gp`) : null,
+      divineChargePrice ? h('span', null, `Divine charge: ${fmt.gp(divineChargePrice)}gp (${fmt.gp(chargePerItem)}gp/item)`) : null
+    ),
+    h('table', {className:'ge-table'},
+      h('thead', null,
+        h('tr', null,
+          h(Th, {k:'name',             label:'Item'}),
+          h(Th, {k:'high',             label:'GE Price'}),
+          h(Th, {k:'afterTax',         label:'After Tax'}),
+          h(Th, {k:'alch',             label:'Alch Value'}),
+          h(Th, {k:'alchProfit',       label:'Manual Profit'}),
+          h(Th, {k:'alchemiserProfit', label:'Alchemiser Profit'}),
+          h('th', null, '')
+        )
+      ),
+      h('tbody', null, sorted.map(it =>
+        h('tr', {key:it.id, 'data-item-id':it.id,
+          className: selected?.id===it.id ? 'selected' : '',
+          onClick: () => onSelect(it)
+        },
+          h('td', null, it.name),
+          h('td', null, fmt.gp(it.high||it.low)+'gp'),
+          h('td', {style:{color:T.textDim}}, fmt.gp(it.afterTax)+'gp'),
+          h('td', {style:{color:'#ce93d8'}}, fmt.gp(it.alch)+'gp'),
+          h('td', {style:{color: it.alchProfit > 0 ? T.green : T.red}},
+            (it.alchProfit > 0 ? '+' : '') + fmt.gp(it.alchProfit)+'gp'
+          ),
+          h('td', {style:{color: it.alchemiserProfit > 0 ? T.green : T.red}},
+            (it.alchemiserProfit > 0 ? '+' : '') + fmt.gp(it.alchemiserProfit)+'gp'
+          ),
+          h('td', null,
+            h('button', {
+              className:'star-btn',
+              onClick: e => { e.stopPropagation(); onToggleWatch(it.id); }
+            }, h('span', {className: watchlist.includes(it.id)?'star-on':'star-off'},
+              watchlist.includes(it.id)?'★':'☆'
+            ))
+          )
+        )
+      ))
+    )
+  );
+}
+
+/* ─── Sidebar order editor ────────────────────────────────────── */
+function SidebarOrderEditor({navItems, order, onChange}) {
+  const ordered = useMemo(() => {
+    if (!order || !order.length) return navItems;
+    const byId = Object.fromEntries(navItems.map(n => [n.id, n]));
+    const known = order.map(id => byId[id]).filter(Boolean);
+    const newOnes = navItems.filter(n => !order.includes(n.id));
+    return [...known, ...newOnes];
+  }, [navItems, order]);
+
+  const [dragIdx, setDragIdx] = useState(null);
+  const [overIdx, setOverIdx] = useState(null);
+
+  const onDrop = (idx) => {
+    if (dragIdx === null) return;
+    const arr = [...ordered];
+    const [moved] = arr.splice(dragIdx, 1);
+    arr.splice(idx, 0, moved);
+    onChange(arr.map(n => n.id));
+    setDragIdx(null); setOverIdx(null);
+  };
+
+  return h('div', null,
+    ordered.map((item, idx) =>
+      h('div', {
+        key: item.id, draggable: true,
+        className: 'drag-item' + (overIdx === idx ? ' drag-over' : ''),
+        onDragStart: () => setDragIdx(idx),
+        onDragOver:  e => { e.preventDefault(); setOverIdx(idx); },
+        onDrop:      () => onDrop(idx),
+        onDragEnd:   () => { setDragIdx(null); setOverIdx(null); },
+        style: { opacity: dragIdx === idx ? 0.4 : 1 }
+      },
+        h('span', {style:{color:T.textDim, fontSize:14}}, '⠿'),
+        h('span', {style:{fontSize:13}}, item.icon),
+        h('span', {style:{fontSize:12, color:T.text}}, item.label)
+      )
+    )
+  );
+}
+
+/* ─── GP input with K/M/B shorthand ──────────────────────────── */
+function GpInput({value, onChange, placeholder, style}) {
+  const [raw, setRaw] = useState(value ? String(value) : '');
+
+  useEffect(() => {
+    // Sync if parent value changes externally (e.g. edit mode)
+    if (value !== undefined && value !== '' && value !== null) {
+      setRaw(String(value));
+    }
+  }, []);
+
+  const parsed = parseGP(raw);
+  const preview = (raw.length > 0 && typeof parsed === 'number' && String(parsed) !== raw)
+    ? fmt.gp(parsed) + 'gp'
+    : null;
+
+  const handleChange = e => {
+    const v = e.target.value;
+    setRaw(v);
+    const p = parseGP(v);
+    onChange(typeof p === 'number' ? p : v);
+  };
+
+  const handleBlur = () => {
+    const p = parseGP(raw);
+    if (typeof p === 'number') {
+      setRaw(String(p));
+      onChange(p);
+    }
+  };
+
+  return h('div', {style:{position:'relative'}},
+    h('input', {
+      className:'ge-input', type:'text', placeholder: placeholder || '0',
+      value: raw, onChange: handleChange, onBlur: handleBlur,
+      style: {...(style||{}), paddingRight: preview ? 60 : undefined}
+    }),
+    preview && h('span', {style:{
+      position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
+      fontSize:10, color:T.gold, pointerEvents:'none', whiteSpace:'nowrap'
+    }}, preview)
+  );
+}
+
+/* ─── Item autocomplete ───────────────────────────────────────── */
+function ItemAutocomplete({items, value, onChange, placeholder}) {
+  const [query, setQuery] = useState(value||'');
+  const [open, setOpen] = useState(false);
+
+  useEffect(() => { setQuery(value||''); }, [value]);
+
+  const filtered = useMemo(() => {
+    if (!query || query.length < 2) return [];
+    const q = query.toLowerCase();
+    return items
+      .filter(it => it.name.toLowerCase().includes(q))
+      .slice(0, 25);
+  }, [items, query]);
+
+  return h('div', {style:{position:'relative'}},
+    h('input', {
+      className:'ge-input',
+      value: query,
+      placeholder: placeholder || 'Search item...',
+      autoComplete: 'off',
+      onChange: e => { setQuery(e.target.value); onChange(e.target.value); setOpen(true); },
+      onFocus:  () => setOpen(true),
+      onBlur:   () => setTimeout(() => setOpen(false), 150),
+      style: {marginBottom: 0}
+    }),
+    open && filtered.length > 0 && h('div', {style:{
+      position:'absolute', top:'100%', left:0, right:0, zIndex:200,
+      background:T.panel, border:`1px solid ${T.border}`, borderRadius:3,
+      maxHeight:200, overflowY:'auto', boxShadow:'0 4px 16px rgba(0,0,0,0.6)'
+    }},
+      filtered.map(it =>
+        h('div', {
+          key:it.id,
+          style:{padding:'6px 10px', cursor:'pointer', fontSize:12, borderBottom:`1px solid ${T.borderDim}`, display:'flex', justifyContent:'space-between', alignItems:'center'},
+          onMouseDown: () => { setQuery(it.name); onChange(it.name); setOpen(false); }
+        },
+          h('span', {style:{color:T.text}}, it.name),
+          h('span', {style:{color:T.textDim, fontSize:10}}, fmt.gp(it.high||it.low)+'gp')
+        )
+      )
+    )
+  );
+}
+
+/* ─── Position modal ──────────────────────────────────────────── */
+function PositionModal({items, position, onSave, onClose}) {
+  const blank = { id:Date.now().toString(), item_name:'', quantity:'', cost_basis:'',
+    target_price:'', target_profit_pct:'', stop_loss:'', status:'open', created_at:new Date().toISOString() };
+  const [form, setForm] = useState(position ? {...position,
+    target_price: position.target_price||'',
+    stop_loss: position.stop_loss||'',
+    target_profit_pct: position.target_profit_pct||''
+  } : blank);
+  const [createAlert, setCreateAlert] = useState(false);
+  const set = k => e => setForm(f => ({...f, [k]:e.target.value}));
+  const totalCost = form.quantity && form.cost_basis ? Number(form.quantity) * Number(form.cost_basis) : 0;
+
+  const handleSave = () => {
+    if (!form.item_name || !form.quantity || !form.cost_basis) return;
+    onSave({...form,
+      quantity: Number(form.quantity),
+      cost_basis: Number(form.cost_basis),
+      target_price: form.target_price ? Number(form.target_price) : null,
+      stop_loss: form.stop_loss ? Number(form.stop_loss) : null,
+      target_profit_pct: form.target_profit_pct ? Number(form.target_profit_pct) : null,
+    }, createAlert);
+  };
+
+  return h('div', {className:'modal-overlay', onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+    h('div', {className:'modal'},
+      h('div', {className:'modal-header'},
+        h('div', {className:'detail-name', style:{fontSize:15}}, position ? 'Edit Position' : 'Add Position'),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:onClose}, 'X')
+      ),
+      h('div', {className:'modal-body'},
+        h('label', {className:'form-lbl'}, 'Item Name'),
+        h(ItemAutocomplete, {
+          items,
+          value: form.item_name,
+          onChange: name => setForm(f=>({...f, item_name:name})),
+          placeholder: 'Search item...'
+        }),
+        h('div', {style:{marginBottom:12}}),
+
+        h('div', {className:'form-grid-2'},
+          h('div', null, h('label',{className:'form-lbl'},'Quantity'),
+            h('input',{className:'ge-input',type:'number',min:1,placeholder:'e.g. 100',value:form.quantity,onChange:set('quantity')})),
+          h('div', null, h('label',{className:'form-lbl'},'Cost Basis (per item)'),
+            h(GpInput,{value:form.cost_basis, placeholder:'Price paid each', onChange:v=>setForm(f=>({...f,cost_basis:v}))}))
+        ),
+
+        totalCost > 0 && h('div', {style:{fontSize:11,color:T.textDim,marginBottom:12}},
+          `Total cost: ${fmt.gp(totalCost)}gp`),
+
+        h('div', {className:'ge-section-head'}, 'Optional Targets'),
+        h('div', {className:'form-grid-3'},
+          h('div', null, h('label',{className:'form-lbl'},'Target Price'),
+            h(GpInput,{value:form.target_price, placeholder:'Exit price', onChange:v=>setForm(f=>({...f,target_price:v}))})),
+          h('div', null, h('label',{className:'form-lbl'},'Target Profit %'),
+            h('input',{className:'ge-input',type:'number',placeholder:'e.g. 15',value:form.target_profit_pct,onChange:set('target_profit_pct')})),
+          h('div', null, h('label',{className:'form-lbl'},'Stop-Loss Price'),
+            h(GpInput,{value:form.stop_loss, placeholder:'Floor price', onChange:v=>setForm(f=>({...f,stop_loss:v}))}))
+        ),
+
+        form.target_price && h('label', {className:'row', style:{gap:8,marginBottom:12,cursor:'pointer',fontSize:11}},
+          h('input',{type:'checkbox',checked:createAlert,onChange:e=>setCreateAlert(e.target.checked)}),
+          h('span',null,'Create GE alert when target price is reached')
+        ),
+
+        h('div', {style:{display:'flex',gap:8,justifyContent:'flex-end',marginTop:8}},
+          h('button',{className:'ge-btn',onClick:onClose},'Cancel'),
+          h('button',{className:'ge-btn gold',onClick:handleSave}, position?'Update':'Add Position')
+        )
+      )
+    )
+  );
+}
+
+/* ─── Sell modal ──────────────────────────────────────────────── */
+function SellModal({position, onSell, onClose}) {
+  const [sellPrice, setSellPrice] = useState(position.currentPrice || '');
+  const [qty, setQty] = useState(position.quantity);
+  const sp = typeof sellPrice === 'number' ? sellPrice : Number(sellPrice) || 0;
+  const q = Number(qty);
+  const gross = sp * q;
+  const tax   = Math.round(gross * 0.02);
+  const net   = Math.round(sp > 50 ? sp * q * 0.98 : sp * q);
+  const cost  = position.cost_basis * q;
+  const pl    = net - cost;
+
+  return h('div', {className:'modal-overlay', onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+    h('div', {className:'modal'},
+      h('div', {className:'modal-header'},
+        h('div', {className:'detail-name', style:{fontSize:15}}, `Sell: ${position.item_name}`),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:onClose}, 'X')
+      ),
+      h('div', {className:'modal-body'},
+        h('div', {className:'form-grid-2'},
+          h('div', null, h('label',{className:'form-lbl'},'Sell Price (per item)'),
+            h(GpInput,{value:sellPrice, onChange:v=>setSellPrice(v), placeholder:'Sell price'})),
+          h('div', null, h('label',{className:'form-lbl'},`Quantity (max ${position.quantity})`),
+            h('input',{className:'ge-input',type:'number',min:1,max:position.quantity,value:qty,
+              onChange:e=>setQty(Math.min(Math.max(1,Number(e.target.value)),position.quantity))}))
+        ),
+
+        sp > 0 && h('div', {style:{background:'rgba(0,0,0,0.25)',borderRadius:4,padding:'10px',marginBottom:12}},
+          h('div', {className:'ge-section-head', style:{fontSize:10,marginBottom:6}}, 'What if I sold now?'),
+          [['Gross Sale Value', fmt.gp(gross)+'gp', null],
+           ['GE Tax (2%)',      '-'+fmt.gp(tax)+'gp', T.red],
+           ['Net Proceeds',     fmt.gp(net)+'gp', null],
+           ['Cost Basis',       '-'+fmt.gp(cost)+'gp', null],
+           ['Net P&L',          (pl>=0?'+':'')+fmt.gp(pl)+'gp', pl>=0?T.green:T.red],
+          ].map(([l,v,c])=>h('div',{key:l,style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:3}},
+            h('span',{style:{color:T.textDim}},l),
+            h('span',{style:{color:c||T.text}},v)
+          ))
+        ),
+
+        h('div', {style:{display:'flex',gap:8,justifyContent:'flex-end'}},
+          h('button',{className:'ge-btn',onClick:onClose},'Cancel'),
+          h('button',{className:'ge-btn gold',disabled:!sp||sp<=0,
+            onClick:()=>onSell({id:position.id,sell_price:sp,quantity:q})
+          },'Confirm Sale')
+        )
+      )
+    )
+  );
+}
+
+/* ─── Portfolio tab ───────────────────────────────────────────── */
+function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, toast}) {
+  const [showModal,  setShowModal]  = useState(false);
+  const [editPos,    setEditPos]    = useState(null);
+  const [sellModal,  setSellModal]  = useState(null);
+  const [showClosed, setShowClosed] = useState(false);
+
+  const positions  = portfolio?.positions || [];
+  const taxStats   = portfolio?.tax_stats  || {};
+
+  const enriched = useMemo(() => positions.map(pos => {
+    const item = items.find(it => it.name.toLowerCase() === pos.item_name.toLowerCase());
+    const currentPrice = item ? (item.high || item.low || 0) : 0;
+    const currentValue = currentPrice * pos.quantity;
+    const costValue    = pos.cost_basis * pos.quantity;
+    const grossPL      = currentValue - costValue;
+    const tax          = Math.round(currentValue * 0.02);
+    const netPL        = grossPL - tax;
+    const plPct        = costValue > 0 ? (grossPL / costValue) * 100 : 0;
+    const targetDist   = pos.target_price ? pos.target_price - currentPrice : null;
+    const stopDist     = pos.stop_loss    ? currentPrice - pos.stop_loss    : null;
+    return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist};
+  }), [positions, items]);
+
+  const openPos   = enriched.filter(p => p.status !== 'sold');
+  const closedPos = enriched.filter(p => p.status === 'sold');
+
+  const totalInvested = openPos.reduce((s,p) => s+p.costValue, 0);
+  const totalCurrent  = openPos.reduce((s,p) => s+p.currentValue, 0);
+  const unrealizedPL  = totalCurrent - totalInvested;
+  const unrealizedPct = totalInvested > 0 ? (unrealizedPL / totalInvested) * 100 : 0;
+  const realizedPL    = closedPos.reduce((s,p) => s+(p.realized_pl||0), 0);
+
+  // Allocation by item
+  const allocations = useMemo(() => {
+    return openPos
+      .filter(p => p.currentValue > 0)
+      .map(p => ({
+        name: p.item_name,
+        val: p.currentValue,
+        pct: totalCurrent > 0 ? (p.currentValue / totalCurrent) * 100 : 0
+      }))
+      .sort((a, b) => b.val - a.val);
+  }, [openPos, totalCurrent]);
+
+  const handleSave = async (pos, createAlert) => {
+    await onSavePosition(pos);
+    if (createAlert && pos.target_price) {
+      await window.genius?.saveAlert({id:`p-${pos.id}`, item_name:pos.item_name, condition:'above', price:pos.target_price});
+    }
+    if (pos.stop_loss) {
+      await window.genius?.saveAlert({id:`sl-${pos.id}`, item_name:pos.item_name, condition:'below', price:pos.stop_loss});
+    }
+    setShowModal(false); setEditPos(null);
+    toast(editPos ? 'Position updated' : 'Position added', 'success');
+  };
+
+  return h('div', {className:'tab-content'},
+
+    h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, TAB_DESCRIPTIONS.portfolio),
+
+    // Overview
+    h('div', {className:'overview-grid'},
+      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalInvested)+'gp'), h('div',{className:'ov-lbl'},'Total Invested')),
+      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},'Current Value')),
+      h('div',{className:'ov-card'},
+        h('div',{className:'ov-val '+(unrealizedPL>=0?'pct-up':'pct-down')},
+          (unrealizedPL>=0?'+':'')+fmt.gp(unrealizedPL)+'gp'),
+        h('div',{className:'ov-lbl'},`Unrealized P&L (${unrealizedPct>=0?'+':''}${unrealizedPct.toFixed(1)}%)`)
+      ),
+      h('div',{className:'ov-card'},
+        h('div',{className:'ov-val '+(realizedPL>=0?'pct-up':'pct-down')},
+          (realizedPL>=0?'+':'')+fmt.gp(realizedPL)+'gp'),
+        h('div',{className:'ov-lbl'},'Realized P&L')
+      ),
+    ),
+
+    // Toolbar
+    h('div',{style:{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}},
+      h('span',{style:{fontSize:12,color:T.textDim}},`${openPos.length} open position${openPos.length!==1?'s':''}`),
+      h('button',{className:'ge-btn gold',onClick:()=>{setEditPos(null);setShowModal(true);}}, '+ Add Position')
+    ),
+
+    // Positions table
+    openPos.length === 0
+      ? h('div',{className:'empty-state'},
+          h('div',{style:{fontSize:32,marginBottom:8}},'📊'),
+          h('div',null,'No open positions.'),
+          h('div',{style:{fontSize:12,color:T.textDim,marginTop:8,lineHeight:1.7,maxWidth:360,textAlign:'center'}},
+            'Hit "+ Add Position" above to log a buy.',h('br',null),
+            'GEnius will track live P&L, set target price alerts, and show your portfolio allocation.',h('br',null),
+            'Sold positions move to the history section below.'
+          )
+        )
+      : h('table',{className:'ge-table'},
+          h('thead',null, h('tr',null,
+            h('th',null,'Item'), h('th',null,'Qty'), h('th',null,'Cost/ea'),
+            h('th',null,'Current'), h('th',null,'Value'),
+            h('th',null,'Gross P&L'), h('th',null,'Net P&L'), h('th',null,'P&L %'),
+            h('th',null,'Target'), h('th',null,'')
+          )),
+          h('tbody',null, openPos.map(pos =>
+            h('tr',{key:pos.id},
+              h('td',null,pos.item_name),
+              h('td',null,pos.quantity.toLocaleString()),
+              h('td',null,fmt.gp(pos.cost_basis)+'gp'),
+              h('td',{style:{color:T.gold}},fmt.gp(pos.currentPrice)+'gp'),
+              h('td',null,fmt.gp(pos.currentValue)+'gp'),
+              h('td',{className:pos.grossPL>=0?'pct-up':'pct-down'},(pos.grossPL>=0?'+':'')+fmt.gp(pos.grossPL)+'gp'),
+              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'),
+              h('td',{className:pos.plPct>=0?'pct-up':'pct-down'},fmt.pct(pos.plPct)),
+              h('td',{style:{color:pos.target_price?(pos.currentPrice>=pos.target_price?T.green:T.textDim):T.textDim}},
+                pos.target_price ? fmt.gp(pos.target_price)+'gp' : '—'),
+              h('td',null,
+                h('div',{style:{display:'flex',gap:3}},
+                  h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10},
+                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'Edit'),
+                  h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
+                    onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
+                  h('button',{className:'ge-btn danger',style:{padding:'2px 6px',fontSize:10},
+                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'Del')
+                )
+              )
+            )
+          ))
+        ),
+
+    // Allocation
+    totalCurrent > 0 && allocations.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
+      h('div',{className:'ge-section-head'},'Portfolio Allocation'),
+      allocations.map(({name,val,pct}) =>
+        h('div',{key:name,style:{marginBottom:8}},
+          h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}},
+            h('span',{style:{color:T.text}},name),
+            h('span',{style:{color:T.textDim}},`${fmt.gp(val)}gp (${pct.toFixed(1)}%)`)
+          ),
+          h('div',{className:'alloc-bar-bg'},
+            h('div',{className:'alloc-bar-fg',style:{width:`${pct}%`}})
+          )
+        )
+      )
+    ),
+
+    // Tax tracking
+    h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`,marginTop:4}},
+      h('div',{className:'ge-section-head'},'GE Tax Tracking'),
+      h('div',{className:'overview-grid'},
+        h('div',{className:'ov-card'},h('div',{className:'ov-val'},fmt.gp(taxStats.today_tax||0)+'gp'),h('div',{className:'ov-lbl'},'Tax Today')),
+        h('div',{className:'ov-card'},h('div',{className:'ov-val'},fmt.gp(taxStats.week_tax||0)+'gp'),h('div',{className:'ov-lbl'},'Tax This Week')),
+        h('div',{className:'ov-card'},h('div',{className:'ov-val'},fmt.gp(taxStats.month_tax||0)+'gp'),h('div',{className:'ov-lbl'},'Tax This Month')),
+        h('div',{className:'ov-card'},h('div',{className:'ov-val'},fmt.gp(taxStats.lifetime_tax||0)+'gp'),h('div',{className:'ov-lbl'},'Lifetime Tax')),
+      )
+    ),
+
+    // Closed positions
+    closedPos.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:showClosed?8:0},
+        onClick:()=>setShowClosed(s=>!s)},
+        h('div',{className:'ge-section-head',style:{margin:0}},`Closed Positions (${closedPos.length})`),
+        h('span',{style:{color:T.textDim}},showClosed?'▲':'▼')
+      ),
+      showClosed && h('table',{className:'ge-table'},
+        h('thead',null,h('tr',null,
+          h('th',null,'Item'),h('th',null,'Qty'),h('th',null,'Cost/ea'),
+          h('th',null,'Sold At'),h('th',null,'Realized P&L')
+        )),
+        h('tbody',null, closedPos.map(pos=>
+          h('tr',{key:pos.id},
+            h('td',null,pos.item_name),
+            h('td',null,(pos.sold_quantity||pos.quantity).toLocaleString()),
+            h('td',null,fmt.gp(pos.cost_basis)+'gp'),
+            h('td',{style:{color:T.gold}},fmt.gp(pos.sold_price||0)+'gp'),
+            h('td',{className:(pos.realized_pl||0)>=0?'pct-up':'pct-down'},
+              (pos.realized_pl>=0?'+':'')+fmt.gp(pos.realized_pl||0)+'gp')
+          )
+        ))
+      )
+    ),
+
+    // Modals
+    showModal && h(PositionModal, {items, position:editPos, onClose:()=>{setShowModal(false);setEditPos(null);}, onSave:handleSave}),
+    sellModal  && h(SellModal,    {position:sellModal, onClose:()=>setSellModal(null),
+      onSell: async (opts) => {
+        const res = await onSellPosition(opts);
+        setSellModal(null);
+        if (res?.success) toast(`Sold! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
+      }
+    })
+  );
+}
+
+/* ─── History population popup ───────────────────────────────── */
+function HistoryPopup({state, onDismiss}) {
+  if (!state) return null;
+  const isInitial = !state.backgroundTotal;
+  const done  = isInitial ? state.done  : state.backgroundDone;
+  const total = isInitial ? state.total : state.backgroundTotal;
+  const pct   = total > 0 ? Math.round((done / total) * 100) : 0;
+  const fullyComplete = state.fullyComplete;
+
+  return h('div', {style:{
+    position:'fixed', bottom:20, right:20, zIndex:900,
+    background:T.panel, border:`1px solid ${T.border}`,
+    borderRadius:6, padding:'14px 16px', width:320,
+    boxShadow:'0 4px 20px rgba(0,0,0,0.6)'
+  }},
+    h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'flex-start', marginBottom:8}},
+      h('div', {style:{fontSize:12, fontWeight:'bold', color:T.goldBright}},
+        fullyComplete
+          ? '✓ Price history complete'
+          : state.complete
+            ? '📊 Building history in background...'
+            : '📊 Building price history...'
+      ),
+      h('button', {
+        className:'ge-btn', style:{padding:'1px 8px', fontSize:10},
+        onClick:onDismiss
+      }, '✕')
+    ),
+
+    !state.complete && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      `Fetching history for the most traded items (${state.done}/${state.total}). `,
+      'After this, history builds in the background — any item you open populates immediately.'
+    ),
+
+    state.complete && !fullyComplete && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      `${fmt.gp(done)} of ${fmt.gp(total)} items loaded. `,
+      'You can dismiss this — history continues even if hidden.'
+    ),
+
+    fullyComplete && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10}},
+      'All GE items have price history. You\'re fully loaded.'
+    ),
+
+    h('div', {style:{background:'rgba(0,0,0,0.3)', borderRadius:3, height:6, overflow:'hidden'}},
+      h('div', {style:{
+        height:'100%', borderRadius:3,
+        width: fullyComplete ? '100%' : `${pct}%`,
+        background: fullyComplete ? T.green : state.complete ? T.blue : T.gold,
+        transition:'width 0.5s'
+      }})
+    ),
+    !fullyComplete && h('div', {style:{fontSize:10, color:T.textDim, marginTop:4, display:'flex', justifyContent:'space-between'}},
+      h('span', null, state.complete ? `${done.toLocaleString()} / ${total.toLocaleString()} items` : `${pct}%`),
+      state.complete && h('span', null, `${pct}%`)
+    )
+  );
+}
+
+/* ─── Market Opportunities Tab ───────────────────────────────── */
+function OpportunitiesTab({items, selected, onSelect, description}) {
+
+  const withSignal = useCallback((sig) =>
+    items.filter(it => it.signals && it.signals.includes(sig)), [items]);
+
+  const surge    = useMemo(() => withSignal('SURGE').sort((a,b)=>(b.change_1d||0)-(a.change_1d||0)).slice(0,20), [items]);
+  const dump     = useMemo(() => withSignal('DUMP').sort((a,b)=>(a.change_1d||0)-(b.change_1d||0)).slice(0,20), [items]);
+  const accum    = useMemo(() => withSignal('ACCUMULATION').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,20), [items]);
+  const distrib  = useMemo(() => withSignal('DISTRIBUTION').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,20), [items]);
+  const alchItems= useMemo(() => withSignal('ALCH').sort((a,b) => {
+    const profit = it => (it.alch||0) - ((it.high||it.low||0)*0.98) - (it.natureRunePrice||0);
+    return profit(b) - profit(a);
+  }).slice(0,20), [items]);
+  const frenzy   = useMemo(() => withSignal('FRENZY').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,15), [items]);
+  const topScored = useMemo(() => [...items].filter(it=>it.score>0&&!it.untradeable).sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,20), [items]);
+
+  const risers  = useMemo(() => [...items].filter(it=>it.change_1d!=null&&it.change_1d>0).sort((a,b)=>(b.change_1d||0)-(a.change_1d||0)).slice(0,8), [items]);
+  const fallers = useMemo(() => [...items].filter(it=>it.change_1d!=null&&it.change_1d<0).sort((a,b)=>(a.change_1d||0)-(b.change_1d||0)).slice(0,8), [items]);
+
+  function SectionTable({title, icon, color, desc, rows, renderRow, headers, empty='None detected today.'}) {
+    if (!rows.length) return h('div', {style:{marginBottom:18}},
+      h('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
+        h('span', {style:{fontSize:14}}, icon),
+        h('span', {style:{fontFamily:'Cinzel,serif',fontSize:12,letterSpacing:'1.5px',textTransform:'uppercase',color: color||T.gold}}, title),
+        h('span', {style:{fontSize:10,color:T.textDim,marginLeft:4}}, '— ' + empty)
+      )
+    );
+    return h('div', {style:{marginBottom:20}},
+      h('div', {style:{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}},
+        h('span', {style:{fontSize:14}}, icon),
+        h('span', {style:{fontFamily:'Cinzel,serif',fontSize:12,letterSpacing:'1.5px',textTransform:'uppercase',color:color||T.gold}}, title),
+        h('span', {style:{fontSize:10,background:'rgba(201,168,76,0.15)',border:`1px solid ${T.borderDim}`,borderRadius:10,padding:'0 6px',color:T.textDim}}, rows.length),
+        desc && h('span', {style:{fontSize:10,color:T.textDim}}, desc)
+      ),
+      h('div', {className:'ge-table-wrap'},
+        h('table', {className:'ge-table'},
+          h('thead', null, h('tr', null, headers.map((hd,i)=>h('th',{key:i,style:{cursor:'default'}},hd)))),
+          h('tbody', null, rows.map((it,i) =>
+            h('tr', {key:it.id||i, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it)},
+              renderRow(it)
+            )
+          ))
+        )
+      )
+    );
+  }
+
+  const signalCells = it => h('td', null,
+    h('div', {style:{display:'flex',flexWrap:'wrap',gap:3}},
+      (it.signals||[]).map(s => h(SignalBadge, {key:s, signal:s}))
+    )
+  );
+
+  return h('div', {style:{padding:'4px 0'}},
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+
+    // Summary bar
+    h('div', {style:{display:'flex',gap:10,flexWrap:'wrap',marginBottom:18,padding:'10px 12px',background:T.panel2,borderRadius:4,border:`1px solid ${T.borderDim}`}},
+      [
+        ['SURGE',    T.green,  surge.length],
+        ['DUMP',     T.red,    dump.length],
+        ['ACCUM',    '#4dd0e1',accum.length],
+        ['DISTRIB',  '#ffb74d',distrib.length],
+        ['FRENZY',   '#ff80ab',frenzy.length],
+        ['ALCH',     '#ce93d8',alchItems.length],
+      ].map(([label,color,count]) =>
+        h('div', {key:label, style:{display:'flex',flexDirection:'column',alignItems:'center',minWidth:56}},
+          h('span', {style:{fontSize:18,fontWeight:300,color}}, count),
+          h('span', {style:{fontSize:9,color:T.textDim,letterSpacing:'1px',textTransform:'uppercase'}}, label)
+        )
+      )
+    ),
+
+    h(SectionTable, {
+      title:'Opportunity Score — Top 20', icon:'◈', color:T.goldBright,
+      desc:'— composite score combining momentum, volume, signals, and alch profit',
+      rows:topScored,
+      headers:['Item','Score','Price','Change','Volume','Signals'],
+      renderRow: it => {
+        const score = it.score || 0;
+        const scoreColor = score >= 70 ? T.green : score >= 40 ? T.gold : T.textDim;
+        return [
+          h('td',{key:'n'},it.name),
+          h('td',{key:'s',style:{color:scoreColor,fontWeight:'bold',textAlign:'center'}},score.toFixed(1)),
+          h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+          h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
+          h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
+          h('td',{key:'sig'},h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},(it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s})))),
+        ];
+      },
+    }),
+
+    // Strong Movers
+    h('div', {style:{marginBottom:20}},
+      h('div', {style:{fontFamily:'Cinzel,serif',fontSize:12,letterSpacing:'1.5px',textTransform:'uppercase',color:T.gold,marginBottom:8}},
+        '📈 Strong Movers'
+      ),
+      h('div', {className:'two-col'},
+        h('div', null,
+          h('div', {style:{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:'1px'}}, 'Top Risers'),
+          risers.length ? h('table', {className:'ge-table'},
+            h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Price'),h('th',null,'Change'))),
+            h('tbody',null, risers.map(it=>h('tr',{key:it.id,className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},
+              h('td',null,it.name),
+              h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+              h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low}))
+            )))
+          ) : h('div',{style:{color:T.textDim,fontSize:11,padding:'8px 0'}},'No rising items detected.')
+        ),
+        h('div', null,
+          h('div', {style:{fontSize:10,color:T.textDim,marginBottom:4,textTransform:'uppercase',letterSpacing:'1px'}}, 'Top Fallers'),
+          fallers.length ? h('table', {className:'ge-table'},
+            h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Price'),h('th',null,'Change'))),
+            h('tbody',null, fallers.map(it=>h('tr',{key:it.id,className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},
+              h('td',null,it.name),
+              h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+              h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low}))
+            )))
+          ) : h('div',{style:{color:T.textDim,fontSize:11,padding:'8px 0'}},'No falling items detected.')
+        )
+      )
+    ),
+
+    h(SectionTable, {
+      title:'SURGE Signals', icon:'⚡', color:T.green,
+      desc:'— price rising with elevated volume',
+      rows:surge,
+      headers:['Item','Price','Change','Volume','Signals'],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
+        h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
+        signalCells(it),
+      ],
+    }),
+
+    h(SectionTable, {
+      title:'DUMP Signals', icon:'📉', color:T.red,
+      desc:'— price falling with elevated volume',
+      rows:dump,
+      headers:['Item','Price','Change','Volume','Signals'],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
+        h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
+        signalCells(it),
+      ],
+    }),
+
+    h(SectionTable, {
+      title:'Accumulation', icon:'📦', color:'#4dd0e1',
+      desc:'— price flat, volume quietly building',
+      rows:accum,
+      headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
+        h('td',{key:'r',style:{color:'#4dd0e1'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
+        signalCells(it),
+      ],
+    }),
+
+    h(SectionTable, {
+      title:'Distribution', icon:'🌊', color:'#ffb74d',
+      desc:'— price flat, extreme volume — watch for incoming drop',
+      rows:distrib,
+      headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
+        h('td',{key:'r',style:{color:'#ffb74d'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
+        signalCells(it),
+      ],
+    }),
+
+    h(SectionTable, {
+      title:'Volume Frenzy', icon:'🔥', color:'#ff80ab',
+      desc:'— 250%+ above average volume',
+      rows:frenzy,
+      headers:['Item','Price','Change','Vol Ratio','Signals'],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
+        h('td',{key:'r',style:{color:'#ff80ab'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
+        signalCells(it),
+      ],
+    }),
+
+    h(SectionTable, {
+      title:'Alch Opportunities', icon:'⚗', color:'#ce93d8',
+      desc:'— alch profit exceeds GE sell after tax + nature rune',
+      rows:alchItems,
+      headers:['Item','GE Price','Alch Value','Profit / Ea','GE Limit'],
+      renderRow: it => {
+        const profit = Math.round((it.alch||0) - (it.high||it.low||0)*0.98 - (it.natureRunePrice||0));
+        return [
+          h('td',{key:'n'},it.name),
+          h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+          h('td',{key:'a',style:{color:'#ce93d8'}},fmt.gp(it.alch)+'gp'),
+          h('td',{key:'pr',style:{color:T.green}},'+'+fmt.gp(profit)+'gp'),
+          h('td',{key:'l',style:{color:T.textDim}},it.limit?it.limit.toLocaleString():'—'),
+        ];
+      },
+    }),
+  );
+}
+
+/* ─── Tab descriptions ───────────────────────────────────────── */
+const TAB_DESCRIPTIONS = {
+  dashboard:      'The big picture. Try not to panic.',
+  compare:        'Side-by-side. May the best item win.',
+  watchlist:      'The items you\'ve decided are worth obsessing over.',
+  market:         'Everything the Grand Exchange has to offer. Yes, all of it.',
+  opportunities:  'Items showing unusual price or volume activity. May or may not be a trap.',
+  portfolio:      'Track positions, profits, losses, and questionable financial decisions.',
+  alch:           'Items where nature runes are paying their own rent.',
+  melee:          'For those who solve problems up close and personally.',
+  magic:          'Wear a dress, cast spells, do more damage than everyone else.',
+  ranged:         'Killing things from a comfortable distance since 2001.',
+  necromancy:     'Ethically questionable workforce management.',
+  hybrid:         'Items that don\'t discriminate.',
+  prayer:         'The most expensive way to become holy.',
+  summoning:      'Pouches, shards, and the creatures they become.',
+  pocket:         'Small items, large implications.',
+  codex:          'Teaching your character new moves, expensively.',
+  ammo:           'Things you fire, then never find again.',
+  runes:          'The original microtransaction.',
+  low_tier:       'Bronze through dragon. Nostalgia or ironman supplies.',
+  supplies:       'Consumables that keep you alive long enough to die later.',
+  herblore:       'Crushing things together until they become medicine. Or poison.',
+  smithing:       'Hitting hot metal until it becomes better hot metal.',
+  crafting:       'If it can be made with a chisel, needle, or spinning wheel, it\'s probably here.',
+  fletching:      'Arrows, bows, and the materials that become them.',
+  food:           'Eat. Heal. Repeat.',
+  farming:        'Plant seeds, wait, harvest, pretend you\'re not just afking.',
+  mining:         'Ores, logs, fish, energies — raw materials straight from the source.',
+  archaeology:    'Digging up the past and selling it.',
+  invention:      'A PhD in item destruction.',
+  construction:   'Planks, nails, and a house your friends never visit.',
+  boss:           'Rare loot from things that were trying very hard to kill you.',
+  treasure_trails:'Rewards from following cryptic instructions written by a sadist.',
+  rares:          'Items worth more than most players\' entire banks.',
+  expensive:      'Everything over a certain threshold. Handle with care.',
+  overrides:      'Look good. That\'s it. That\'s the whole tab.',
+  materials:      'Items that defied categorisation. We\'re working on it.',
+  alerts:         'Because checking prices every five minutes is exhausting.',
+  news:           'The new updates: Congratulations, or condolences. Whichever applies.',
+};
+
 /* ─── Nav config ─────────────────────────────────────────────── */
 const NAV = [
-  {id:'watchlist',label:'Watchlist',icon:'★'},
+  {id:'dashboard',      label:'Dashboard',        icon:'◈'},
+  {id:'watchlist',      label:'Watchlist',        icon:'★'},
+  {id:'market',         label:'Market',           icon:'◐'},
+  {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
+  {id:'compare',        label:'Compare',          icon:'⇌'},
+  {id:'portfolio',      label:'Portfolio',        icon:'📊'},
+  {id:'alerts',         label:'Alerts',           icon:'◉'},
+  {id:'alch',           label:'Alch',             icon:'🔥'},
   {group:'Combat'},
-  {id:'melee',    label:'Melee',    icon:'⚔'},
-  {id:'magic',    label:'Magic',    icon:'✦'},
-  {id:'ranged',   label:'Ranged',   icon:'◎'},
-  {id:'ammo',     label:'Ammo',     icon:'◈'},
-  {id:'pocket',   label:'Pocket',   icon:'◇'},
+  {id:'melee',          label:'Melee',            icon:'⚔'},
+  {id:'magic',          label:'Magic',            icon:'✦'},
+  {id:'ranged',         label:'Ranged',           icon:'◎'},
+  {id:'necromancy',     label:'Necromancy',       icon:'☠'},
+  {id:'hybrid',         label:'Hybrid',           icon:'⚜'},
+  {id:'prayer',         label:'Prayer',           icon:'✙'},
+  {id:'summoning',      label:'Summoning',        icon:'⟡'},
+  {id:'pocket',         label:'Pocket',           icon:'◇'},
+  {id:'codex',          label:'Ability Codexes',  icon:'📖'},
+  {id:'ammo',           label:'Ammo',             icon:'◈'},
+  {id:'runes',          label:'Runes',            icon:'◈'},
+  {id:'low_tier',       label:'Low Tier',         icon:'⚔'},
+  {id:'supplies',       label:'Supplies',         icon:'⚗'},
   {group:'Skilling'},
-  {id:'herblore', label:'Herblore', icon:'⚗'},
-  {id:'smithing', label:'Smithing', icon:'⚒'},
-  {id:'crafting', label:'Crafting', icon:'◉'},
-  {id:'fletching',label:'Fletching',icon:'↑'},
-  {id:'cooking',  label:'Cooking',  icon:'◬'},
-  {id:'farming',  label:'Farming',  icon:'❧'},
-  {id:'mining',   label:'Mining/WC',icon:'⛏'},
-  {group:''},
-  {id:'materials',label:'Materials',icon:'◆'},
-  {id:'market',   label:'Market',   icon:'◐'},
-  {id:'news',     label:'News',     icon:'✦'},
-  {id:'alerts',   label:'Alerts',   icon:'◉'},
-  {id:'settings', label:'Settings', icon:'⚙'},
+  {id:'herblore',       label:'Herblore',         icon:'⚗'},
+  {id:'smithing',       label:'Smithing',         icon:'⚒'},
+  {id:'crafting',       label:'Crafting',         icon:'◉'},
+  {id:'fletching',      label:'Fletching',        icon:'↑'},
+  {id:'food',           label:'Food',             icon:'◬'},
+  {id:'farming',        label:'Farming',          icon:'❧'},
+  {id:'mining',         label:'Gathering',        icon:'⛏'},
+  {id:'archaeology',    label:'Archaeology',      icon:'⌖'},
+  {id:'invention',      label:'Invention',        icon:'⚙'},
+  {id:'construction',   label:'Construction',     icon:'🏗'},
+  {group:'Other'},
+  {id:'boss',           label:'Boss Drops',       icon:'☠'},
+  {id:'treasure_trails',label:'Treasure Trails',  icon:'🗺'},
+  {id:'rares',          label:'Rares',            icon:'💎'},
+  {id:'expensive',      label:'High Value',       icon:'💎'},
+  {id:'overrides',      label:'Cosmetics/Titles', icon:'✦'},
+  {id:'materials',      label:'Misc',             icon:'◆'},
+  {id:'news',           label:'News',             icon:'✦'},
+  {id:'settings',       label:'Settings',         icon:'⚙'},
 ];
 
 /* ─── App ─────────────────────────────────────────────────────── */
 function App() {
-  const [tab, setTab] = useState('market');
+  const [tab, setTab] = useState('dashboard');
   const [items, setItems] = useState([]);
   const [news, setNews] = useState([]);
+  const [indexes, setIndexes] = useState([]);
+  const [compareList, setCompareList] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
+  const [hiddenItems, setHiddenItems] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [settings, setSettings] = useState({});
+  const [portfolio, setPortfolio] = useState({positions:[], tax_stats:{}});
+  const [notes, setNotes] = useState({});
+  const [historyPopup, setHistoryPopup] = useState(null); // null | {done, total, complete}
   const [selected, setSelected] = useState(null);
   const [fetching, setFetching] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   const {toasts, add:toast} = useToast();
   const theme = settings.theme || 'dark';
 
+  // Custom nav order — flatten NAV when user has custom order (no group separators)
+  const navItems = useMemo(() => {
+    const order = settings.navOrder;
+    if (!order || !order.length) return NAV;
+    const byId = Object.fromEntries(NAV.filter(n=>n.id).map(n=>[n.id,n]));
+    const known = order.map(id=>byId[id]).filter(Boolean);
+    const newOnes = NAV.filter(n=>n.id && !order.includes(n.id));
+    return [...known, ...newOnes]; // flat list, no groups
+  }, [settings.navOrder]);
+
   useEffect(() => {
-    if (!window.genius) return;
+    if (!window.genius) { console.error('[GEnius] window.genius is not defined!'); return; }
+    console.log('[GEnius] Loading initial data...');
     Promise.all([
       window.genius.getData(),
       window.genius.getWatchlist(),
       window.genius.getAlerts(),
-      window.genius.getSettings()
-    ]).then(([data,wl,al,s]) => {
+      window.genius.getSettings(),
+      window.genius.getPortfolio(),
+      window.genius.getHidden(),
+      window.genius.getNotes(),
+    ]).then(([data,wl,al,s,pf,hidden,nt]) => {
+      console.log('[GEnius] getData returned:', data?.items?.length ?? 0, 'items, timestamp:', data?.timestamp);
       if (data.items)     setItems(data.items);
       if (data.news)      setNews(data.news);
+      if (data.indexes)   setIndexes(data.indexes);
       if (data.timestamp) setLastUpdate(data.timestamp);
       setWatchlist(wl||[]);
       setAlerts(al||[]);
       setSettings(s||{});
+      if (pf) setPortfolio(pf);
+      setHiddenItems(hidden||[]);
+      setNotes(nt||{});
+
+      // Trigger history population if needed
+      if (data.items && data.items.length) {
+        window.genius?.getHistoryStatus().then(status => {
+          if (status.isFirstRun || status.stored < 50) {
+            const sorted = [...data.items]
+              .filter(it => it.id)
+              .sort((a,b) => (b.volume||0) - (a.volume||0));
+            const allIds = sorted.map(it => it.id);
+            setHistoryPopup({done:0, total:Math.min(300, allIds.length), complete:false,
+              backgroundDone:0, backgroundTotal:allIds.length, fullyComplete:false});
+            window.genius?.startHistoryPopulation(allIds);
+          }
+        });
+      }
+    }).catch(e => console.error('[GEnius] Initial load error:', e));
+
+    window.genius.onHistoryProgress(d => {
+      setHistoryPopup(prev => {
+        if (!prev) return prev;
+        const initialDone = d.done <= prev.total;
+        if (initialDone) {
+          // Still in initial 300
+          const complete = d.done >= prev.total;
+          return {...prev, done: Math.min(d.done, prev.total), complete,
+            backgroundDone: d.stored, backgroundTotal: d.total};
+        } else {
+          // Background phase
+          const fullyComplete = d.stored >= d.total;
+          return {...prev, complete: true, fullyComplete,
+            backgroundDone: d.stored, backgroundTotal: d.total};
+        }
+      });
     });
     window.genius.onFetchComplete(d => {
+      console.log('[GEnius] fetch-complete received:', d);
+      if (d.pythonOut) console.log('[GEnius] Python output:', d.pythonOut);
       setFetching(false); setLastUpdate(d.timestamp);
       window.genius.getData().then(data => {
-        if (data.items) setItems(data.items);
-        if (data.news)  setNews(data.news);
-      });
+        console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
+        if (data.items)   setItems(data.items);
+        if (data.news)    setNews(data.news);
+        if (data.indexes) setIndexes(data.indexes);
+      }).catch(e => console.error('[GEnius] getData after fetch error:', e));
       toast('Prices updated','success');
     });
-    window.genius.onFetchError(d => { setFetching(false); toast('Fetch error: '+(d.error||'unknown'),'error'); });
+    window.genius.onFetchError(d => { setFetching(false); toast('Fetch error: '+(d.error||'unknown'),'error'); console.error('[GEnius] fetch-error:', d); });
     return () => { window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); };
+  }, []);
+
+  // Global shortcut: S or / focuses the search bar unless a text field is active
+  useEffect(() => {
+    const onKey = e => {
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (document.activeElement?.isContentEditable) return;
+      if (e.key === 's' || e.key === 'S' || e.key === '/') {
+        e.preventDefault();
+        document.querySelector('.ge-search-input')?.focus();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
   }, []);
 
   const toggleWatch = useCallback(async id => {
@@ -769,36 +3378,85 @@ function App() {
     toast(watchlist.includes(id) ? 'Removed from watchlist' : 'Added to watchlist', 'info');
   }, [watchlist]);
 
+  const toggleHide = useCallback(async id => {
+    const ids = Array.isArray(id) ? id : [id];
+    let nh = [...hiddenItems];
+    ids.forEach(i => {
+      if (nh.includes(i)) nh = nh.filter(x=>x!==i);
+      else nh.push(i);
+    });
+    setHiddenItems(nh);
+    await window.genius?.setHidden(nh);
+    if (ids.length > 1) {
+      toast(`${ids.length} items hidden — manage in Settings`, 'info');
+    } else if (!hiddenItems.includes(ids[0])) {
+      setSelected(null);
+      toast('Item hidden — manage in Settings', 'info');
+    } else {
+      toast('Item unhidden', 'info');
+    }
+  }, [hiddenItems]);
+
+  const addToCompare = useCallback(it => {
+    if (it._add) {
+      // called from CompareTab search — item already pushed to list externally; just force re-render
+      setCompareList(prev => prev.find(c=>c.id===it.id) ? prev : [...prev.slice(0,3), it]);
+      return;
+    }
+    setCompareList(prev => {
+      if (prev.find(c=>c.id===it.id)) { toast('Already in compare','info'); return prev; }
+      if (prev.length>=4) { toast('Max 4 items in compare','info'); return prev; }
+      toast(`${it.name} added to compare`,'success');
+      return [...prev, it];
+    });
+  }, []);
+
+  // Filter hidden items from everything except the settings hidden manager
+  const visibleItems = useMemo(() => {
+    if (!hiddenItems.length) return items;
+    return items.filter(it => !hiddenItems.includes(it.id));
+  }, [items, hiddenItems]);
+
   const byCategory = useMemo(() => {
     const m={};
-    items.forEach(it=>(it.categories||['materials']).forEach(c=>{if(!m[c])m[c]=[];m[c].push(it);}));
+    visibleItems.forEach(it=>(it.categories||['materials']).forEach(c=>{if(!m[c])m[c]=[];m[c].push(it);}));
     return m;
-  }, [items]);
+  }, [visibleItems]);
 
   const catItems = useMemo(() => {
-    if (['watchlist','market','news','alerts','settings'].includes(tab)) return items;
+    if (['watchlist','market','opportunities','news','alerts','settings'].includes(tab)) return visibleItems;
     return byCategory[tab]||[];
-  }, [tab,items,byCategory]);
+  }, [tab,visibleItems,byCategory]);
 
   const handleFetch = async () => {
     setFetching(true);
-    const res = await window.genius?.fetchNow('prices');
+    const res = await window.genius?.fetchNow('full');
     if (res&&!res.success) { setFetching(false); toast('Fetch failed','error'); }
   };
 
   const stale = lastUpdate ? Math.floor((Date.now()-lastUpdate)/60000) : null;
   const statusType = !lastUpdate ? 'none' : stale < 20 ? 'live' : 'stale';
   const statusText = !lastUpdate ? 'No data' : stale < 1 ? 'Live' : `${stale}m ago`;
-  const showDetail = selected && !['market','news','alerts','settings'].includes(tab);
+  const showDetail = selected && !['news','alerts','settings'].includes(tab);
 
   const handleSearchSelect = item => {
     setSelected(item);
     if (item.categories&&item.categories.length) setTab(item.categories[0]);
+    // Scroll to item in the table after a short delay (tab switch needs to render first)
+    setTimeout(() => {
+      const row = document.querySelector(`tr[data-item-id="${item.id}"]`);
+      if (row) {
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        row.classList.add('search-highlight');
+        setTimeout(() => row.classList.remove('search-highlight'), 2000);
+      }
+    }, 80);
   };
 
   return h('div',{className:'app'},
     h('style',null,CSS),
     theme==='parchment'&&h('style',null,PARCHMENT_CSS),
+    theme==='black'&&h('style',null,BLACK_CSS),
     h('link',{rel:'preconnect',href:'https://fonts.googleapis.com'}),
     h('link',{href:'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap',rel:'stylesheet'}),
 
@@ -807,7 +3465,7 @@ function App() {
         h('div',{style:{fontFamily:'Cinzel,serif',fontSize:18,fontWeight:700,color:T.goldBright,letterSpacing:3,textShadow:`0 0 10px rgba(255,215,0,0.3)`}},'GE',h('span',{style:{color:T.copper}},'nius')),
         h('div',{style:{fontSize:9,color:T.textDim,letterSpacing:2,textTransform:'uppercase',marginTop:1}},'Market Intelligence')
       ),
-      NAV.map((entry,i) =>
+      navItems.map((entry,i) =>
         entry.group!==undefined
           ? h('div',{key:'g'+i,className:'nav-group-label'},entry.group)
           : h('button',{
@@ -837,19 +3495,33 @@ function App() {
       ),
       h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
         h('div',{className:'content',style:{flex:1}},
-          tab==='watchlist'&&h(WatchlistTab,{items,watchlist,selected,onSelect:setSelected,onToggleWatch:toggleWatch}),
-          ['melee','magic','ranged','ammo','pocket','herblore','smithing','crafting','fletching','cooking','farming','mining','materials'].includes(tab)&&
-            h(ItemTable,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch}),
-          tab==='market'  &&h(MarketTab,  {items}),
-          tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url)}),
+          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio}),
+          tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare}),
+          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:setSelected,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist}),
+          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components'}),
+          tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
+          ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','smithing','crafting','fletching','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','overrides','low_tier','materials','construction','supplies'].includes(tab)&&
+            h(ItemTable,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
+          tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
+          tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
+          tab==='portfolio'&&h(PortfolioTab,{
+            items, portfolio, toast,
+            onSavePosition: async pos => { await window.genius?.savePosition(pos); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
+            onDeletePosition: async id => { await window.genius?.deletePosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
+            onSellPosition: async opts => { const r = await window.genius?.sellPosition(opts); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
+          }),
+          tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:setSelected,description:TAB_DESCRIPTIONS.market}),
+          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:setSelected,description:TAB_DESCRIPTIONS.opportunities}),
+          tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news}),
           tab==='alerts'  &&h(AlertsTab,  {
-            items,alerts,toast,
+            items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id))
           }),
-          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast})
+          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide})
         ),
-        showDetail&&h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onClose:()=>setSelected(null)})
+        showDetail&&h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items}),
+      h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})
       )
     ),
 

@@ -1,0 +1,8 @@
+node_modules/
+dist/
+resources/
+*.exe
+*.blockmap
+__pycache__/
+*.pyc
+.claude/

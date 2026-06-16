@@ -1,0 +1,5419 @@
+{
+  "1/3 evil turnip": [
+    "food"
+  ],
+  "2/3 cake": [
+    "food"
+  ],
+  "2/3 chocolate cake": [
+    "food"
+  ],
+  "2/3 evil turnip": [
+    "food"
+  ],
+  "abyssal lurker scroll (abyssal stealth)": [
+    "summoning"
+  ],
+  "abyssal parasite scroll (abyssal drain)": [
+    "summoning"
+  ],
+  "abyssal whip": [
+    "melee"
+  ],
+  "adamant 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant battleaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant full helm (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant full helm (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant kiteshield": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant kiteshield (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant kiteshield (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant pickaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant platebody": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant platebody (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant platebody (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant platelegs": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant platelegs (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "adamant scimitar": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant sword": [
+    "melee",
+    "low_tier"
+  ],
+  "adamant warhammer": [
+    "melee",
+    "low_tier"
+  ],
+  "agility potion (1)": [
+    "herblore"
+  ],
+  "agility potion (2)": [
+    "herblore"
+  ],
+  "agility potion (3)": [
+    "herblore"
+  ],
+  "agility potion (4)": [
+    "herblore"
+  ],
+  "ahrim's hood": [
+    "magic",
+    "ammo"
+  ],
+  "ahrim's hood (broken)": [
+    "magic",
+    "ammo"
+  ],
+  "air rune": [
+    "runes"
+  ],
+  "air talisman": [
+    "runes"
+  ],
+  "amulet of glory": [
+    "crafting"
+  ],
+  "amulet of glory (4)": [
+    "crafting"
+  ],
+  "amulet of glory (t)": [
+    "treasure_trails"
+  ],
+  "amulet of power": [
+    "crafting"
+  ],
+  "amulet of strength": [
+    "crafting"
+  ],
+  "anchovies": [
+    "food"
+  ],
+  "ancient staff": [
+    "low_tier"
+  ],
+  "antipoison (1)": [
+    "herblore"
+  ],
+  "antipoison (2)": [
+    "herblore"
+  ],
+  "antipoison (3)": [
+    "herblore"
+  ],
+  "antipoison (4)": [
+    "herblore"
+  ],
+  "antipoison+ (1)": [
+    "herblore"
+  ],
+  "antipoison+ (2)": [
+    "herblore"
+  ],
+  "antipoison+ (3)": [
+    "herblore"
+  ],
+  "antipoison+ (4)": [
+    "herblore"
+  ],
+  "apple mush": [
+    "food"
+  ],
+  "apple pie": [
+    "food"
+  ],
+  "apple tree seed": [
+    "farming"
+  ],
+  "apprentice wand": [
+    "low_tier"
+  ],
+  "archer helm": [
+    "low_tier"
+  ],
+  "archers' ring": [
+    "boss",
+    "ranged"
+  ],
+  "arctic pine logs": [
+    "mining"
+  ],
+  "arrow shaft": [
+    "ammo",
+    "fletching"
+  ],
+  "asgarnian ale": [
+    "food"
+  ],
+  "asgarnian ale (1)": [
+    "food"
+  ],
+  "asgarnian ale (2)": [
+    "food"
+  ],
+  "asgarnian ale (3)": [
+    "food"
+  ],
+  "asgarnian ale (4)": [
+    "food"
+  ],
+  "asgarnian ale (m)": [
+    "food"
+  ],
+  "asgarnian seed": [
+    "farming"
+  ],
+  "ashes": [
+    "materials"
+  ],
+  "astral rune": [
+    "runes"
+  ],
+  "attack potion (3)": [
+    "herblore"
+  ],
+  "attack potion (4)": [
+    "herblore"
+  ],
+  "avantoe seed": [
+    "farming"
+  ],
+  "axeman's folly": [
+    "food"
+  ],
+  "axeman's folly (1)": [
+    "food"
+  ],
+  "axeman's folly (2)": [
+    "food"
+  ],
+  "axeman's folly (3)": [
+    "food"
+  ],
+  "axeman's folly (4)": [
+    "food"
+  ],
+  "axeman's folly (m)": [
+    "food"
+  ],
+  "baby dragon bones": [
+    "prayer"
+  ],
+  "baked potato": [
+    "food"
+  ],
+  "banana": [
+    "food"
+  ],
+  "banana tree seed": [
+    "farming"
+  ],
+  "bane longsword": [
+    "melee"
+  ],
+  "bane pickaxe": [
+    "mining"
+  ],
+  "banite ore": [
+    "smithing",
+    "mining"
+  ],
+  "barb bolttips": [
+    "ammo",
+    "fletching"
+  ],
+  "barbed bolts": [
+    "ammo",
+    "fletching"
+  ],
+  "bark": [
+    "mining"
+  ],
+  "bass": [
+    "food"
+  ],
+  "bat bones": [
+    "prayer"
+  ],
+  "beer": [
+    "food"
+  ],
+  "berserker helm": [
+    "low_tier"
+  ],
+  "berserker ring": [
+    "boss",
+    "melee"
+  ],
+  "big bones": [
+    "prayer"
+  ],
+  "black 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "black battleaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "black dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "black helm": [
+    "melee",
+    "low_tier"
+  ],
+  "black longsword": [
+    "melee",
+    "low_tier"
+  ],
+  "black mace": [
+    "melee",
+    "low_tier"
+  ],
+  "black scimitar": [
+    "melee",
+    "low_tier"
+  ],
+  "black sq shield": [
+    "melee",
+    "low_tier"
+  ],
+  "black sword": [
+    "melee",
+    "low_tier"
+  ],
+  "black warhammer": [
+    "melee",
+    "low_tier"
+  ],
+  "blood rune": [
+    "runes"
+  ],
+  "blood talisman": [
+    "runes"
+  ],
+  "blood tiara": [
+    "materials"
+  ],
+  "blue beret": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "blue dragonhide body": [
+    "ranged",
+    "low_tier"
+  ],
+  "blue dragonhide body (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "blue dragonhide body (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "blue hallowe'en mask": [
+    "rares"
+  ],
+  "blue partyhat": [
+    "rares"
+  ],
+  "body rune": [
+    "runes"
+  ],
+  "bones": [
+    "prayer"
+  ],
+  "bowstring": [
+    "fletching"
+  ],
+  "bread": [
+    "food"
+  ],
+  "bronze 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "bronze battleaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "bronze dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "bronze longsword": [
+    "melee",
+    "low_tier"
+  ],
+  "bronze med helm": [
+    "melee",
+    "low_tier"
+  ],
+  "bronze sword": [
+    "melee",
+    "low_tier"
+  ],
+  "burnt bones": [
+    "prayer"
+  ],
+  "cadava berries": [
+    "food"
+  ],
+  "cake": [
+    "food"
+  ],
+  "calquat tree seed": [
+    "farming"
+  ],
+  "cannonball": [
+    "ammo"
+  ],
+  "casket": [
+    "food"
+  ],
+  "cave eel": [
+    "food"
+  ],
+  "cave nightshade seed": [
+    "farming"
+  ],
+  "chaos rune": [
+    "runes"
+  ],
+  "chaos talisman": [
+    "runes"
+  ],
+  "cheese": [
+    "food"
+  ],
+  "chef's delight": [
+    "food"
+  ],
+  "chef's delight (1)": [
+    "food"
+  ],
+  "chef's delight (2)": [
+    "food"
+  ],
+  "chef's delight (3)": [
+    "food"
+  ],
+  "chef's delight (4)": [
+    "food"
+  ],
+  "chef's delight (m)": [
+    "food"
+  ],
+  "chocolate cake": [
+    "food"
+  ],
+  "chocolate dust": [
+    "food"
+  ],
+  "chocolate slice": [
+    "food"
+  ],
+  "christmas cracker": [
+    "rares"
+  ],
+  "cider": [
+    "food"
+  ],
+  "cider (1)": [
+    "food"
+  ],
+  "cider (2)": [
+    "food"
+  ],
+  "cider (3)": [
+    "food"
+  ],
+  "cider (4)": [
+    "food"
+  ],
+  "clay": [
+    "smithing",
+    "mining"
+  ],
+  "clean guam": [
+    "herblore",
+    "food"
+  ],
+  "clean marrentill": [
+    "herblore",
+    "food"
+  ],
+  "clean ranarr": [
+    "herblore",
+    "food"
+  ],
+  "clean toadflax": [
+    "food"
+  ],
+  "cod": [
+    "food"
+  ],
+  "comp ogre bow": [
+    "ranged",
+    "low_tier"
+  ],
+  "cooked chicken": [
+    "food"
+  ],
+  "cooked karambwan": [
+    "food"
+  ],
+  "cooked meat": [
+    "food"
+  ],
+  "corrupt zuriel's staff": [
+    "low_tier"
+  ],
+  "corrupt dragon dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "cosmic rune": [
+    "runes"
+  ],
+  "cosmic talisman": [
+    "runes"
+  ],
+  "cosmic tiara": [
+    "materials"
+  ],
+  "cowhide": [
+    "crafting",
+    "mining"
+  ],
+  "crayfish": [
+    "food"
+  ],
+  "crystal bow": [
+    "ranged"
+  ],
+  "cup of tea": [
+    "food"
+  ],
+  "curry": [
+    "food"
+  ],
+  "curry tree seed": [
+    "farming"
+  ],
+  "dagannoth bones": [
+    "prayer"
+  ],
+  "dagannoth hide": [
+    "crafting"
+  ],
+  "death rune": [
+    "runes"
+  ],
+  "death talisman": [
+    "runes"
+  ],
+  "death tiara": [
+    "materials"
+  ],
+  "deathtouch bracelet": [
+    "crafting"
+  ],
+  "defence mix (1)": [
+    "herblore"
+  ],
+  "defence mix (2)": [
+    "herblore"
+  ],
+  "defence potion (1)": [
+    "herblore"
+  ],
+  "defence potion (2)": [
+    "herblore"
+  ],
+  "defence potion (3)": [
+    "herblore"
+  ],
+  "defence potion (4)": [
+    "herblore"
+  ],
+  "dharok's helm": [
+    "melee",
+    "ammo"
+  ],
+  "dharok's helm (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "dharok's platebody": [
+    "melee",
+    "ammo"
+  ],
+  "dharok's platebody (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "dharok's platelegs": [
+    "melee",
+    "ammo"
+  ],
+  "dharok's platelegs (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "diamond": [
+    "crafting"
+  ],
+  "diamond necklace": [
+    "crafting"
+  ],
+  "diamond ring": [
+    "crafting"
+  ],
+  "dorgeshuun crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "dragon 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "dragon battleaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "dragon bolt tips": [
+    "ammo",
+    "low_tier"
+  ],
+  "dragon chainbody": [
+    "melee",
+    "low_tier"
+  ],
+  "dragon dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "dragon halberd": [
+    "melee",
+    "low_tier"
+  ],
+  "dragon mace": [
+    "melee",
+    "low_tier"
+  ],
+  "dragonstone": [
+    "crafting"
+  ],
+  "dragonstone necklace": [
+    "crafting"
+  ],
+  "dust rune": [
+    "runes"
+  ],
+  "dwarf multicannon": [
+    "ranged"
+  ],
+  "dwarven stout": [
+    "food"
+  ],
+  "dwarven stout (1)": [
+    "food"
+  ],
+  "dwarven stout (2)": [
+    "food"
+  ],
+  "dwarven stout (3)": [
+    "food"
+  ],
+  "dwarven stout (4)": [
+    "food"
+  ],
+  "dwarven stout (m)": [
+    "food"
+  ],
+  "earth rune": [
+    "runes"
+  ],
+  "earth talisman": [
+    "runes"
+  ],
+  "easter egg": [
+    "rares"
+  ],
+  "elder rune 2h sword": [
+    "low_tier"
+  ],
+  "elder rune bar": [
+    "mining"
+  ],
+  "elder rune longsword": [
+    "low_tier"
+  ],
+  "elder rune pickaxe": [
+    "gathering"
+  ],
+  "elemental titan scroll (titan's constitution)": [
+    "summoning"
+  ],
+  "elemental helmet": [
+    "materials"
+  ],
+  "elemental shield": [
+    "materials"
+  ],
+  "elemental talisman": [
+    "runes"
+  ],
+  "emerald": [
+    "crafting"
+  ],
+  "emerald bolts (e)": [
+    "ammo"
+  ],
+  "emerald ring": [
+    "crafting"
+  ],
+  "empty pot": [
+    "food"
+  ],
+  "energy potion (1)": [
+    "herblore"
+  ],
+  "energy potion (2)": [
+    "herblore"
+  ],
+  "energy potion (3)": [
+    "herblore"
+  ],
+  "energy potion (4)": [
+    "herblore"
+  ],
+  "equa leaves": [
+    "food"
+  ],
+  "eucalyptus logs": [
+    "mining"
+  ],
+  "eucalyptus pyre logs": [
+    "mining"
+  ],
+  "evil turnip scroll (evil flames)": [
+    "summoning"
+  ],
+  "evil turnip": [
+    "food"
+  ],
+  "evil turnip pouch": [
+    "summoning"
+  ],
+  "evil turnip seed": [
+    "farming"
+  ],
+  "extreme attack (1)": [
+    "herblore"
+  ],
+  "extreme attack (2)": [
+    "herblore"
+  ],
+  "extreme attack (3)": [
+    "herblore"
+  ],
+  "extreme attack (4)": [
+    "herblore"
+  ],
+  "eye of newt": [
+    "food"
+  ],
+  "fayrg bones": [
+    "prayer"
+  ],
+  "feather": [
+    "ammo"
+  ],
+  "fire battlestaff": [
+    "magic",
+    "low_tier"
+  ],
+  "fire talisman": [
+    "runes"
+  ],
+  "fire tiara": [
+    "materials"
+  ],
+  "fishing potion (1)": [
+    "herblore"
+  ],
+  "fishing potion (2)": [
+    "herblore"
+  ],
+  "fishing potion (3)": [
+    "herblore"
+  ],
+  "fishing potion (4)": [
+    "herblore"
+  ],
+  "fishing rod": [
+    "food"
+  ],
+  "flax": [
+    "fletching",
+    "food"
+  ],
+  "forinthry bracelet (1)": [
+    "crafting"
+  ],
+  "forinthry bracelet (5)": [
+    "crafting"
+  ],
+  "fremennik boots": [
+    "low_tier"
+  ],
+  "fremennik round shield": [
+    "low_tier"
+  ],
+  "frog-leather chaps": [
+    "ranged",
+    "low_tier"
+  ],
+  "fruit blast": [
+    "food"
+  ],
+  "fruit batta": [
+    "food"
+  ],
+  "frying pan": [
+    "materials"
+  ],
+  "gadderhammer": [
+    "materials"
+  ],
+  "games necklace (1)": [
+    "crafting"
+  ],
+  "games necklace (8)": [
+    "crafting"
+  ],
+  "garlic": [
+    "food"
+  ],
+  "gin": [
+    "food"
+  ],
+  "gold necklace": [
+    "crafting"
+  ],
+  "gold ring": [
+    "crafting"
+  ],
+  "granite maul": [
+    "melee",
+    "low_tier"
+  ],
+  "green dragonhide": [
+    "crafting",
+    "mining"
+  ],
+  "green dragonhide body": [
+    "ranged",
+    "low_tier"
+  ],
+  "green dragonhide body (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "green dragonhide body (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "green dragonhide chaps": [
+    "ranged",
+    "low_tier"
+  ],
+  "green dragonhide chaps (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "green dragonhide chaps (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "green dragonhide vambraces": [
+    "ranged",
+    "low_tier"
+  ],
+  "green hallowe'en mask": [
+    "rares"
+  ],
+  "green partyhat": [
+    "rares"
+  ],
+  "guthan's chainskirt": [
+    "melee",
+    "ammo"
+  ],
+  "guthan's chainskirt (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "guthan's helm": [
+    "melee",
+    "ammo"
+  ],
+  "guthan's helm (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "guthan's platebody": [
+    "melee",
+    "ammo"
+  ],
+  "guthan's platebody (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "half a meat pie": [
+    "food"
+  ],
+  "half a redberry pie": [
+    "food"
+  ],
+  "half an apple pie": [
+    "food"
+  ],
+  "hard leather body": [
+    "ranged",
+    "low_tier"
+  ],
+  "harpoon": [
+    "food"
+  ],
+  "headless arrow": [
+    "ammo"
+  ],
+  "herring": [
+    "food"
+  ],
+  "holy symbol": [
+    "crafting"
+  ],
+  "hunter potion (1)": [
+    "herblore"
+  ],
+  "hunter potion (2)": [
+    "herblore"
+  ],
+  "hunter potion (3)": [
+    "herblore"
+  ],
+  "hunter potion (4)": [
+    "herblore"
+  ],
+  "hunters' crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "hunting mix (1)": [
+    "herblore"
+  ],
+  "hunting mix (2)": [
+    "herblore"
+  ],
+  "hydra pouch": [
+    "summoning"
+  ],
+  "ibis pouch": [
+    "summoning"
+  ],
+  "ibis scroll (fish rain)": [
+    "summoning"
+  ],
+  "iron 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "iron dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "iron longsword": [
+    "melee",
+    "low_tier"
+  ],
+  "iron mace": [
+    "melee",
+    "low_tier"
+  ],
+  "iron scimitar": [
+    "melee",
+    "low_tier"
+  ],
+  "iron sword": [
+    "melee",
+    "low_tier"
+  ],
+  "iron warhammer": [
+    "melee",
+    "low_tier"
+  ],
+  "jogre bones": [
+    "prayer"
+  ],
+  "jug of wine": [
+    "food"
+  ],
+  "karil's coif": [
+    "ranged",
+    "ammo"
+  ],
+  "karil's coif (broken)": [
+    "ranged",
+    "ammo"
+  ],
+  "karil's skirt": [
+    "ranged",
+    "ammo"
+  ],
+  "karil's skirt (broken)": [
+    "ranged",
+    "ammo"
+  ],
+  "karil's top": [
+    "ranged",
+    "ammo"
+  ],
+  "karil's top (broken)": [
+    "ranged",
+    "ammo"
+  ],
+  "kwuarm seed": [
+    "farming"
+  ],
+  "lava rune": [
+    "runes"
+  ],
+  "law rune": [
+    "runes"
+  ],
+  "leather body": [
+    "ranged",
+    "low_tier"
+  ],
+  "leather gloves": [
+    "ranged",
+    "food",
+    "low_tier"
+  ],
+  "limestone": [
+    "mining"
+  ],
+  "lobster": [
+    "food"
+  ],
+  "lobster pot": [
+    "food"
+  ],
+  "logs": [
+    "fletching",
+    "mining"
+  ],
+  "magic logs": [
+    "fletching",
+    "mining"
+  ],
+  "magic shieldbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "magic shortbow": [
+    "ranged",
+    "fletching"
+  ],
+  "mahogany logs": [
+    "mining"
+  ],
+  "mahogany pyre logs": [
+    "mining"
+  ],
+  "mahogany stock": [
+    "fletching"
+  ],
+  "manta ray": [
+    "food"
+  ],
+  "maple logs": [
+    "fletching",
+    "mining"
+  ],
+  "maple shieldbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "maple shortbow": [
+    "ranged",
+    "fletching"
+  ],
+  "maple stock": [
+    "fletching"
+  ],
+  "mature cider": [
+    "food"
+  ],
+  "meat pie": [
+    "food"
+  ],
+  "meat pizza": [
+    "food"
+  ],
+  "meat tenderiser": [
+    "materials"
+  ],
+  "mind rune": [
+    "runes"
+  ],
+  "mind talisman": [
+    "runes"
+  ],
+  "mist rune": [
+    "runes"
+  ],
+  "mithril 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril longsword": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril mace": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril med helm": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril pickaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril scimitar": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril sword": [
+    "melee",
+    "low_tier"
+  ],
+  "mithril warhammer": [
+    "melee",
+    "low_tier"
+  ],
+  "mud rune": [
+    "runes"
+  ],
+  "mystic robe top": [
+    "magic",
+    "low_tier"
+  ],
+  "nature rune": [
+    "runes"
+  ],
+  "nature talisman": [
+    "runes"
+  ],
+  "nature tiara": [
+    "materials"
+  ],
+  "necrite ore": [
+    "smithing"
+  ],
+  "noose wand": [
+    "gathering"
+  ],
+  "oak logs": [
+    "fletching",
+    "mining"
+  ],
+  "oak shortbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "oak stock": [
+    "fletching"
+  ],
+  "off-hand dragon battleaxe": [
+    "melee"
+  ],
+  "off-hand dragon claw": [
+    "melee",
+    "low_tier"
+  ],
+  "off-hand dragon longsword": [
+    "melee"
+  ],
+  "off-hand dragon scimitar": [
+    "melee"
+  ],
+  "ogre arrow": [
+    "ammo",
+    "fletching"
+  ],
+  "ogre arrow shaft": [
+    "ammo",
+    "fletching"
+  ],
+  "onyx": [
+    "crafting"
+  ],
+  "opal bolt tips": [
+    "ammo",
+    "fletching"
+  ],
+  "opal bolts": [
+    "ammo",
+    "fletching"
+  ],
+  "opal bolts (e)": [
+    "ammo"
+  ],
+  "orlando smith's hat": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "ourg bones": [
+    "prayer"
+  ],
+  "pearl bolts": [
+    "ammo",
+    "fletching"
+  ],
+  "pearl bolts (e)": [
+    "ammo"
+  ],
+  "penguin mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "penguin staff": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "perfect juju agility potion (1)": [
+    "herblore"
+  ],
+  "perfect juju agility potion (2)": [
+    "herblore"
+  ],
+  "perfect juju agility potion (3)": [
+    "herblore"
+  ],
+  "perfect juju agility potion (4)": [
+    "herblore"
+  ],
+  "perfect juju dungeoneering potion (1)": [
+    "herblore"
+  ],
+  "perfect juju dungeoneering potion (2)": [
+    "herblore"
+  ],
+  "perfect juju dungeoneering potion (3)": [
+    "herblore"
+  ],
+  "perfect juju dungeoneering potion (4)": [
+    "herblore"
+  ],
+  "perfect juju farming potion (1)": [
+    "herblore"
+  ],
+  "perfect juju farming potion (2)": [
+    "herblore"
+  ],
+  "perfect juju farming potion (3)": [
+    "herblore"
+  ],
+  "perfect juju farming potion (4)": [
+    "herblore"
+  ],
+  "pharaoh's sceptre": [
+    "magic"
+  ],
+  "pharaoh's sceptre (3)": [
+    "magic"
+  ],
+  "pike": [
+    "food"
+  ],
+  "pineapple pizza": [
+    "food"
+  ],
+  "pineapple seed": [
+    "farming"
+  ],
+  "pirate hook (left)": [
+    "rares"
+  ],
+  "pitta bread": [
+    "food"
+  ],
+  "pizza base": [
+    "food"
+  ],
+  "plain pizza": [
+    "food"
+  ],
+  "pot of cream": [
+    "food"
+  ],
+  "potato cactus": [
+    "food"
+  ],
+  "potato seed": [
+    "farming"
+  ],
+  "prayer mix (1)": [
+    "herblore"
+  ],
+  "prayer mix (2)": [
+    "herblore"
+  ],
+  "prayer potion (1)": [
+    "herblore",
+    "supplies"
+  ],
+  "prayer potion (2)": [
+    "herblore",
+    "supplies"
+  ],
+  "prayer potion (3)": [
+    "herblore",
+    "supplies"
+  ],
+  "prayer potion (4)": [
+    "herblore",
+    "supplies"
+  ],
+  "praying mantis pouch": [
+    "summoning"
+  ],
+  "pre-nature amulet": [
+    "crafting"
+  ],
+  "premade chocolate saturday": [
+    "food"
+  ],
+  "premade ttl": [
+    "food"
+  ],
+  "premade veg ball": [
+    "food"
+  ],
+  "premade veg batta": [
+    "food"
+  ],
+  "premade worm batta": [
+    "food"
+  ],
+  "premade worm crunchies": [
+    "food"
+  ],
+  "premade worm hole": [
+    "food"
+  ],
+  "primal main course": [
+    "food"
+  ],
+  "primal platebody": [
+    "smithing"
+  ],
+  "primal starter": [
+    "food"
+  ],
+  "pumpkin": [
+    "rares"
+  ],
+  "pure essence": [
+    "mining"
+  ],
+  "purple partyhat": [
+    "rares"
+  ],
+  "rainbow fish": [
+    "food"
+  ],
+  "ranarr seed": [
+    "farming"
+  ],
+  "ranger boots": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "raurg bones": [
+    "prayer"
+  ],
+  "raw beef": [
+    "food"
+  ],
+  "raw chicken": [
+    "food"
+  ],
+  "raw manta ray": [
+    "food"
+  ],
+  "raw potato": [
+    "food"
+  ],
+  "raw rat meat": [
+    "food"
+  ],
+  "raw sea turtle": [
+    "food"
+  ],
+  "red dragonhide": [
+    "crafting",
+    "mining"
+  ],
+  "red dragonhide vambraces": [
+    "ranged",
+    "low_tier"
+  ],
+  "red hallowe'en mask": [
+    "rares"
+  ],
+  "red partyhat": [
+    "rares"
+  ],
+  "red spiders' eggs": [
+    "food"
+  ],
+  "red topaz": [
+    "crafting"
+  ],
+  "redberries": [
+    "food"
+  ],
+  "relicym's balm (1)": [
+    "herblore"
+  ],
+  "relicym's balm (2)": [
+    "herblore"
+  ],
+  "relicym's balm (3)": [
+    "herblore"
+  ],
+  "relicym's balm (4)": [
+    "herblore"
+  ],
+  "restore potion (1)": [
+    "herblore"
+  ],
+  "restore potion (2)": [
+    "herblore"
+  ],
+  "restore potion (3)": [
+    "herblore"
+  ],
+  "restore potion (4)": [
+    "herblore"
+  ],
+  "ring of forging": [
+    "crafting"
+  ],
+  "ring of recoil": [
+    "crafting"
+  ],
+  "ring of stone": [
+    "crafting"
+  ],
+  "robin hood hat": [
+    "treasure_trails",
+    "ranged",
+    "low_tier"
+  ],
+  "rock climbing boots": [
+    "materials"
+  ],
+  "rolling pin": [
+    "materials"
+  ],
+  "rope": [
+    "food"
+  ],
+  "ruby": [
+    "crafting"
+  ],
+  "ruby bolts (e)": [
+    "ammo"
+  ],
+  "rune 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "rune armoured boots": [
+    "melee",
+    "low_tier"
+  ],
+  "rune chainbody": [
+    "melee",
+    "low_tier"
+  ],
+  "rune essence": [
+    "mining"
+  ],
+  "rune full helm": [
+    "melee",
+    "low_tier"
+  ],
+  "rune full helm (saradomin)": [
+    "melee",
+    "low_tier"
+  ],
+  "rune full helm (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune full helm (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune kiteshield": [
+    "melee",
+    "low_tier"
+  ],
+  "rune kiteshield (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune kiteshield (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune mace": [
+    "melee",
+    "low_tier"
+  ],
+  "rune med helm": [
+    "melee",
+    "low_tier"
+  ],
+  "rune pickaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "rune platebody": [
+    "melee",
+    "low_tier"
+  ],
+  "rune platebody (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune platebody (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune platelegs": [
+    "melee",
+    "low_tier"
+  ],
+  "rune platelegs (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune platelegs (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune plateskirt": [
+    "melee",
+    "low_tier"
+  ],
+  "rune plateskirt (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune plateskirt (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "rune square shield": [
+    "melee",
+    "low_tier"
+  ],
+  "rune warhammer": [
+    "melee",
+    "low_tier"
+  ],
+  "runite ore": [
+    "smithing",
+    "mining"
+  ],
+  "salmon": [
+    "food"
+  ],
+  "santa hat": [
+    "rares"
+  ],
+  "sapphire": [
+    "crafting"
+  ],
+  "sapphire necklace": [
+    "crafting"
+  ],
+  "sapphire ring": [
+    "crafting"
+  ],
+  "sardine": [
+    "food"
+  ],
+  "scrambled egg": [
+    "food"
+  ],
+  "sea turtle": [
+    "food"
+  ],
+  "seaweed": [
+    "food"
+  ],
+  "seercull": [
+    "ranged",
+    "low_tier"
+  ],
+  "seers' ring": [
+    "boss",
+    "magic"
+  ],
+  "shaikahan bones": [
+    "prayer"
+  ],
+  "shark": [
+    "food"
+  ],
+  "shieldbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "shortbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "silver ore": [
+    "smithing",
+    "mining"
+  ],
+  "sinew": [
+    "fletching",
+    "food"
+  ],
+  "skeletal helm": [
+    "low_tier"
+  ],
+  "skewer": [
+    "food"
+  ],
+  "slayer's respite": [
+    "food"
+  ],
+  "slayer's respite (1)": [
+    "food"
+  ],
+  "slayer's respite (2)": [
+    "food"
+  ],
+  "slayer's respite (3)": [
+    "food"
+  ],
+  "slayer's respite (4)": [
+    "food"
+  ],
+  "slayer's respite (m)": [
+    "food"
+  ],
+  "slayer's staff": [
+    "low_tier"
+  ],
+  "slice of cake": [
+    "food"
+  ],
+  "sliced banana": [
+    "food"
+  ],
+  "small fishing net": [
+    "food"
+  ],
+  "smoke rune": [
+    "runes"
+  ],
+  "snake hide": [
+    "crafting",
+    "mining"
+  ],
+  "snakeskin body": [
+    "ranged",
+    "low_tier"
+  ],
+  "soft clay": [
+    "mining"
+  ],
+  "soul rune": [
+    "runes"
+  ],
+  "spatula": [
+    "materials"
+  ],
+  "spicy tomato": [
+    "food"
+  ],
+  "spined body": [
+    "ranged",
+    "low_tier"
+  ],
+  "spined boots": [
+    "ranged",
+    "low_tier"
+  ],
+  "spined chaps": [
+    "ranged",
+    "low_tier"
+  ],
+  "spined gloves": [
+    "ranged",
+    "low_tier"
+  ],
+  "splitbark boots": [
+    "magic",
+    "low_tier"
+  ],
+  "splitbark gauntlets": [
+    "magic",
+    "low_tier"
+  ],
+  "splitbark helm": [
+    "magic",
+    "low_tier"
+  ],
+  "staff of air": [
+    "magic",
+    "low_tier"
+  ],
+  "staff of earth": [
+    "magic",
+    "low_tier"
+  ],
+  "staff of water": [
+    "magic",
+    "low_tier"
+  ],
+  "steam rune": [
+    "runes"
+  ],
+  "steel dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "steel longsword": [
+    "melee",
+    "low_tier"
+  ],
+  "steel mace": [
+    "melee",
+    "low_tier"
+  ],
+  "steel scimitar": [
+    "melee",
+    "low_tier"
+  ],
+  "steel sword": [
+    "melee",
+    "low_tier"
+  ],
+  "steel warhammer": [
+    "melee",
+    "low_tier"
+  ],
+  "strength amulet (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "studded body": [
+    "ranged",
+    "low_tier"
+  ],
+  "studded body (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "studded body (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "studded chaps": [
+    "ranged",
+    "low_tier"
+  ],
+  "studded chaps (g)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "studded chaps (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "studded leather coif": [
+    "ranged",
+    "low_tier"
+  ],
+  "super antipoison (1)": [
+    "herblore"
+  ],
+  "super antipoison (2)": [
+    "herblore"
+  ],
+  "super antipoison (3)": [
+    "herblore"
+  ],
+  "super antipoison (4)": [
+    "herblore"
+  ],
+  "super antipoison mix (1)": [
+    "herblore"
+  ],
+  "super antipoison mix (2)": [
+    "herblore"
+  ],
+  "super attack (1)": [
+    "herblore"
+  ],
+  "super attack (2)": [
+    "herblore"
+  ],
+  "super attack (3)": [
+    "herblore"
+  ],
+  "super attack (4)": [
+    "herblore"
+  ],
+  "super attack mix (1)": [
+    "herblore"
+  ],
+  "super attack mix (2)": [
+    "herblore"
+  ],
+  "super defence (1)": [
+    "herblore"
+  ],
+  "super defence (2)": [
+    "herblore"
+  ],
+  "super defence (3)": [
+    "herblore"
+  ],
+  "super defence (4)": [
+    "herblore"
+  ],
+  "super energy mix (1)": [
+    "herblore"
+  ],
+  "super energy mix (2)": [
+    "herblore"
+  ],
+  "super kebab": [
+    "food"
+  ],
+  "super magic flask (6)": [
+    "herblore"
+  ],
+  "super magic mix (1)": [
+    "herblore"
+  ],
+  "super magic mix (2)": [
+    "herblore"
+  ],
+  "super magic potion (1)": [
+    "herblore"
+  ],
+  "super magic potion (2)": [
+    "herblore"
+  ],
+  "super magic potion (3)": [
+    "herblore"
+  ],
+  "super magic potion (4)": [
+    "herblore"
+  ],
+  "super restore (1)": [
+    "herblore"
+  ],
+  "super restore (2)": [
+    "herblore"
+  ],
+  "super restore (3)": [
+    "herblore"
+  ],
+  "super restore (4)": [
+    "herblore"
+  ],
+  "super strength (1)": [
+    "herblore"
+  ],
+  "super strength (2)": [
+    "herblore"
+  ],
+  "super strength (3)": [
+    "herblore"
+  ],
+  "super strength (4)": [
+    "herblore"
+  ],
+  "supercompost": [
+    "food"
+  ],
+  "swamp paste": [
+    "food"
+  ],
+  "tarromin tar": [
+    "ammo"
+  ],
+  "teacher wand": [
+    "magic",
+    "low_tier"
+  ],
+  "teak logs": [
+    "mining"
+  ],
+  "teak stock": [
+    "fletching"
+  ],
+  "third age mage hat": [
+    "treasure_trails"
+  ],
+  "torag's helm": [
+    "melee",
+    "ammo"
+  ],
+  "torag's helm (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "torag's platebody": [
+    "melee",
+    "ammo"
+  ],
+  "torag's platebody (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "torag's platelegs": [
+    "melee",
+    "ammo"
+  ],
+  "torag's platelegs (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "trout": [
+    "food"
+  ],
+  "tuna": [
+    "food"
+  ],
+  "uncut diamond": [
+    "crafting"
+  ],
+  "uncut jade": [
+    "crafting"
+  ],
+  "uncut opal": [
+    "crafting"
+  ],
+  "unholy symbol": [
+    "crafting"
+  ],
+  "verac's brassard": [
+    "melee",
+    "ammo"
+  ],
+  "verac's brassard (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "verac's helm": [
+    "melee",
+    "ammo"
+  ],
+  "verac's helm (broken)": [
+    "melee",
+    "ammo"
+  ],
+  "verac's plateskirt": [
+    "ammo"
+  ],
+  "verac's plateskirt (broken)": [
+    "ammo"
+  ],
+  "vial": [
+    "herblore"
+  ],
+  "vodka": [
+    "food"
+  ],
+  "warrior ring": [
+    "boss",
+    "melee"
+  ],
+  "water rune": [
+    "runes"
+  ],
+  "water talisman": [
+    "runes"
+  ],
+  "weapon poison (1)": [
+    "herblore"
+  ],
+  "weapon poison (2)": [
+    "herblore"
+  ],
+  "weapon poison (3)": [
+    "herblore"
+  ],
+  "weapon poison (4)": [
+    "herblore"
+  ],
+  "white 2h sword": [
+    "melee",
+    "low_tier"
+  ],
+  "white battleaxe": [
+    "melee",
+    "low_tier"
+  ],
+  "white berries": [
+    "food"
+  ],
+  "white dagger": [
+    "melee",
+    "low_tier"
+  ],
+  "white partyhat": [
+    "rares"
+  ],
+  "willow logs": [
+    "fletching",
+    "mining"
+  ],
+  "willow shortbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "willow stock": [
+    "fletching"
+  ],
+  "wizard robe top": [
+    "low_tier"
+  ],
+  "wizard robe top (g)": [
+    "low_tier",
+    "treasure_trails"
+  ],
+  "wizard robe top (t)": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "wizard's mind bomb": [
+    "food"
+  ],
+  "wizard's mind bomb (m)": [
+    "food"
+  ],
+  "woad leaf": [
+    "food"
+  ],
+  "wolf bones": [
+    "prayer"
+  ],
+  "wooden shield": [
+    "materials"
+  ],
+  "wooden stock": [
+    "fletching"
+  ],
+  "wyvern bones": [
+    "prayer"
+  ],
+  "yellow partyhat": [
+    "rares"
+  ],
+  "yew logs": [
+    "fletching",
+    "mining"
+  ],
+  "yew shortbow": [
+    "ranged",
+    "fletching"
+  ],
+  "yew stock": [
+    "fletching"
+  ],
+  "zamorakian spear": [
+    "melee"
+  ],
+  "zogre bones": [
+    "prayer"
+  ],
+  "zuriel's hood": [
+    "magic"
+  ],
+  "zuriel's staff": [
+    "magic"
+  ],
+  "zuriel's robe top": [
+    "magic"
+  ],
+  "zuriel's robe bottom": [
+    "magic"
+  ],
+  "vesta's spear": [
+    "melee"
+  ],
+  "vesta's longsword": [
+    "melee"
+  ],
+  "vesta's chainbody": [
+    "melee"
+  ],
+  "vesta's plateskirt": [
+    "melee"
+  ],
+  "statius's warhammer": [
+    "melee"
+  ],
+  "statius's full helm": [
+    "melee"
+  ],
+  "statius's platebody": [
+    "melee"
+  ],
+  "statius's platelegs": [
+    "melee"
+  ],
+  "morrigan's leather body": [
+    "ranged"
+  ],
+  "morrigan's leather chaps": [
+    "ranged"
+  ],
+  "morrigan's coif": [
+    "ranged"
+  ],
+  "morrigan's javelin": [
+    "ranged",
+    "ammo"
+  ],
+  "morrigan's throwing axe": [
+    "ranged"
+  ],
+  "corrupt vesta's spear": [
+    "low_tier"
+  ],
+  "corrupt vesta's longsword": [
+    "low_tier"
+  ],
+  "corrupt vesta's chainbody": [
+    "low_tier"
+  ],
+  "corrupt vesta's plateskirt": [
+    "low_tier"
+  ],
+  "corrupt statius's warhammer": [
+    "low_tier"
+  ],
+  "corrupt statius's full helm": [
+    "low_tier"
+  ],
+  "corrupt statius's platebody": [
+    "low_tier"
+  ],
+  "corrupt statius's platelegs": [
+    "low_tier"
+  ],
+  "corrupt morrigan's leather body": [
+    "low_tier"
+  ],
+  "corrupt morrigan's leather chaps": [
+    "low_tier"
+  ],
+  "corrupt morrigan's coif": [
+    "low_tier"
+  ],
+  "corrupt morrigan's javelin": [
+    "low_tier"
+  ],
+  "corrupt morrigan's throwing axe": [
+    "low_tier"
+  ],
+  "corrupt zuriel's robe top": [
+    "low_tier"
+  ],
+  "corrupt zuriel's robe bottom": [
+    "low_tier"
+  ],
+  "corrupt zuriel's hood": [
+    "low_tier"
+  ],
+  "black wizard boots": [
+    "low_tier"
+  ],
+  "zombie impling jar": [
+    "mining"
+  ],
+  "gilded magic wardrobe flatpack": [
+    "construction"
+  ],
+  "gilded cape rack flatpack": [
+    "construction"
+  ],
+  "gilded bed flatpack": [
+    "construction"
+  ],
+  "gilded bench flatpack": [
+    "construction"
+  ],
+  "gilded drawers flatpack": [
+    "construction"
+  ],
+  "gilded wardrobe flatpack": [
+    "construction"
+  ],
+  "gilded dresser flatpack": [
+    "construction"
+  ],
+  "abomination cape": [
+    "boss",
+    "melee"
+  ],
+  "abyssal armour spikes": [
+    "melee"
+  ],
+  "abyssal bane": [
+    "melee"
+  ],
+  "mechanized chinchompa": [
+    "invention",
+    "ammo"
+  ],
+  "cat mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "bat mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "fox mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "sheep mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "wolf mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "unicorn mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "hobby unicorn": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "bat staff": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "cat staff": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "wolf staff": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "dragon staff": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "saradomin bow": [
+    "treasure_trails"
+  ],
+  "zamorak bow": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "armadyl robe": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "bandos robe": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "saradomin robe": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "zamorak robe": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "zamorak robe top": [
+    "materials"
+  ],
+  "zamorak robe bottom": [
+    "materials"
+  ],
+  "guthix robe": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "ancient robe": [
+    "treasure_trails",
+    "magic"
+  ],
+  "armadyl cloak": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "bandos cloak": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "saradomin cloak": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "zamorak cloak": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "guthix cloak": [
+    "treasure_trails",
+    "prayer"
+  ],
+  "ancient cloak": [
+    "treasure_trails"
+  ],
+  "bag of clues": [
+    "treasure_trails"
+  ],
+  "explosive barrel": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "half-moon spectacles": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "heated tea flask": [
+    "treasure_trails",
+    "food"
+  ],
+  "heavy chest": [
+    "treasure_trails"
+  ],
+  "samurai kasa": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "sack of effigies": [
+    "treasure_trails"
+  ],
+  "golden thread": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "flaming sword enchantment": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "ripper demon": [
+    "summoning",
+    "supplies"
+  ],
+  "kal'gerion demon": [
+    "summoning",
+    "supplies"
+  ],
+  "hellhound binding": [
+    "summoning",
+    "supplies"
+  ],
+  "hellhound scroll": [
+    "summoning",
+    "supplies"
+  ],
+  "blood reaver": [
+    "summoning",
+    "supplies"
+  ],
+  "waterfiend binding": [
+    "summoning",
+    "gathering"
+  ],
+  "waterfiend scroll": [
+    "summoning",
+    "gathering"
+  ],
+  "gargoyle binding": [
+    "summoning",
+    "gathering"
+  ],
+  "gargoyle scroll": [
+    "summoning",
+    "gathering"
+  ],
+  "binding contract": [
+    "summoning"
+  ],
+  "black stone heart": [
+    "boss"
+  ],
+  "amulet of the forsaken": [
+    "boss"
+  ],
+  "heart of the berserker": [
+    "boss",
+    "melee"
+  ],
+  "heart of the archer": [
+    "boss",
+    "ranged"
+  ],
+  "heart of the seer": [
+    "boss",
+    "magic"
+  ],
+  "heart of the warrior": [
+    "boss",
+    "melee"
+  ],
+  "blessed spirit shield": [
+    "boss",
+    "prayer"
+  ],
+  "blessed flask": [
+    "prayer"
+  ],
+  "tumeken's resplendence": [
+    "magic"
+  ],
+  "annihilation": [
+    "melee"
+  ],
+  "spear of annihilation": [
+    "melee"
+  ],
+  "nihil pouch": [
+    "summoning"
+  ],
+  "nihil scroll": [
+    "summoning"
+  ],
+  "necrotic anima stone": [
+    "runes"
+  ],
+  "pernix token": [
+    "overrides"
+  ],
+  "torva token": [
+    "overrides"
+  ],
+  "virtus token": [
+    "overrides"
+  ],
+  "treasure resting animation token": [
+    "overrides"
+  ],
+  "meditation rest animation token": [
+    "overrides"
+  ],
+  "loved up rest animation token": [
+    "overrides"
+  ],
+  "hexer braids hairstyle token": [
+    "overrides"
+  ],
+  "dragon slayer ability codex": [
+    "codex"
+  ],
+  "demon slayer ability codex": [
+    "codex"
+  ],
+  "ahrim's": [
+    "boss",
+    "magic"
+  ],
+  "dharok's": [
+    "boss",
+    "melee"
+  ],
+  "guthan's": [
+    "boss",
+    "melee"
+  ],
+  "karil's": [
+    "boss",
+    "ranged"
+  ],
+  "torag's": [
+    "boss",
+    "melee"
+  ],
+  "verac's": [
+    "boss",
+    "melee"
+  ],
+  "linza's": [
+    "boss",
+    "melee"
+  ],
+  "akrisae's": [
+    "boss"
+  ],
+  "swordfish": [
+    "food"
+  ],
+  "raw swordfish": [
+    "food"
+  ],
+  "cooked swordfish": [
+    "food"
+  ],
+  "dinosaur claws": [
+    "materials"
+  ],
+  "kebbit claws": [
+    "materials"
+  ],
+  "kebbit teeth": [
+    "materials"
+  ],
+  "kebbit spike": [
+    "materials"
+  ],
+  "masterwork thread": [
+    "materials"
+  ],
+  "masterwork sinew": [
+    "materials"
+  ],
+  "masterwork components": [
+    "materials"
+  ],
+  "masterwork helm": [
+    "melee"
+  ],
+  "masterwork platebody": [
+    "melee"
+  ],
+  "masterwork platelegs": [
+    "melee"
+  ],
+  "masterwork gloves": [
+    "melee"
+  ],
+  "masterwork boots": [
+    "melee"
+  ],
+  "trimmed masterwork helm": [
+    "melee"
+  ],
+  "trimmed masterwork platebody": [
+    "melee"
+  ],
+  "trimmed masterwork platelegs": [
+    "melee"
+  ],
+  "trimmed masterwork gloves": [
+    "melee"
+  ],
+  "trimmed masterwork boots": [
+    "melee"
+  ],
+  "masterwork spear of annihilation": [
+    "melee"
+  ],
+  "masterwork staff of armadyl": [
+    "magic"
+  ],
+  "masterwork bow": [
+    "ranged"
+  ],
+  "tumeken's light": [
+    "melee"
+  ],
+  "ek-zekkil": [
+    "melee"
+  ],
+  "bow of the last guardian": [
+    "ranged"
+  ],
+  "abyssal titan pouch": [
+    "summoning"
+  ],
+  "abyssal lurker pouch": [
+    "summoning"
+  ],
+  "abyssal parasite pouch": [
+    "summoning"
+  ],
+  "abyssal lurker scroll": [
+    "summoning"
+  ],
+  "abyssal titan scroll": [
+    "summoning"
+  ],
+  "abyssal parasite scroll": [
+    "summoning"
+  ],
+  "abyssal vine whip": [
+    "melee"
+  ],
+  "lava whip": [
+    "melee"
+  ],
+  "abyssal bludgeon": [
+    "melee"
+  ],
+  "abyssal dagger": [
+    "melee"
+  ],
+  "abyssal orb": [
+    "magic"
+  ],
+  "abyssal wand": [
+    "magic"
+  ],
+  "noxious scythe": [
+    "melee"
+  ],
+  "noxious staff": [
+    "magic"
+  ],
+  "noxious longbow": [
+    "ranged"
+  ],
+  "ascension crossbow": [
+    "ranged"
+  ],
+  "off-hand ascension crossbow": [
+    "ranged"
+  ],
+  "eldritch crossbow": [
+    "ranged"
+  ],
+  "off-hand eldritch crossbow": [
+    "ranged"
+  ],
+  "blightbound crossbow": [
+    "boss"
+  ],
+  "off-hand blightbound crossbow": [
+    "boss"
+  ],
+  "hexhunter bow": [
+    "boss"
+  ],
+  "soulbound lantern": [
+    "necromancy"
+  ],
+  "skull lantern": [
+    "necromancy"
+  ],
+  "fractured staff of armadyl": [
+    "magic"
+  ],
+  "seismic wand": [
+    "magic"
+  ],
+  "seismic singularity": [
+    "magic"
+  ],
+  "tectonic mask": [
+    "magic"
+  ],
+  "tectonic robe top": [
+    "magic"
+  ],
+  "tectonic robe bottom": [
+    "magic"
+  ],
+  "draconic energy": [
+    "materials"
+  ],
+  "tectonic energy": [
+    "crafting"
+  ],
+  "sirenic mask": [
+    "ranged"
+  ],
+  "sirenic hauberk": [
+    "ranged"
+  ],
+  "sirenic chaps": [
+    "ranged"
+  ],
+  "sirenic scale": [
+    "crafting"
+  ],
+  "sirenic patch": [
+    "materials"
+  ],
+  "pernix cowl": [
+    "ranged"
+  ],
+  "pernix body": [
+    "ranged"
+  ],
+  "pernix chaps": [
+    "ranged"
+  ],
+  "torva full helm": [
+    "melee"
+  ],
+  "torva platebody": [
+    "melee"
+  ],
+  "torva platelegs": [
+    "melee"
+  ],
+  "virtus mask": [
+    "magic"
+  ],
+  "virtus robe top": [
+    "magic"
+  ],
+  "virtus robe legs": [
+    "magic"
+  ],
+  "virtus wand": [
+    "magic"
+  ],
+  "virtus book": [
+    "magic"
+  ],
+  "drygore rapier": [
+    "melee"
+  ],
+  "drygore longsword": [
+    "melee"
+  ],
+  "drygore mace": [
+    "melee"
+  ],
+  "off-hand drygore rapier": [
+    "melee"
+  ],
+  "off-hand drygore longsword": [
+    "melee"
+  ],
+  "off-hand drygore mace": [
+    "melee"
+  ],
+  "holy wrench": [
+    "pocket"
+  ],
+  "sign of life": [
+    "pocket"
+  ],
+  "sign of death": [
+    "pocket"
+  ],
+  "sign of the porter": [
+    "pocket"
+  ],
+  "scrimshaw of ranging": [
+    "pocket"
+  ],
+  "scrimshaw of magic": [
+    "pocket"
+  ],
+  "scrimshaw of attack": [
+    "pocket"
+  ],
+  "scrimshaw of strength": [
+    "pocket"
+  ],
+  "scrimshaw of defence": [
+    "pocket"
+  ],
+  "scrimshaw of vampyrism": [
+    "pocket"
+  ],
+  "scrimshaw of sacrifice": [
+    "pocket"
+  ],
+  "hydrix bolts": [
+    "ammo"
+  ],
+  "onyx bolts": [
+    "ammo"
+  ],
+  "onyx bolts (e)": [
+    "ammo"
+  ],
+  "bakriminel bolts": [
+    "ammo"
+  ],
+  "bakriminel bolts (e)": [
+    "ammo"
+  ],
+  "ascendri bolts": [
+    "ammo"
+  ],
+  "ascendri bolts (e)": [
+    "ammo"
+  ],
+  "dragon bolts": [
+    "ammo",
+    "low_tier"
+  ],
+  "dragon bolts (e)": [
+    "ammo",
+    "low_tier"
+  ],
+  "dragon arrow": [
+    "ammo",
+    "low_tier"
+  ],
+  "rune arrow": [
+    "ammo",
+    "low_tier"
+  ],
+  "broad bolts": [
+    "ammo"
+  ],
+  "broad arrowheads": [
+    "ammo"
+  ],
+  "elder overload potion (6)": [
+    "herblore"
+  ],
+  "elder overload salve (6)": [
+    "herblore"
+  ],
+  "dragon bones": [
+    "prayer"
+  ],
+  "frost dragon bones": [
+    "prayer"
+  ],
+  "hardened dragon bones": [
+    "prayer"
+  ],
+  "reinforced dragon bones": [
+    "prayer"
+  ],
+  "airut bones": [
+    "prayer"
+  ],
+  "superior dragon bones": [
+    "prayer"
+  ],
+  "tortured ourg bones": [
+    "prayer"
+  ],
+  "lava dragon bones": [
+    "prayer"
+  ],
+  "infernal ashes": [
+    "prayer"
+  ],
+  "impious ashes": [
+    "prayer"
+  ],
+  "accursed ashes": [
+    "prayer"
+  ],
+  "tortured ashes": [
+    "prayer"
+  ],
+  "searing ashes": [
+    "prayer"
+  ],
+  "chronotes": [
+    "archaeology"
+  ],
+  "goldrune": [
+    "archaeology"
+  ],
+  "zemphurite": [
+    "archaeology"
+  ],
+  "orthenglass": [
+    "archaeology"
+  ],
+  "quintessence": [
+    "archaeology"
+  ],
+  "everlight silvthril": [
+    "archaeology"
+  ],
+  "blood of orcus": [
+    "archaeology"
+  ],
+  "hellfire metal": [
+    "archaeology"
+  ],
+  "ancient vis": [
+    "archaeology"
+  ],
+  "mark of the kyzaj": [
+    "archaeology"
+  ],
+  "third age iron": [
+    "archaeology"
+  ],
+  "guildmaster tony's mattock": [
+    "archaeology"
+  ],
+  "tetracompass piece": [
+    "archaeology"
+  ],
+  "warped gem": [
+    "archaeology"
+  ],
+  "half a partyhat": [
+    "rares"
+  ],
+  "half a santa hat": [
+    "rares"
+  ],
+  "blue halloween mask": [
+    "rares"
+  ],
+  "red halloween mask": [
+    "rares"
+  ],
+  "green halloween mask": [
+    "rares"
+  ],
+  "half full jug of wine": [
+    "rares"
+  ],
+  "tavia's fishing rod": [
+    "rares"
+  ],
+  "hazelmere's signet ring": [
+    "rares"
+  ],
+  "disk of returning": [
+    "rares"
+  ],
+  "yo-yo": [
+    "rares"
+  ],
+  "rubber chicken": [
+    "rares"
+  ],
+  "rainbow scarf": [
+    "rares"
+  ],
+  "bunny ears": [
+    "rares"
+  ],
+  "flared trousers": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "pantaloons": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "giant present": [
+    "rares"
+  ],
+  "burnt mystery": [
+    "rares"
+  ],
+  "dragon scimitar (or)": [
+    "rares"
+  ],
+  "black santa hat": [
+    "rares"
+  ],
+  "inverted santa hat": [
+    "rares"
+  ],
+  "partyhat & specs": [
+    "rares"
+  ],
+  "ornament kit (sp)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "ornament kit (gwd)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "shadow dye": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "blood dye": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "ice dye": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "barrows dye": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "third age dye": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "guthix dye": [
+    "overrides"
+  ],
+  "saradomin dye": [
+    "overrides"
+  ],
+  "zamorak dye": [
+    "overrides"
+  ],
+  "armadyl dye": [
+    "overrides"
+  ],
+  "bandos dye": [
+    "overrides"
+  ],
+  "seren dye": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "ancient dye": [
+    "overrides"
+  ],
+  "dragon mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "blue dragon mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "red dragon mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "green dragon mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "gilded shoulder cape": [
+    "rares"
+  ],
+  "godsword blade": [
+    "melee"
+  ],
+  "godsword shard 1": [
+    "melee"
+  ],
+  "godsword shard 2": [
+    "melee"
+  ],
+  "godsword shard 3": [
+    "melee"
+  ],
+  "chaotic maul frozen dye kit": [
+    "overrides"
+  ],
+  "chaotic maul warped dye kit": [
+    "overrides"
+  ],
+  "chaotic rapier frozen dye kit": [
+    "overrides"
+  ],
+  "chaotic rapier warped dye kit": [
+    "overrides"
+  ],
+  "laceration boots": [
+    "melee"
+  ],
+  "khopesh of the kharidian": [
+    "melee"
+  ],
+  "off-hand khopesh of the kharidian": [
+    "melee"
+  ],
+  "obliteration": [
+    "magic"
+  ],
+  "chaotic crossbow frozen dye kit": [
+    "overrides"
+  ],
+  "chaotic crossbow warped dye kit": [
+    "overrides"
+  ],
+  "pernix's quiver": [
+    "ranged"
+  ],
+  "fragment of pernix's quiver": [
+    "ranged"
+  ],
+  "alteration necklace": [
+    "necromancy"
+  ],
+  "cryptbloom helm": [
+    "magic"
+  ],
+  "cryptbloom top": [
+    "magic"
+  ],
+  "cryptbloom bottoms": [
+    "magic"
+  ],
+  "cryptbloom gloves": [
+    "magic"
+  ],
+  "cryptbloom boots": [
+    "magic"
+  ],
+  "undead slayer ability codex": [
+    "codex"
+  ],
+  "greater barge ability codex": [
+    "codex"
+  ],
+  "double surge ability codex": [
+    "codex"
+  ],
+  "double escape ability codex": [
+    "codex"
+  ],
+  "tuska's wrath ability codex": [
+    "codex"
+  ],
+  "ingenuity of the humans ability codex": [
+    "codex"
+  ],
+  "invoke lord of bones incantation codex": [
+    "codex"
+  ],
+  "molten barricade cosmetic ability scroll": [
+    "overrides"
+  ],
+  "frozen barricade cosmetic ability scroll": [
+    "overrides"
+  ],
+  "blood ice barricade cosmetic ability scroll": [
+    "overrides"
+  ],
+  "shock barricade cosmetic ability scroll": [
+    "overrides"
+  ],
+  "impure essence": [
+    "runes"
+  ],
+  "elemental anima stone": [
+    "runes"
+  ],
+  "catalytic anima stone": [
+    "runes"
+  ],
+  "resonant anima of bik": [
+    "runes"
+  ],
+  "resonant anima of ful": [
+    "fletching"
+  ],
+  "resonant anima of jas": [
+    "fletching"
+  ],
+  "resonant anima of wen": [
+    "fletching"
+  ],
+  "grasping rune pouch": [
+    "runes"
+  ],
+  "large rune pouch": [
+    "runes"
+  ],
+  "rune pouch": [
+    "runes"
+  ],
+  "scripture of jas": [
+    "boss"
+  ],
+  "scripture of ful": [
+    "boss"
+  ],
+  "scripture of bik": [
+    "boss"
+  ],
+  "scripture of wen": [
+    "boss"
+  ],
+  "scripture of amascut": [
+    "boss"
+  ],
+  "brooch of the gods": [
+    "pocket"
+  ],
+  "bones to peaches": [
+    "prayer"
+  ],
+  "crystal armour seed": [
+    "materials"
+  ],
+  "crystal weapon seed": [
+    "materials"
+  ],
+  "crystal tool seed": [
+    "materials"
+  ],
+  "deathspore arrow tips": [
+    "ammo"
+  ],
+  "deathspore arrows": [
+    "ammo"
+  ],
+  "croesus spore sack": [
+    "boss"
+  ],
+  "croesus sporehammer": [
+    "boss"
+  ],
+  "mushroom potato": [
+    "food"
+  ],
+  "mushroom & onion": [
+    "food"
+  ],
+  "purple mushroom": [
+    "boss"
+  ],
+  "compost mound pouch": [
+    "summoning"
+  ],
+  "compost mound scroll": [
+    "summoning"
+  ],
+  "shark jawbone": [
+    "materials"
+  ],
+  "granite lobster pouch": [
+    "summoning"
+  ],
+  "granite lobster scroll": [
+    "summoning"
+  ],
+  "jackalope pouch": [
+    "summoning"
+  ],
+  "jackalope scroll": [
+    "summoning"
+  ],
+  "animal fur": [
+    "archaeology"
+  ],
+  "inquisitor's staff": [
+    "melee"
+  ],
+  "inquisitor's staff censer": [
+    "magic"
+  ],
+  "inquisitor's staff ornament": [
+    "magic"
+  ],
+  "inquisitor's staff rod": [
+    "magic"
+  ],
+  "second age sword": [
+    "treasure_trails",
+    "melee"
+  ],
+  "second age range top": [
+    "treasure_trails",
+    "ranged"
+  ],
+  "second age range legs": [
+    "treasure_trails",
+    "ranged"
+  ],
+  "second age magic robe top": [
+    "treasure_trails",
+    "magic"
+  ],
+  "second age magic robe legs": [
+    "treasure_trails",
+    "magic"
+  ],
+  "second age platelegs": [
+    "treasure_trails",
+    "melee"
+  ],
+  "second age platebody": [
+    "treasure_trails",
+    "melee"
+  ],
+  "second age full helm": [
+    "treasure_trails",
+    "melee"
+  ],
+  "incense stick": [
+    "materials"
+  ],
+  "pack yak mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "bolt of cloth": [
+    "crafting"
+  ],
+  "bolt mould": [
+    "fletching"
+  ],
+  "charcoal": [
+    "materials"
+  ],
+  "chocolate bar": [
+    "food"
+  ],
+  "barker toad pouch": [
+    "summoning"
+  ],
+  "barker toad scroll": [
+    "summoning"
+  ],
+  "_note": "Auto-generated from RS Wiki. Hand-written entries take priority over wiki results.",
+  "_generated_items": 643,
+  "staff of fire": [
+    "magic",
+    "low_tier"
+  ],
+  "battlestaff": [
+    "magic",
+    "low_tier"
+  ],
+  "mimic kill token": [
+    "materials"
+  ],
+  "crossbow string": [
+    "fletching"
+  ],
+  "warrior helm": [
+    "low_tier"
+  ],
+  "farseer helm": [
+    "low_tier"
+  ],
+  "crossbow stock": [
+    "fletching"
+  ],
+  "crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand bronze crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand iron crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand steel crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand black crossbow": [
+    "treasure_trails",
+    "low_tier"
+  ],
+  "off-hand mithril crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand adamant crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand rune crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "off-hand dragon crossbow": [
+    "ranged",
+    "low_tier"
+  ],
+  "fragments of pernix's quiver": [
+    "boss"
+  ],
+  "bloated leech pouch": [
+    "summoning"
+  ],
+  "bloated leech scroll (blood drain)": [
+    "summoning"
+  ],
+  "bloated leech": [
+    "summoning"
+  ],
+  "holy scarab": [
+    "summoning"
+  ],
+  "ascended essence": [
+    "fletching"
+  ],
+  "ward of subjugation": [
+    "magic"
+  ],
+  "battle robe bottom 0": [
+    "magic",
+    "low_tier"
+  ],
+  "battle robe top 0": [
+    "magic",
+    "low_tier"
+  ],
+  "mystical sand seed": [
+    "materials"
+  ],
+  "elemental body": [
+    "materials"
+  ],
+  "elemental legs": [
+    "materials"
+  ],
+  "amulet of souls": [
+    "hybrid"
+  ],
+  "reaper necklace": [
+    "hybrid"
+  ],
+  "essence of finality": [
+    "hybrid"
+  ],
+  "ring of death": [
+    "hybrid"
+  ],
+  "cinderbane gloves": [
+    "hybrid"
+  ],
+  "reaper's choice": [
+    "hybrid"
+  ],
+  "dark bow": [
+    "ranged",
+    "low_tier"
+  ],
+  "anima core body of sliske": [
+    "boss",
+    "hybrid"
+  ],
+  "anima core helm of sliske": [
+    "boss",
+    "hybrid"
+  ],
+  "anima core legs of sliske": [
+    "boss",
+    "hybrid"
+  ],
+  "dormant anima core body": [
+    "boss"
+  ],
+  "dormant anima core helm": [
+    "boss"
+  ],
+  "dormant anima core legs": [
+    "boss"
+  ],
+  "dormant anima core body shard": [
+    "boss"
+  ],
+  "dormant anima core helm shard": [
+    "boss"
+  ],
+  "dormant anima core legs shard": [
+    "boss"
+  ],
+  "anima core body of seren": [
+    "boss",
+    "magic"
+  ],
+  "anima core body of zamorak": [
+    "boss",
+    "ranged"
+  ],
+  "anima core body of zaros": [
+    "boss",
+    "melee"
+  ],
+  "anima core helm of seren": [
+    "boss",
+    "magic"
+  ],
+  "anima core helm of zamorak": [
+    "boss",
+    "ranged"
+  ],
+  "anima core helm of zaros": [
+    "boss",
+    "melee"
+  ],
+  "anima core legs of seren": [
+    "boss",
+    "magic"
+  ],
+  "anima core legs of zamorak": [
+    "boss",
+    "ranged"
+  ],
+  "anima core legs of zaros": [
+    "boss",
+    "melee"
+  ],
+  "staff of sliske": [
+    "boss"
+  ],
+  "crest of sliske": [
+    "boss"
+  ],
+  "spirit weed incense sticks": [
+    "supplies"
+  ],
+  "fellstalk incense sticks": [
+    "supplies"
+  ],
+  "lantadyme incense sticks": [
+    "supplies"
+  ],
+  "kwuarm incense sticks": [
+    "supplies"
+  ],
+  "irit incense sticks": [
+    "supplies"
+  ],
+  "ranarr incense sticks": [
+    "supplies"
+  ],
+  "guam incense sticks": [
+    "gathering"
+  ],
+  "bloodweed incense sticks": [
+    "gathering"
+  ],
+  "cadantine incense sticks": [
+    "gathering"
+  ],
+  "dwarf weed incense sticks": [
+    "gathering"
+  ],
+  "avantoe incense sticks": [
+    "gathering"
+  ],
+  "tarromin incense sticks": [
+    "gathering"
+  ],
+  "wergali incense sticks": [
+    "fletching"
+  ],
+  "manuscript of amascut": [
+    "supplies"
+  ],
+  "manuscript of bik": [
+    "boss"
+  ],
+  "manuscript of elidinis": [
+    "boss"
+  ],
+  "manuscript of ful": [
+    "supplies"
+  ],
+  "manuscript of jas": [
+    "supplies"
+  ],
+  "manuscript of wen": [
+    "supplies"
+  ],
+  "torn grimoire page": [
+    "supplies"
+  ],
+  "erethdor's grimoire": [
+    "boss"
+  ],
+  "scripture of elidinis": [
+    "boss"
+  ],
+  "half full wine jug": [
+    "rares"
+  ],
+  "holly wreath": [
+    "rares"
+  ],
+  "christmas scythe": [
+    "rares"
+  ],
+  "soul dyed hallowe'en mask": [
+    "rares"
+  ],
+  "yellow hallowe'en mask": [
+    "rares"
+  ],
+  "soul dye": [
+    "rares"
+  ],
+  "aurora dye": [
+    "rares"
+  ],
+  "challenger halo": [
+    "rares"
+  ],
+  "stargazer shoulder cape": [
+    "rares"
+  ],
+  "second-age": [
+    "treasure_trails"
+  ],
+  "ancient hilt": [
+    "boss"
+  ],
+  "magma core": [
+    "boss"
+  ],
+  "dark sliver of leng": [
+    "boss"
+  ],
+  "dark shard of leng": [
+    "boss"
+  ],
+  "shard of genesis essence": [
+    "boss"
+  ],
+  "memory dowser": [
+    "boss"
+  ],
+  "fractured stabilisation gem": [
+    "boss"
+  ],
+  "fractured armadyl symbol": [
+    "boss"
+  ],
+  "staff of armadyl's fractured shaft": [
+    "boss"
+  ],
+  "obsidian blade": [
+    "boss"
+  ],
+  "shadowy egg": [
+    "boss"
+  ],
+  "devourer's guard": [
+    "boss"
+  ],
+  "elite dracolich hauberk": [
+    "boss"
+  ],
+  "croesus foultorch": [
+    "boss"
+  ],
+  "intricate shadow chest": [
+    "boss"
+  ],
+  "tagga's corehammer": [
+    "boss"
+  ],
+  "sana's fyrtorch": [
+    "boss"
+  ],
+  "visage of the first necromancer": [
+    "boss"
+  ],
+  "top of the last guardian's bow": [
+    "boss"
+  ],
+  "bottom of the last guardian's bow": [
+    "boss"
+  ],
+  "vestments of havoc": [
+    "boss"
+  ],
+  "dark facet of": [
+    "boss"
+  ],
+  "varanus's mercy": [
+    "boss",
+    "melee"
+  ],
+  "nodon spike harness": [
+    "boss",
+    "melee"
+  ],
+  "misalionar's death mask": [
+    "boss",
+    "necromancy"
+  ],
+  "infinity boots": [
+    "low_tier"
+  ],
+  "infinity bottoms": [
+    "low_tier"
+  ],
+  "infinity gloves": [
+    "low_tier"
+  ],
+  "infinity hat": [
+    "low_tier"
+  ],
+  "infinity top": [
+    "low_tier"
+  ],
+  "infinity robes set": [
+    "low_tier"
+  ],
+  "initiate": [
+    "low_tier"
+  ],
+  "proselyte": [
+    "low_tier"
+  ],
+  "halo of returning": [
+    "rares"
+  ],
+  "haunted whetstone": [
+    "rares"
+  ],
+  "mimic tongue cape": [
+    "rares"
+  ],
+  "shoulder cape": [
+    "rares"
+  ],
+  "terrasaur maul": [
+    "boss",
+    "melee"
+  ],
+  "gloomfire bow": [
+    "boss",
+    "ranged"
+  ],
+  "robe top of the first necromancer": [
+    "boss",
+    "necromancy"
+  ],
+  "spider leg": [
+    "boss"
+  ],
+  "volcanic fragments": [
+    "boss"
+  ],
+  "tribal fin": [
+    "boss"
+  ],
+  "superior long bone": [
+    "boss"
+  ],
+  "vorkath's scale": [
+    "boss"
+  ],
+  "enchantment of affliction": [
+    "boss"
+  ],
+  "enchantment of flames": [
+    "boss"
+  ],
+  "enchantment of metaphysics": [
+    "boss"
+  ],
+  "roar of awakening": [
+    "boss"
+  ],
+  "ode to deceit": [
+    "boss"
+  ],
+  "elite dracolich chaps": [
+    "boss"
+  ],
+  "elite dracolich coif": [
+    "boss"
+  ],
+  "intricate blood stained chest": [
+    "boss"
+  ],
+  "intricate ice chest": [
+    "boss"
+  ],
+  "khopesh of elidinis": [
+    "boss"
+  ],
+  "enhanced gloves of passage": [
+    "melee"
+  ],
+  "masterwork 2h sword": [
+    "melee"
+  ],
+  "masterwork melee armour trim": [
+    "melee"
+  ],
+  "trimmed masterwork melee": [
+    "melee"
+  ],
+  "masterwork magic robe top": [
+    "magic"
+  ],
+  "masterwork magic robe bottom": [
+    "magic"
+  ],
+  "masterwork magic hat": [
+    "magic"
+  ],
+  "masterwork staff": [
+    "magic"
+  ],
+  "masterwork ranged body": [
+    "ranged"
+  ],
+  "masterwork ranged chaps": [
+    "ranged"
+  ],
+  "masterwork ranged cowl": [
+    "ranged"
+  ],
+  "binding essence": [
+    "smithing"
+  ],
+  "sirenic essence": [
+    "crafting"
+  ],
+  "skeka's hypnowand": [
+    "gathering"
+  ],
+  "balarak's sash brush": [
+    "archaeology"
+  ],
+  "skewer stick": [
+    "food"
+  ],
+  "skewered": [
+    "food"
+  ],
+  "mjolnir": [
+    "materials"
+  ],
+  "toktz": [
+    "low_tier"
+  ],
+  "elder rune pickaxe + 1": [
+    "gathering"
+  ],
+  "elder rune pickaxe + 2": [
+    "gathering"
+  ],
+  "elder rune pickaxe + 3": [
+    "gathering"
+  ],
+  "elder rune pickaxe + 4": [
+    "gathering"
+  ],
+  "elder rune pickaxe + 5": [
+    "gathering"
+  ],
+  "elder rune hatchet": [
+    "gathering"
+  ],
+  "elder rune gauntlets": [
+    "low_tier"
+  ],
+  "elder rune gauntlets + 1": [
+    "low_tier"
+  ],
+  "elder rune gauntlets + 2": [
+    "low_tier"
+  ],
+  "elder rune gauntlets + 3": [
+    "low_tier"
+  ],
+  "elder rune gauntlets + 4": [
+    "low_tier"
+  ],
+  "elder rune gauntlets + 5": [
+    "low_tier"
+  ],
+  "elder rune round shield": [
+    "low_tier"
+  ],
+  "elder rune round shield + 1": [
+    "low_tier"
+  ],
+  "elder rune round shield + 2": [
+    "low_tier"
+  ],
+  "elder rune round shield + 3": [
+    "low_tier"
+  ],
+  "elder rune round shield + 4": [
+    "low_tier"
+  ],
+  "elder rune round shield + 5": [
+    "low_tier"
+  ],
+  "elder rune off hand longsword": [
+    "low_tier"
+  ],
+  "elder rune off hand longsword + 1": [
+    "low_tier"
+  ],
+  "elder rune off hand longsword + 2": [
+    "low_tier"
+  ],
+  "elder rune off hand longsword + 3": [
+    "low_tier"
+  ],
+  "elder rune off hand longsword + 4": [
+    "low_tier"
+  ],
+  "elder rune off hand longsword + 5": [
+    "low_tier"
+  ],
+  "double pirate hooks": [
+    "rares"
+  ],
+  "christmas tree hat": [
+    "rares"
+  ],
+  "purple hallowe'en mask": [
+    "rares"
+  ],
+  "orange hallowe'en mask": [
+    "rares"
+  ],
+  "full easter basket": [
+    "rares"
+  ],
+  "cloak of seasons": [
+    "rares"
+  ],
+  "gnome scarf": [
+    "rares"
+  ],
+  "power flower basket (inactive)": [
+    "rares"
+  ],
+  "woodland fox ears": [
+    "rares"
+  ],
+  "swordy mcswordface": [
+    "rares"
+  ],
+  "dracolich hauberk": [
+    "boss"
+  ],
+  "dracolich chaps": [
+    "boss"
+  ],
+  "dracolich coif": [
+    "boss"
+  ],
+  "elite dracolich vambraces": [
+    "boss"
+  ],
+  "elite dracolich boots": [
+    "boss"
+  ],
+  "intricate smoke-shrouded chest": [
+    "boss"
+  ],
+  "enchantment of agony": [
+    "boss"
+  ],
+  "enchantment of shadows": [
+    "boss"
+  ],
+  "enchantment of heroism": [
+    "boss"
+  ],
+  "enchantment of dispelling": [
+    "boss"
+  ],
+  "wand of the praesul": [
+    "boss"
+  ],
+  "runic attuner": [
+    "boss"
+  ],
+  "warped stone": [
+    "boss"
+  ],
+  "shadow spike": [
+    "boss"
+  ],
+  "jail cell key": [
+    "boss"
+  ],
+  "khopesh of tumeken": [
+    "boss",
+    "melee"
+  ],
+  "malevolent cuirass": [
+    "boss",
+    "melee"
+  ],
+  "abyssal scourge": [
+    "boss",
+    "melee"
+  ],
+  "gloves of passage": [
+    "boss",
+    "melee"
+  ],
+  "robe bottom of the first necromancer": [
+    "boss",
+    "necromancy"
+  ],
+  "legatus's emberstaff": [
+    "boss",
+    "magic"
+  ],
+  "imperium core": [
+    "boss",
+    "magic"
+  ],
+  "inquisitor staff": [
+    "magic"
+  ],
+  "noxious essence": [
+    "crafting"
+  ],
+  "grace of the elves": [
+    "gathering"
+  ],
+  "masterwork melee platebody": [
+    "melee"
+  ],
+  "masterwork ranged vambraces": [
+    "ranged"
+  ],
+  "masterwork ranged boots": [
+    "ranged"
+  ],
+  "masterwork magic boots": [
+    "magic"
+  ],
+  "masterwork magic gloves": [
+    "magic"
+  ],
+  "gud raider axe": [
+    "low_tier"
+  ],
+  "gud raider chainbody": [
+    "low_tier"
+  ],
+  "gud raider shield": [
+    "low_tier"
+  ],
+  "muspah scroll (siphon self)": [
+    "summoning"
+  ],
+  "nightmare muspah pouch": [
+    "summoning"
+  ],
+  "crate (classic components)": [
+    "invention"
+  ],
+  "crate (historic components)": [
+    "invention"
+  ],
+  "crate (timeworn components)": [
+    "invention"
+  ],
+  "crate (vintage components)": [
+    "invention"
+  ],
+  "the devourer's nexus (unattuned)": [
+    "boss",
+    "necromancy"
+  ],
+  "crown of seasons": [
+    "rares"
+  ],
+  "chest of seasons": [
+    "rares"
+  ],
+  "bottoms of seasons": [
+    "rares"
+  ],
+  "boots of seasons": [
+    "rares"
+  ],
+  "sceptre of enchantment (tradeable)": [
+    "rares"
+  ],
+  "am-zi": [
+    "melee"
+  ],
+  "am-hej": [
+    "melee"
+  ],
+  "pneumatic gloves": [
+    "melee"
+  ],
+  "masterwork melee platelegs": [
+    "melee"
+  ],
+  "hailfire boots": [
+    "magic"
+  ],
+  "ragefire boots": [
+    "magic"
+  ],
+  "flarefrost boots": [
+    "ranged"
+  ],
+  "malevolent greaves": [
+    "boss",
+    "melee"
+  ],
+  "armadyl armour set": [
+    "boss",
+    "ranged"
+  ],
+  "enchantment of dread": [
+    "boss"
+  ],
+  "enchantment of savagery": [
+    "boss"
+  ],
+  "dark ice sliver": [
+    "boss"
+  ],
+  "dark ice shard": [
+    "boss"
+  ],
+  "corrupted chain scroll": [
+    "overrides"
+  ],
+  "golden cape": [
+    "rares"
+  ],
+  "primal armour set + 4": [
+    "smithing"
+  ],
+  "enhanced nightmare gauntlets": [
+    "ranged"
+  ],
+  "tracking gloves": [
+    "ranged"
+  ],
+  "empty easter basket": [
+    "rares"
+  ],
+  "rainbow glasses": [
+    "rares"
+  ],
+  "winter scarf (aurora)": [
+    "rares"
+  ],
+  "apple parasol": [
+    "rares"
+  ],
+  "mask of the matriarchs": [
+    "rares"
+  ],
+  "gloves of seasons": [
+    "rares"
+  ],
+  "mask of the araxytes": [
+    "rares"
+  ],
+  "crab hat (tradeable)": [
+    "rares"
+  ],
+  "primal armour set + 3": [
+    "smithing"
+  ],
+  "foot wraps of the first necromancer": [
+    "boss",
+    "necromancy"
+  ],
+  "crown of the first necromancer": [
+    "boss",
+    "necromancy"
+  ],
+  "malevolent kiteshield": [
+    "boss",
+    "melee"
+  ],
+  "crest of seren": [
+    "boss"
+  ],
+  "dracolich boots": [
+    "boss"
+  ],
+  "static gloves": [
+    "magic"
+  ],
+  "camel staff": [
+    "magic"
+  ],
+  "starbloom robes set + 5": [
+    "magic"
+  ],
+  "glaiven boots": [
+    "ranged"
+  ],
+  "decimation": [
+    "ranged"
+  ],
+  "masterwork melee helm": [
+    "melee"
+  ],
+  "praesulic essence (melee)": [
+    "smithing"
+  ],
+  "praesulic essence (ranged)": [
+    "smithing"
+  ],
+  "praesulic essence (magic)": [
+    "smithing"
+  ],
+  "corrupted concentrated blast scroll": [
+    "overrides"
+  ],
+  "corrupted wild magic scroll": [
+    "overrides"
+  ],
+  "emberkeen boots": [
+    "melee"
+  ],
+  "primal armour set": [
+    "smithing"
+  ],
+  "primal armour set + 1": [
+    "smithing"
+  ],
+  "primal armour set + 2": [
+    "smithing"
+  ],
+  "primal armour set + 5": [
+    "melee"
+  ],
+  "primal full helm": [
+    "smithing"
+  ],
+  "primal full helm + 1": [
+    "smithing"
+  ],
+  "primal full helm + 2": [
+    "smithing"
+  ],
+  "primal full helm + 3": [
+    "smithing"
+  ],
+  "primal full helm + 4": [
+    "smithing"
+  ],
+  "primal full helm + 5": [
+    "melee"
+  ],
+  "primal armoured boots": [
+    "smithing"
+  ],
+  "primal armoured boots + 1": [
+    "smithing"
+  ],
+  "primal armoured boots + 2": [
+    "smithing"
+  ],
+  "primal armoured boots + 3": [
+    "smithing"
+  ],
+  "primal armoured boots + 4": [
+    "smithing"
+  ],
+  "primal armoured boots + 5": [
+    "melee"
+  ],
+  "primal gauntlets": [
+    "smithing"
+  ],
+  "primal gauntlets + 1": [
+    "smithing"
+  ],
+  "primal gauntlets + 2": [
+    "smithing"
+  ],
+  "primal gauntlets + 3": [
+    "smithing"
+  ],
+  "primal gauntlets + 4": [
+    "smithing"
+  ],
+  "primal gauntlets + 5": [
+    "melee"
+  ],
+  "primal kiteshield": [
+    "smithing"
+  ],
+  "primal kiteshield + 1": [
+    "smithing"
+  ],
+  "primal kiteshield + 2": [
+    "smithing"
+  ],
+  "primal kiteshield + 3": [
+    "smithing"
+  ],
+  "primal kiteshield + 4": [
+    "smithing"
+  ],
+  "primal kiteshield + 5": [
+    "melee"
+  ],
+  "primal platebody + 1": [
+    "smithing"
+  ],
+  "primal platebody + 2": [
+    "smithing"
+  ],
+  "primal platebody + 3": [
+    "smithing"
+  ],
+  "primal platebody + 4": [
+    "smithing"
+  ],
+  "primal platebody + 5": [
+    "melee"
+  ],
+  "primal platelegs": [
+    "smithing"
+  ],
+  "primal platelegs + 1": [
+    "smithing"
+  ],
+  "primal platelegs + 2": [
+    "smithing"
+  ],
+  "primal platelegs + 3": [
+    "smithing"
+  ],
+  "primal platelegs + 4": [
+    "smithing"
+  ],
+  "primal platelegs + 5": [
+    "melee"
+  ],
+  "primal 2h sword": [
+    "smithing"
+  ],
+  "primal 2h sword + 1": [
+    "smithing"
+  ],
+  "primal 2h sword + 2": [
+    "smithing"
+  ],
+  "primal 2h sword + 3": [
+    "smithing"
+  ],
+  "primal 2h sword + 4": [
+    "smithing"
+  ],
+  "primal 2h sword + 5": [
+    "melee"
+  ],
+  "primal warhammer": [
+    "smithing"
+  ],
+  "primal warhammer + 1": [
+    "smithing"
+  ],
+  "primal warhammer + 2": [
+    "smithing"
+  ],
+  "primal warhammer + 3": [
+    "smithing"
+  ],
+  "primal warhammer + 4": [
+    "smithing"
+  ],
+  "primal warhammer + 5": [
+    "melee"
+  ],
+  "primal off hand warhammer": [
+    "smithing"
+  ],
+  "primal off hand warhammer + 1": [
+    "smithing"
+  ],
+  "primal off hand warhammer + 2": [
+    "smithing"
+  ],
+  "primal off hand warhammer + 3": [
+    "smithing"
+  ],
+  "primal off hand warhammer + 4": [
+    "smithing"
+  ],
+  "primal off hand warhammer + 5": [
+    "melee"
+  ],
+  "primal crossbow": [
+    "ranged"
+  ],
+  "primal crossbow (unstrung)": [
+    "fletching"
+  ],
+  "primal crossbow mk. 5": [
+    "ranged"
+  ],
+  "off-hand primal crossbow": [
+    "ranged"
+  ],
+  "off-hand primal crossbow mk. 5": [
+    "ranged"
+  ],
+  "primal arrow": [
+    "fletching"
+  ],
+  "primal arrowheads": [
+    "fletching"
+  ],
+  "primal bolt tips": [
+    "fletching"
+  ],
+  "primal bolts": [
+    "fletching"
+  ],
+  "primal limbs": [
+    "fletching"
+  ],
+  "primal pickaxe": [
+    "gathering"
+  ],
+  "primal hatchet": [
+    "gathering"
+  ],
+  "primal pickaxe + 1": [
+    "gathering"
+  ],
+  "primal pickaxe + 2": [
+    "gathering"
+  ],
+  "primal pickaxe + 3": [
+    "gathering"
+  ],
+  "primal pickaxe + 4": [
+    "gathering"
+  ],
+  "primal pickaxe + 5": [
+    "gathering"
+  ],
+  "primal bar": [
+    "smithing"
+  ],
+  "primal ore box": [
+    "smithing"
+  ],
+  "primal extract": [
+    "herblore"
+  ],
+  "primal stone spirit": [
+    "mining"
+  ],
+  "primal dessert": [
+    "food"
+  ],
+  "primal fruit pulp": [
+    "food"
+  ],
+  "primal armour spikes": [
+    "melee"
+  ],
+  "primal abyssal armour spikes": [
+    "melee"
+  ],
+  "kerapac's wrist wraps": [
+    "boss",
+    "magic"
+  ],
+  "enhanced kerapac's wrist wraps": [
+    "magic"
+  ],
+  "kerapac's wristwraps shard": [
+    "boss"
+  ],
+  "enhanced kerapac's wristwraps shard": [
+    "boss"
+  ],
+  "mimic plushie": [
+    "rares"
+  ],
+  "coin of enchantment (tradeable)": [
+    "rares"
+  ],
+  "fish mask": [
+    "rares"
+  ],
+  "mask of the grove guardian": [
+    "rares"
+  ],
+  "dwellberry parasol": [
+    "rares"
+  ],
+  "malevolent helm": [
+    "boss",
+    "melee"
+  ],
+  "crest of zaros": [
+    "boss"
+  ],
+  "vengeful kiteshield": [
+    "boss",
+    "ranged"
+  ],
+  "dracolich vambraces": [
+    "boss"
+  ],
+  "dragon rider lance": [
+    "boss",
+    "melee"
+  ],
+  "codex of lost knowledge": [
+    "boss"
+  ],
+  "dragon pickaxe": [
+    "gathering"
+  ],
+  "archaeology potion recipe": [
+    "herblore"
+  ],
+  "jal-tok-yt": [
+    "crafting"
+  ],
+  "divine spirit shield": [
+    "boss",
+    "melee"
+  ],
+  "elysian spirit shield": [
+    "boss",
+    "ranged"
+  ],
+  "kalphite essence": [
+    "smithing"
+  ],
+  "vampyrism gloves": [
+    "low_tier"
+  ],
+  "occultist's ring": [
+    "boss",
+    "necromancy"
+  ],
+  "rose tinted glasses": [
+    "rares"
+  ],
+  "lemon parasol": [
+    "rares"
+  ],
+  "orange parasol": [
+    "rares"
+  ],
+  "winter hat (aurora)": [
+    "rares"
+  ],
+  "oil of enchantment": [
+    "rares"
+  ],
+  "crest of zamorak": [
+    "boss"
+  ],
+  "laniakea's spear": [
+    "boss",
+    "melee"
+  ],
+  "spectral spirit shield": [
+    "boss",
+    "necromancy"
+  ],
+  "arcane spirit shield": [
+    "boss",
+    "magic"
+  ],
+  "masterwork melee gloves": [
+    "melee"
+  ],
+  "masterwork melee boots": [
+    "melee"
+  ],
+  "seasinger's robe top": [
+    "magic"
+  ],
+  "seasinger's robe bottom": [
+    "magic"
+  ],
+  "nightmare gauntlets": [
+    "ranged"
+  ],
+  "spectral lens": [
+    "low_tier"
+  ],
+  "dragon plate armour set (lg)": [
+    "low_tier"
+  ],
+  "chaotic essence": [
+    "smithing"
+  ],
+  "malevolent essence": [
+    "smithing"
+  ],
+  "elder rune armour set + 5": [
+    "melee"
+  ],
+  "wyrm scalp": [
+    "crafting"
+  ],
+  "tectonic essence": [
+    "crafting"
+  ],
+  "elite sirenic repair patch": [
+    "crafting"
+  ],
+  "starbloom robes set": [
+    "crafting"
+  ],
+  "starbloom robes set + 1": [
+    "crafting"
+  ],
+  "starbloom robes set + 2": [
+    "crafting"
+  ],
+  "starbloom robes set + 3": [
+    "crafting"
+  ],
+  "starbloom robes set + 4": [
+    "crafting"
+  ],
+  "starbloom boots": [
+    "crafting"
+  ],
+  "starbloom boots + 1": [
+    "crafting"
+  ],
+  "starbloom boots + 2": [
+    "crafting"
+  ],
+  "starbloom boots + 3": [
+    "crafting"
+  ],
+  "starbloom boots + 4": [
+    "crafting"
+  ],
+  "starbloom boots + 5": [
+    "magic"
+  ],
+  "starbloom gloves": [
+    "crafting"
+  ],
+  "starbloom gloves + 1": [
+    "crafting"
+  ],
+  "starbloom gloves + 2": [
+    "crafting"
+  ],
+  "starbloom gloves + 3": [
+    "crafting"
+  ],
+  "starbloom gloves + 4": [
+    "crafting"
+  ],
+  "starbloom gloves + 5": [
+    "magic"
+  ],
+  "starbloom hat": [
+    "crafting"
+  ],
+  "starbloom hat + 1": [
+    "crafting"
+  ],
+  "starbloom hat + 2": [
+    "crafting"
+  ],
+  "starbloom hat + 3": [
+    "crafting"
+  ],
+  "starbloom hat + 4": [
+    "crafting"
+  ],
+  "starbloom hat + 5": [
+    "magic"
+  ],
+  "starbloom robe bottom": [
+    "crafting"
+  ],
+  "starbloom robe bottom + 1": [
+    "crafting"
+  ],
+  "starbloom robe bottom + 2": [
+    "crafting"
+  ],
+  "starbloom robe bottom + 3": [
+    "crafting"
+  ],
+  "starbloom robe bottom + 4": [
+    "crafting"
+  ],
+  "starbloom robe bottom + 5": [
+    "magic"
+  ],
+  "starbloom robe top": [
+    "crafting"
+  ],
+  "starbloom robe top + 1": [
+    "crafting"
+  ],
+  "starbloom robe top + 2": [
+    "crafting"
+  ],
+  "starbloom robe top + 3": [
+    "crafting"
+  ],
+  "starbloom robe top + 4": [
+    "crafting"
+  ],
+  "starbloom robe top + 5": [
+    "magic"
+  ],
+  "starbloom cloth": [
+    "crafting"
+  ],
+  "starbloom flower": [
+    "crafting"
+  ],
+  "starbloom thread": [
+    "crafting"
+  ],
+  "starbloom flower seed": [
+    "farming"
+  ],
+  "gout tuber": [
+    "farming"
+  ],
+  "melodic essence": [
+    "crafting"
+  ],
+  "steadfast boots": [
+    "melee"
+  ],
+  "dragon bane 2h sword": [
+    "melee"
+  ],
+  "broken dragon bane 2h sword": [
+    "melee"
+  ],
+  "broken revenant bane 2h sword": [
+    "melee"
+  ],
+  "bandos armour set": [
+    "boss",
+    "melee"
+  ],
+  "mages' book": [
+    "low_tier"
+  ],
+  "master wand": [
+    "low_tier"
+  ],
+  "grifolic poncho": [
+    "low_tier"
+  ],
+  "dragon platebody": [
+    "low_tier"
+  ],
+  "dragon plate armour set (sk)": [
+    "low_tier"
+  ],
+  "saradomin's hum": [
+    "boss"
+  ],
+  "hand wrap of the first necromancer": [
+    "boss",
+    "necromancy"
+  ],
+  "lime parasol": [
+    "rares"
+  ],
+  "woodland fox tail": [
+    "rares"
+  ],
+  "dragon rider kit": [
+    "hybrid"
+  ],
+  "gemstone greaves": [
+    "hybrid"
+  ],
+  "upgraded bone blowpipe": [
+    "ranged"
+  ],
+  "seasinger's hood": [
+    "magic"
+  ],
+  "eternal magic staff (saturated)": [
+    "crafting"
+  ],
+  "ancient elven ritual shard": [
+    "supplies"
+  ],
+  "volatile runic brick": [
+    "crafting"
+  ],
+  "demonic essence": [
+    "smithing"
+  ],
+  "elder rune armour set + 1": [
+    "smithing"
+  ],
+  "elder rune armour set + 2": [
+    "smithing"
+  ],
+  "elder rune armour set + 3": [
+    "smithing"
+  ],
+  "elder rune armour set + 4": [
+    "smithing"
+  ],
+  "elder rune armour set": [
+    "smithing"
+  ],
+  "banite armour set": [
+    "smithing"
+  ],
+  "banite armour set + 1": [
+    "smithing"
+  ],
+  "banite armour set + 2": [
+    "smithing"
+  ],
+  "banite armour set + 3": [
+    "smithing"
+  ],
+  "banite armour set + 4": [
+    "melee"
+  ],
+  "necronium armour set": [
+    "smithing"
+  ],
+  "necronium armour set + 1": [
+    "smithing"
+  ],
+  "necronium armour set + 2": [
+    "smithing"
+  ],
+  "necronium armour set + 3": [
+    "smithing"
+  ],
+  "necronium armour set + 4": [
+    "melee"
+  ],
+  "rainbow cape": [
+    "rares"
+  ],
+  "coconut parasol": [
+    "rares"
+  ],
+  "watermelon parasol": [
+    "rares"
+  ],
+  "pinata sombrero": [
+    "rares"
+  ],
+  "armadyl boots": [
+    "boss",
+    "ranged"
+  ],
+  "armadyl gloves": [
+    "boss",
+    "ranged"
+  ],
+  "armadyl buckler": [
+    "boss",
+    "ranged"
+  ],
+  "vorkath's spike": [
+    "boss"
+  ],
+  "merethiel's stave": [
+    "overrides"
+  ],
+  "pirate hook (right)": [
+    "overrides"
+  ],
+  "wyrm heart": [
+    "crafting"
+  ],
+  "steadfast scale": [
+    "crafting"
+  ],
+  "elite tectonic repair patch": [
+    "crafting"
+  ],
+  "seasinger weapon upgrade kit": [
+    "crafting"
+  ],
+  "gemstone boots": [
+    "hybrid"
+  ],
+  "mizuyari": [
+    "melee"
+  ],
+  "ascension grips": [
+    "ranged"
+  ],
+  "death notes": [
+    "supplies"
+  ],
+  "alchemical hydrix dust": [
+    "supplies"
+  ],
+  "revenant bane 2h sword": [
+    "melee"
+  ],
+  "dragon bane off-hand longsword": [
+    "melee"
+  ],
+  "dragon bane square shield": [
+    "melee"
+  ],
+  "broken revenant bane square shield": [
+    "melee"
+  ],
+  "broken revenant bane off-hand longsword": [
+    "melee"
+  ],
+  "broken dragon bane square shield": [
+    "melee"
+  ],
+  "broken dragon bane off-hand longsword": [
+    "melee"
+  ],
+  "masuta's warspear": [
+    "boss",
+    "melee"
+  ],
+  "superior ancient mace": [
+    "low_tier"
+  ],
+  "bone blowpipe": [
+    "low_tier"
+  ],
+  "dragon full helm": [
+    "low_tier"
+  ],
+  "gift wrap scythe": [
+    "rares"
+  ],
+  "cadavaberry parasol": [
+    "rares"
+  ],
+  "strawberry parasol": [
+    "rares"
+  ],
+  "santa costume gloves (green)": [
+    "rares"
+  ],
+  "santa costume top (green)": [
+    "rares"
+  ],
+  "elemental impetus": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "eternal magic wand (saturated)": [
+    "crafting"
+  ],
+  "eternal magic orb (saturated)": [
+    "crafting"
+  ],
+  "wyrm spike": [
+    "crafting"
+  ],
+  "blood necklace shard": [
+    "crafting"
+  ],
+  "dinosaurhide body": [
+    "crafting"
+  ],
+  "oldak coil upgrade kit": [
+    "magic"
+  ],
+  "fishy treat": [
+    "boss"
+  ],
+  "revenant bane off-hand longsword": [
+    "melee"
+  ],
+  "tetsu body": [
+    "melee"
+  ],
+  "tetsu helm": [
+    "melee"
+  ],
+  "tetsu platelegs": [
+    "melee"
+  ],
+  "tetsu sword upgrade kit": [
+    "melee"
+  ],
+  "dragonfire shield": [
+    "melee"
+  ],
+  "bandos chestplate": [
+    "boss",
+    "melee"
+  ],
+  "bandos tassets": [
+    "boss",
+    "melee"
+  ],
+  "dragonfire ward": [
+    "ranged"
+  ],
+  "fleeting boots": [
+    "ranged"
+  ],
+  "dragonfire deflector": [
+    "magic"
+  ],
+  "dragonfire shroud": [
+    "necromancy"
+  ],
+  "black mask": [
+    "low_tier"
+  ],
+  "black mask (10)": [
+    "low_tier"
+  ],
+  "grifolic leggings": [
+    "low_tier"
+  ],
+  "ganodermic poncho": [
+    "low_tier"
+  ],
+  "elite black armour set": [
+    "low_tier"
+  ],
+  "polypore staff": [
+    "low_tier"
+  ],
+  "orikalkum armour set": [
+    "smithing"
+  ],
+  "orikalkum armour set + 1": [
+    "smithing"
+  ],
+  "orikalkum armour set + 2": [
+    "smithing"
+  ],
+  "orikalkum armour set + 3": [
+    "smithing"
+  ],
+  "frosted wreath": [
+    "rares"
+  ],
+  "blue checkered shirt": [
+    "rares"
+  ],
+  "green checkered shirt": [
+    "rares"
+  ],
+  "purple checkered shirt": [
+    "rares"
+  ],
+  "gnome goggles": [
+    "rares"
+  ],
+  "pinata plushie": [
+    "rares"
+  ],
+  "puzzle box skipping ticket": [
+    "treasure_trails"
+  ],
+  "tower skipping ticket": [
+    "treasure_trails"
+  ],
+  "round glasses (black)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "round glasses (blue)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "round glasses (green)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "stylish glasses (black)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "stylish glasses (blue)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "stylish glasses (green)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "half-moon spectacles (black)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "half-moon spectacles (blue)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "half-moon spectacles (green)": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "robin (item)": [
+    "rares"
+  ],
+  "scare tactics": [
+    "codex"
+  ],
+  "golden roses": [
+    "farming"
+  ],
+  "dragon rider helm": [
+    "hybrid"
+  ],
+  "gemstone helm": [
+    "hybrid"
+  ],
+  "draconic visage": [
+    "smithing"
+  ],
+  "masterwork white cloth": [
+    "smithing"
+  ],
+  "malevolent energy": [
+    "smithing"
+  ],
+  "crystalline essence": [
+    "crafting"
+  ],
+  "araxyte pheromone": [
+    "boss"
+  ],
+  "savage spear shaft": [
+    "boss"
+  ],
+  "savage spear tip": [
+    "boss"
+  ],
+  "savage spear cap": [
+    "boss"
+  ],
+  "savage plume": [
+    "boss"
+  ],
+  "gemstone gauntlets": [
+    "hybrid"
+  ],
+  "spirit shard": [
+    "summoning"
+  ],
+  " energy": [
+    "mining"
+  ],
+  "ectoplasm": [
+    "necromancy"
+  ],
+  " pouch": [
+    "summoning"
+  ],
+  "super energy flask": [
+    "herblore"
+  ],
+  "resonant anima of amascut": [
+    "fletching"
+  ],
+  "guthix bow": [
+    "treasure_trails"
+  ],
+  "black beret": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "white beret": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "evening bolero": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "evening gloves": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "evening shoes": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "evening dipped skirt": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "evening masquerade mask": [
+    "treasure_trails",
+    "overrides"
+  ],
+  "scan clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "compass clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "elite clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "master clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "hard clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "medium clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "easy clue skipping ticket": [
+    "treasure_trails"
+  ],
+  "santa costume boots (green)": [
+    "rares"
+  ],
+  "santa costume legs (green)": [
+    "rares"
+  ],
+  "rainbow parasol": [
+    "rares"
+  ],
+  "dragon sq shield": [
+    "melee",
+    "low_tier"
+  ],
+  "dragon claw": [
+    "melee",
+    "low_tier"
+  ],
+  "bane platebody +3": [
+    "smithing"
+  ],
+  "powder of penance": [
+    "supplies"
+  ],
+  "crystal helm": [
+    "hybrid"
+  ],
+  "crystal body": [
+    "hybrid"
+  ],
+  "crystal legs": [
+    "hybrid"
+  ],
+  "holy elixir": [
+    "boss"
+  ],
+  "ripper claw": [
+    "melee"
+  ],
+  "off-hand ripper claw": [
+    "melee"
+  ],
+  "hand cannon": [
+    "ranged"
+  ],
+  "dark mystic robe bottom": [
+    "low_tier"
+  ],
+  "light mystic hat": [
+    "low_tier"
+  ],
+  "dark mystic gloves": [
+    "low_tier"
+  ],
+  "light mystic boots": [
+    "low_tier"
+  ],
+  "dark mystic hat": [
+    "low_tier"
+  ],
+  "dark mystic boots": [
+    "low_tier"
+  ],
+  "ancient robe top": [
+    "treasure_trails"
+  ],
+  "ancient robe legs": [
+    "treasure_trails"
+  ],
+  "light mystic robes set": [
+    "low_tier"
+  ],
+  "dark mystic robes set": [
+    "low_tier"
+  ],
+  "bane longsword + 1": [
+    "smithing"
+  ],
+  "bane pickaxe + 4": [
+    "mining"
+  ],
+  "bane longsword + 3": [
+    "smithing"
+  ],
+  "bane longsword + 2": [
+    "smithing"
+  ],
+  "light mystic robe bottom": [
+    "low_tier"
+  ],
+  "light mystic gloves": [
+    "low_tier"
+  ],
+  "resonant anima of bik (tradeable)": [
+    "fletching"
+  ],
+  "rune dart tip": [
+    "fletching"
+  ],
+  "dragon arrowheads": [
+    "fletching"
+  ],
+  "adamant dart tip": [
+    "fletching"
+  ],
+  "rune bolts (unf)": [
+    "fletching"
+  ],
+  "meerkats pouch": [
+    "summoning",
+    "treasure_trails"
+  ],
+  "meerkat scroll (fetch casket)": [
+    "treasure_trails",
+    "summoning"
+  ],
+  "right banana of knowledge": [
+    "overrides"
+  ],
+  "left banana of knowledge": [
+    "overrides"
+  ],
+  "dragon harpoon": [
+    "mining"
+  ],
+  "mahogany plank": [
+    "construction"
+  ],
+  "tempered fungal shaft": [
+    "fletching"
+  ],
+  "polypore spore": [
+    "materials",
+    "crafting"
+  ],
+  "time rune": [
+    "runes"
+  ],
+  "magic plank": [
+    "construction"
+  ],
+  "onyx dust": [
+    "crafting"
+  ],
+  "thread": [
+    "construction"
+  ],
+  "keramos": [
+    "archaeology"
+  ],
+  "yu'biusk clay": [
+    "archaeology"
+  ],
+  "dragon dart": [
+    "low_tier"
+  ],
+  "vellum": [
+    "archaeology"
+  ],
+  "water orb": [
+    "crafting"
+  ],
+  "tin ore": [
+    "mining"
+  ],
+  "plank": [
+    "construction"
+  ],
+  "stone wall segment": [
+    "construction"
+  ],
+  "chitin scraps": [
+    "materials"
+  ],
+  "imperial steel": [
+    "archaeology"
+  ]
+}

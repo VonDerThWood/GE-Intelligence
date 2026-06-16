@@ -1,7 +1,7 @@
 {
   "name": "genius-ge-intelligence",
   "productName": "GEnius",
-  "version": "1.0.0",
+  "version": "1.3.0",
   "description": "RuneScape 3 Grand Exchange Market Intelligence",
   "main": "src/main.js",
   "author": "VonDerThWood",
@@ -9,6 +9,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "electron . --dev",
+    "prebuild": "node scripts/sync-overrides.js",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
     "postinstall": "electron-builder install-app-deps"
@@ -17,7 +18,7 @@
     "electron-store": "^8.1.0"
   },
   "devDependencies": {
-    "electron": "^26.6.10",
+    "electron": "^28.0.0",
     "electron-builder": "^24.9.1"
   },
   "build": {
@@ -36,25 +37,19 @@
       {
         "from": "python/",
         "to": "python/",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       },
       {
         "from": "assets/",
         "to": "assets/",
-        "filter": [
-          "**/*"
-        ]
+        "filter": ["**/*"]
       }
     ],
     "win": {
       "target": [
         {
           "target": "nsis",
-          "arch": [
-            "x64"
-          ]
+          "arch": ["x64"]
         }
       ],
       "icon": "assets/icon.ico"
@@ -64,7 +59,9 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "GEnius"
+      "shortcutName": "GEnius",
+      "allowElevation": true,
+      "include": "build/installer.nsh"
     }
   }
 }

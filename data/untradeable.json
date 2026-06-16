@@ -1,0 +1,1955 @@
+[
+  {
+    "id": "untradeable_base_parts",
+    "name": "Base parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 2424,
+    "low": 2424,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_blade_parts",
+    "name": "Blade parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 554,
+    "low": 554,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_clear_parts",
+    "name": "Clear parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 27,
+    "low": 27,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_connector_parts",
+    "name": "Connector parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 458,
+    "low": 458,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_cover_parts",
+    "name": "Cover parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 2001,
+    "low": 2001,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_crafted_parts",
+    "name": "Crafted parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 806,
+    "low": 806,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_crystal_parts",
+    "name": "Crystal parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 72031,
+    "low": 72031,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_deflecting_parts",
+    "name": "Deflecting parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 2334,
+    "low": 2334,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_delicate_parts",
+    "name": "Delicate parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 235,
+    "low": 235,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_flexible_parts",
+    "name": "Flexible parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 618,
+    "low": 618,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_head_parts",
+    "name": "Head parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 1640,
+    "low": 1640,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_magic_parts",
+    "name": "Magic parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 458,
+    "low": 458,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_metallic_parts",
+    "name": "Metallic parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 2828,
+    "low": 2828,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_organic_parts",
+    "name": "Organic parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 91,
+    "low": 91,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_padded_parts",
+    "name": "Padded parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 2446,
+    "low": 2446,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_plated_parts",
+    "name": "Plated parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 2334,
+    "low": 2334,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_simple_parts",
+    "name": "Simple parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 475,
+    "low": 475,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_smooth_parts",
+    "name": "Smooth parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 251,
+    "low": 251,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_spiked_parts",
+    "name": "Spiked parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 534,
+    "low": 534,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_spiritual_parts",
+    "name": "Spiritual parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 646,
+    "low": 646,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_stave_parts",
+    "name": "Stave parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 778,
+    "low": 778,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_tensile_parts",
+    "name": "Tensile parts",
+    "categories": [
+      "invention"
+    ],
+    "high": 907,
+    "low": 907,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "common"
+  },
+  {
+    "id": "untradeable_dextrous_components",
+    "name": "Dextrous components",
+    "categories": [
+      "invention"
+    ],
+    "high": 15323,
+    "low": 15323,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_direct_components",
+    "name": "Direct components",
+    "categories": [
+      "invention"
+    ],
+    "high": 48188,
+    "low": 48188,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_enhancing_components",
+    "name": "Enhancing components",
+    "categories": [
+      "invention"
+    ],
+    "high": 2508,
+    "low": 2508,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_ethereal_components",
+    "name": "Ethereal components",
+    "categories": [
+      "invention"
+    ],
+    "high": 66743,
+    "low": 66743,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_evasive_components",
+    "name": "Evasive components",
+    "categories": [
+      "invention"
+    ],
+    "high": 23534,
+    "low": 23534,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_healthy_components",
+    "name": "Healthy components",
+    "categories": [
+      "invention"
+    ],
+    "high": 13916,
+    "low": 13916,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_heavy_components",
+    "name": "Heavy components",
+    "categories": [
+      "invention"
+    ],
+    "high": 15725,
+    "low": 15725,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_imbued_components",
+    "name": "Imbued components",
+    "categories": [
+      "invention"
+    ],
+    "high": 36692,
+    "low": 36692,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_light_components",
+    "name": "Light components",
+    "categories": [
+      "invention"
+    ],
+    "high": 15680,
+    "low": 15680,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_living_components",
+    "name": "Living components",
+    "categories": [
+      "invention"
+    ],
+    "high": 8700,
+    "low": 8700,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_offcut_components",
+    "name": "Offcut components",
+    "categories": [
+      "invention"
+    ],
+    "high": 7816,
+    "low": 7816,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_pious_components",
+    "name": "Pious components",
+    "categories": [
+      "invention"
+    ],
+    "high": 14900,
+    "low": 14900,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_powerful_components",
+    "name": "Powerful components",
+    "categories": [
+      "invention"
+    ],
+    "high": 10214,
+    "low": 10214,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_precious_components",
+    "name": "Precious components",
+    "categories": [
+      "invention"
+    ],
+    "high": 10453,
+    "low": 10453,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_precise_components",
+    "name": "Precise components",
+    "categories": [
+      "invention"
+    ],
+    "high": 6184,
+    "low": 6184,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_protective_components",
+    "name": "Protective components",
+    "categories": [
+      "invention"
+    ],
+    "high": 17122,
+    "low": 17122,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_sharp_components",
+    "name": "Sharp components",
+    "categories": [
+      "invention"
+    ],
+    "high": 5541,
+    "low": 5541,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_strong_components",
+    "name": "Strong components",
+    "categories": [
+      "invention"
+    ],
+    "high": 9275,
+    "low": 9275,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_stunning_components",
+    "name": "Stunning components",
+    "categories": [
+      "invention"
+    ],
+    "high": 5302,
+    "low": 5302,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_subtle_components",
+    "name": "Subtle components",
+    "categories": [
+      "invention"
+    ],
+    "high": 75238,
+    "low": 75238,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_swift_components",
+    "name": "Swift components",
+    "categories": [
+      "invention"
+    ],
+    "high": 8311,
+    "low": 8311,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_variable_components",
+    "name": "Variable components",
+    "categories": [
+      "invention"
+    ],
+    "high": 42457,
+    "low": 42457,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "uncommon"
+  },
+  {
+    "id": "untradeable_armadyl_components",
+    "name": "Armadyl components",
+    "categories": [
+      "invention"
+    ],
+    "high": 678309,
+    "low": 678309,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_ascended_components",
+    "name": "Ascended components",
+    "categories": [
+      "invention"
+    ],
+    "high": 242860,
+    "low": 242860,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_avernic_components",
+    "name": "Avernic components",
+    "categories": [
+      "invention"
+    ],
+    "high": 1510599,
+    "low": 1510599,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_bandos_components",
+    "name": "Bandos components",
+    "categories": [
+      "invention"
+    ],
+    "high": 100089,
+    "low": 100089,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_brassican_components",
+    "name": "Brassican components",
+    "categories": [
+      "invention"
+    ],
+    "high": 28640,
+    "low": 28640,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_clockwork_components",
+    "name": "Clockwork components",
+    "categories": [
+      "invention"
+    ],
+    "high": 502578,
+    "low": 502578,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_corporeal_components",
+    "name": "Corporeal components",
+    "categories": [
+      "invention"
+    ],
+    "high": 392002,
+    "low": 392002,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_culinary_components",
+    "name": "Culinary components",
+    "categories": [
+      "invention"
+    ],
+    "high": 120986,
+    "low": 120986,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_cywir_components",
+    "name": "Cywir components",
+    "categories": [
+      "invention"
+    ],
+    "high": 4080528,
+    "low": 4080528,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_dragonfire_components",
+    "name": "Dragonfire components",
+    "categories": [
+      "invention"
+    ],
+    "high": 54388,
+    "low": 54388,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_ecliptic_components",
+    "name": "Ecliptic components",
+    "categories": [
+      "invention"
+    ],
+    "high": 26742661,
+    "low": 26742661,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_explosive_components",
+    "name": "Explosive components",
+    "categories": [
+      "invention"
+    ],
+    "high": 37692,
+    "low": 37692,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_faceted_components",
+    "name": "Faceted components",
+    "categories": [
+      "invention"
+    ],
+    "high": 20496,
+    "low": 20496,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_fortunate_components",
+    "name": "Fortunate components",
+    "categories": [
+      "invention"
+    ],
+    "high": 851718,
+    "low": 851718,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_fungal_components",
+    "name": "Fungal components",
+    "categories": [
+      "invention"
+    ],
+    "high": 51180,
+    "low": 51180,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_harnessed_components",
+    "name": "Harnessed components",
+    "categories": [
+      "invention"
+    ],
+    "high": 27943,
+    "low": 27943,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_ilujankan_components",
+    "name": "Ilujankan components",
+    "categories": [
+      "invention"
+    ],
+    "high": 4227955,
+    "low": 4227955,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_knightly_components",
+    "name": "Knightly components",
+    "categories": [
+      "invention"
+    ],
+    "high": 1587,
+    "low": 1587,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_manufactured_components",
+    "name": "Manufactured components",
+    "categories": [
+      "invention"
+    ],
+    "high": 47800,
+    "low": 47800,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_noxious_components",
+    "name": "Noxious components",
+    "categories": [
+      "invention"
+    ],
+    "high": 14140303,
+    "low": 14140303,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_oceanic_components",
+    "name": "Oceanic components",
+    "categories": [
+      "invention"
+    ],
+    "high": 1421458,
+    "low": 1421458,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_pestiferous_components",
+    "name": "Pestiferous components",
+    "categories": [
+      "invention"
+    ],
+    "high": 801590,
+    "low": 801590,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_resilient_components",
+    "name": "Resilient components",
+    "categories": [
+      "invention"
+    ],
+    "high": 154518,
+    "low": 154518,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_rumbling_components",
+    "name": "Rumbling components",
+    "categories": [
+      "invention"
+    ],
+    "high": 1133427,
+    "low": 1133427,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_saradomin_components",
+    "name": "Saradomin components",
+    "categories": [
+      "invention"
+    ],
+    "high": 11568,
+    "low": 11568,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_seren_components",
+    "name": "Seren components",
+    "categories": [
+      "invention"
+    ],
+    "high": 1092395,
+    "low": 1092395,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_shadow_components",
+    "name": "Shadow components",
+    "categories": [
+      "invention"
+    ],
+    "high": 2512140,
+    "low": 2512140,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_shifting_components",
+    "name": "Shifting components",
+    "categories": [
+      "invention"
+    ],
+    "high": 985928,
+    "low": 985928,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_silent_components",
+    "name": "Silent components",
+    "categories": [
+      "invention"
+    ],
+    "high": 389322,
+    "low": 389322,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_third-age_components",
+    "name": "Third-age components",
+    "categories": [
+      "invention"
+    ],
+    "high": 29138086,
+    "low": 29138086,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_undead_components",
+    "name": "Undead components",
+    "categories": [
+      "invention"
+    ],
+    "high": 885260,
+    "low": 885260,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_zamorak_components",
+    "name": "Zamorak components",
+    "categories": [
+      "invention"
+    ],
+    "high": 244945,
+    "low": 244945,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_zaros_components",
+    "name": "Zaros components",
+    "categories": [
+      "invention"
+    ],
+    "high": 680402,
+    "low": 680402,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "rare"
+  },
+  {
+    "id": "untradeable_classic_components",
+    "name": "Classic components",
+    "categories": [
+      "invention"
+    ],
+    "high": 29263,
+    "low": 29263,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "ancient"
+  },
+  {
+    "id": "untradeable_historic_components",
+    "name": "Historic components",
+    "categories": [
+      "invention"
+    ],
+    "high": 10513,
+    "low": 10513,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "ancient"
+  },
+  {
+    "id": "untradeable_timeworn_components",
+    "name": "Timeworn components",
+    "categories": [
+      "invention"
+    ],
+    "high": 37021,
+    "low": 37021,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "ancient"
+  },
+  {
+    "id": "untradeable_vintage_components",
+    "name": "Vintage components",
+    "categories": [
+      "invention"
+    ],
+    "high": 90537,
+    "low": 90537,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": [],
+    "rarity": "ancient"
+  },
+  {
+    "id": "untradeable_extreme_brawler's_potion",
+    "name": "Extreme brawler's potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 49871,
+    "low": 49871,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_extreme_sharpshooter's_potion",
+    "name": "Extreme sharpshooter's potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 32883,
+    "low": 32883,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_extreme_battlemage's_potion",
+    "name": "Extreme battlemage's potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 35720,
+    "low": 35720,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_extreme_warmaster's_potion",
+    "name": "Extreme warmaster's potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 74408,
+    "low": 74408,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_holy_overload_potion",
+    "name": "Holy overload potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 116866,
+    "low": 116866,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_searing_overload_potion",
+    "name": "Searing overload potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 115639,
+    "low": 115639,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_overload_salve",
+    "name": "Overload salve",
+    "categories": [
+      "herblore"
+    ],
+    "high": 163828,
+    "low": 163828,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_aggroverload",
+    "name": "Aggroverload",
+    "categories": [
+      "herblore"
+    ],
+    "high": 162434,
+    "low": 162434,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_holy_aggroverload",
+    "name": "Holy aggroverload",
+    "categories": [
+      "herblore"
+    ],
+    "high": 180031,
+    "low": 180031,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_attack_potion",
+    "name": "Supreme attack potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 16615,
+    "low": 16615,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_strength_potion",
+    "name": "Supreme strength potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 36401,
+    "low": 36401,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_defence_potion",
+    "name": "Supreme defence potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 32282,
+    "low": 32282,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_ranging_potion",
+    "name": "Supreme ranging potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 25382,
+    "low": 25382,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_magic_potion",
+    "name": "Supreme magic potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 30015,
+    "low": 30015,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_overload_potion",
+    "name": "Supreme overload potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 159068,
+    "low": 159068,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_supreme_overload_salve",
+    "name": "Supreme overload salve",
+    "categories": [
+      "herblore"
+    ],
+    "high": 232422,
+    "low": 232422,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_elder_overload_potion",
+    "name": "Elder overload potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 164563,
+    "low": 164563,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_elder_overload_salve",
+    "name": "Elder overload salve",
+    "categories": [
+      "herblore"
+    ],
+    "high": 234017,
+    "low": 234017,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_replenishment_potion",
+    "name": "Replenishment potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 18864,
+    "low": 18864,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_enhanced_replenishment_potion",
+    "name": "Enhanced replenishment potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 28204,
+    "low": 28204,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_wyrmfire_potion",
+    "name": "Wyrmfire potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 36903,
+    "low": 36903,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_brightfire_potion",
+    "name": "Brightfire potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 47657,
+    "low": 47657,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  },
+  {
+    "id": "untradeable_perfect_plus_potion",
+    "name": "Perfect plus potion",
+    "categories": [
+      "herblore"
+    ],
+    "high": 101918,
+    "low": 101918,
+    "alch": null,
+    "limit": null,
+    "volume": null,
+    "avgVolume": null,
+    "change_1d": null,
+    "members": true,
+    "untradeable": true,
+    "natureRunePrice": 0,
+    "signals": []
+  }
+]
