@@ -1,7 +1,7 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { exec } = require('child_process');
+const { execFile } = require('child_process');
 const Store = require('electron-store');
 
 const store = new Store();
@@ -39,8 +39,7 @@ function createWindow() {
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false
+      nodeIntegration: false
     },
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -128,12 +127,12 @@ function runPython(mode = 'prices') {
     const python = getPythonExecutable();
     const scriptPath = path.join(pythonDir, 'run.py');
     const webhookUrl = store.get('discordWebhook', '');
-    let cmd = `"${python}" "${scriptPath}" --mode=${mode} --data-dir="${dataDir}"`;
-    if (webhookUrl) cmd += ` --webhook=${webhookUrl}`;
+    const args = [scriptPath, `--mode=${mode}`, `--data-dir=${dataDir}`];
+    if (webhookUrl) args.push(`--webhook=${webhookUrl}`);
 
-    console.log('[Python] Running:', cmd);
+    console.log('[Python] Running:', python, args.join(' '));
 
-    exec(cmd, { env: process.env }, (error, stdout, stderr) => {
+    execFile(python, args, { env: process.env }, (error, stdout, stderr) => {
       if (stderr) console.warn('[Python] stderr:', stderr.slice(0, 500));
       if (error) {
         console.error('[Python] Error:', error.message);
@@ -211,7 +210,9 @@ ipcMain.handle('set-hidden',    (_, list) => { store.set('hiddenItems', list); r
 ipcMain.handle('get-notes',  () => store.get('itemNotes', {}));
 ipcMain.handle('save-note',  (_, { id, text }) => { const notes = store.get('itemNotes', {}); if (text) notes[id] = text; else delete notes[id]; store.set('itemNotes', notes); return { success: true }; });
 
-ipcMain.handle('open-external', (_, url) => shell.openExternal(url));
+ipcMain.handle('open-external', (_, url) => {
+  if (/^https?:\/\//.test(url)) shell.openExternal(url);
+});
 
 ipcMain.handle('export-data', async () => {
   const { dialog } = require('electron');
@@ -263,7 +264,8 @@ ipcMain.handle('import-data', async () => {
     if (Array.isArray(bundle.hiddenItems)) store.set('hiddenItems', bundle.hiddenItems);
     if (bundle.itemNotes && typeof bundle.itemNotes === 'object') store.set('itemNotes', bundle.itemNotes);
     if (bundle.settings && typeof bundle.settings === 'object') {
-      Object.entries(bundle.settings).forEach(([k, v]) => store.set(k, v));
+      const ALLOWED_SETTINGS = ['discordWebhook','fetchInterval','notifications','expensiveThreshold','navOrder','theme'];
+      ALLOWED_SETTINGS.forEach(k => { if (k in bundle.settings) store.set(k, bundle.settings[k]); });
     }
     if (bundle.alerts    != null) fs.writeFileSync(alertsFile,    JSON.stringify(bundle.alerts,    null, 2), 'utf8');
     if (bundle.portfolio != null) fs.writeFileSync(portfolioFile, JSON.stringify(bundle.portfolio, null, 2), 'utf8');
@@ -511,10 +513,15 @@ function loadHistory() {
   } catch { historyData = {}; }
 }
 
+function atomicWrite(filePath, data) {
+  const tmp = filePath + '.tmp';
+  fs.writeFileSync(tmp, data, 'utf8');
+  fs.renameSync(tmp, filePath);
+}
+
 function saveHistory() {
-  try {
-    fs.writeFileSync(historyFile, JSON.stringify(historyData), 'utf8');
-  } catch (e) { console.error('[history] Save failed:', e.message); }
+  try { atomicWrite(historyFile, JSON.stringify(historyData)); }
+  catch (e) { console.error('[history] Save failed:', e.message); }
 }
 
 async function fetchHistoryForItem(itemId) {
@@ -648,7 +655,7 @@ function loadSnapshots() {
 }
 
 function saveSnapshots() {
-  try { fs.writeFileSync(snapshotFile, JSON.stringify(snapshotData), 'utf8'); } catch {}
+  try { atomicWrite(snapshotFile, JSON.stringify(snapshotData)); } catch {}
 }
 
 function updateSnapshots() {
@@ -690,7 +697,7 @@ function loadAthCache() {
 }
 
 function saveAthCache() {
-  try { fs.writeFileSync(athCacheFile, JSON.stringify(athCache), 'utf8'); } catch {}
+  try { atomicWrite(athCacheFile, JSON.stringify(athCache)); } catch {}
 }
 
 ipcMain.handle('get-item-timeseries', async (_, itemId) => {
