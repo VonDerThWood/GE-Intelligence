@@ -3065,7 +3065,7 @@
     "rares"
   ],
   "godsword blade": [
-    "melee"
+    "boss"
   ],
   "godsword shard 1": [
     "melee"
@@ -5415,5 +5415,18 @@
   ],
   "imperial steel": [
     "archaeology"
+  ],
+  "zamorak robe (bottom)": [
+    "misc"
+  ],
+  "wizard boots": [
+    "low_tier"
+  ],
+  "zamorak robe (top)": [
+    "misc"
+  ],
+  "vulnerability bomb": [
+    "supplies",
+    "herblore"
   ]
 }

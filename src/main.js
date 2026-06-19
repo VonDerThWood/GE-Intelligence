@@ -142,6 +142,7 @@ function runPython(mode = 'prices') {
       } else {
         console.log('[Python] stdout:', stdout);
         notifyRenderer('fetch-complete', { mode, timestamp: Date.now(), pythonOut: stdout });
+        if (mode === 'prices' || !mode) updateSnapshots();
         resolve(stdout);
       }
     });
@@ -211,6 +212,68 @@ ipcMain.handle('get-notes',  () => store.get('itemNotes', {}));
 ipcMain.handle('save-note',  (_, { id, text }) => { const notes = store.get('itemNotes', {}); if (text) notes[id] = text; else delete notes[id]; store.set('itemNotes', notes); return { success: true }; });
 
 ipcMain.handle('open-external', (_, url) => shell.openExternal(url));
+
+ipcMain.handle('export-data', async () => {
+  const { dialog } = require('electron');
+  const { filePath, canceled } = await dialog.showSaveDialog({
+    title: 'Export GEnius Data',
+    defaultPath: `genius-backup-${new Date().toISOString().slice(0,10)}.json`,
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+  });
+  if (canceled || !filePath) return { canceled: true };
+  try {
+    const readJson = (f) => { try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; } };
+    const bundle = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      watchlist:   store.get('watchlist', []),
+      hiddenItems: store.get('hiddenItems', []),
+      itemNotes:   store.get('itemNotes', {}),
+      settings: {
+        discordWebhook:     store.get('discordWebhook', ''),
+        fetchInterval:      store.get('fetchInterval', 15),
+        notifications:      store.get('notifications', true),
+        expensiveThreshold: store.get('expensiveThreshold', 500000000),
+        navOrder:           store.get('navOrder', []),
+      },
+      alerts:    readJson(alertsFile),
+      portfolio: readJson(portfolioFile),
+      overrides: readJson(overridesFile),
+    };
+    fs.writeFileSync(filePath, JSON.stringify(bundle, null, 2), 'utf8');
+    return { success: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+
+ipcMain.handle('import-data', async () => {
+  const { dialog } = require('electron');
+  const { filePaths, canceled } = await dialog.showOpenDialog({
+    title: 'Import GEnius Data',
+    filters: [{ name: 'JSON', extensions: ['json'] }],
+    properties: ['openFile'],
+  });
+  if (canceled || !filePaths.length) return { canceled: true };
+  try {
+    const bundle = JSON.parse(fs.readFileSync(filePaths[0], 'utf8'));
+    if (bundle.version !== 1) return { error: 'Unrecognised backup format.' };
+
+    if (Array.isArray(bundle.watchlist))   store.set('watchlist',   bundle.watchlist);
+    if (Array.isArray(bundle.hiddenItems)) store.set('hiddenItems', bundle.hiddenItems);
+    if (bundle.itemNotes && typeof bundle.itemNotes === 'object') store.set('itemNotes', bundle.itemNotes);
+    if (bundle.settings && typeof bundle.settings === 'object') {
+      Object.entries(bundle.settings).forEach(([k, v]) => store.set(k, v));
+    }
+    if (bundle.alerts    != null) fs.writeFileSync(alertsFile,    JSON.stringify(bundle.alerts,    null, 2), 'utf8');
+    if (bundle.portfolio != null) fs.writeFileSync(portfolioFile, JSON.stringify(bundle.portfolio, null, 2), 'utf8');
+    if (bundle.overrides != null) fs.writeFileSync(overridesFile, JSON.stringify(bundle.overrides, null, 2), 'utf8');
+
+    return { success: true };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
 
 ipcMain.handle('get-alerts', () => {
   try {
@@ -457,25 +520,32 @@ function saveHistory() {
 async function fetchHistoryForItem(itemId) {
   return new Promise((resolve) => {
     const https = require('https');
-    const url = `https://api.weirdgloop.org/exchange/history/rs/last90d?id=${itemId}`;
+    const url = `https://api.weirdgloop.org/exchange/history/rs/all?id=${itemId}`;
     const req = https.get(url, {
-      headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' }
+      headers: { 'User-Agent': 'GEnius/1.3 (github.com/VonDerThWood/GE-Intelligence)' }
     }, (res) => {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
         try {
           const json = JSON.parse(data);
-          const points = json[String(itemId)] || null;
-          if (points && points.length) {
+          const raw = json[String(itemId)] || null;
+          if (raw && raw.length) {
+            const points = raw.map(p => ({
+              timestamp: p.timestamp,
+              price: p.price,
+              volume: p.volume || 0,
+            })).filter(p => p.price);
             historyData[String(itemId)] = points;
+            // Also update ath cache so timeseries fetch is free
+            athCache[String(itemId)] = { data: points.map(p => ({timestamp:p.timestamp, high:p.price, low:p.price, volume:p.volume})) };
           }
-          resolve(!!points);
+          resolve(!!raw);
         } catch { resolve(false); }
       });
     });
     req.on('error', () => resolve(false));
-    req.setTimeout(8000, () => { req.destroy(); resolve(false); });
+    req.setTimeout(10000, () => { req.destroy(); resolve(false); });
   });
 }
 
@@ -536,11 +606,21 @@ ipcMain.handle('stop-history-population', () => {
 });
 
 ipcMain.handle('get-item-history', async (_, itemId) => {
-  // Return local first, fetch from API if missing
   if (itemHistoryCache.has(itemId)) return itemHistoryCache.get(itemId);
-  if (historyData[String(itemId)]) {
-    itemHistoryCache.set(itemId, historyData[String(itemId)]);
-    return historyData[String(itemId)];
+
+  const existing = historyData[String(itemId)];
+  if (existing && existing.length) {
+    // Check if data is stale (most recent point older than 8 days = old last90d cache)
+    const sorted = [...existing].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+    const latestTs = sorted[0].timestamp || 0;
+    const ageMs = Date.now() - latestTs * (latestTs < 1e12 ? 1000 : 1);
+    const stale = ageMs > 8 * 24 * 60 * 60 * 1000;
+    if (!stale) {
+      itemHistoryCache.set(itemId, existing);
+      return existing;
+    }
+    // Stale — fall through to refetch
+    console.log(`[history] Stale data for ${itemId}, refetching from all endpoint`);
   }
 
   // Fetch live and store
@@ -553,6 +633,81 @@ ipcMain.handle('get-item-history', async (_, itemId) => {
   return result;
 });
 
+// ─── Full timeseries (ATH/ATL + date lookup) ─────────────────────────────────
+let athCache = {};     // { itemId: { fetchedAt, data: [{timestamp, high, low}] } }
+let athCacheFile;
+
+// ─── Price snapshots (local recent history, 1 per day per item) ───────────────
+let snapshotData = {};  // { itemId: [{t, p, v}] }
+let snapshotFile;
+
+function loadSnapshots() {
+  try {
+    if (fs.existsSync(snapshotFile)) snapshotData = JSON.parse(fs.readFileSync(snapshotFile, 'utf8'));
+  } catch { snapshotData = {}; }
+}
+
+function saveSnapshots() {
+  try { fs.writeFileSync(snapshotFile, JSON.stringify(snapshotData), 'utf8'); } catch {}
+}
+
+function updateSnapshots() {
+  try {
+    if (!fs.existsSync(dataFile)) return;
+    const parsed = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+    const items = parsed?.items || [];
+    if (!items.length) return;
+    const nowTs = Math.floor(Date.now() / 1000);
+    const cutoff = nowTs - 90 * 24 * 3600;
+    const todayStr = new Date().toDateString();
+    items.forEach(item => {
+      if (!item.id) return;
+      const price = item.high || item.low;
+      if (!price) return;
+      const key = String(item.id);
+      const arr = (snapshotData[key] || []).filter(s => s.t >= cutoff);
+      const last = arr[arr.length - 1];
+      const lastDay = last ? new Date(last.t * 1000).toDateString() : null;
+      if (lastDay === todayStr) {
+        arr[arr.length - 1] = {t: nowTs, p: price, v: item.volume || 0};
+      } else {
+        arr.push({t: nowTs, p: price, v: item.volume || 0});
+      }
+      snapshotData[key] = arr;
+    });
+    saveSnapshots();
+  } catch (e) { console.error('[snapshots] Error:', e.message); }
+}
+
+ipcMain.handle('get-price-snapshots', (_, itemId) => {
+  return (snapshotData[String(itemId)] || []).map(s => ({timestamp: s.t, price: s.p, volume: s.v}));
+});
+
+function loadAthCache() {
+  try {
+    if (fs.existsSync(athCacheFile)) athCache = JSON.parse(fs.readFileSync(athCacheFile, 'utf8'));
+  } catch { athCache = {}; }
+}
+
+function saveAthCache() {
+  try { fs.writeFileSync(athCacheFile, JSON.stringify(athCache), 'utf8'); } catch {}
+}
+
+ipcMain.handle('get-item-timeseries', async (_, itemId) => {
+  const key = String(itemId);
+  // Reuse ath cache if available
+  if (athCache[key]) return athCache[key].data;
+  // Reuse history data if available (already fetched via all endpoint)
+  if (historyData[key] && historyData[key].length) {
+    const data = historyData[key].map(p => ({timestamp:p.timestamp, high:p.price||p.high, low:p.price||p.low, volume:p.volume||0}));
+    athCache[key] = { data };
+    return data;
+  }
+  // Fetch fresh — fetchHistoryForItem now uses the all endpoint and populates both caches
+  await fetchHistoryForItem(itemId);
+  return athCache[key] ? athCache[key].data : null;
+});
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 app.whenReady().then(() => {
   // Initialize data paths here — app.getPath() requires app to be ready
@@ -561,6 +716,10 @@ app.whenReady().then(() => {
   alertsFile    = path.join(dataDir, 'alerts.json');
   portfolioFile = path.join(dataDir, 'portfolio.json');
   historyFile   = path.join(dataDir, 'history.json');
+  athCacheFile  = path.join(dataDir, 'ath_cache.json');
+  snapshotFile  = path.join(dataDir, 'price_snapshots.json');
+  loadAthCache();
+  loadSnapshots();
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
   loadHistory();
 

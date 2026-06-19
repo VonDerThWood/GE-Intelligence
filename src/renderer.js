@@ -122,7 +122,7 @@ body {
 
 /* ── Chart modal ── */
 .chart-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.75); z-index: 500; display: flex; align-items: center; justify-content: center; }
-.chart-modal { background: ${T.panel}; border: 2px solid ${T.border}; border-radius: 6px; padding: 20px; width: 680px; max-width: 95vw; box-shadow: 0 8px 32px rgba(0,0,0,0.8); }
+.chart-modal { background: ${T.panel}; border: 2px solid ${T.border}; border-radius: 6px; padding: 20px; width: 680px; max-width: 95vw; max-height: 90vh; overflow-y: auto; box-shadow: 0 8px 32px rgba(0,0,0,0.8); }
 .chart-modal-title { font-family: 'Cinzel', serif; font-size: 15px; color: ${T.goldBright}; margin-bottom: 14px; display: flex; justify-content: space-between; align-items: center; }
 .chart-modal-close { background: none; border: none; color: ${T.textDim}; font-size: 18px; cursor: pointer; padding: 0 4px; }
 .chart-modal-close:hover { color: ${T.text}; }
@@ -151,6 +151,7 @@ body {
 .signal-badge.QUIET        { background: rgba(158,158,158,0.1);  border-color: rgba(158,158,158,0.3); color: #bdbdbd; }
 .signal-badge.THIN         { background: rgba(229,57,53,0.08);   border-color: rgba(229,57,53,0.25);  color: #ef9a9a; }
 .signal-badge.ALCH         { background: rgba(156,39,176,0.15);  border-color: rgba(156,39,176,0.5);  color: #ce93d8; }
+.signal-badge.MANIPULATED  { background: rgba(229,57,53,0.18);   border-color: #e53935;               color: #e53935; font-weight: bold; letter-spacing: 0.03em; }
 
 /* ── Star button ── */
 .star-btn { background: none; border: none; cursor: pointer; font-size: 20px; padding: 2px 6px; transition: transform 0.15s; line-height: 1; }
@@ -216,52 +217,6 @@ select.ge-input option { background: ${T.panel}; }
 .pct-flat { color: ${T.textDim}; }
 `;
 
-const PARCHMENT_CSS = `
-body { background: #f4e9d0 !important; color: #2a1a05 !important; background-image: none !important; }
-.app { background: #f4e9d0; }
-.sidebar { background: #e8d5a8 !important; border-color: #8b6914 !important; }
-.ge-header { background: linear-gradient(180deg, #ddc88a 0%, #c9a84c 100%) !important; border-color: #8b6914 !important; }
-.ge-logo { color: #3a1a00 !important; text-shadow: none !important; }
-.nav-btn { color: #6b4c1e !important; }
-.nav-btn:hover { background: rgba(139,105,20,0.12) !important; color: #3a1a00 !important; }
-.nav-btn.active { color: #3a1a00 !important; background: rgba(139,105,20,0.2) !important; border-left-color: #8b6914 !important; }
-.nav-group-label { color: #8b6914 !important; border-color: #c9a84c !important; }
-.ge-search-input { background: #fdf6e3 !important; color: #2a1a05 !important; border-color: #8b6914 !important; }
-.ge-search-results { background: #e8d5a8 !important; border-color: #8b6914 !important; }
-.ge-result-name { color: #2a1a05 !important; }
-.ge-result-item:hover, .ge-result-item.focused { background: rgba(139,105,20,0.15) !important; }
-.ge-status { background: #fdf6e3 !important; border-color: #c9a84c !important; color: #6b4c1e !important; }
-.ge-btn { background: linear-gradient(180deg, #ddc88a 0%, #c9a84c 100%) !important; color: #2a1a05 !important; border-color: #8b6914 !important; }
-.ge-btn.gold { background: linear-gradient(180deg, #c9a84c 0%, #8b6914 100%) !important; color: #fff8e7 !important; }
-.content { background: #f4e9d0 !important; }
-.ge-table th { color: #6b3a00 !important; background: rgba(0,0,0,0.06) !important; border-color: #8b6914 !important; }
-.ge-table td { color: #2a1a05 !important; border-color: rgba(139,105,20,0.3) !important; }
-.ge-table tr:hover td { background: rgba(139,105,20,0.1) !important; }
-.ge-table tr.selected td { background: rgba(139,105,20,0.2) !important; border-left-color: #8b6914 !important; }
-.detail-panel { background: #e8d5a8 !important; border-color: #8b6914 !important; }
-.detail-top { background: linear-gradient(180deg, #ddc88a 0%, #e8d5a8 100%) !important; border-color: #8b6914 !important; }
-.detail-name { color: #3a1a00 !important; text-shadow: none !important; }
-.detail-price { color: #6b3a00 !important; }
-.stat-lbl { color: #8b6914 !important; }
-.stat-val { color: #2a1a05 !important; }
-.sparkline-wrap { background: #fdf6e3 !important; border-color: #c9a84c !important; }
-.chart-modal { background: #e8d5a8 !important; border-color: #8b6914 !important; }
-.cat-tag { background: rgba(139,105,20,0.2) !important; border-color: #c9a84c !important; color: #6b3a00 !important; }
-.ov-card { background: #ddc88a !important; border-color: #c9a84c !important; }
-.ov-val { color: #6b3a00 !important; }
-.ov-lbl { color: #8b6914 !important; }
-.offer-slot { background: #ddc88a !important; border-color: #8b6914 !important; }
-.offer-slot-name { color: #2a1a05 !important; }
-.offer-slot-price { color: #6b3a00 !important; }
-.ge-input { background: #fdf6e3 !important; color: #2a1a05 !important; border-color: #c9a84c !important; }
-.ge-section-head { color: #6b3a00 !important; border-color: #8b6914 !important; }
-.news-title { color: #2a1a05 !important; }
-.news-title:hover { color: #6b3a00 !important; }
-.toast { background: #e8d5a8 !important; border-color: #8b6914 !important; color: #2a1a05 !important; }
-.star-off { color: #c9a84c !important; }
-::-webkit-scrollbar-track { background: #e8d5a8 !important; }
-::-webkit-scrollbar-thumb { background: #8b6914 !important; }
-`;
 
 const BLACK_CSS = `
 body { background: #000 !important; }
@@ -307,6 +262,7 @@ const SIGNAL_INFO = {
   QUIET:        'Volume is 10–50% below average — trading has slowed down compared to normal.',
   THIN:         'Volume is 50%+ below average — very few trades. This market is illiquid; prices may be unreliable.',
   ALCH:         'High alchemy yields more than selling on the GE after the 2% tax and the cost of a nature rune. Profitable to alch.',
+  MANIPULATED:  'Extreme volume spike on an item with a tiny GE buy limit and a large price move — a classic sign of coordinated buying to inflate the price. Trade with caution.',
 };
 
 function SignalBadge({signal, style: extraStyle}) {
@@ -367,6 +323,102 @@ function ChangeDisplay({change_1d, price}) {
 }
 // GE tax: 2% on items over 50gp, capped at 5,000,000gp
 const applyTax = price => price <= 50 ? price : Math.min(Math.floor(price * 0.98), price - Math.min(Math.floor(price * 0.02), 5000000));
+
+// ── Fun features ─────────────────────────────────────────────────────────────
+
+// Big Mac conversion: bond price (live) / $7.49 USD × Big Mac $5.69 USD
+const BOND_USD  = 9.99;
+const BIGMAC_USD = 5.69;
+
+function getBigMacs(price, bondGP) {
+  if (!price || !bondGP) return null;
+  const gpPerMac = bondGP / BOND_USD * BIGMAC_USD;
+  const macs = price / gpPerMac;
+  if (macs < 0.05) return null;
+  if (macs >= 1000) return `${Math.round(macs).toLocaleString()} Big Macs 🍔`;
+  if (macs >= 1)    return `${macs >= 10 ? Math.round(macs) : macs.toFixed(1)} Big Mac${macs >= 1.05 ? 's' : ''} 🍔`;
+  return `${(macs * 100).toFixed(0)}% of a Big Mac 🍔`;
+}
+
+function getMarketPersonality(item) {
+  const sigs  = item.signals || [];
+  const cats  = item.categories || [];
+  const price = item.high || item.low || 0;
+  const vol   = item.volume || 0;
+  const avg   = item.avgVolume || 0;
+  const chg   = item.change_1d;
+  const name  = (item.name || '').toLowerCase();
+
+  // Specific recognisable items first
+  if (name.includes('party hat'))     return 'The ultra-rare heirloom. Never actually worn to a party. Functionally a wealth storage unit that happens to look festive.';
+  if (name.includes('abyssal whip'))  return "The old reliable. Every mid-level's first real weapon. Been relevant for over a decade. Somehow still here.";
+  if (name.includes('nature rune'))   return 'The backbone of the economy. Every alcher, every crafter, every skiller needs these. You never notice them until they spike.';
+  if (name.includes('cannonball'))    return 'Deceptively humble. Made in bulk, sold in bulk, used in bulk. The market equivalent of background noise.';
+  if (name.includes('bond'))          return "Jagex's official bridge between real money and GP. Tracks membership sentiment more than the market.";
+  if (name.includes('dragon bones') || name.includes('superior dragon bones')) return 'The prayer grinder\'s burden. Price lives and dies by how many people are doing Slayer this week.';
+  if (name.includes('pure essence') || name.includes('rune essence')) return 'The literal building block of magic. Bought in the millions by bots and legitimate players alike. Impossible to tell apart.';
+
+  // Signal-driven personalities
+  if (sigs.includes('SURGE') && sigs.includes('FRENZY')) return 'Right now? Absolute chaos. Something happened — a game update, a streamer, a rumour — and everyone piled in at once.';
+  if (sigs.includes('DUMP')  && sigs.includes('FRENZY')) return "It's not a crash, it's a sale. Everyone is selling and nobody knows exactly why. Could be nothing. Could be everything.";
+  if (sigs.includes('SURGE'))  return 'On the rise. Steady hands are being rewarded. Whether this lasts depends entirely on what caused it.';
+  if (sigs.includes('DUMP'))   return 'Taking a hit. Could be a temporary dip, could be the start of something worse. The chart will tell you more than the price will.';
+  if (sigs.includes('ACCUMULATION')) return 'Quiet activity. Volume is elevated but the price isn\'t moving much — someone is buying without making a scene.';
+  if (sigs.includes('DISTRIBUTION')) return 'Heavy selling at a steady price. Someone is offloading quietly. Worth watching.';
+  if (sigs.includes('FRENZY')) return 'Unusually high trading volume today. The market is paying attention to this one.';
+
+  // Category-based
+  if (cats.includes('runes'))     return 'Reliable. Consumed endlessly, replenished constantly. The market equivalent of a utility bill.';
+  if (cats.includes('herbs') || cats.includes('potions')) return 'Tied to the skilling economy. Moves with Herblore training demand and DXP weekends. Predictable if you know the calendar.';
+  if (cats.includes('logs') || cats.includes('planks'))   return 'Construction and Firemaking fuel. Slow and steady. Nobody gets rich trading these; nobody loses big either.';
+  if (cats.includes('food'))      return 'Bossing staple or skilling food — either way it gets consumed and replaced. Demand is nearly infinite, just not always urgent.';
+  if (cats.includes('gems'))      return 'Fluctuates with crafting and quest demand. Often ignored until a crafting method gets popular, then everyone remembers it exists.';
+  if (cats.includes('seeds'))     return 'Farming economy in a nutshell. Cyclical demand, patches reset, prices follow.';
+  if (cats.includes('weapons') || cats.includes('armour')) {
+    if (price > 10_000_000) return 'High-value gear. Demand follows the meta. When a boss or activity gets popular, these spike. When the hype dies, so does the price.';
+    return 'Mid-tier gear. Useful for a while, then outgrown. Consistent demand from players levelling through the tier.';
+  }
+
+  // Price tier fallback
+  if (price > 100_000_000) return 'Expensive enough that most players have only seen it in someone else\'s bank. Thin market, big swings.';
+  if (price > 10_000_000)  return 'High-value, low-volume. Trades slowly, moves meaningfully when it does.';
+  if (price < 100)         return 'Worth almost nothing individually. Worth everything in bulk. The backbone of every skiller\'s supply chain.';
+
+  // Volume personality
+  if (avg > 0 && vol / avg > 3) return 'Extremely active today. Something is driving unusual interest — worth figuring out what before making a move.';
+  if (avg > 500_000)             return 'One of the market\'s workhorses. High volume, consistent demand. Not glamorous, but always moving.';
+
+  return 'Quietly going about its business. Nothing unusual today.';
+}
+
+function getMoodOfMarket(items) {
+  if (!items || !items.length) return null;
+  const tradeable = items.filter(it => !it.untradeable && it.change_1d != null);
+  if (!tradeable.length) return null;
+
+  let surges = 0, dumps = 0, frenzies = 0, accums = 0;
+  for (const it of tradeable) {
+    const sigs = it.signals || [];
+    if (sigs.includes('SURGE'))        surges++;
+    if (sigs.includes('DUMP'))         dumps++;
+    if (sigs.includes('FRENZY'))       frenzies++;
+    if (sigs.includes('ACCUMULATION') || sigs.includes('DISTRIBUTION')) accums++;
+  }
+
+  const total = tradeable.length;
+  const surgeRatio  = surges  / total;
+  const dumpRatio   = dumps   / total;
+  const frenzyRatio = frenzies / total;
+  const net = surgeRatio - dumpRatio;
+
+  if (frenzyRatio > 0.06 && net > 0.02)   return { emoji:'🔥', label:'Frenzy',      tip:'Lots of items surging on unusually high volume. The market is in full swing.' };
+  if (frenzyRatio > 0.06 && net < -0.02)  return { emoji:'🌊', label:'Volatile',     tip:'High trading volume across the board, but buyers and sellers can\'t agree. Choppy conditions.' };
+  if (frenzyRatio > 0.04)                  return { emoji:'⚡', label:'Active',       tip:'Trading volume is elevated across many items. Something is moving the market.' };
+  if (net > 0.04)                           return { emoji:'📈', label:'Bullish',      tip:'More items rising than falling. Cautious optimism across the market.' };
+  if (net < -0.04)                          return { emoji:'📉', label:'Bearish',      tip:'More items falling than rising. Broad selling pressure today.' };
+  if (accums / total > 0.05)               return { emoji:'🤫', label:'Quiet Moves',  tip:'Prices look calm, but volume suggests activity behind the scenes.' };
+  return { emoji:'😴', label:'Slow Day',    tip:'Low signals, low drama. The market is doing the bare minimum today.' };
+}
 
 // Parse human-readable price input: "2m" -> 2000000, "1.5b" -> 1500000000, "500k" -> 500000
 function parseGP(str) {
@@ -436,43 +488,246 @@ function ChartModal({item, onClose}) {
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
+  const [hoverIdx, setHoverIdx] = useState(null);
+  const [hoverType, setHoverType] = useState(null);
+  const [timeseries, setTimeseries] = useState(null);
+  const [timeseriesLoading, setTimeseriesLoading] = useState(false);
+  const [snapshots, setSnapshots] = useState([]);
+  const [dateQuery, setDateQuery] = useState('');
+  const [dateLookup, setDateLookup] = useState(null);
+  const [seasonalView, setSeasonalView] = useState('weekly');
+  const [seasonalHover, setSeasonalHover] = useState(null);
+  const [chartView, setChartView] = useState('recent');
+  const [zoomFrom, setZoomFrom] = useState('');
+  const [zoomTo, setZoomTo] = useState('');
+  const [zoomWindow, setZoomWindow] = useState(null); // [startIdx, endIdx] into timeseries
+  const zoomCenterRef = React.useRef(0.5); // 0-1 fraction of chart where cursor is
 
   useEffect(() => {
     if (!item?.id) return;
-    setLoading(true); setError(false); setHistory(null);
-    window.genius?.getItemHistory(item.id).then(data => {
-      if (data && data.length) {
-        setHistory(data);
-      } else {
-        setError(true);
-      }
+    setLoading(true); setError(false); setHistory(null); setTimeseries(null); setTimeseriesLoading(true); setDateLookup(null); setDateQuery(''); setChartView('recent'); setSnapshots([]);
+    window.genius?.getItemHistory(item.id).then(hist => {
+      if (hist && hist.length) setHistory(hist); else setError(true);
       setLoading(false);
     }).catch(() => { setError(true); setLoading(false); });
+    window.genius?.getItemTimeseries(item.id).then(ts => {
+      setTimeseries(ts && ts.length ? ts : null);
+      setTimeseriesLoading(false);
+    }).catch(() => setTimeseriesLoading(false));
+    window.genius?.getPriceSnapshots(item.id).then(snaps => {
+      setSnapshots(snaps && snaps.length ? snaps : []);
+    }).catch(() => {});
   }, [item?.id]);
 
   if (!item) return null;
 
-  // Filter to selected range
-  const points = useMemo(() => {
-    if (!history) return [];
-    const cutoff = Date.now() - range * 24 * 60 * 60 * 1000;
-    return history.filter(p => {
-      const ts = typeof p.timestamp === 'number'
-        ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1)
-        : new Date(p.timestamp).getTime();
-      return ts >= cutoff;
-    });
-  }, [history, range]);
+  // Zoom helper — called by scroll and arrow keys
+  const doZoom = useCallback((direction) => {
+    if (!timeseries || !timeseries.length) return;
+    const total = timeseries.length;
+    const cur = zoomWindow || [0, total - 1];
+    const span = cur[1] - cur[0];
+    const center = cur[0] + Math.round(span * zoomCenterRef.current);
+    const STEP = 0.15; // zoom 15% per tick
+    const newSpan = direction === 'in'
+      ? Math.max(10, Math.round(span * (1 - STEP)))
+      : Math.min(total - 1, Math.round(span * (1 + STEP)));
+    const half = Math.round(newSpan / 2);
+    const start = Math.max(0, center - half);
+    const end   = Math.min(total - 1, start + newSpan);
+    const adjStart = Math.max(0, end - newSpan);
+    if (adjStart === 0 && end === total - 1) { setZoomWindow(null); return; }
+    setZoomWindow([adjStart, end]);
+    setHoverIdx(null);
+  }, [timeseries, zoomWindow]);
 
-  const prices  = points.map(p => p.price);
-  const volumes = points.map(p => p.volume || 0);
+  // Arrow key zoom when modal is open
+  useEffect(() => {
+    if (chartView !== 'alltime') return;
+    const onKey = e => {
+      if (e.key === 'ArrowUp')   { e.preventDefault(); doZoom('in');  }
+      if (e.key === 'ArrowDown') { e.preventDefault(); doZoom('out'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [chartView, doZoom]);
+
+  // Merge WeirdGloop history with local snapshots, filter to range
+  const points = useMemo(() => {
+    if (!history && !snapshots.length) return [];
+    const getTs = p => typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
+    // Merge: combine history + snapshots, dedup by day (snapshot wins for same day)
+    const combined = [...(history || [])];
+    const histDays = new Set((history || []).map(p => new Date(getTs(p)).toDateString()));
+    snapshots.forEach(s => {
+      const day = new Date(getTs(s)).toDateString();
+      if (!histDays.has(day)) combined.push(s);
+      else {
+        // Replace WeirdGloop entry for that day with our fresher snapshot
+        const idx = combined.findIndex(p => new Date(getTs(p)).toDateString() === day);
+        if (idx !== -1) combined[idx] = s;
+      }
+    });
+    combined.sort((a, b) => getTs(a) - getTs(b));
+    const latestTs = combined.reduce((max, p) => Math.max(max, getTs(p)), 0);
+    const cutoff = latestTs - range * 24 * 60 * 60 * 1000;
+    return combined.filter(p => getTs(p) >= cutoff);
+  }, [history, snapshots, range]);
+
+  // ATH/ATL from full timeseries
+  const athData = useMemo(() => {
+    if (!timeseries || !timeseries.length) return null;
+    const fmtTs = ts => {
+      const d = new Date(ts * (ts < 1e12 ? 1000 : 1));
+      return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+    };
+    let ath = {price: -Infinity, date: ''};
+    let atl = {price: Infinity, date: ''};
+    timeseries.forEach(p => {
+      if (p.high && p.high > ath.price) ath = {price: p.high, date: fmtTs(p.timestamp)};
+      if (p.low  && p.low  < atl.price) atl = {price: p.low,  date: fmtTs(p.timestamp)};
+    });
+    return {ath, atl};
+  }, [timeseries]);
+
+  // Support & resistance levels
+  const supportResistance = useMemo(() => {
+    if (!timeseries || timeseries.length < 30) return null;
+    const allPrices = timeseries.flatMap(p => [p.high, p.low].filter(Boolean));
+    if (!allPrices.length) return null;
+
+    const min = Math.min(...allPrices);
+    const max = Math.max(...allPrices);
+    const range = max - min;
+    if (range === 0) return null;
+
+    // Bucket prices into 20 bins, find bins with high density
+    const BINS = 20;
+    const bucketSize = range / BINS;
+    const buckets = Array(BINS).fill(0);
+    allPrices.forEach(p => {
+      const idx = Math.min(BINS - 1, Math.floor((p - min) / bucketSize));
+      buckets[idx]++;
+    });
+
+    const currentPrice = timeseries[timeseries.length-1]?.high || timeseries[timeseries.length-1]?.low || 0;
+
+    // Find local maxima in the histogram — these are price clusters (support/resistance)
+    // Only include levels within 50% of current price so stale historical levels don't show
+    const levels = [];
+    for (let i = 1; i < BINS - 1; i++) {
+      if (buckets[i] > buckets[i-1] && buckets[i] > buckets[i+1] && buckets[i] > allPrices.length * 0.04) {
+        const price = min + (i + 0.5) * bucketSize;
+        if (currentPrice > 0 && (price < currentPrice * 0.75 || price > currentPrice * 1.25)) continue;
+        levels.push({
+          price,
+          strength: buckets[i],
+          type: price < currentPrice ? 'support' : 'resistance',
+        });
+      }
+    }
+
+    if (!levels.length) return null;
+    return levels.sort((a,b) => b.strength - a.strength).slice(0, 4);
+  }, [timeseries]);
+
+  // Seasonal data — monthly and weekly
+  const seasonalData = useMemo(() => {
+    if (!timeseries || timeseries.length < 60) return null;
+    const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const earliest = timeseries.reduce((min, p) => {
+      const t = p.timestamp * (p.timestamp < 1e12 ? 1000 : 1);
+      return t < min ? t : min;
+    }, Infinity);
+    const yearsOfData = (Date.now() - earliest) / (1000 * 60 * 60 * 24 * 365);
+
+    // Monthly buckets
+    const mBuckets = Array(12).fill(null).map(() => []);
+    // Weekly buckets (weeks 1-52)
+    const wBuckets = Array(53).fill(null).map(() => []);
+
+    timeseries.forEach(p => {
+      const price = p.high || p.low;
+      if (!price) return;
+      const d = new Date(p.timestamp * (p.timestamp < 1e12 ? 1000 : 1));
+      mBuckets[d.getMonth()].push(price);
+      // ISO week number
+      const jan1 = new Date(d.getFullYear(), 0, 1);
+      const week = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+      if (week >= 1 && week <= 52) wBuckets[week].push(price);
+    });
+
+    const monthAvgs = mBuckets.map((arr, i) => ({
+      label: MONTHS[i],
+      avg: arr.length ? Math.round(arr.reduce((s,v)=>s+v,0)/arr.length) : null,
+    })).filter(m => m.avg !== null);
+
+    const weekAvgs = wBuckets.map((arr, i) => ({
+      label: `W${i}`,
+      avg: arr.length >= 2 ? Math.round(arr.reduce((s,v)=>s+v,0)/arr.length) : null,
+    })).filter(w => w.avg !== null);
+
+    if (monthAvgs.length < 3) return null;
+
+    const mOverall = monthAvgs.reduce((s,m)=>s+m.avg,0)/monthAvgs.length;
+    const wOverall = weekAvgs.length ? weekAvgs.reduce((s,w)=>s+w.avg,0)/weekAvgs.length : 0;
+
+    return {
+      months: monthAvgs.map(m => ({...m, pct: ((m.avg - mOverall) / mOverall) * 100})),
+      weeks:  weekAvgs.map(w => ({...w,  pct: ((w.avg  - wOverall)  / wOverall)  * 100})),
+      yearsOfData,
+      newItem: yearsOfData < 1.5,
+    };
+  }, [timeseries]);
+
+  // Date lookup
+  const handleDateLookup = val => {
+    setDateQuery(val);
+    if (!timeseries || !val) { setDateLookup(null); return; }
+    const target = new Date(val).getTime();
+    if (isNaN(target)) { setDateLookup(null); return; }
+    let best = null, bestDiff = Infinity;
+    timeseries.forEach(p => {
+      const t = p.timestamp * (p.timestamp < 1e12 ? 1000 : 1);
+      const diff = Math.abs(t - target);
+      if (diff < bestDiff) { bestDiff = diff; best = p; }
+    });
+    if (best) {
+      const d = new Date(best.timestamp * (best.timestamp < 1e12 ? 1000 : 1));
+      setDateLookup({
+        date: d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'}),
+        high: best.high,
+        low: best.low,
+      });
+    }
+  };
+
+  const activePoints = useMemo(() => {
+    if (chartView !== 'alltime' || !timeseries) return points;
+    // Apply scroll/key zoom window first
+    let base = timeseries;
+    if (zoomWindow) {
+      base = timeseries.slice(zoomWindow[0], zoomWindow[1] + 1);
+    }
+    // Then apply date picker filter on top
+    if (!zoomFrom && !zoomTo) return base;
+    const fromMs = zoomFrom ? new Date(zoomFrom).getTime() : -Infinity;
+    const toMs   = zoomTo   ? new Date(zoomTo).getTime()   :  Infinity;
+    if (isNaN(fromMs) && isNaN(toMs)) return base;
+    return base.filter(p => {
+      const t = p.timestamp * (p.timestamp < 1e12 ? 1000 : 1);
+      return t >= (isNaN(fromMs) ? -Infinity : fromMs) && t <= (isNaN(toMs) ? Infinity : toMs);
+    });
+  }, [chartView, timeseries, points, zoomFrom, zoomTo, zoomWindow]);
+  const prices  = activePoints.map(p => p.price ?? p.high ?? p.low ?? 0);
+  const volumes = activePoints.map(p => p.volume || 0);
   const minP = Math.min(...prices), maxP = Math.max(...prices);
   const maxV = Math.max(...volumes, 1);
   const YLAB = 52; // width reserved for Y-axis labels on left
   const W = 620, PH = 160, VH = 60, PAD = 8;
   const CW = W - YLAB; // chart width after Y-axis
 
-  const px = (i) => YLAB + PAD + (i / Math.max(points.length - 1, 1)) * (CW - PAD * 2);
+  const px = (i) => YLAB + PAD + (i / Math.max(activePoints.length - 1, 1)) * (CW - PAD * 2);
   const py = (v) => PH - PAD - ((v - minP) / Math.max(maxP - minP, 1)) * (PH - PAD * 2);
   const vy = (v) => VH - (v / maxV) * (VH - 4);
 
@@ -494,13 +749,15 @@ function ChartModal({item, onClose}) {
     : '';
 
   // Date label helpers
-  const labelCount = Math.min(points.length, 6);
+  const labelCount = Math.min(activePoints.length, 6);
   const labelIdxs = Array.from({length: labelCount}, (_, i) =>
-    Math.round(i * (points.length - 1) / Math.max(labelCount - 1, 1))
+    Math.round(i * (activePoints.length - 1) / Math.max(labelCount - 1, 1))
   );
   const fmtDate = ts => {
     const d = new Date(typeof ts === 'number' ? ts * (ts < 1e12 ? 1000 : 1) : ts);
-    return `${d.getMonth()+1}/${d.getDate()}`;
+    return chartView === 'alltime'
+      ? d.toLocaleDateString('en-US', {month:'short', year:'numeric'})
+      : `${d.getMonth()+1}/${d.getDate()}`;
   };
 
   return h('div', {className:'chart-modal-overlay', onClick:onClose},
@@ -511,14 +768,25 @@ function ChartModal({item, onClose}) {
         h('span', null, item.name),
         h('div', {style:{display:'flex', gap:6, alignItems:'center'}},
           [7,30,90].map(r => h('button', {
-            key:r, onClick:()=>setRange(r),
+            key:r, onClick:()=>{ setRange(r); setChartView('recent'); setHoverIdx(null); setZoomFrom(''); setZoomTo(''); setZoomWindow(null); },
             style:{
               padding:'2px 10px', fontSize:11, cursor:'pointer', borderRadius:3,
-              background: range===r ? 'rgba(201,168,76,0.2)' : 'transparent',
-              border: `1px solid ${range===r ? T.gold : T.border}`,
-              color: range===r ? T.goldBright : T.textDim,
+              background: chartView==='recent' && range===r ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${chartView==='recent' && range===r ? T.gold : T.border}`,
+              color: chartView==='recent' && range===r ? T.goldBright : T.textDim,
             }
           }, `${r}d`)),
+          h('button', {
+            onClick:()=>{ if (!timeseries && !timeseriesLoading) return; setChartView('alltime'); setHoverIdx(null); },
+            disabled: timeseriesLoading && !timeseries,
+            style:{
+              padding:'2px 10px', fontSize:11, cursor: timeseriesLoading && !timeseries ? 'default' : 'pointer', borderRadius:3,
+              background: chartView==='alltime' ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${chartView==='alltime' ? T.gold : T.border}`,
+              color: chartView==='alltime' ? T.goldBright : timeseriesLoading && !timeseries ? T.borderDim : T.textDim,
+              opacity: !timeseries && !timeseriesLoading ? 0.35 : 1,
+            }
+          }, timeseriesLoading && !timeseries ? '⏳ All Time' : 'All Time'),
           h('button', {className:'chart-modal-close', onClick:onClose, style:{marginLeft:8}}, '✕')
         )
       ),
@@ -528,19 +796,63 @@ function ChartModal({item, onClose}) {
         h('span', null, '⏳ Fetching price history...')
       ),
 
+      // Date range row (all-time only)
+      chartView === 'alltime' && timeseries && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'6px 4px 2px', fontSize:11}},
+        h('span', {style:{color:T.textDim}}, 'From'),
+        h('input', {
+          type:'date', value:zoomFrom,
+          onChange: e => { setZoomFrom(e.target.value); setHoverIdx(null); },
+          style:{background:T.panel2, border:`1px solid ${T.border}`, borderRadius:3, color:T.text, padding:'2px 6px', fontSize:11, colorScheme:'dark'},
+        }),
+        h('span', {style:{color:T.textDim}}, 'To'),
+        h('input', {
+          type:'date', value:zoomTo,
+          onChange: e => { setZoomTo(e.target.value); setHoverIdx(null); },
+          style:{background:T.panel2, border:`1px solid ${T.border}`, borderRadius:3, color:T.text, padding:'2px 6px', fontSize:11, colorScheme:'dark'},
+        }),
+        (zoomFrom || zoomTo || zoomWindow) && h('button', {
+          onClick: () => { setZoomFrom(''); setZoomTo(''); setZoomWindow(null); setHoverIdx(null); },
+          style:{padding:'2px 8px', fontSize:10, cursor:'pointer', borderRadius:3, background:'transparent', border:`1px solid ${T.border}`, color:T.textDim},
+        }, 'Reset'),
+        h('span', {style:{color:T.textDim, marginLeft:'auto'}},
+          activePoints.length > 0
+            ? `${activePoints.length.toLocaleString()} data points`
+            : ''
+        ),
+      ),
+
       error && h('div', {style:{height:240, display:'flex', alignItems:'center', justifyContent:'center', color:T.textDim, fontSize:12}},
         h('span', null, 'Historical data unavailable for this item.')
       ),
 
-      !loading && !error && points.length === 0 && h('div', {style:{height:240, display:'flex', alignItems:'center', justifyContent:'center', color:T.textDim, fontSize:12}},
-        h('span', null, `No data in the last ${range} days.`)
+      !loading && !error && activePoints.length === 0 && h('div', {style:{height:240, display:'flex', alignItems:'center', justifyContent:'center', color:T.textDim, fontSize:12}},
+        h('span', null, chartView === 'alltime' ? 'All-time data unavailable.' : `No data in the last ${range} days.`)
       ),
 
-      !loading && !error && points.length > 0 && h('div', null,
+      !loading && !error && activePoints.length > 0 && h('div', null,
         // Price chart
-        h('div', {style:{background:'rgba(0,0,0,0.25)', borderRadius:4, padding:'8px 4px 0'}},
+        h('div', {style:{background:'rgba(0,0,0,0.25)', borderRadius:4, padding:'8px 4px 0', position:'relative'}},
           h('div', {style:{fontSize:9, color:T.textDim, marginLeft:YLAB+PAD, marginBottom:2}}, 'PRICE'),
-          h('svg', {viewBox:`0 0 ${W} ${PH}`, style:{width:'100%', display:'block'}},
+          h('svg', {
+            viewBox:`0 0 ${W} ${PH}`, style:{width:'100%', display:'block', cursor:'crosshair'},
+            onMouseMove: e => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const svgX = (e.clientX - rect.left) / rect.width * W;
+              const relX = svgX - YLAB - PAD;
+              const chartW = CW - PAD * 2;
+              zoomCenterRef.current = Math.max(0, Math.min(1, relX / chartW));
+              const idx = Math.round(relX / (chartW / Math.max(activePoints.length-1,1)));
+              const clamped = Math.max(0, Math.min(activePoints.length-1, idx));
+              setHoverIdx(clamped);
+              setHoverType('price');
+            },
+            onMouseLeave: () => setHoverIdx(null),
+            onWheel: e => {
+              if (chartView !== 'alltime') return;
+              e.preventDefault();
+              doZoom(e.deltaY < 0 ? 'in' : 'out');
+            },
+          },
             // Y-axis labels on left
             gridLevels.map((g, i) =>
               h('text', {key:i, x:YLAB-4, y:g.y+3, fontSize:9, fill:T.textDim, textAnchor:'end'},
@@ -549,7 +861,7 @@ function ChartModal({item, onClose}) {
             ),
             // Vertical divider line
             h('line', {x1:YLAB, x2:YLAB, y1:PAD, y2:PH-PAD, stroke:'rgba(255,255,255,0.1)', strokeWidth:1}),
-            // Horizontal gridlines with values
+            // Horizontal gridlines
             gridLevels.map((g, i) =>
               h('line', {key:i, x1:YLAB, x2:W-PAD, y1:g.y, y2:g.y,
                 stroke:'rgba(255,255,255,0.05)', strokeWidth:1,
@@ -560,32 +872,54 @@ function ChartModal({item, onClose}) {
             h('path', {d:areaPath, fill:`${priceColor}18`, stroke:'none'}),
             // Price line
             h('path', {d:pricePath, fill:'none', stroke:priceColor, strokeWidth:1.5}),
-            // Hover targets with tooltips
-            prices.map((v, i) =>
-              h('circle', {key:i, cx:px(i), cy:py(v), r:5, fill:'transparent', stroke:'none', style:{cursor:'crosshair'}},
-                h('title', null, `${fmtDate(points[i].timestamp)}: ${fmt.gp(v)}gp`)
-              )
-            ),
+            // Hover crosshair + dot
+            hoverIdx !== null && hoverType === 'price' && [
+              h('line', {key:'vl', x1:px(hoverIdx), x2:px(hoverIdx), y1:PAD, y2:PH-PAD, stroke:'rgba(255,255,255,0.2)', strokeWidth:1, pointerEvents:'none'}),
+              h('circle', {key:'dot', cx:px(hoverIdx), cy:py(prices[hoverIdx]), r:4, fill:priceColor, stroke:T.panel, strokeWidth:1.5, pointerEvents:'none'}),
+            ],
             // Current price dot
             prices.length > 0 && h('circle', {cx:px(prices.length-1), cy:py(prices[prices.length-1]), r:3, fill:priceColor, pointerEvents:'none'}),
           ),
           // Volume bars
           h('div', {style:{fontSize:9, color:T.textDim, marginLeft:YLAB+PAD, marginTop:4}}, 'VOLUME'),
-          h('svg', {viewBox:`0 0 ${W} ${VH}`, style:{width:'100%', display:'block', marginBottom:4}},
+          h('svg', {
+            viewBox:`0 0 ${W} ${VH}`, style:{width:'100%', display:'block', marginBottom:4, cursor:'crosshair'},
+            onMouseMove: e => {
+              const rect = e.currentTarget.getBoundingClientRect();
+              const svgX = (e.clientX - rect.left) / rect.width * W;
+              const relX = svgX - YLAB - PAD;
+              const idx = Math.round(relX / ((CW - PAD*2) / Math.max(activePoints.length-1,1)));
+              const clamped = Math.max(0, Math.min(activePoints.length-1, idx));
+              setHoverIdx(clamped);
+              setHoverType('vol');
+            },
+            onMouseLeave: () => setHoverIdx(null),
+          },
             h('line', {x1:YLAB, x2:YLAB, y1:0, y2:VH, stroke:'rgba(255,255,255,0.1)', strokeWidth:1}),
             volumes.map((v, i) => {
               const bw = Math.max(1, (CW - PAD*2) / volumes.length - 1);
               const bh = vy(v);
-              return h('g', {key:i},
-                h('rect', {x:px(i)-bw/2, y:bh, width:bw, height:Math.max(0,VH-bh), fill:`${T.blue}55`, style:{cursor:'crosshair'}},
-                  h('title', null, `${fmtDate(points[i].timestamp)}: ${v!=null?v.toLocaleString():'—'}`)
-                )
-              );
+              return h('rect', {key:i, x:px(i)-bw/2, y:bh, width:bw, height:Math.max(0,VH-bh),
+                fill: hoverIdx===i ? T.blue : `${T.blue}55`, pointerEvents:'none'});
             })
           ),
+          // Hover tooltip overlay
+          hoverIdx !== null && h('div', {style:{
+            position:'absolute', top:8, right:8,
+            background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
+            padding:'5px 10px', fontSize:11, color:T.text, pointerEvents:'none', zIndex:10,
+            boxShadow:'0 2px 8px rgba(0,0,0,0.5)'
+          }},
+            h('div', {style:{color:T.textDim, fontSize:10, marginBottom:2}}, fmtDate(activePoints[hoverIdx].timestamp)),
+            h('div', null, h('span', {style:{color:T.textDim}}, 'Price: '), h('span', {style:{color:T.gold}}, fmt.gp(prices[hoverIdx])+'gp')),
+            h('div', null, h('span', {style:{color:T.textDim}}, 'Volume: '), h('span', {style:{color:T.blue}}, volumes[hoverIdx]!=null ? volumes[hoverIdx].toLocaleString() : '—')),
+          ),
           h('div', {style:{display:'flex', justifyContent:'space-between', padding:`2px ${PAD}px 6px ${YLAB+PAD}px`, fontSize:9, color:T.textDim}},
-            labelIdxs.map(i => h('span', {key:i}, fmtDate(points[i].timestamp)))
-          )
+            labelIdxs.map(i => h('span', {key:i}, fmtDate(activePoints[i].timestamp)))
+          ),
+          chartView === 'alltime' && h('div', {style:{textAlign:'center', fontSize:9, color:T.textDim, paddingBottom:4}},
+            'Scroll or ↑ ↓ to zoom · Use date pickers above to select a range'
+          ),
         ),
 
         // Stats row
@@ -600,6 +934,155 @@ function ChartModal({item, onClose}) {
           item.volume != null && h('span',null,
             h('span',{style:{color:T.textDim}},'Volume: '),
             h('span',{style:{color:T.blue}}, item.volume.toLocaleString())
+          )
+        ),
+
+        // ATH / ATL row
+        timeseriesLoading && h('div', {style:{marginTop:6, fontSize:11, color:T.textDim, borderTop:`1px solid ${T.borderDim}`, paddingTop:8, display:'flex', alignItems:'center', gap:8}},
+          h('span', null, '⏳'),
+          h('span', null, 'Fetching all-time data — this may take a moment on first load, then it\'s cached permanently.')
+        ),
+        !timeseriesLoading && !timeseries && h('div', {style:{marginTop:6, fontSize:11, color:T.textDim, borderTop:`1px solid ${T.borderDim}`, paddingTop:8}},
+          'All-time data unavailable for this item.'
+        ),
+        athData && h('div', {style:{display:'flex', gap:20, marginTop:6, fontSize:12, flexWrap:'wrap', borderTop:`1px solid ${T.borderDim}`, paddingTop:8}},
+          h('span',null,
+            h('span',{style:{color:T.textDim}},'All-Time High: '),
+            h('span',{style:{color:T.green, fontWeight:'bold'}}, fmt.gp(athData.ath.price)+'gp'),
+            h('span',{style:{color:T.textDim, fontSize:10, marginLeft:4}}, athData.ath.date)
+          ),
+          h('span',null,
+            h('span',{style:{color:T.textDim}},'All-Time Low: '),
+            h('span',{style:{color:T.red, fontWeight:'bold'}}, fmt.gp(athData.atl.price)+'gp'),
+            h('span',{style:{color:T.textDim, fontSize:10, marginLeft:4}}, athData.atl.date)
+          ),
+        ),
+
+        // Date lookup
+        timeseries && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:8, borderTop:`1px solid ${T.borderDim}`, paddingTop:8}},
+          h('span',{style:{fontSize:11, color:T.textDim}},'Price on date:'),
+          h('input', {
+            type:'date', className:'ge-input',
+            style:{fontSize:11, padding:'2px 6px', width:140, WebkitAppRegion:'no-drag'},
+            value:dateQuery,
+            onChange: e => handleDateLookup(e.target.value),
+          }),
+          dateLookup && h('span', {style:{fontSize:12}},
+            h('span',{style:{color:T.textDim}}, dateLookup.date+': '),
+            dateLookup.high && h('span',null, h('span',{style:{color:T.textDim,fontSize:10}},'High '), h('span',{style:{color:T.green}}, fmt.gp(dateLookup.high)+'gp ')),
+            dateLookup.low  && h('span',null, h('span',{style:{color:T.textDim,fontSize:10}},'Low '),  h('span',{style:{color:T.red}},   fmt.gp(dateLookup.low)+'gp')),
+          )
+        ),
+
+        // Support & Resistance
+        timeseries && h('div', {style:{marginTop:12, borderTop:`1px solid ${T.borderDim}`, paddingTop:10}},
+          h('div', {style:{fontFamily:'Cinzel,serif', fontSize:11, letterSpacing:'1px', color:T.gold, marginBottom:8}}, 'SUPPORT & RESISTANCE'),
+          supportResistance && supportResistance.length > 0
+            ? h('div', {style:{display:'flex', gap:8, flexWrap:'wrap'}},
+                supportResistance.map((lvl, i) =>
+                  h('div', {key:i, style:{
+                    padding:'5px 12px', borderRadius:3, fontSize:12,
+                    background: lvl.type==='support' ? 'rgba(100,200,100,0.08)' : 'rgba(200,100,100,0.08)',
+                    border: `1px solid ${lvl.type==='support' ? T.green : T.red}55`,
+                  }},
+                    h('span', {style:{color: lvl.type==='support' ? T.green : T.red, fontWeight:'bold'}}, fmt.gp(lvl.price)+'gp'),
+                    h('span', {style:{color:T.textDim, fontSize:10, marginLeft:6}}, lvl.type)
+                  )
+                )
+              )
+            : h('div', {style:{fontSize:11, color:T.textDim}},
+                'No significant levels detected near the current price. The item may be trending without a clear floor or ceiling.'
+              )
+        ),
+
+        seasonalData && seasonalData.newItem && h('div', {style:{marginTop:12, borderTop:`1px solid ${T.borderDim}`, paddingTop:10, fontSize:11, color:T.textDim}},
+          `⚠ Seasonal analysis requires at least 1.5 years of data. This item only has ${seasonalData.yearsOfData.toFixed(1)} year(s) — check back later.`
+        ),
+        // Seasonal averages — only show if enough data
+        seasonalData && !seasonalData.newItem && h('div', {style:{marginTop:12, borderTop:`1px solid ${T.borderDim}`, paddingTop:10}},
+          // Header + pill toggle
+          h('div', {style:{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:10}},
+            h('div', {style:{fontFamily:'Cinzel,serif', fontSize:11, letterSpacing:'1px', color:T.gold}}, 'SEASONAL AVERAGES'),
+            h('div', {style:{display:'flex', gap:4}},
+              ['weekly','monthly'].map(v =>
+                h('button', {
+                  key:v,
+                  onClick: () => setSeasonalView(v),
+                  style:{
+                    padding:'2px 10px', fontSize:10, cursor:'pointer', borderRadius:10,
+                    background: seasonalView===v ? 'rgba(201,168,76,0.2)' : 'transparent',
+                    border: `1px solid ${seasonalView===v ? T.gold : T.borderDim}`,
+                    color: seasonalView===v ? T.goldBright : T.textDim,
+                  }
+                }, v.charAt(0).toUpperCase()+v.slice(1))
+              )
+            )
+          ),
+          // Chart
+          h('div', {style:{position:'relative'}},
+            seasonalHover && h('div', {style:{
+              position:'absolute', top:0, right:0, zIndex:20,
+              background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
+              padding:'4px 10px', fontSize:11, color:T.text, pointerEvents:'none',
+              boxShadow:'0 2px 8px rgba(0,0,0,0.5)', whiteSpace:'nowrap',
+            }},
+              h('span', {style:{color:T.textDim}}, seasonalHover.label+': '),
+              h('span', {style:{color: seasonalHover.pct >= 5 ? T.green : seasonalHover.pct <= -5 ? T.red : T.gold}},
+                (seasonalHover.pct >= 0 ? '+' : '') + seasonalHover.pct.toFixed(1) + '%'
+              ),
+              h('span', {style:{color:T.textDim}}, ' · '),
+              h('span', {style:{color:T.gold}}, fmt.gp(seasonalHover.avg)+'gp'),
+            ),
+            h('div', {style:{display:'flex', gap: seasonalView==='weekly' ? 2 : 4, alignItems:'flex-end', position:'relative', paddingBottom:4, overflowX:'auto'}},
+              h('div', {style:{position:'absolute', left:0, right:0, height:1, background:T.borderDim, top:'50%'}}),
+              (seasonalView === 'weekly' ? seasonalData.weeks : seasonalData.months).map((m, i) => {
+                const _now = new Date();
+                const _jan1 = new Date(_now.getFullYear(), 0, 1);
+                const _curWeek = Math.ceil(((_now - _jan1) / 86400000 + _jan1.getDay() + 1) / 7);
+                const isCurrent = seasonalView === 'weekly'
+                  ? m.label === `W${_curWeek}`
+                  : i === _now.getMonth();
+                const barColor = m.pct >= 5 ? T.green : m.pct <= -5 ? T.red : T.gold;
+                const BAR_SCALE = seasonalView === 'weekly' ? 1.5 : 2.5;
+                const barH = Math.max(3, Math.abs(m.pct) * BAR_SCALE);
+                const barW = seasonalView === 'weekly' ? 8 : 28;
+                const showLabel = seasonalView === 'monthly' || i % 4 === 0;
+                const hoverProps = {
+                  onMouseEnter: () => setSeasonalHover(m),
+                  onMouseLeave: () => setSeasonalHover(null),
+                  style:{cursor:'default'},
+                };
+                const barStyle = isCurrent
+                  ? {...hoverProps.style, width:barW, height:barH, outline:`2px solid white`, outlineOffset:1, zIndex:2}
+                  : {...hoverProps.style, width:barW, height:barH};
+                return h('div', {key:i, style:{display:'flex', flexDirection:'column', alignItems:'center', minWidth:barW+2, zIndex: isCurrent ? 2 : 1}},
+                  m.pct >= 0
+                    ? h('div', {style:{display:'flex', flexDirection:'column', alignItems:'center'}},
+                        isCurrent && h('div', {style:{fontSize:7, color:'white', fontWeight:'bold', marginBottom:1, whiteSpace:'nowrap'}}, 'NOW'),
+                        showLabel && !isCurrent && m.pct >= 5 && h('div', {style:{fontSize:8, color:barColor, fontWeight:'bold', marginBottom:1, whiteSpace:'nowrap'}}, '+'+m.pct.toFixed(1)+'%'),
+                        h('div', {...hoverProps, style:{...barStyle, background:barColor+(isCurrent ? 'ff' : '99'), borderRadius:'2px 2px 0 0'}}),
+                        h('div', {style:{height:1, width:barW, background: isCurrent ? 'white' : T.border}}),
+                        (showLabel || isCurrent) && h('div', {style:{fontSize:8, color: isCurrent ? 'white' : T.textDim, fontWeight: isCurrent ? 'bold' : 'normal', marginTop:2, whiteSpace:'nowrap'}}, m.label),
+                        seasonalView === 'monthly' && h('div', {style:{fontSize:8, color:T.gold}}, fmt.gp(m.avg)+'gp'),
+                      )
+                    : h('div', {style:{display:'flex', flexDirection:'column', alignItems:'center'}},
+                        (showLabel || isCurrent) && h('div', {style:{fontSize:8, color: isCurrent ? 'white' : T.textDim, fontWeight: isCurrent ? 'bold' : 'normal', marginBottom:2, whiteSpace:'nowrap'}}, m.label),
+                        seasonalView === 'monthly' && h('div', {style:{fontSize:8, color:T.gold, marginBottom:1}}, fmt.gp(m.avg)+'gp'),
+                        h('div', {style:{height:1, width:barW, background: isCurrent ? 'white' : T.border}}),
+                        h('div', {...hoverProps, style:{...barStyle, background:barColor+(isCurrent ? 'ff' : '99'), borderRadius:'0 0 2px 2px'}}),
+                        isCurrent && h('div', {style:{fontSize:7, color:'white', fontWeight:'bold', marginTop:1, whiteSpace:'nowrap'}}, 'NOW'),
+                        showLabel && !isCurrent && m.pct <= -5 && h('div', {style:{fontSize:8, color:barColor, fontWeight:'bold', marginTop:1, whiteSpace:'nowrap'}}, m.pct.toFixed(1)+'%'),
+                      )
+                );
+              })
+            )
+          ),
+          h('div', {style:{fontSize:10, color:T.textDim, marginTop:8}},
+            seasonalView === 'weekly' ? 'Hover any bar for exact values. ' : '',
+            h('span',{style:{color:T.green}},'Green'), ' = 5%+ above average, ',
+            h('span',{style:{color:T.red}},'red'), ' = 5%+ below, ',
+            h('span',{style:{color:T.gold}},'gold'), ' = neutral. Based on ',
+            Math.round(seasonalData.yearsOfData*10)/10, '+ years of data.'
           )
         )
       )
@@ -639,6 +1122,22 @@ function useSearch(items) {
 function GESearchBar({items, onSelect}) {
   const s = useSearch(items);
   const showDrop = s.focused && s.results.length > 0;
+  const pickRandom = () => {
+    const seen = new Set();
+    const BORING_ONLY = new Set(['misc', 'low_tier', 'materials']);
+    const pool = items.filter(it => {
+      if (it.untradeable || (!it.high && !it.low)) return false;
+      if (seen.has(it.id)) return false;
+      seen.add(it.id);
+      const cats = it.categories || [];
+      const hasInterestingCat = cats.some(c => !BORING_ONLY.has(c));
+      const hasVolume = (it.volume || 0) > 5000;
+      const hasPrice  = (it.high || it.low || 0) > 10000;
+      return hasInterestingCat || (hasVolume && hasPrice);
+    });
+    if (!pool.length) return;
+    onSelect(pool[Math.floor(Math.random() * pool.length)]);
+  };
   return h('div', {className:'ge-search-wrap'},
     h('input', {
       className:'ge-search-input',
@@ -649,6 +1148,18 @@ function GESearchBar({items, onSelect}) {
       onBlur:()=>setTimeout(()=>s.setFocused(false),150),
       onKeyDown:e=>s.onKey(e, it=>{onSelect(it); s.setQuery('');}),
     }),
+    !s.query && h('button', {
+      onClick: pickRandom,
+      title: "I'm feeling lucky. You might not be.",
+      style:{
+        position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
+        background:'transparent', border:'none', cursor:'pointer',
+        fontSize:15, color:T.textDim, padding:'2px 4px', lineHeight:1,
+        transition:'color 0.15s',
+      },
+      onMouseEnter: e => e.currentTarget.style.color = T.goldBright,
+      onMouseLeave: e => e.currentTarget.style.color = T.textDim,
+    }, '🎲'),
     s.query && h('button',{className:'ge-search-clear',onClick:()=>s.setQuery('')},'x'),
     showDrop && h('div',{className:'ge-search-results'},
       s.results.map((it,i) =>
@@ -672,20 +1183,15 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart}) {
 
   useEffect(() => {
     if (!itemId || !currentPrice) return;
-    window.genius?.getItemHistoryLocal(itemId).then(history => {
+    window.genius?.getItemHistory(itemId).then(history => {
       if (!history || history.length < 2) return;
-      const sorted = [...history].sort((a,b) => {
-        const ta = typeof a.timestamp==='number' ? a.timestamp*(a.timestamp<1e12?1000:1) : new Date(a.timestamp).getTime();
-        const tb = typeof b.timestamp==='number' ? b.timestamp*(b.timestamp<1e12?1000:1) : new Date(b.timestamp).getTime();
-        return ta - tb;
-      });
-      const now = Date.now();
+      const getTs = p => typeof p.timestamp==='number' ? p.timestamp*(p.timestamp<1e12?1000:1) : new Date(p.timestamp).getTime();
+      const sorted = [...history].sort((a,b) => getTs(a) - getTs(b));
+      // Use the most recent history point as reference so data lag doesn't kill 7d
+      const latestTs = getTs(sorted[sorted.length - 1]);
       const calc = (days) => {
-        const cutoff = now - days*24*60*60*1000;
-        const pt = sorted.find(p => {
-          const t = typeof p.timestamp==='number' ? p.timestamp*(p.timestamp<1e12?1000:1) : new Date(p.timestamp).getTime();
-          return t >= cutoff;
-        });
+        const cutoff = latestTs - days*24*60*60*1000;
+        const pt = sorted.find(p => getTs(p) >= cutoff);
         if (!pt || !pt.price) return null;
         const chg = ((currentPrice - pt.price) / pt.price) * 100;
         const gp  = Math.round(currentPrice - pt.price);
@@ -772,6 +1278,25 @@ function RecipeSection({item, allItems}) {
     ),
     total != null && h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}},
       `Per dose: ${fmt.gp(Math.round(total / doses))} gp`)
+  );
+}
+
+function BigMacLine({price, bondGP}) {
+  const [pos, setPos] = useState(null);
+  const macs = getBigMacs(price, bondGP);
+  if (!macs) return null;
+  return h('div', {
+    style:{fontSize:11, color:T.textDim, cursor:'help', marginTop:8, display:'inline-block'},
+    onMouseMove: e => setPos({x: e.clientX, y: e.clientY}),
+    onMouseLeave: () => setPos(null),
+  },
+    '≈ ', macs,
+    pos && h('div', {style:{
+      position:'fixed', left:pos.x + 12, top:pos.y + 12, zIndex:9999,
+      background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+      padding:'5px 8px', fontSize:11, color:T.textDim, maxWidth:180, lineHeight:1.5,
+      pointerEvents:'none', boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
+    }}, `Based on live bond price (${fmt.gp(bondGP)}gp = $${BOND_USD} USD) and Big Mac index ($${BIGMAC_USD} USD)`)
   );
 }
 
@@ -940,10 +1465,27 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       // Price trend badges from history
       item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true)}),
 
+      // Big Mac price conversion
+      !item.untradeable && h(BigMacLine, {
+        price: item.high || item.low,
+        bondGP: (allItems||[]).find(it => it.name === 'Bond')?.high || 0,
+      }),
+
       // Examine text — use dump data first, fall back to wiki fetch
       statsLoading && !item.examine && h('div',{style:{marginTop:12,fontSize:11,color:T.textDim}},'Loading item info...'),
-      (item.examine || wikiStats?.examine) && h('div',{style:{marginTop:12,padding:'8px 10px',background:'rgba(0,0,0,0.2)',borderRadius:4,fontSize:11,color:T.textDim,fontStyle:'italic',lineHeight:1.5}},
-        '"', item.examine || wikiStats.examine, '"'
+      h('div',{style:{marginTop:12,padding:'8px 10px',background:'rgba(0,0,0,0.2)',borderRadius:4,fontSize:11,color:T.textDim,fontStyle:'italic',lineHeight:1.5}},
+        (() => {
+          const txt = item.examine || wikiStats?.examine;
+          if (txt) return ['"', txt, '"'];
+          if (statsLoading) return null;
+          return '"This item is so boring that not even the API has a description for it."';
+        })()
+      ),
+
+      // Market Personality
+      !item.untradeable && h('div', {style:{marginTop:10, padding:'8px 10px', background:'rgba(0,0,0,0.15)', borderRadius:4, borderLeft:`2px solid ${T.borderDim}`, fontSize:11, color:T.textDim, lineHeight:1.5}},
+        h('span', {style:{color:T.gold, fontWeight:'bold', marginRight:6}}, '◈'),
+        getMarketPersonality(item)
       ),
 
       // Equipment stats table
@@ -1266,6 +1808,7 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
 /* ─── Dashboard tab ──────────────────────────────────────────── */
 function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio}) {
   const [activeSignal, setActiveSignal] = useState(null);
+  const [activeIndexId, setActiveIndexId] = useState(null);
   const tradeableItems = useMemo(() => items.filter(it => !it.untradeable), [items]);
 
   const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000)
@@ -1281,7 +1824,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     }).slice(0,6), [tradeableItems]);
 
   const signalCounts = useMemo(() => {
-    const counts = {SURGE:0,DUMP:0,ACCUMULATION:0,DISTRIBUTION:0,FRENZY:0,HIGH_VOL:0};
+    const counts = {SURGE:0,DUMP:0,ACCUMULATION:0,DISTRIBUTION:0,FRENZY:0,HIGH_VOL:0,MANIPULATED:0};
     for (const it of tradeableItems) {
       for (const s of (it.signals||[])) { if (s in counts) counts[s]++; }
     }
@@ -1328,6 +1871,19 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     return false;
   }), [alerts, items]);
 
+  // Item of the Day — seeded by date so it's the same for everyone all day
+  const itemOfTheDay = useMemo(() => {
+    const pool = tradeableItems.filter(it => it.high || it.low);
+    if (!pool.length) return null;
+    const today = new Date();
+    const seed  = today.getFullYear() * 10000 + (today.getMonth()+1) * 100 + today.getDate();
+    const idx   = seed % pool.length;
+    return pool[idx];
+  }, [tradeableItems]);
+
+  // Mood of the Market
+  const mood = useMemo(() => getMoodOfMarket(tradeableItems), [tradeableItems]);
+
   const sectionStyle = {marginBottom:20};
   const headingStyle = {fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase',
     color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:10};
@@ -1340,10 +1896,17 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     const chgColor = up ? T.green : dn ? T.red : T.textDim;
     const arrow = up ? '▲' : dn ? '▼' : '●';
     const sign = idx.change > 0 ? '+' : '';
-    return h('div', {style:{
-      background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
-      padding:'10px 14px', minWidth:150, flex:'1 1 140px',
-    }},
+    const def = INDEXES.find(d => d.name === idx.name);
+    return h('div', {
+      onClick: () => def && setActiveIndexId(def.id),
+      style:{
+        background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+        padding:'10px 14px', minWidth:150, flex:'1 1 140px',
+        cursor: def ? 'pointer' : 'default', transition:'border-color 0.15s',
+      },
+      onMouseEnter: e => { if (def) e.currentTarget.style.borderColor = T.gold+'88'; },
+      onMouseLeave: e => { e.currentTarget.style.borderColor = T.border; },
+    },
       h('div', {style:{fontSize:11, color:T.textDim, marginBottom:4}}, idx.name),
       h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright, marginBottom:2}},
         idx.value.toFixed(2)),
@@ -1422,8 +1985,77 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     );
   }
 
+  // Index drill-down view
+  if (activeIndexId) {
+    const def = INDEXES.find(d => d.id === activeIndexId);
+    const itemById = {};
+    items.forEach(it => { itemById[it.id] = it; });
+    const indexItems = def ? def.items.map(d => itemById[d.id]).filter(Boolean) : [];
+    const withChange = indexItems.filter(it => it.change_1d != null);
+    const avgChange = withChange.length ? withChange.reduce((s,it) => s+it.change_1d, 0) / withChange.length : null;
+    return h('div', {style:{display:'flex', flexDirection:'column', height:'100%'}},
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0}},
+        h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:12}, onClick:()=>setActiveIndexId(null)}, '← Back'),
+        h('div', {style:{fontSize:12, fontWeight:'bold', color:T.goldBright, letterSpacing:'0.08em'}}, def?.name),
+        avgChange != null && h('div', {style:{fontSize:12, color: avgChange >= 0 ? T.green : T.red}},
+          (avgChange >= 0 ? '▲ +' : '▼ ') + avgChange.toFixed(2) + '% avg today'),
+        h('div', {style:{fontSize:11, color:T.textDim, marginLeft:'auto'}},
+          `${indexItems.length} / ${def?.items.length || 0} items tracked`),
+      ),
+      h('div', {style:{flex:1, overflowY:'auto'}},
+        h(ItemTable, {items:indexItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+      )
+    );
+  }
+
   return h('div', {style:{padding:'12px 14px', overflowY:'auto', height:'100%'}},
     description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
+
+    // ── Mood + Item of the Day ───────────────────────────────────
+    h('div', {style:{display:'flex', gap:8, marginBottom:20}},
+
+      // Mood of the Market
+      mood && h('div', {
+        title: mood.tip,
+        style:{
+          background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+          padding:'10px 14px', flex:'0 0 auto', cursor:'default',
+          display:'flex', alignItems:'center', gap:10,
+        }
+      },
+        h('div', {style:{fontSize:28, lineHeight:1}}, mood.emoji),
+        h('div', null,
+          h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:2}}, 'Market Mood'),
+          h('div', {style:{fontSize:13, fontWeight:'bold', color:T.textBright}}, mood.label),
+        )
+      ),
+
+      // Item of the Day
+      itemOfTheDay && h('div', {
+        onClick: () => onSelect(itemOfTheDay),
+        style:{
+          background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+          padding:'10px 14px', flex:'1 1 0', cursor:'pointer',
+          transition:'border-color 0.15s',
+        },
+        onMouseEnter: e => e.currentTarget.style.borderColor = T.gold+'88',
+        onMouseLeave: e => e.currentTarget.style.borderColor = T.border,
+      },
+        h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:4}}, "Item of the Day"),
+        h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'baseline', gap:8}},
+          h('div', {style:{fontSize:13, fontWeight:'bold', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, itemOfTheDay.name),
+          h('div', {style:{fontSize:12, color:T.gold, flexShrink:0}}, fmt.gp(itemOfTheDay.high||itemOfTheDay.low)+'gp'),
+        ),
+        h('div', {style:{fontSize:11, color:T.textDim, marginTop:4, fontStyle:'italic', lineHeight:1.4,
+          overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical'}},
+          (() => {
+            const txt = itemOfTheDay.examine;
+            if (txt) return `"${txt}"`;
+            return '"This item is so boring that not even the API has a description for it."';
+          })()
+        )
+      ),
+    ),
 
     // ── Personal command center ──────────────────────────────────
 
@@ -1559,7 +2191,7 @@ function CompareTab({compareList, onRemove, onClear, allItems, description}) {
                           return r>=2.5?T.gold:r>=1.5?T.green:r<=0.5?T.red:T.text;
                         }},
     {label: 'Alch',     render: it => it.alch ? fmt.gp(it.alch)+'gp' : '—', color: () => T.textDim},
-    {label: 'Score',    render: it => it.score != null ? it.score.toFixed(1) : '—',
+    {label: 'Score',    render: it => it.score != null ? h('span', null, h('span', null, it.score.toFixed(1)), h('span', {style:{color:T.textDim, fontSize:10}}, '/100')) : '—',
                         color:  it => {
                           const s = it.score||0;
                           return s>=70?T.green:s>=40?T.gold:T.textDim;
@@ -2211,7 +2843,6 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items}) 
       h('select',{className:'ge-input',value:s.theme||'dark',onChange:set('theme')},
         h('option',{value:'dark'},'Dark (default)'),
         h('option',{value:'black'},'Black'),
-        h('option',{value:'parchment'},'Parchment (light)')
       )
     ),
     h('div',{style:{marginBottom:20}},
@@ -2245,6 +2876,26 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items}) 
     ),
     h('button',{className:'ge-btn gold',onClick:save},'Save settings'),
 
+    h('div',{style:{marginTop:28, marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Data Portability'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}},
+        'Export your watchlist, portfolio, alerts, notes, and settings to a file. Import it on any machine to restore everything.'
+      ),
+      h('div',{style:{display:'flex',gap:8}},
+        h('button',{className:'ge-btn gold',onClick:async()=>{
+          const res = await window.genius?.exportData();
+          if (res?.canceled) return;
+          if (res?.error) toast('Export failed: '+res.error,'error');
+          else toast('Data exported successfully','success');
+        }},'⬆ Export Backup'),
+        h('button',{className:'ge-btn',onClick:async()=>{
+          const res = await window.genius?.importData();
+          if (res?.canceled) return;
+          if (res?.error) { toast('Import failed: '+res.error,'error'); return; }
+          toast('Data imported — restart GEnius to see all changes','success');
+        }},'⬇ Import Backup'),
+      )
+    ),
 
     hiddenItems && hiddenItems.length > 0 && h('div',{style:{marginTop:24}},
       h('div',{className:'ge-section-head'},'Hidden Items'),
@@ -2952,7 +3603,334 @@ function HistoryPopup({state, onDismiss}) {
   );
 }
 
+/* ─── Market Indexes Tab ─────────────────────────────────────── */
+const INDEXES = [
+  {
+    id: 'cti', name: 'Common Trade Index', color: '#c9a84c',
+    items: [
+      {id:453,name:'Coal'},{id:2353,name:'Steel bar'},{id:444,name:'Gold ore'},
+      {id:561,name:'Nature rune'},{id:560,name:'Death rune'},{id:7936,name:'Pure essence'},
+      {id:1515,name:'Yew logs'},{id:1513,name:'Magic logs'},{id:1739,name:'Cowhide'},
+      {id:377,name:'Raw lobster'},{id:7944,name:'Raw monkfish'},{id:1779,name:'Flax'},
+      {id:1761,name:'Soft clay'},{id:225,name:'Limpwurt root'},{id:231,name:'Snape grass'},
+      {id:3000,name:'Clean snapdragon'},{id:263,name:'Clean kwuarm'},{id:4151,name:'Abyssal whip'},
+      {id:11732,name:'Dragon boots'},{id:11838,name:'Rune armour set (lg)'},{id:10034,name:'Red chinchompa'},
+      {id:8778,name:'Oak plank'},{id:385,name:'Shark'},{id:1753,name:'Green dragonhide'},
+      {id:536,name:'Dragon bones'},{id:2,name:'Cannonball'},{id:11284,name:'Dragonfire shield'},
+    ],
+  },
+  {
+    id: 'rune', name: 'Rune Index', color: '#7986cb',
+    items: [
+      {id:556,name:'Air rune'},{id:558,name:'Mind rune'},{id:555,name:'Water rune'},
+      {id:557,name:'Earth rune'},{id:554,name:'Fire rune'},{id:559,name:'Body rune'},
+      {id:564,name:'Cosmic rune'},{id:562,name:'Chaos rune'},{id:561,name:'Nature rune'},
+      {id:563,name:'Law rune'},{id:560,name:'Death rune'},{id:9075,name:'Astral rune'},
+      {id:565,name:'Blood rune'},{id:566,name:'Soul rune'},{id:21773,name:'Armadyl rune'},
+      {id:4694,name:'Steam rune'},{id:4695,name:'Mist rune'},{id:4696,name:'Dust rune'},
+      {id:4697,name:'Smoke rune'},{id:4698,name:'Mud rune'},{id:4699,name:'Lava rune'},
+    ],
+  },
+  {
+    id: 'log', name: 'Log Index', color: '#8d6e63',
+    items: [
+      {id:1511,name:'Logs'},{id:2862,name:'Achey tree logs'},{id:1521,name:'Oak logs'},
+      {id:1519,name:'Willow logs'},{id:6333,name:'Teak logs'},{id:1517,name:'Maple logs'},
+      {id:3239,name:'Bark'},{id:40285,name:'Acadia logs'},{id:10810,name:'Arctic pine logs'},
+      {id:12581,name:'Eucalyptus logs'},{id:6332,name:'Mahogany logs'},{id:1515,name:'Yew logs'},
+      {id:1513,name:'Magic logs'},{id:29556,name:'Elder logs'},{id:58250,name:'Eternal magic logs'},
+    ],
+  },
+  {
+    id: 'food', name: 'Food Index', color: '#ef9a9a',
+    items: [
+      {id:329,name:'Salmon'},{id:361,name:'Tuna'},{id:379,name:'Lobster'},
+      {id:365,name:'Bass'},{id:373,name:'Swordfish'},{id:7946,name:'Monkfish'},
+      {id:385,name:'Shark'},{id:15266,name:'Cavefish'},{id:15272,name:'Rocktail'},
+      {id:34729,name:'Great white shark'},{id:2309,name:'Bread'},{id:1891,name:'Cake'},
+      {id:1897,name:'Chocolate cake'},{id:5406,name:'Strawberries (5)'},{id:6685,name:'Saradomin brew (4)'},
+    ],
+  },
+  {
+    id: 'metal', name: 'Metal Index', color: '#90a4ae',
+    items: [
+      {id:436,name:'Copper ore'},{id:438,name:'Tin ore'},{id:440,name:'Iron ore'},
+      {id:442,name:'Silver ore'},{id:453,name:'Coal'},{id:444,name:'Gold ore'},
+      {id:447,name:'Mithril ore'},{id:449,name:'Adamantite ore'},{id:44820,name:'Luminite'},
+      {id:451,name:'Runite ore'},{id:44822,name:'Orichalcite ore'},{id:44824,name:'Drakolith'},
+      {id:44826,name:'Necrite ore'},{id:44828,name:'Phasmatite'},{id:21778,name:'Banite ore'},
+      {id:44830,name:'Light animica'},{id:44832,name:'Dark animica'},
+      {id:2349,name:'Bronze bar'},{id:2351,name:'Iron bar'},{id:2355,name:'Silver bar'},
+      {id:2353,name:'Steel bar'},{id:2357,name:'Gold bar'},{id:2359,name:'Mithril bar'},
+      {id:2361,name:'Adamant bar'},{id:2363,name:'Rune bar'},{id:44838,name:'Orikalkum bar'},
+      {id:44840,name:'Necronium bar'},{id:44842,name:'Bane bar'},{id:44844,name:'Elder rune bar'},
+    ],
+  },
+  {
+    id: 'herb', name: 'Herb Index', color: '#a5d6a7',
+    items: [
+      {id:199,name:'Grimy guam'},{id:201,name:'Grimy marrentill'},{id:203,name:'Grimy tarromin'},
+      {id:205,name:'Grimy harralander'},{id:207,name:'Grimy ranarr'},{id:3049,name:'Grimy toadflax'},
+      {id:209,name:'Grimy irit'},{id:14836,name:'Grimy wergali'},{id:12174,name:'Grimy spirit weed'},
+      {id:211,name:'Grimy avantoe'},{id:213,name:'Grimy kwuarm'},{id:3051,name:'Grimy snapdragon'},
+      {id:215,name:'Grimy cadantine'},{id:2485,name:'Grimy lantadyme'},{id:217,name:'Grimy dwarf weed'},
+      {id:219,name:'Grimy torstol'},{id:21626,name:'Grimy fellstalk'},
+      {id:249,name:'Clean guam'},{id:251,name:'Clean marrentill'},{id:253,name:'Clean tarromin'},
+      {id:255,name:'Clean harralander'},{id:257,name:'Clean ranarr'},{id:2998,name:'Clean toadflax'},
+      {id:259,name:'Clean irit'},{id:14854,name:'Clean wergali'},{id:12172,name:'Clean spirit weed'},
+      {id:261,name:'Clean avantoe'},{id:263,name:'Clean kwuarm'},{id:3000,name:'Clean snapdragon'},
+      {id:265,name:'Clean cadantine'},{id:2481,name:'Clean lantadyme'},{id:267,name:'Clean dwarf weed'},
+      {id:269,name:'Clean torstol'},{id:21624,name:'Clean fellstalk'},
+    ],
+  },
+];
+
+function IndexesTab({items, selected, onSelect, onToggleWatch, watchlist, onToggleHide}) {
+  const [activeIndex, setActiveIndex] = useState(null);
+
+  const itemById = useMemo(() => {
+    const map = {};
+    items.forEach(it => { map[it.id] = it; });
+    return map;
+  }, [items]);
+
+  const indexStats = useMemo(() => {
+    return INDEXES.map(idx => {
+      const matched = idx.items.map(def => itemById[def.id]).filter(Boolean);
+      const withChange = matched.filter(it => it.change_1d != null);
+      const avgChange = withChange.length
+        ? withChange.reduce((s, it) => s + it.change_1d, 0) / withChange.length
+        : null;
+      return { ...idx, matched, avgChange, coverage: matched.length };
+    });
+  }, [itemById]);
+
+  if (activeIndex !== null) {
+    const idx = indexStats[activeIndex];
+    return h('div', {style:{padding:'12px 16px'}},
+      h('div', {style:{display:'flex', alignItems:'center', gap:12, marginBottom:16}},
+        h('button', {
+          onClick: () => setActiveIndex(null),
+          style:{background:'transparent', border:`1px solid ${T.border}`, borderRadius:4,
+            color:T.textDim, cursor:'pointer', padding:'4px 12px', fontSize:12},
+        }, '← Back'),
+        h('span', {style:{fontSize:16, fontWeight:'bold', color:idx.color}}, idx.name),
+        idx.avgChange != null && h('span', {
+          style:{fontSize:13, color: idx.avgChange >= 0 ? T.green : T.red, marginLeft:4},
+        }, (idx.avgChange >= 0 ? '▲ +' : '▼ ') + idx.avgChange.toFixed(2) + '% avg today'),
+        h('span', {style:{fontSize:11, color:T.textDim, marginLeft:'auto'}},
+          `${idx.coverage} / ${idx.items.length} items tracked`),
+      ),
+      h('div', {style:{display:'flex', flexDirection:'column', gap:2}},
+        idx.matched.length === 0 && h('div', {style:{color:T.textDim, fontSize:12, padding:'20px 0', textAlign:'center'}},
+          'No price data available for these items yet.'
+        ),
+        idx.matched.map(it =>
+          h('div', {
+            key:it.id,
+            onClick: () => onSelect(it),
+            style:{
+              display:'flex', alignItems:'center', gap:10, padding:'7px 10px',
+              borderRadius:4, cursor:'pointer', background: selected?.id===it.id ? 'rgba(201,168,76,0.08)' : 'transparent',
+              border: `1px solid ${selected?.id===it.id ? T.gold+'44' : 'transparent'}`,
+            },
+            onMouseEnter: e => e.currentTarget.style.background='rgba(255,255,255,0.04)',
+            onMouseLeave: e => e.currentTarget.style.background = selected?.id===it.id ? 'rgba(201,168,76,0.08)' : 'transparent',
+          },
+            h('span', {style:{flex:1, fontSize:13, color:T.text}}, it.name),
+            h('span', {style:{fontSize:13, color:T.gold, minWidth:90, textAlign:'right'}},
+              fmt.gp(it.high || it.low) + 'gp'),
+            it.change_1d != null && h('span', {
+              style:{fontSize:12, minWidth:72, textAlign:'right',
+                color: it.change_1d > 0 ? T.green : it.change_1d < 0 ? T.red : T.textDim},
+            }, (it.change_1d > 0 ? '+' : '') + it.change_1d.toFixed(2) + '%'),
+            it.volume != null && h('span', {style:{fontSize:11, color:T.textDim, minWidth:80, textAlign:'right'}},
+              it.volume.toLocaleString() + ' vol'),
+          )
+        )
+      )
+    );
+  }
+
+  return h('div', {style:{padding:'12px 16px'}},
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
+      'Click an index to see all constituent items and their current prices.'
+    ),
+    h('div', {style:{display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(280px, 1fr))', gap:12}},
+      indexStats.map((idx, i) =>
+        h('div', {
+          key:idx.id,
+          onClick: () => setActiveIndex(i),
+          style:{
+            background:'rgba(0,0,0,0.25)', border:`1px solid ${T.border}`, borderRadius:6,
+            padding:'14px 16px', cursor:'pointer', transition:'border-color 0.15s',
+          },
+          onMouseEnter: e => e.currentTarget.style.borderColor = idx.color+'88',
+          onMouseLeave: e => e.currentTarget.style.borderColor = T.border,
+        },
+          h('div', {style:{fontSize:11, color:idx.color, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:8}},
+            idx.name),
+          idx.avgChange != null
+            ? h('div', {style:{display:'flex', alignItems:'baseline', gap:8}},
+                h('span', {style:{fontSize:28, fontWeight:'bold', color:T.goldBright}},
+                  (idx.avgChange >= 0 ? '+' : '') + idx.avgChange.toFixed(2) + '%'),
+                h('span', {style:{fontSize:14, color: idx.avgChange >= 0 ? T.green : T.red}},
+                  idx.avgChange >= 0 ? '▲' : '▼'),
+              )
+            : h('div', {style:{fontSize:14, color:T.textDim}}, 'No data'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:6}},
+            `avg daily change · ${idx.coverage} items tracked`),
+        )
+      )
+    )
+  );
+}
+
 /* ─── Market Opportunities Tab ───────────────────────────────── */
+function ScoreBreakdown({it}) {
+  const price   = it.high || it.low || 0;
+  const chg     = it.change_1d;
+  const vol     = it.volume || 0;
+  const avg     = it.avgVolume || 0;
+  const sigs    = it.signals || [];
+  const alch    = it.alch || 0;
+  const nature  = it.natureRunePrice || 0;
+
+  const pctFactor = chg != null ? Math.min(1, Math.abs(chg) / 20) : 0;
+  const gpFactor  = chg != null ? Math.min(1, (Math.abs(chg) / 100 * price) / 100000) : 0;
+  const momPts    = chg != null ? Math.round(40 * Math.sqrt(pctFactor * gpFactor) * 10) / 10 : 0;
+
+  const volRatio  = avg > 0 ? vol / avg : 0;
+  const volPts    = avg > 0 && volRatio > 0 ? Math.round(Math.min(30, (volRatio - 1) / 2 * 30) * 10) / 10 : 0;
+
+  let sigPts = 0;
+  if (sigs.includes('SURGE') || sigs.includes('DUMP')) sigPts += 20;
+  if (sigs.includes('ACCUMULATION') || sigs.includes('DISTRIBUTION')) sigPts += 10;
+  if (sigs.includes('FRENZY')) sigPts += 10;
+
+  const alchProfit = alch && price && nature ? alch - (price * 0.98) - nature : 0;
+  const alchPts    = alchProfit > 0 ? Math.round(Math.min(10, alchProfit / price * 100) * 10) / 10 : 0;
+
+  const cardStyle = {background:'rgba(0,0,0,0.3)', border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'8px 10px', flex:'1 1 0'};
+  const labelStyle = {fontSize:10, color:T.textDim, marginBottom:4, textTransform:'uppercase', letterSpacing:'0.05em'};
+  const ptsStyle = pts => ({fontSize:14, fontWeight:'bold', color: pts > 0 ? T.green : T.textDim});
+  const subStyle = {fontSize:10, color:T.borderGold, marginTop:3, opacity:0.8};
+
+  return h('tr', null,
+    h('td', {colSpan:6, style:{padding:'0 8px 10px', background:'rgba(0,0,0,0.2)'}},
+      h('div', {style:{display:'flex', gap:6}},
+        h('div', {style:cardStyle},
+          h('div', {style:labelStyle}, 'Price momentum'),
+          h('div', {style:ptsStyle(momPts)}, momPts > 0 ? `+${momPts} pts` : '0 pts'),
+          h('div', {style:subStyle},
+            chg != null
+              ? `${chg > 0 ? '+' : ''}${chg.toFixed(2)}% · ${chg > 0 ? '+' : ''}${fmt.gp(Math.round(price - price / (1 + chg / 100)))}gp`
+              : 'No price data'
+          )
+        ),
+        h('div', {style:cardStyle},
+          h('div', {style:labelStyle}, 'Volume'),
+          h('div', {style:ptsStyle(volPts)}, volPts > 0 ? `+${volPts} pts` : '0 pts'),
+          h('div', {style:subStyle},
+            avg > 0 ? `${volRatio.toFixed(1)}× average` : 'No avg volume'
+          )
+        ),
+        h('div', {style:cardStyle},
+          h('div', {style:labelStyle}, 'Signal bonus'),
+          h('div', {style:ptsStyle(sigPts)}, sigPts > 0 ? `+${sigPts} pts` : '0 pts'),
+          h('div', {style:subStyle},
+            sigPts > 0
+              ? sigs.filter(s => ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY'].includes(s)).join(', ')
+              : 'No qualifying signals'
+          )
+        ),
+        h('div', {style:cardStyle},
+          h('div', {style:labelStyle}, 'Alch profit'),
+          h('div', {style:ptsStyle(alchPts)}, alchPts > 0 ? `+${alchPts} pts` : '0 pts'),
+          h('div', {style:subStyle},
+            alchProfit > 0 ? `+${fmt.gp(Math.round(alchProfit))}gp margin` : 'No alch profit'
+          )
+        ),
+      )
+    )
+  );
+}
+
+function ScoreTable({rows, selected, onSelect}) {
+  const [expanded, setExpanded] = useState(null);
+  const [sortCol, setSortCol] = useState(1);
+  const [sortAsc, setSortAsc] = useState(false);
+
+  const sortKeys = ['name', 'score', it=>it.high||it.low, 'change_1d', 'volume'];
+  const sorted = useMemo(() => {
+    const key = sortKeys[sortCol];
+    return [...rows].sort((a,b) => {
+      const av = typeof key === 'function' ? key(a) : (a[key] ?? 0);
+      const bv = typeof key === 'function' ? key(b) : (b[key] ?? 0);
+      if (typeof av === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+      return sortAsc ? av - bv : bv - av;
+    });
+  }, [rows, sortCol, sortAsc]);
+
+  const onHeader = i => {
+    if (sortCol === i) setSortAsc(a => !a);
+    else { setSortCol(i); setSortAsc(false); }
+  };
+
+  const headers = ['Item','Score','Price','Change','Volume','Signals'];
+
+  return h('div', {style:{marginBottom:20}},
+    h('div', {style:{display:'flex',alignItems:'baseline',gap:8,marginBottom:6}},
+      h('span', {style:{fontSize:14}}, '◈'),
+      h('span', {style:{fontFamily:'Cinzel,serif',fontSize:12,letterSpacing:'1.5px',textTransform:'uppercase',color:T.goldBright}}, 'Opportunity Score — Top 20'),
+      h('span', {style:{fontSize:10,background:'rgba(201,168,76,0.15)',border:`1px solid ${T.borderDim}`,borderRadius:10,padding:'0 6px',color:T.textDim}}, rows.length),
+      h('span', {style:{fontSize:10,color:T.textDim}}, '— composite score combining momentum, volume, signals, and alch profit'),
+    ),
+    h('div', {className:'ge-table-wrap'},
+      h('table', {className:'ge-table'},
+        h('thead', null, h('tr', null, headers.map((hd,i) =>
+          h('th', {key:i, style:{cursor: i < 5 ? 'pointer' : 'default', userSelect:'none'}, onClick:()=>i<5&&onHeader(i)},
+            hd, sortCol===i ? (sortAsc?' ▲':' ▼') : ''
+          )
+        ))),
+        h('tbody', null, sorted.map(it => {
+          const score = it.score || 0;
+          const scoreColor = score >= 70 ? T.green : score >= 40 ? T.gold : T.textDim;
+          const isExpanded = expanded === it.id;
+          return [
+            h('tr', {
+              key: it.id,
+              className: selected?.id === it.id ? 'selected' : '',
+              onClick: () => onSelect && onSelect(it),
+            },
+              h('td', null, it.name),
+              h('td', {style:{textAlign:'center'}},
+                h('div', {style:{display:'flex', alignItems:'center', justifyContent:'center', gap:6}},
+                  h('span', null,
+                    h('span', {style:{color:scoreColor, fontWeight:'bold'}}, score.toFixed(1)),
+                    h('span', {style:{color:T.textDim, fontSize:10}}, '/100'),
+                  ),
+                  h('span', {
+                    onClick: e => { e.stopPropagation(); setExpanded(isExpanded ? null : it.id); },
+                    style:{color:T.textDim, cursor:'pointer', fontSize:11, lineHeight:1,
+                      display:'inline-block', transform: isExpanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                      transition:'transform 0.2s'},
+                  }, '▾')
+                )
+              ),
+              h('td', {style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp'),
+              h('td', null, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
+              h('td', null, h(VolDisplay, {volume:it.volume, avgVolume:it.avgVolume})),
+              h('td', null, h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},(it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s})))),
+            ),
+            isExpanded && h(ScoreBreakdown, {key: it.id+'-bd', it}),
+          ];
+        }))
+      )
+    )
+  );
+}
+
 function OpportunitiesTab({items, selected, onSelect, description}) {
 
   const withSignal = useCallback((sig) =>
@@ -2972,7 +3950,27 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
   const risers  = useMemo(() => [...items].filter(it=>it.change_1d!=null&&it.change_1d>0).sort((a,b)=>(b.change_1d||0)-(a.change_1d||0)).slice(0,8), [items]);
   const fallers = useMemo(() => [...items].filter(it=>it.change_1d!=null&&it.change_1d<0).sort((a,b)=>(a.change_1d||0)-(b.change_1d||0)).slice(0,8), [items]);
 
-  function SectionTable({title, icon, color, desc, rows, renderRow, headers, empty='None detected today.'}) {
+  function SectionTable({title, icon, color, desc, rows, renderRow, headers, sortKeys, empty='None detected today.'}) {
+    const [sortCol, setSortCol] = useState(null);
+    const [sortAsc, setSortAsc] = useState(false);
+
+    const sorted = useMemo(() => {
+      if (sortCol === null || !sortKeys || !sortKeys[sortCol]) return rows;
+      const key = sortKeys[sortCol];
+      return [...rows].sort((a, b) => {
+        const av = typeof key === 'function' ? key(a) : (a[key] ?? 0);
+        const bv = typeof key === 'function' ? key(b) : (b[key] ?? 0);
+        if (typeof av === 'string') return sortAsc ? av.localeCompare(bv) : bv.localeCompare(av);
+        return sortAsc ? av - bv : bv - av;
+      });
+    }, [rows, sortCol, sortAsc, sortKeys]);
+
+    const onHeader = i => {
+      if (!sortKeys || !sortKeys[i]) return;
+      if (sortCol === i) setSortAsc(a => !a);
+      else { setSortCol(i); setSortAsc(false); }
+    };
+
     if (!rows.length) return h('div', {style:{marginBottom:18}},
       h('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:6}},
         h('span', {style:{fontSize:14}}, icon),
@@ -2989,8 +3987,13 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ),
       h('div', {className:'ge-table-wrap'},
         h('table', {className:'ge-table'},
-          h('thead', null, h('tr', null, headers.map((hd,i)=>h('th',{key:i,style:{cursor:'default'}},hd)))),
-          h('tbody', null, rows.map((it,i) =>
+          h('thead', null, h('tr', null, headers.map((hd,i) => {
+            const sortable = sortKeys && sortKeys[i];
+            return h('th', {key:i, style:{cursor:sortable?'pointer':'default', userSelect:'none'}, onClick:()=>onHeader(i)},
+              hd, sortable && sortCol===i ? (sortAsc?' ▲':' ▼') : ''
+            );
+          }))),
+          h('tbody', null, sorted.map((it,i) =>
             h('tr', {key:it.id||i, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it)},
               renderRow(it)
             )
@@ -3026,24 +4029,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       )
     ),
 
-    h(SectionTable, {
-      title:'Opportunity Score — Top 20', icon:'◈', color:T.goldBright,
-      desc:'— composite score combining momentum, volume, signals, and alch profit',
-      rows:topScored,
-      headers:['Item','Score','Price','Change','Volume','Signals'],
-      renderRow: it => {
-        const score = it.score || 0;
-        const scoreColor = score >= 70 ? T.green : score >= 40 ? T.gold : T.textDim;
-        return [
-          h('td',{key:'n'},it.name),
-          h('td',{key:'s',style:{color:scoreColor,fontWeight:'bold',textAlign:'center'}},score.toFixed(1)),
-          h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
-          h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
-          h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-          h('td',{key:'sig'},h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},(it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s})))),
-        ];
-      },
-    }),
+    h(ScoreTable, {rows:topScored, selected, onSelect}),
 
     // Strong Movers
     h('div', {style:{marginBottom:20}},
@@ -3081,6 +4067,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       desc:'— price rising with elevated volume',
       rows:surge,
       headers:['Item','Price','Change','Volume','Signals'],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
@@ -3095,6 +4082,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       desc:'— price falling with elevated volume',
       rows:dump,
       headers:['Item','Price','Change','Volume','Signals'],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
@@ -3109,6 +4097,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       desc:'— price flat, volume quietly building',
       rows:accum,
       headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
+      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
@@ -3123,6 +4112,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       desc:'— price flat, extreme volume — watch for incoming drop',
       rows:distrib,
       headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
+      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
@@ -3137,6 +4127,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       desc:'— 250%+ above average volume',
       rows:frenzy,
       headers:['Item','Price','Change','Vol Ratio','Signals'],
+      sortKeys:['name',it=>it.high||it.low,'change_1d',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
@@ -3151,6 +4142,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       desc:'— alch profit exceeds GE sell after tax + nature rune',
       rows:alchItems,
       headers:['Item','GE Price','Alch Value','Profit / Ea','GE Limit'],
+      sortKeys:['name',it=>it.high||it.low,'alch',it=>Math.round((it.alch||0)-(it.high||it.low||0)*0.98-(it.natureRunePrice||0)),'limit'],
       renderRow: it => {
         const profit = Math.round((it.alch||0) - (it.high||it.low||0)*0.98 - (it.natureRunePrice||0));
         return [
@@ -3455,7 +4447,6 @@ function App() {
 
   return h('div',{className:'app'},
     h('style',null,CSS),
-    theme==='parchment'&&h('style',null,PARCHMENT_CSS),
     theme==='black'&&h('style',null,BLACK_CSS),
     h('link',{rel:'preconnect',href:'https://fonts.googleapis.com'}),
     h('link',{href:'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap',rel:'stylesheet'}),

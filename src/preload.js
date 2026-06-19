@@ -37,6 +37,12 @@ contextBridge.exposeInMainWorld('genius', {
   deletePosition:  (id)  => ipcRenderer.invoke('delete-position', id),
   sellPosition:    (opts)=> ipcRenderer.invoke('sell-position', opts),
 
+  // Full timeseries (ATH/ATL + date lookup)
+  getItemTimeseries: (id) => ipcRenderer.invoke('get-item-timeseries', id),
+
+  // Local price snapshots (no-lag recent history)
+  getPriceSnapshots: (id) => ipcRenderer.invoke('get-price-snapshots', id),
+
   // Item notes
   getNotes:  ()           => ipcRenderer.invoke('get-notes'),
   saveNote:  (id, text)   => ipcRenderer.invoke('save-note', { id, text }),
@@ -44,6 +50,10 @@ contextBridge.exposeInMainWorld('genius', {
   // Category overrides editor
   getOverrides:  ()   => ipcRenderer.invoke('get-overrides'),
   saveOverrides: (ov) => ipcRenderer.invoke('save-overrides', ov),
+
+  // Data portability
+  exportData: () => ipcRenderer.invoke('export-data'),
+  importData: () => ipcRenderer.invoke('import-data'),
 
   // Utility
   openExternal: (url) => ipcRenderer.invoke('open-external', url),
