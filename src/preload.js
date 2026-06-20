@@ -47,6 +47,10 @@ contextBridge.exposeInMainWorld('genius', {
   getNotes:  ()           => ipcRenderer.invoke('get-notes'),
   saveNote:  (id, text)   => ipcRenderer.invoke('save-note', { id, text }),
 
+  // Search shorthands
+  getShorthands:  ()   => ipcRenderer.invoke('get-shorthands'),
+  saveShorthands: (sh) => ipcRenderer.invoke('save-shorthands', sh),
+
   // Category overrides editor
   getOverrides:  ()   => ipcRenderer.invoke('get-overrides'),
   saveOverrides: (ov) => ipcRenderer.invoke('save-overrides', ov),

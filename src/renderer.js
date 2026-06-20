@@ -266,27 +266,34 @@ const SIGNAL_INFO = {
 };
 
 function SignalBadge({signal, style: extraStyle}) {
-  const [open, setOpen] = useState(false);
+  const [pos, setPos] = useState(null);
   const ref = useRef(null);
 
   useEffect(() => {
-    if (!open) return;
-    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
+    if (!pos) return;
+    const handler = e => { if (ref.current && !ref.current.contains(e.target)) setPos(null); };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [open]);
+  }, [pos]);
 
   const info = SIGNAL_INFO[signal];
   return h('span', {ref, style:{position:'relative', display:'inline-block', ...extraStyle}},
     h('span', {
       className: `signal-badge ${signal}`,
-      onClick: e => { e.stopPropagation(); if (info) setOpen(o => !o); },
+      onClick: e => {
+        e.stopPropagation();
+        if (!info) return;
+        setPos(p => p ? null : {x: e.clientX, y: e.clientY});
+      },
       style: {cursor: info ? 'pointer' : 'default'},
     }, signal),
-    open && info && h('div', {
+    pos && info && h('div', {
       style: {
-        position:'absolute', bottom:'calc(100% + 6px)', left:'50%',
-        transform:'translateX(-50%)', zIndex:300,
+        position:'fixed', zIndex:9999,
+        left: Math.min(pos.x + 12, window.innerWidth - 230),
+        top: pos.y + 16 + 210 > window.innerHeight
+          ? pos.y - 210 - 8
+          : pos.y + 16,
         background:T.panel2, border:`1px solid ${T.border}`,
         borderRadius:4, padding:'8px 10px',
         fontSize:11, color:T.text, lineHeight:1.5,
@@ -483,6 +490,43 @@ function SparklineSVG({data, color, w, ht}) {
 }
 
 /* ─── Chart modal ────────────────────────────────────────────── */
+function ImageModal({name, fallbackUrl, onClose}) {
+  const wikiName = name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
+  const detailUrl = `https://runescape.wiki/images/${encodeURIComponent(wikiName + '_detail')}.png`;
+  const [src, setSrc] = useState(detailUrl);
+
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
+
+  return h('div', {
+    onClick: onClose,
+    style: {
+      position:'fixed', inset:0, zIndex:10000,
+      background:'rgba(0,0,0,0.82)',
+      display:'flex', alignItems:'center', justifyContent:'center',
+      cursor:'zoom-out',
+    }
+  },
+    h('div', {style:{display:'flex', flexDirection:'column', alignItems:'center', gap:10}},
+      h('img', {
+        src,
+        alt: name,
+        onError: () => { if (src !== fallbackUrl) setSrc(fallbackUrl); else onClose(); },
+        style: {
+          maxWidth: '80vw', maxHeight: '75vh',
+          borderRadius: 4,
+          boxShadow: '0 8px 40px rgba(0,0,0,0.8)',
+        }
+      }),
+      h('div', {style:{color:'rgba(255,255,255,0.5)', fontSize:12}}, name),
+      h('div', {style:{color:'rgba(255,255,255,0.3)', fontSize:11}}, 'Click anywhere or press Esc to close')
+    )
+  );
+}
+
 function ChartModal({item, onClose}) {
   const [range, setRange] = useState(30);
   const [history, setHistory] = useState(null);
@@ -502,6 +546,12 @@ function ChartModal({item, onClose}) {
   const [zoomTo, setZoomTo] = useState('');
   const [zoomWindow, setZoomWindow] = useState(null); // [startIdx, endIdx] into timeseries
   const zoomCenterRef = React.useRef(0.5); // 0-1 fraction of chart where cursor is
+
+  useEffect(() => {
+    const handler = e => { if (e.key === 'Escape') onClose(); };
+    document.addEventListener('keydown', handler);
+    return () => document.removeEventListener('keydown', handler);
+  }, []);
 
   useEffect(() => {
     if (!item?.id) return;
@@ -1091,14 +1141,68 @@ function ChartModal({item, onClose}) {
 }
 
 /* ─── Item search ────────────────────────────────────────────── */
-function useSearch(items) {
+const BUILTIN_SHORTHANDS = {
+  // Weapons
+  'FSOA':   'Fractured Staff of Armadyl',
+  'EZK':    'Ek-ZekKil',
+  'NOX':    'Noxious scythe',
+  'NOXBOW': 'Noxious longbow',
+  'NOXSTAFF': 'Noxious staff',
+  'SGB':    'Seren godbow',
+  'BOLG':   'Bow of the Last Guardian',
+  'BBC':    'Blightbound crossbow',
+  'ACB':    'Ascension crossbow',
+  'ZBOW':   'Zaryte bow',
+  'RCB':    'Royal crossbow',
+  'WHIP':   'Abyssal whip',
+  'GMAUL':  'Granite maul',
+  'DFS':    'Dragonfire shield',
+  'DCLAWS': 'Dragon claws',
+  // Godswords
+  'AGS':    'Armadyl godsword',
+  'BGS':    'Bandos godsword',
+  'SGS':    'Saradomin godsword',
+  'ZGS':    'Zamorak godsword',
+  // Staves
+  'ABS':    'Armadyl battlestaff',
+  'MWSOA':  'Masterwork Spear of Annihilation',
+  // Armour
+  'MALEV':  'Malevolent cuirass',
+  'VIRTUS': 'Virtus robe top',
+  'VIRT':   'Virtus robe top',
+  'MW':     'Masterwork platebody',
+  'STEADS': 'Steadfast boots',
+  'TASSY':  'Bandos tassets',
+  'SHB':    'Silverhawk boots',
+  // Jewellery / accessories
+  'EOF':    'Essence of Finality amulet',
+  'AOS':    'Amulet of souls',
+  'LOTD':   'Luck of the Dwarves',
+  'HSR':    'Hazelmere\'s signet ring',
+  'GOTE':   'Grace of the elves',
+  'BOTE':   'Brooch of the Gods',
+  'BOTG':   'Brooch of the Gods',
+  'EE':     'Enhanced Excalibur',
+  // Consumables / misc
+  'PHAT':   'Blue partyhat',
+  'BOND':   'Bond',
+};
+
+function resolveShorthand(query, userShorthands) {
+  const key = query.trim().toUpperCase();
+  const merged = {...BUILTIN_SHORTHANDS, ...userShorthands};
+  return merged[key] || null;
+}
+
+function useSearch(items, userShorthands = {}) {
   const [query, setQuery] = useState('');
   const [focused, setFocused] = useState(false);
   const [focusIdx, setFocusIdx] = useState(0);
   const ref = useRef(null);
   const results = useMemo(() => {
     if (!query.trim() || query.length < 2) return [];
-    const q = query.toLowerCase();
+    const resolved = resolveShorthand(query, userShorthands);
+    const q = (resolved || query).toLowerCase();
     return items
       .filter(it => it.name.toLowerCase().includes(q))
       .sort((a,b) => {
@@ -1107,7 +1211,7 @@ function useSearch(items) {
         return a.name.localeCompare(b.name);
       })
       .slice(0, 12);
-  }, [query, items]);
+  }, [query, items, userShorthands]);
   useEffect(() => { setFocusIdx(0); }, [results]);
   function onKey(e, onSelect) {
     if (!results.length) return;
@@ -1119,8 +1223,8 @@ function useSearch(items) {
   return {query, setQuery, focused, setFocused, results, focusIdx, ref, onKey};
 }
 
-function GESearchBar({items, onSelect}) {
-  const s = useSearch(items);
+function GESearchBar({items, onSelect, userShorthands}) {
+  const s = useSearch(items, userShorthands);
   const showDrop = s.focused && s.results.length > 0;
   const pickRandom = () => {
     const seen = new Set();
@@ -1302,6 +1406,7 @@ function BigMacLine({price, bondGP}) {
 
 function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems}) {
   const [chartOpen, setChartOpen]     = useState(false);
+  const [imageOpen, setImageOpen]     = useState(false);
   const [wikiStats, setWikiStats]     = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
   const [iconUrl, setIconUrl]         = useState(null);
@@ -1357,6 +1462,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 
   return h('div', {className:'detail-panel'},
     chartOpen && h(ChartModal, {item, onClose:()=>setChartOpen(false)}),
+    imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
       h('div', {className:'row-between', style:{marginBottom:6}},
         h('div', {className:'row', style:{gap:8, alignItems:'center'}},
@@ -1364,7 +1470,9 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             src: iconUrl,
             alt: '',
             onError: () => setIconUrl(null),
-            style: {width:32, height:32, imageRendering:'pixelated', flexShrink:0}
+            onClick: () => setImageOpen(true),
+            title: 'Click to enlarge',
+            style: {width:32, height:32, imageRendering:'pixelated', flexShrink:0, cursor:'zoom-in'}
           }),
           h('div', {className:'detail-name'}, item.name)
         ),
@@ -2798,8 +2906,10 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description}) {
   );
 }
 
-function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items}) {
+function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands}) {
   const [s, setS] = useState(settings);
+  const [shDraft, setShDraft] = useState('');
+  const [shKey, setShKey]     = useState('');
   useEffect(()=>setS(settings),[settings]);
   const set = k => e => setS(x=>({...x,[k]:e.target.value}));
   const setChk = k => e => setS(x=>({...x,[k]:e.target.checked}));
@@ -2895,6 +3005,57 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items}) 
           toast('Data imported — restart GEnius to see all changes','success');
         }},'⬇ Import Backup'),
       )
+    ),
+
+    h('div',{style:{marginTop:24}},
+      h('div',{className:'ge-section-head'},'Custom Shorthands'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}},
+        'Add your own abbreviations. Type them in the search bar to jump straight to an item. (e.g. "T90" → "Noxious scythe")'
+      ),
+      h('div',{style:{display:'flex',gap:6,marginBottom:10}},
+        h('input',{
+          className:'ge-input', placeholder:'Shorthand (e.g. T90)',
+          value:shKey, onChange:e=>setShKey(e.target.value.toUpperCase()),
+          style:{width:120, textTransform:'uppercase'},
+        }),
+        h('input',{
+          className:'ge-input', placeholder:'Item name (e.g. Noxious scythe)',
+          value:shDraft, onChange:e=>setShDraft(e.target.value),
+          style:{flex:1},
+          onKeyDown: e => {
+            if (e.key !== 'Enter') return;
+            const k = shKey.trim(), v = shDraft.trim();
+            if (!k || !v) return;
+            const updated = {...(userShorthands||{}), [k]: v};
+            onSaveShorthands(updated);
+            setShKey(''); setShDraft('');
+            toast(`Shorthand "${k}" saved`, 'success');
+          }
+        }),
+        h('button',{className:'ge-btn gold',onClick:()=>{
+          const k = shKey.trim(), v = shDraft.trim();
+          if (!k || !v) { toast('Enter both a shorthand and an item name','error'); return; }
+          const updated = {...(userShorthands||{}), [k]: v};
+          onSaveShorthands(updated);
+          setShKey(''); setShDraft('');
+          toast(`Shorthand "${k}" saved`, 'success');
+        }},'Add'),
+      ),
+      Object.keys(userShorthands||{}).length > 0 && h('div',{style:{display:'flex',flexDirection:'column',gap:4}},
+        Object.entries(userShorthands).map(([k,v]) =>
+          h('div',{key:k,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',background:'rgba(0,0,0,0.2)',borderRadius:3,fontSize:12}},
+            h('span',{style:{color:T.gold,fontWeight:'bold',minWidth:80}}, k),
+            h('span',{style:{color:T.text,flex:1}}, v),
+            h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:10},onClick:()=>{
+              const updated = {...userShorthands};
+              delete updated[k];
+              onSaveShorthands(updated);
+              toast(`Shorthand "${k}" removed`,'info');
+            }},'Remove')
+          )
+        )
+      ),
+      Object.keys(userShorthands||{}).length === 0 && h('div',{style:{fontSize:11,color:T.textDim,fontStyle:'italic'}},'No custom shorthands yet.')
     ),
 
     hiddenItems && hiddenItems.length > 0 && h('div',{style:{marginTop:24}},
@@ -4258,6 +4419,7 @@ function App() {
   const [settings, setSettings] = useState({});
   const [portfolio, setPortfolio] = useState({positions:[], tax_stats:{}});
   const [notes, setNotes] = useState({});
+  const [userShorthands, setUserShorthands] = useState({});
   const [historyPopup, setHistoryPopup] = useState(null); // null | {done, total, complete}
   const [selected, setSelected] = useState(null);
   const [fetching, setFetching] = useState(false);
@@ -4286,7 +4448,8 @@ function App() {
       window.genius.getPortfolio(),
       window.genius.getHidden(),
       window.genius.getNotes(),
-    ]).then(([data,wl,al,s,pf,hidden,nt]) => {
+      window.genius.getShorthands(),
+    ]).then(([data,wl,al,s,pf,hidden,nt,sh]) => {
       console.log('[GEnius] getData returned:', data?.items?.length ?? 0, 'items, timestamp:', data?.timestamp);
       if (data.items)     setItems(data.items);
       if (data.news)      setNews(data.news);
@@ -4298,6 +4461,7 @@ function App() {
       if (pf) setPortfolio(pf);
       setHiddenItems(hidden||[]);
       setNotes(nt||{});
+      setUserShorthands(sh||{});
 
       // Trigger history population if needed
       if (data.items && data.items.length) {
@@ -4474,7 +4638,7 @@ function App() {
       h('div',{className:'ge-header'},
         h('span',{className:'ge-logo'},'GE',h('span',null,'nius')),
         h('div',{style:{width:2,height:20,background:T.borderDim,flexShrink:0}}),
-        h(GESearchBar,{items,onSelect:handleSearchSelect}),
+        h(GESearchBar,{items,onSelect:handleSearchSelect,userShorthands}),
         h('div',{className:'ge-status'},h('div',{className:`status-dot ${statusType}`}),statusText),
         h('button',{
           className:'ge-btn gold',disabled:fetching,onClick:handleFetch,
@@ -4509,7 +4673,7 @@ function App() {
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id))
           }),
-          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide})
+          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}})
         ),
         showDetail&&h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items}),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})

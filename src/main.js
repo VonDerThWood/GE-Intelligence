@@ -210,6 +210,9 @@ ipcMain.handle('set-hidden',    (_, list) => { store.set('hiddenItems', list); r
 ipcMain.handle('get-notes',  () => store.get('itemNotes', {}));
 ipcMain.handle('save-note',  (_, { id, text }) => { const notes = store.get('itemNotes', {}); if (text) notes[id] = text; else delete notes[id]; store.set('itemNotes', notes); return { success: true }; });
 
+ipcMain.handle('get-shorthands',  () => store.get('userShorthands', {}));
+ipcMain.handle('save-shorthands', (_, sh) => { store.set('userShorthands', sh); return { success: true }; });
+
 ipcMain.handle('open-external', (_, url) => {
   if (/^https?:\/\//.test(url)) shell.openExternal(url);
 });
