@@ -1933,24 +1933,21 @@
     "treasure_trails"
   ],
   "torag's helm": [
-    "melee",
-    "ammo"
+    "melee"
   ],
   "torag's helm (broken)": [
     "melee",
     "ammo"
   ],
   "torag's platebody": [
-    "melee",
-    "ammo"
+    "melee"
   ],
   "torag's platebody (broken)": [
     "melee",
     "ammo"
   ],
   "torag's platelegs": [
-    "melee",
-    "ammo"
+    "melee"
   ],
   "torag's platelegs (broken)": [
     "melee",
@@ -1975,26 +1972,24 @@
     "crafting"
   ],
   "verac's brassard": [
-    "melee",
-    "ammo"
+    "melee"
   ],
   "verac's brassard (broken)": [
     "melee",
     "ammo"
   ],
   "verac's helm": [
-    "melee",
-    "ammo"
+    "melee"
   ],
   "verac's helm (broken)": [
     "melee",
     "ammo"
   ],
   "verac's plateskirt": [
-    "ammo"
+    "melee"
   ],
   "verac's plateskirt (broken)": [
-    "ammo"
+    "melee"
   ],
   "vial": [
     "herblore"
@@ -5428,5 +5423,33 @@
   "vulnerability bomb": [
     "supplies",
     "herblore"
+  ],
+  "ascension shard": [
+    "fletching"
+  ],
+  "blowpipe feather": [
+    "materials",
+    "fletching"
+  ],
+  "cannonball cabbage": [
+    "food"
+  ],
+  "triskelion": [
+    "archaeology"
+  ],
+  "zamorakian title scroll (acolyte)": [
+    "overrides"
+  ],
+  "zamorakian title scroll (hierophant)": [
+    "overrides"
+  ],
+  "zamorakian title scroll (high priestess/high priest)": [
+    "overrides"
+  ],
+  "zamorakian title scroll (the witch)": [
+    "overrides"
+  ],
+  "zamorakian essence": [
+    "boss"
   ]
 }

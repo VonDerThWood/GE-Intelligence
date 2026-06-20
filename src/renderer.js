@@ -398,7 +398,7 @@ function getMarketPersonality(item) {
   return 'Quietly going about its business. Nothing unusual today.';
 }
 
-function getMoodOfMarket(items) {
+function getMarketWeather(items) {
   if (!items || !items.length) return null;
   const tradeable = items.filter(it => !it.untradeable && it.change_1d != null);
   if (!tradeable.length) return null;
@@ -418,13 +418,13 @@ function getMoodOfMarket(items) {
   const frenzyRatio = frenzies / total;
   const net = surgeRatio - dumpRatio;
 
-  if (frenzyRatio > 0.06 && net > 0.02)   return { emoji:'🔥', label:'Frenzy',      tip:'Lots of items surging on unusually high volume. The market is in full swing.' };
-  if (frenzyRatio > 0.06 && net < -0.02)  return { emoji:'🌊', label:'Volatile',     tip:'High trading volume across the board, but buyers and sellers can\'t agree. Choppy conditions.' };
-  if (frenzyRatio > 0.04)                  return { emoji:'⚡', label:'Active',       tip:'Trading volume is elevated across many items. Something is moving the market.' };
-  if (net > 0.04)                           return { emoji:'📈', label:'Bullish',      tip:'More items rising than falling. Cautious optimism across the market.' };
-  if (net < -0.04)                          return { emoji:'📉', label:'Bearish',      tip:'More items falling than rising. Broad selling pressure today.' };
-  if (accums / total > 0.05)               return { emoji:'🤫', label:'Quiet Moves',  tip:'Prices look calm, but volume suggests activity behind the scenes.' };
-  return { emoji:'😴', label:'Slow Day',    tip:'Low signals, low drama. The market is doing the bare minimum today.' };
+  if (frenzyRatio > 0.06 && net > 0.02)  return { emoji:'🌪️', label:'Market Chaos',     tip:'Frenzy signals widespread — high volume and sharp moves across the board. Anything can happen.' };
+  if (frenzyRatio > 0.06 && net < -0.02) return { emoji:'⛈️',  label:'Storm Warning',    tip:'Heavy selling on high volume. Volatile conditions — prices may shift rapidly.' };
+  if (frenzyRatio > 0.04)                return { emoji:'🌩️', label:'Thunderstorms',    tip:'Elevated activity and volume spikes. The market is unsettled.' };
+  if (net > 0.04)                         return { emoji:'☀️',  label:'Clear Skies',      tip:'Mostly positive movement across the market. A good day for buyers.' };
+  if (net < -0.04)                        return { emoji:'🌧️', label:'Rainy Day',        tip:'More items falling than rising. Broad selling pressure — proceed carefully.' };
+  if (accums / total > 0.05)             return { emoji:'🌫️', label:'Foggy Conditions', tip:'Prices look calm but volume says otherwise. Something is moving quietly beneath the surface.' };
+  return { emoji:'🌤️', label:'Partly Cloudy',  tip:'Low signals, mild activity. The market is ticking along without much drama today.' };
 }
 
 // Parse human-readable price input: "2m" -> 2000000, "1.5b" -> 1500000000, "500k" -> 500000
@@ -527,7 +527,7 @@ function ImageModal({name, fallbackUrl, onClose}) {
   );
 }
 
-function ChartModal({item, onClose}) {
+function ChartModal({item, onClose, dateFormat}) {
   const [range, setRange] = useState(30);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -542,6 +542,7 @@ function ChartModal({item, onClose}) {
   const [seasonalView, setSeasonalView] = useState('weekly');
   const [seasonalHover, setSeasonalHover] = useState(null);
   const [chartView, setChartView] = useState('recent');
+  const [chartMode, setChartMode] = useState('line'); // 'line' | 'candle'
   const [zoomFrom, setZoomFrom] = useState('');
   const [zoomTo, setZoomTo] = useState('');
   const [zoomWindow, setZoomWindow] = useState(null); // [startIdx, endIdx] into timeseries
@@ -606,14 +607,23 @@ function ChartModal({item, onClose}) {
   const points = useMemo(() => {
     if (!history && !snapshots.length) return [];
     const getTs = p => typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
-    // Merge: combine history + snapshots, dedup by day (snapshot wins for same day)
-    const combined = [...(history || [])];
-    const histDays = new Set((history || []).map(p => new Date(getTs(p)).toDateString()));
+
+    // Dedup history by day — keep latest entry per day (API sometimes returns 2 per day)
+    const dedupedHistory = [];
+    const histByDay = {};
+    for (const p of (history || [])) {
+      const day = new Date(getTs(p)).toDateString();
+      if (!histByDay[day] || getTs(p) > getTs(histByDay[day])) histByDay[day] = p;
+    }
+    for (const day in histByDay) dedupedHistory.push(histByDay[day]);
+
+    // Merge with snapshots — snapshot wins for same day (fresher data)
+    const combined = [...dedupedHistory];
+    const histDays = new Set(dedupedHistory.map(p => new Date(getTs(p)).toDateString()));
     snapshots.forEach(s => {
       const day = new Date(getTs(s)).toDateString();
       if (!histDays.has(day)) combined.push(s);
       else {
-        // Replace WeirdGloop entry for that day with our fresher snapshot
         const idx = combined.findIndex(p => new Date(getTs(p)).toDateString() === day);
         if (idx !== -1) combined[idx] = s;
       }
@@ -629,7 +639,11 @@ function ChartModal({item, onClose}) {
     if (!timeseries || !timeseries.length) return null;
     const fmtTs = ts => {
       const d = new Date(ts * (ts < 1e12 ? 1000 : 1));
-      return d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+      const fmt = dateFormat || 'MM/DD/YYYY';
+      const M = String(d.getMonth()+1).padStart(2,'0'), D = String(d.getDate()).padStart(2,'0'), Y = d.getFullYear();
+      if (fmt === 'DD/MM/YYYY') return `${D}/${M}/${Y}`;
+      if (fmt === 'YYYY-MM-DD') return `${Y}-${M}-${D}`;
+      return `${M}/${D}/${Y}`;
     };
     let ath = {price: -Infinity, date: ''};
     let atl = {price: Infinity, date: ''};
@@ -790,6 +804,30 @@ function ChartModal({item, onClose}) {
 
   const priceColor = prices.length > 1 && prices[prices.length-1] >= prices[0] ? T.green : T.red;
 
+  // Candlestick data — group points into buckets based on view range
+  const candles = useMemo(() => {
+    if (activePoints.length < 2) return [];
+    // Target ~30 candles, but ensure at least 3 data points per candle so bodies have variation
+    const bucketSize = Math.max(3, Math.ceil(activePoints.length / 30));
+    const buckets = [];
+    for (let i = 0; i < activePoints.length; i += bucketSize) {
+      buckets.push(activePoints.slice(i, i + bucketSize));
+    }
+    return buckets.map(pts => {
+      const prices = pts.map(p => p.price ?? p.high ?? p.low ?? 0).filter(Boolean);
+      const highs  = pts.map(p => p.high ?? p.price ?? 0).filter(Boolean);
+      const lows   = pts.map(p => p.low  ?? p.price ?? 0).filter(Boolean);
+      if (!prices.length) return null;
+      return {
+        ts:    pts[0].timestamp,
+        open:  prices[0],
+        close: prices[prices.length - 1],
+        high:  Math.max(...(highs.length ? highs : prices)),
+        low:   Math.min(...(lows.length  ? lows  : prices)),
+      };
+    }).filter(Boolean);
+  }, [activePoints]);
+
   const pricePath = prices.length > 1
     ? `M ${px(0)} ${py(prices[0])} ` + prices.slice(1).map((v,i) => `L ${px(i+1)} ${py(v)}`).join(' ')
     : '';
@@ -798,6 +836,27 @@ function ChartModal({item, onClose}) {
     ? `${pricePath} L ${px(prices.length-1)} ${PH} L ${px(0)} ${PH} Z`
     : '';
 
+  // Precompute candle SVG elements (avoids IIFE-in-children issues)
+  const candleElements = useMemo(() => {
+    if (!candles.length) return [];
+    const allPrices = candles.flatMap(c => [c.high, c.low]).filter(Boolean);
+    if (!allPrices.length) return [];
+    const cMin = Math.min(...allPrices), cMax = Math.max(...allPrices);
+    const cpy = v => PH - PAD - ((v - cMin) / Math.max(cMax - cMin, 1)) * (PH - PAD * 2);
+    const cw2 = Math.max(2, (CW - PAD * 2) / Math.max(candles.length, 1) * 0.7);
+    return candles.map((c, i) => {
+      const cx2 = YLAB + PAD + (i / Math.max(candles.length - 1, 1)) * (CW - PAD * 2);
+      const color = c.close >= c.open ? T.green : T.red;
+      const bodyTop = cpy(Math.max(c.open, c.close));
+      const bodyBot = cpy(Math.min(c.open, c.close));
+      const bodyH = Math.max(1, bodyBot - bodyTop);
+      return h('g', {key: i},
+        h('line', {x1: cx2, x2: cx2, y1: cpy(c.high), y2: cpy(c.low), stroke: color, strokeWidth: 1}),
+        h('rect', {x: cx2 - cw2/2, y: bodyTop, width: cw2, height: bodyH, fill: color, opacity: 0.85}),
+      );
+    });
+  }, [candles]);
+
   // Date label helpers
   const labelCount = Math.min(activePoints.length, 6);
   const labelIdxs = Array.from({length: labelCount}, (_, i) =>
@@ -805,9 +864,13 @@ function ChartModal({item, onClose}) {
   );
   const fmtDate = ts => {
     const d = new Date(typeof ts === 'number' ? ts * (ts < 1e12 ? 1000 : 1) : ts);
-    return chartView === 'alltime'
-      ? d.toLocaleDateString('en-US', {month:'short', year:'numeric'})
-      : `${d.getMonth()+1}/${d.getDate()}`;
+    if (chartView === 'alltime') return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
+    if (range === 365) return d.toLocaleDateString('en-US', {month:'short', year:'2-digit'});
+    const fmt = dateFormat || 'MM/DD/YYYY';
+    const M = d.getMonth()+1, D = d.getDate();
+    if (fmt === 'DD/MM/YYYY') return `${D}/${M}`;
+    if (fmt === 'YYYY-MM-DD') return `${d.getFullYear()}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
+    return `${M}/${D}`;
   };
 
   return h('div', {className:'chart-modal-overlay', onClick:onClose},
@@ -817,7 +880,7 @@ function ChartModal({item, onClose}) {
       h('div', {className:'chart-modal-title'},
         h('span', null, item.name),
         h('div', {style:{display:'flex', gap:6, alignItems:'center'}},
-          [7,30,90].map(r => h('button', {
+          [7,30,90,365].map(r => h('button', {
             key:r, onClick:()=>{ setRange(r); setChartView('recent'); setHoverIdx(null); setZoomFrom(''); setZoomTo(''); setZoomWindow(null); },
             style:{
               padding:'2px 10px', fontSize:11, cursor:'pointer', borderRadius:3,
@@ -825,7 +888,7 @@ function ChartModal({item, onClose}) {
               border: `1px solid ${chartView==='recent' && range===r ? T.gold : T.border}`,
               color: chartView==='recent' && range===r ? T.goldBright : T.textDim,
             }
-          }, `${r}d`)),
+          }, r === 365 ? '1y' : `${r}d`)),
           h('button', {
             onClick:()=>{ if (!timeseries && !timeseriesLoading) return; setChartView('alltime'); setHoverIdx(null); },
             disabled: timeseriesLoading && !timeseries,
@@ -837,7 +900,22 @@ function ChartModal({item, onClose}) {
               opacity: !timeseries && !timeseriesLoading ? 0.35 : 1,
             }
           }, timeseriesLoading && !timeseries ? '⏳ All Time' : 'All Time'),
-          h('button', {className:'chart-modal-close', onClick:onClose, style:{marginLeft:8}}, '✕')
+          h('div', {style:{display:'flex', gap:4, marginLeft:8, borderLeft:`1px solid ${T.border}`, paddingLeft:8}},
+            ['line','candle'].map(mode =>
+              h('button', {
+                key:mode,
+                onClick: () => setChartMode(mode),
+                title: mode === 'line' ? 'Line chart' : 'Candlestick chart',
+                style:{
+                  padding:'2px 8px', fontSize:11, cursor:'pointer', borderRadius:3,
+                  background: chartMode===mode ? 'rgba(201,168,76,0.2)' : 'transparent',
+                  border: `1px solid ${chartMode===mode ? T.gold : T.border}`,
+                  color: chartMode===mode ? T.goldBright : T.textDim,
+                }
+              }, mode === 'line' ? '📈' : '🕯️')
+            )
+          ),
+          h('button', {className:'chart-modal-close', onClick:onClose, style:{marginLeft:4}}, '✕')
         )
       ),
 
@@ -918,20 +996,29 @@ function ChartModal({item, onClose}) {
                 strokeDasharray: g.t===0||g.t===1 ? 'none' : '3,3'
               })
             ),
-            // Area fill
-            h('path', {d:areaPath, fill:`${priceColor}18`, stroke:'none'}),
-            // Price line
-            h('path', {d:pricePath, fill:'none', stroke:priceColor, strokeWidth:1.5}),
-            // Hover crosshair + dot
-            hoverIdx !== null && hoverType === 'price' && [
-              h('line', {key:'vl', x1:px(hoverIdx), x2:px(hoverIdx), y1:PAD, y2:PH-PAD, stroke:'rgba(255,255,255,0.2)', strokeWidth:1, pointerEvents:'none'}),
-              h('circle', {key:'dot', cx:px(hoverIdx), cy:py(prices[hoverIdx]), r:4, fill:priceColor, stroke:T.panel, strokeWidth:1.5, pointerEvents:'none'}),
+            chartMode === 'line' && [
+              // Area fill
+              h('path', {key:'area', d:areaPath, fill:`${priceColor}18`, stroke:'none'}),
+              // Price line
+              h('path', {key:'line', d:pricePath, fill:'none', stroke:priceColor, strokeWidth:1.5}),
+              // Hover crosshair + dot
+              hoverIdx !== null && hoverType === 'price' && [
+                h('line', {key:'vl', x1:px(hoverIdx), x2:px(hoverIdx), y1:PAD, y2:PH-PAD, stroke:'rgba(255,255,255,0.2)', strokeWidth:1, pointerEvents:'none'}),
+                h('circle', {key:'dot', cx:px(hoverIdx), cy:py(prices[hoverIdx]), r:4, fill:priceColor, stroke:T.panel, strokeWidth:1.5, pointerEvents:'none'}),
+              ],
+              // Current price dot
+              prices.length > 0 && h('circle', {key:'cur', cx:px(prices.length-1), cy:py(prices[prices.length-1]), r:3, fill:priceColor, pointerEvents:'none'}),
             ],
-            // Current price dot
-            prices.length > 0 && h('circle', {cx:px(prices.length-1), cy:py(prices[prices.length-1]), r:3, fill:priceColor, pointerEvents:'none'}),
+            chartMode === 'candle' && candleElements,
           ),
           // Volume bars
-          h('div', {style:{fontSize:9, color:T.textDim, marginLeft:YLAB+PAD, marginTop:4}}, 'VOLUME'),
+          h('div', {style:{display:'flex', alignItems:'center', gap:8, marginLeft:YLAB+PAD, marginTop:4}},
+            h('div', {style:{fontSize:9, color:T.textDim}}, 'VOLUME'),
+            maxV > 0 && h('div', {style:{fontSize:9, color:T.textDim}},
+              '— today: ', h('span', {style:{color:T.blue}}, (volumes[volumes.length-1]||0).toLocaleString()),
+              item.avgVolume ? [' · 90d avg: ', h('span', {key:'avg', style:{color:T.textDim}}, Math.round(item.avgVolume).toLocaleString())] : null,
+            ),
+          ),
           h('svg', {
             viewBox:`0 0 ${W} ${VH}`, style:{width:'100%', display:'block', marginBottom:4, cursor:'crosshair'},
             onMouseMove: e => {
@@ -946,6 +1033,12 @@ function ChartModal({item, onClose}) {
             onMouseLeave: () => setHoverIdx(null),
           },
             h('line', {x1:YLAB, x2:YLAB, y1:0, y2:VH, stroke:'rgba(255,255,255,0.1)', strokeWidth:1}),
+            maxV > 0 && h('text', {x:YLAB-4, y:8, fontSize:8, fill:T.textDim, textAnchor:'end'}, fmt.gp(maxV)),
+            maxV > 0 && h('text', {x:YLAB-4, y:VH-2, fontSize:8, fill:T.textDim, textAnchor:'end'}, '0'),
+            item.avgVolume && h('line', {
+              x1:YLAB, x2:W-PAD, y1:vy(item.avgVolume), y2:vy(item.avgVolume),
+              stroke:`${T.gold}55`, strokeWidth:1, strokeDasharray:'3,3',
+            }),
             volumes.map((v, i) => {
               const bw = Math.max(1, (CW - PAD*2) / volumes.length - 1);
               const bh = vy(v);
@@ -984,6 +1077,10 @@ function ChartModal({item, onClose}) {
           item.volume != null && h('span',null,
             h('span',{style:{color:T.textDim}},'Volume: '),
             h('span',{style:{color:T.blue}}, item.volume.toLocaleString())
+          ),
+          item.avgVolume != null && h('span',null,
+            h('span',{style:{color:T.textDim}},'90d Avg Vol: '),
+            h('span',{style:{color:T.blue}}, Math.round(item.avgVolume).toLocaleString())
           )
         ),
 
@@ -1404,7 +1501,72 @@ function BigMacLine({price, bondGP}) {
   );
 }
 
-function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems}) {
+function FlipCalculator({item, onAddToPortfolio}) {
+  const buyPrice  = item.low  || item.high || 0;
+  const sellPrice = item.high || item.low  || 0;
+  const [buy,  setBuy]  = useState(buyPrice);
+  const [sell, setSell] = useState(sellPrice);
+  const [qty,  setQty]  = useState(1);
+
+  useEffect(() => { setBuy(item.low || item.high || 0); setSell(item.high || item.low || 0); }, [item.id]);
+
+  const tax       = Math.floor(sell * 0.02);
+  const netSell   = sell - tax;
+  const profit    = (netSell - buy) * qty;
+  const investment = buy * qty;
+  const roi       = investment > 0 ? (profit / investment) * 100 : 0;
+  const profitColor = profit > 0 ? T.green : profit < 0 ? T.red : T.textDim;
+
+  const inputStyle = {
+    background:'rgba(0,0,0,0.25)', border:`1px solid ${T.border}`, borderRadius:3,
+    color:T.text, fontSize:12, padding:'4px 6px', width:'100%', boxSizing:'border-box',
+  };
+  const labelStyle = {fontSize:10, color:T.textDim, marginBottom:3, textTransform:'uppercase', letterSpacing:'0.05em'};
+
+  return h('div', {style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
+    h('div', {style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:8}}, 'MARGIN CALCULATOR'),
+    h('div', {style:{display:'flex', gap:6, marginBottom:8}},
+      h('div', {style:{flex:1}},
+        h('div', {style:labelStyle}, 'Buy Price'),
+        h('input', {type:'number', value:buy, min:0, onChange:e=>setBuy(+e.target.value||0), style:inputStyle})
+      ),
+      h('div', {style:{flex:1}},
+        h('div', {style:labelStyle}, 'Sell Price'),
+        h('input', {type:'number', value:sell, min:0, onChange:e=>setSell(+e.target.value||0), style:inputStyle})
+      ),
+      h('div', {style:{flex:'0 0 70px'}},
+        h('div', {style:labelStyle}, 'Quantity'),
+        h('input', {type:'number', value:qty, min:1, max:item.limit||99999, onChange:e=>setQty(Math.max(1,+e.target.value||1)), style:inputStyle})
+      ),
+    ),
+    h('div', {style:{display:'flex', gap:6, fontSize:11}},
+      h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}},
+        h('div', {style:{color:T.textDim, marginBottom:2}}, 'Investment'),
+        h('div', {style:{color:T.textBright, fontWeight:'bold'}}, fmt.gp(investment)+'gp')
+      ),
+      h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}},
+        h('div', {style:{color:T.textDim, marginBottom:2}}, 'GE Tax'),
+        h('div', {style:{color:T.textDim}}, fmt.gp(tax * qty)+'gp')
+      ),
+      h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}},
+        h('div', {style:{color:T.textDim, marginBottom:2}}, 'Profit'),
+        h('div', {style:{color:profitColor, fontWeight:'bold'}}, (profit >= 0 ? '+' : '') + fmt.gp(profit)+'gp')
+      ),
+      h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}},
+        h('div', {style:{color:T.textDim, marginBottom:2}}, 'ROI'),
+        h('div', {style:{color:profitColor, fontWeight:'bold'}}, roi.toFixed(2)+'%')
+      ),
+    ),
+    onAddToPortfolio && h('button', {
+      className:'ge-btn gold',
+      style:{fontSize:11, padding:'3px 10px', marginTop:6},
+      onClick: () => onAddToPortfolio({item_name: item.name, cost_basis: String(buy), quantity: String(qty)}),
+      title: 'Log this buy to your portfolio'
+    }, '+ Log to Portfolio')
+  );
+}
+
+function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio}) {
   const [chartOpen, setChartOpen]     = useState(false);
   const [imageOpen, setImageOpen]     = useState(false);
   const [wikiStats, setWikiStats]     = useState(null);
@@ -1461,11 +1623,11 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   };
 
   return h('div', {className:'detail-panel'},
-    chartOpen && h(ChartModal, {item, onClose:()=>setChartOpen(false)}),
+    chartOpen && h(ChartModal, {item, onClose:()=>setChartOpen(false), dateFormat}),
     imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
       h('div', {className:'row-between', style:{marginBottom:6}},
-        h('div', {className:'row', style:{gap:8, alignItems:'center'}},
+        h('div', {className:'row', style:{gap:8, alignItems:'center', minWidth:0, overflow:'hidden'}},
           iconUrl && h('img', {
             src: iconUrl,
             alt: '',
@@ -1474,9 +1636,9 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             title: 'Click to enlarge',
             style: {width:32, height:32, imageRendering:'pixelated', flexShrink:0, cursor:'zoom-in'}
           }),
-          h('div', {className:'detail-name'}, item.name)
+          h('div', {className:'detail-name', style:{overflow:'hidden', textOverflow:'ellipsis'}}, item.name)
         ),
-        h('div', {className:'row', style:{gap:4}},
+        h('div', {className:'row', style:{gap:4, flexShrink:0}},
           h('button', {
             className:'star-btn',
             title: inWatch ? 'Remove from watchlist' : 'Add to watchlist',
@@ -1496,7 +1658,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         )
       ),
       item.categories && h('div', {className:'detail-cats'},
-        item.categories.map(c => h('span',{key:c,className:'cat-tag'},{materials:'Misc',mining:'Gathering',treasure_trails:'Treasure Trails',low_tier:'Low Tier'}[c]||c)),
+        item.categories.map(c => h('span',{key:c,className:'cat-tag'}, CAT_LABEL[c] || c)),
         item.members && h('span',{className:'cat-tag',style:{color:T.gold,borderColor:T.gold}},'P2P'),
         !item.untradeable && h('span',{
           className:'cat-tag', title:'Edit categories',
@@ -1504,20 +1666,26 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           onClick:()=>setEditingCats(v=>!v)
         }, editingCats ? '✕ cancel' : '✎ edit')
       ),
-      editingCats && h('div',{style:{padding:'6px 0 2px'}},
-        h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginBottom:6}},
-          ALL_CATS.map(c=>h('span',{key:c,
-            onClick:()=>setDraftCats(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c]),
-            style:{fontSize:10,padding:'2px 6px',borderRadius:2,cursor:'pointer',userSelect:'none',
-              background: draftCats.includes(c) ? T.gold : 'rgba(255,255,255,0.05)',
-              color: draftCats.includes(c) ? '#1a1208' : T.textDim,
-              border:`1px solid ${draftCats.includes(c) ? T.gold : T.border}`
-            }
-          },c))
-        ),
-        h('button',{className:'ge-btn gold',style:{fontSize:11,padding:'3px 10px'},
+      editingCats && h('div',{style:{padding:'6px 0 4px'}},
+        CAT_GROUPS.map(group => h('div',{key:group.label, style:{marginBottom:8}},
+          h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:4}}, group.label),
+          h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
+            group.cats.map(c => {
+              const active = draftCats.includes(c);
+              return h('span',{key:c,
+                onClick:()=>setDraftCats(prev=>prev.includes(c)?prev.filter(x=>x!==c):[...prev,c]),
+                style:{fontSize:11,padding:'3px 8px',borderRadius:3,cursor:'pointer',userSelect:'none',
+                  background: active ? T.gold : 'rgba(255,255,255,0.05)',
+                  color: active ? '#1a1208' : T.textDim,
+                  border:`1px solid ${active ? T.gold : T.border}`
+                }
+              }, CAT_LABEL[c] || c);
+            })
+          )
+        )),
+        h('button',{className:'ge-btn gold',style:{fontSize:11,padding:'3px 10px',marginTop:4},
           onClick:saveCats,disabled:savingCats},
-          savingCats ? 'Saving…' : 'Save — takes effect on Fetch Now')
+          savingCats ? 'Saving…' : 'Save — takes effect on next Fetch Now')
       ),
       h('div', {className:'detail-price'}, fmt.gp(item.high||item.low)+' gp'),
         item.untradeable
@@ -1680,6 +1848,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 
       h(RecipeSection, {item, allItems}),
 
+      !item.untradeable && h(FlipCalculator, {item, onAddToPortfolio}),
+
       h('div',{style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
         h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:6}}, 'NOTES'),
         h('textarea',{
@@ -1702,7 +1872,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 }
 
 /* ─── Item table ─────────────────────────────────────────────── */
-function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description}) {
+function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, showSignals}) {
   const [sort, setSort] = useState({key:'name',dir:1});
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, item}
 
@@ -1886,6 +2056,7 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
         h('th',{onClick:()=>tog('high')},'Price'+arr('high')),
         h('th',{onClick:()=>tog('change_1d')},'Change'+arr('change_1d')),
         h('th',{onClick:()=>tog('volume')},'Volume'+arr('volume')),
+        showSignals && h('th',null,'Signals'),
         h('th',{style:{width:30}},null)
       )),
       h('tbody',null, sorted.map(it =>
@@ -1902,6 +2073,9 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
           h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
           h('td',null, h(ChangeDisplay,{change_1d:it.change_1d, price:it.high||it.low})),
           h('td',null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
+          showSignals && h('td',null, h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},
+            (it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s}))
+          )),
           h('td',{onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center',padding:'6px 6px'}},
             h('button',{className:'star-btn'},
               h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
@@ -1914,9 +2088,12 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
 }
 
 /* ─── Dashboard tab ──────────────────────────────────────────── */
-function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio}) {
+function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news}) {
   const [activeSignal, setActiveSignal] = useState(null);
   const [activeIndexId, setActiveIndexId] = useState(null);
+  const [activeSector, setActiveSector] = useState(null);
+  const [newsExpanded, setNewsExpanded] = useState(true);
+  const [expandedArticle, setExpandedArticle] = useState(null);
   const tradeableItems = useMemo(() => items.filter(it => !it.untradeable), [items]);
 
   const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000)
@@ -1979,6 +2156,14 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     return false;
   }), [alerts, items]);
 
+  // Market stats — total GP traded, items tracked
+  const marketStats = useMemo(() => {
+    const totalGP = tradeableItems.reduce((s, it) => s + ((it.high || it.low || 0) * (it.volume || 0)), 0);
+    const itemsTraded = tradeableItems.filter(it => (it.volume || 0) > 0).length;
+    const itemsTracked = tradeableItems.length;
+    return { totalGP, itemsTraded, itemsTracked };
+  }, [tradeableItems]);
+
   // Item of the Day — seeded by date so it's the same for everyone all day
   const itemOfTheDay = useMemo(() => {
     const pool = tradeableItems.filter(it => it.high || it.low);
@@ -1990,7 +2175,75 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   }, [tradeableItems]);
 
   // Mood of the Market
-  const mood = useMemo(() => getMoodOfMarket(tradeableItems), [tradeableItems]);
+  const mood = useMemo(() => getMarketWeather(tradeableItems), [tradeableItems]);
+
+  // Hall of Shame
+  const hallOfShame = useMemo(() => {
+    const priced = tradeableItems.filter(it => (it.high || it.low) > 10000 && it.change_1d != null);
+    const biggestCrash = [...priced].sort((a,b) => (a.change_1d||0) - (b.change_1d||0))[0];
+    const biggestDump  = [...priced].filter(it => (it.signals||[]).includes('DUMP'))
+      .sort((a,b) => {
+        const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
+        const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
+        return rb - ra;
+      })[0];
+    const mostVolatile = [...priced].filter(it => (it.signals||[]).includes('FRENZY'))
+      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
+    const manipulated  = [...priced].filter(it => (it.signals||[]).includes('MANIPULATED'))
+      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
+
+    const entries = [];
+    if (biggestCrash && (biggestCrash.change_1d||0) < -3)
+      entries.push({ icon:'📉', title:'Biggest Crash', item: biggestCrash, stat: (biggestCrash.change_1d).toFixed(2)+'% today' });
+    if (biggestDump && biggestDump !== biggestCrash)
+      entries.push({ icon:'🚮', title:'Heaviest Dump', item: biggestDump,  stat: (biggestDump.change_1d||0).toFixed(2)+'% on '+(biggestDump.volume&&biggestDump.avgVolume?(biggestDump.volume/biggestDump.avgVolume).toFixed(1)+'x avg vol':'high volume') });
+    if (mostVolatile)
+      entries.push({ icon:'🌪️', title:'Most Volatile',  item: mostVolatile, stat: Math.abs(mostVolatile.change_1d||0).toFixed(2)+'% swing today' });
+    if (manipulated)
+      entries.push({ icon:'🎭', title:'Probably Manipulated', item: manipulated, stat: Math.abs(manipulated.change_1d||0).toFixed(2)+'% move on tiny buy limit' });
+    return entries;
+  }, [tradeableItems]);
+
+  // Sector Heat Map
+  const SECTORS = [
+    {label:'Melee',       cats:['melee'],                          emoji:'⚔️'},
+    {label:'Ranged',      cats:['ranged','ammo','crossbow'],       emoji:'🏹'},
+    {label:'Magic',       cats:['magic','runes','battlestaff'],    emoji:'🔮'},
+    {label:'Necromancy',  cats:['necromancy'],                     emoji:'💀'},
+    {label:'Herblore',    cats:['herblore','supplies'],            emoji:'⚗️'},
+    {label:'Boss Drops',  cats:['boss'],                           emoji:'🐉'},
+    {label:'Rares',       cats:['rares'],                          emoji:'🎩'},
+    {label:'Skilling',    cats:['mining','smithing','crafting','fletching','construction','farming','gathering','archaeology'], emoji:'⛏️'},
+    {label:'Prayer',      cats:['prayer','bones','ashes'],         emoji:'🦴'},
+    {label:'Summoning',   cats:['summoning'],                      emoji:'🐾'},
+    {label:'Invention',   cats:['invention'],                      emoji:'⚙️'},
+    {label:'Treasure Trails', cats:['treasure_trails'],            emoji:'📦'},
+  ];
+
+  const sectorHeat = useMemo(() => {
+    return SECTORS.map(sector => {
+      const catSet = new Set(sector.cats);
+      const members = tradeableItems.filter(it =>
+        (it.categories||[]).some(c => catSet.has(c)) && (it.high || it.low)
+      );
+      if (!members.length) return {...sector, score:0, count:0, surge:0, dump:0, active:0};
+
+      const surge  = members.filter(it => (it.signals||[]).includes('SURGE')).length;
+      const dump   = members.filter(it => (it.signals||[]).includes('DUMP')).length;
+      const frenzy = members.filter(it => (it.signals||[]).includes('FRENZY')).length;
+      const active = members.filter(it => (it.change_1d||0) !== 0).length;
+
+      const avgChg = members.reduce((s,it) => s + (it.change_1d||0), 0) / members.length;
+      const avgOpp = members.reduce((s,it) => s + (it.opportunity_score||0), 0) / members.length;
+
+      // Heat score: blend momentum + opportunity + signal activity
+      const momentumScore = Math.max(0, Math.min(100, 50 + avgChg * 4));
+      const signalScore   = Math.min(100, ((surge + frenzy * 2) / Math.max(members.length, 1)) * 1000);
+      const score = momentumScore * 0.5 + signalScore * 0.3 + avgOpp * 0.2;
+
+      return {...sector, score, count:members.length, surge, dump, frenzy, active, avgChg, members};
+    });
+  }, [tradeableItems]);
 
   const sectionStyle = {marginBottom:20};
   const headingStyle = {fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase',
@@ -2068,6 +2321,56 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     );
   };
 
+  // Sector card
+  const SectorCard = ({sector}) => {
+    const [pos, setPos] = useState(null);
+    const {score, label, emoji, count, surge, dump, frenzy, active, avgChg} = sector;
+    const heat = score >= 72 ? {color:'#ff6b35', label:'🔥 Hot'}
+               : score >= 55 ? {color:'#ffd700', label:'🟡 Warm'}
+               : score >= 40 ? {color:T.green,   label:'🟢 Active'}
+               : score >= 25 ? {color:T.textDim,  label:'⬜ Quiet'}
+               :               {color:T.red,      label:'🔴 Cold'};
+    const tip = [
+      `${count} ${count === 1 ? 'item' : 'items'} tracked`,
+      active != null ? `${active} with price movement today` : null,
+      surge  ? `${surge} surging`  : null,
+      dump   ? `${dump} dumping`   : null,
+      frenzy ? `${frenzy} in frenzy` : null,
+      avgChg != null ? `Avg change: ${avgChg >= 0 ? '+' : ''}${avgChg.toFixed(2)}%` : null,
+      `Heat score reflects price momentum, opportunity scores, and signal activity across all items in this sector.`,
+    ].filter(Boolean).join(' · ');
+
+    return h('div', {
+      onClick: () => setActiveSector(sector),
+      style:{
+        background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+        padding:'8px 10px', flex:'1 1 100px', minWidth:100,
+        cursor:'pointer', position:'relative',
+        borderLeft:`3px solid ${heat.color}`,
+        transition:'border-color 0.15s',
+      },
+      onMouseEnter: e => e.currentTarget.style.borderColor = heat.color,
+      onMouseLeave: e => { e.currentTarget.style.borderColor = T.border; setPos(null); },
+      onMouseMove: e => setPos({x: e.clientX, y: e.clientY}),
+    },
+      h('div', {style:{display:'flex', alignItems:'center', gap:5, marginBottom:4}},
+        h('span', {style:{fontSize:14}}, emoji),
+        h('span', {style:{fontSize:11, fontWeight:'bold', color:T.textBright}}, label),
+      ),
+      h('div', {style:{fontSize:10, color:heat.color}}, heat.label),
+      pos && h('div', {style:{
+        position:'fixed', left: Math.min(pos.x + 12, window.innerWidth - 260), zIndex:9999,
+        top: pos.y + 16 + 120 > window.innerHeight ? pos.y - 120 : pos.y + 16,
+        background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
+        padding:'8px 10px', fontSize:11, color:T.textDim, maxWidth:250, lineHeight:1.6,
+        pointerEvents:'none', boxShadow:'0 4px 16px rgba(0,0,0,0.6)',
+      }},
+        h('div', {style:{color:T.textBright, fontWeight:'bold', marginBottom:4}}, `${emoji} ${label}`),
+        tip
+      )
+    );
+  };
+
   // Signal drill-down view
   if (activeSignal) {
     const sigItems = tradeableItems
@@ -2116,6 +2419,36 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     );
   }
 
+  // Sector drill-down view
+  if (activeSector) {
+    const {label, emoji, members, surge, dump, frenzy, active, count} = activeSector;
+    const HEAT_SIGNALS = new Set(['SURGE','FRENZY','DUMP','MANIPULATED']);
+    const sorted = [...(members||[])]
+      .filter(it => (it.signals||[]).some(s => HEAT_SIGNALS.has(s)))
+      .sort((a,b) => {
+        const order = ['FRENZY','SURGE','DUMP','MANIPULATED'];
+        const aTop = order.find(s => (a.signals||[]).includes(s)) || 'ZZZ';
+        const bTop = order.find(s => (b.signals||[]).includes(s)) || 'ZZZ';
+        if (aTop !== bTop) return order.indexOf(aTop) - order.indexOf(bTop);
+        return Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0);
+      });
+    const stats = [surge && `${surge} surging`, dump && `${dump} dumping`, frenzy && `${frenzy} in frenzy`].filter(Boolean).join(', ');
+    return h('div', {style:{display:'flex', flexDirection:'column', height:'100%'}},
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0}},
+        h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:12}, onClick:()=>setActiveSector(null)}, '← Back'),
+        h('span', {style:{fontSize:16}}, emoji),
+        h('div', {style:{fontSize:12, fontWeight:'bold', color:T.goldBright, letterSpacing:'0.08em'}}, label),
+        stats && h('div', {style:{fontSize:11, color:T.textDim}}, stats),
+        h('div', {style:{fontSize:11, color:T.textDim, marginLeft:'auto'}}, `${sorted.length} ${sorted.length === 1 ? 'item' : 'items'} with active signals (${count} in sector)`),
+      ),
+      sorted.length === 0
+        ? h('div', {style:{padding:20, fontSize:12, color:T.textDim}}, 'No items with active surge, dump, frenzy, or manipulated signals in this sector right now.')
+        : h('div', {style:{flex:1, overflowY:'auto'}},
+            h(ItemTable, {items:sorted, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, showSignals:true})
+          )
+    );
+  }
+
   return h('div', {style:{padding:'12px 14px', overflowY:'auto', height:'100%'}},
     description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
 
@@ -2133,7 +2466,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       },
         h('div', {style:{fontSize:28, lineHeight:1}}, mood.emoji),
         h('div', null,
-          h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:2}}, 'Market Mood'),
+          h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.08em', marginBottom:2}}, 'Market Weather'),
           h('div', {style:{fontSize:13, fontWeight:'bold', color:T.textBright}}, mood.label),
         )
       ),
@@ -2165,6 +2498,113 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       ),
     ),
 
+    // ── Market Stats ─────────────────────────────────────────────
+    h('div', {style:{display:'flex', gap:8, marginBottom:20}},
+      [
+        ['💰', fmt.gp(marketStats.totalGP)+'gp', 'GP traded today'],
+        ['📦', marketStats.itemsTraded.toLocaleString(), 'items with volume'],
+        ['📊', marketStats.itemsTracked.toLocaleString(), 'items tracked'],
+      ].map(([icon, val, label]) =>
+        h('div', {key:label, style:{
+          flex:'1 1 0', background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
+          padding:'8px 12px', display:'flex', alignItems:'center', gap:8,
+        }},
+          h('span', {style:{fontSize:18}}, icon),
+          h('div', null,
+            h('div', {style:{fontSize:13, fontWeight:'bold', color:T.textBright}}, val),
+            h('div', {style:{fontSize:10, color:T.textDim, marginTop:1}}, label),
+          )
+        )
+      )
+    ),
+
+    // ── News Item Mentions ───────────────────────────────────────
+    (() => {
+      const now = new Date();
+      const dow = now.getDay();
+      const daysToMon = dow === 0 ? 6 : dow - 1;
+      const lastMon = new Date(now); lastMon.setDate(now.getDate() - daysToMon); lastMon.setHours(0,0,0,0);
+      const twoMonsAgo = new Date(lastMon); twoMonsAgo.setDate(lastMon.getDate() - 7);
+      const recentNews = (news||[]).filter(n =>
+        n.source === 'RS3 News' &&
+        n.date && new Date(n.date) >= twoMonsAgo &&
+        ((n.mentions&&n.mentions.length) || (n.impact_items&&n.impact_items.length))
+      );
+      if (!recentNews.length) return null;
+      return h('div', {style:sectionStyle},
+        h('div', {style:{...headingStyle, display:'flex', alignItems:'center', justifyContent:'space-between', cursor:'pointer'},
+          onClick:()=>setNewsExpanded(e=>!e)},
+          h('div', {style:{display:'flex', alignItems:'center', gap:8}},
+            h('span', null, 'Recent Updates · Items'),
+            h('span', {style:{fontSize:12, color:T.textDim}}, newsExpanded ? '▲' : '▼'),
+          ),
+          h('span', {
+            style:{fontSize:11, color:T.textDim, fontWeight:'normal'},
+            onClick: e => { e.stopPropagation(); onNavigate&&onNavigate('news'); },
+          }, '→ News tab'),
+        ),
+        newsExpanded && recentNews.map((n,i) => {
+          const isOpen = expandedArticle === i;
+          return h('div', {key:i, style:{borderTop:`1px solid ${T.borderDim}`}},
+            h('div', {
+              style:{display:'flex', alignItems:'center', justifyContent:'space-between', padding:'8px 12px 8px 0', cursor:'pointer', gap:8},
+              onClick:()=>setExpandedArticle(isOpen ? null : i),
+            },
+              h('div', {style:{display:'flex', alignItems:'center', gap:8, minWidth:0, flex:1}},
+                h('span', {style:{fontSize:10, color:T.textDim, flexShrink:0}}, n.date),
+                h('span', {style:{fontSize:12, color:T.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, n.title),
+                n.update_type && h('span', {style:{
+                  fontSize:9, padding:'1px 6px', borderRadius:2, flexShrink:0,
+                  background:'rgba(201,168,76,0.12)', border:`1px solid rgba(201,168,76,0.25)`,
+                  color:T.gold, textTransform:'uppercase', letterSpacing:'0.05em',
+                }}, n.update_type),
+              ),
+              h('span', {style:{color:T.text, flexShrink:0, fontSize:18, minWidth:20, textAlign:'center', lineHeight:1}}, isOpen ? '▾' : '›'),
+            ),
+            isOpen && h('div', {style:{paddingBottom:10}},
+              (n.mentions&&n.mentions.length) > 0 && h('div', {style:{marginBottom:8}},
+                h('div', {style:{fontSize:9, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4}}, 'Mentioned'),
+                h('div', {style:{display:'flex', flexWrap:'wrap', gap:4}},
+                  n.mentions.map(m => {
+                    const it = items.find(it2 => it2.name.toLowerCase()===m.toLowerCase());
+                    return h('span', {key:m, className:'news-tag',
+                      style:{cursor:it?'pointer':'default', color:T.gold},
+                      onClick: it ? ()=>onSelect(it) : undefined,
+                    }, m);
+                  })
+                )
+              ),
+              (n.impact_items&&n.impact_items.length) > 0 && h('div', null,
+                h('div', {style:{fontSize:9, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:4}}, 'Likely affected'),
+                h('div', {style:{display:'flex', flexWrap:'wrap', gap:4}},
+                  n.impact_items.map(m => {
+                    const it = items.find(it2 => it2.name.toLowerCase()===m.name.toLowerCase());
+                    const chgColor = (m.change_1d||0) > 0 ? T.green : (m.change_1d||0) < 0 ? T.red : T.textDim;
+                    return h('span', {key:m.name, className:'news-tag',
+                      style:{cursor:it?'pointer':'default', color:T.textDim},
+                      onClick: it ? ()=>onSelect(it) : undefined,
+                    },
+                      m.name,
+                      m.change_1d != null && h('span', {style:{color:chgColor, marginLeft:4}},
+                        (m.change_1d>0?'+':'')+m.change_1d.toFixed(1)+'%')
+                    );
+                  })
+                )
+              ),
+            ),
+          );
+        }),
+      );
+    })(),
+
+    // ── Sector Heat Map ──────────────────────────────────────────
+    h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Sector Heat Map'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
+        sectorHeat.map(sector => h(SectorCard, {key:sector.label, sector}))
+      )
+    ),
+
     // ── Personal command center ──────────────────────────────────
 
     // Watchlist movers
@@ -2180,12 +2620,14 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Portfolio snapshot
     openPositions.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Portfolio'),
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('portfolio'), title:'Go to Portfolio'},
+        h('span', null, 'Portfolio'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
       h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
           h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, fmt.gp(totalCurrent)+'gp'),
           h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, `Current Value (${openPositions.length} positions)`)),
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
           h('div', {style:{fontSize:16, fontWeight:'bold', color: unrealizedPL >= 0 ? T.green : T.red}},
             (unrealizedPL >= 0 ? '+' : '') + fmt.gp(unrealizedPL) + 'gp'),
           h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
@@ -2269,6 +2711,38 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     volume.length > 0 && h('div', {style:sectionStyle},
       h('div', {style:headingStyle}, 'Volume Anomalies'),
       volume.map(it => h(MiniRow, {key:it.id, it, showChange:false}))
+    ),
+
+    // Hall of Shame
+    hallOfShame.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, '🏛️ Hall of Shame'),
+      h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
+        hallOfShame.map((entry, i) =>
+          h('div', {
+            key:i,
+            onClick: () => onSelect(entry.item),
+            style:{
+              display:'flex', alignItems:'center', gap:10,
+              padding:'8px 10px', borderRadius:4, cursor:'pointer',
+              background:T.panel, border:`1px solid ${T.border}`,
+              borderLeft:`3px solid ${T.red}`,
+              transition:'border-color 0.15s',
+            },
+            onMouseEnter: e => e.currentTarget.style.borderColor = T.red,
+            onMouseLeave: e => e.currentTarget.style.borderColor = T.border,
+          },
+            h('div', {style:{fontSize:20, flexShrink:0}}, entry.icon),
+            h('div', {style:{flex:1, minWidth:0}},
+              h('div', {style:{fontSize:10, color:T.red, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2}}, entry.title),
+              h('div', {style:{fontSize:12, color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, entry.item.name),
+              h('div', {style:{fontSize:11, color:T.textDim}}, entry.stat),
+            ),
+            h('div', {style:{fontSize:12, color:T.red, flexShrink:0, fontWeight:'bold'}},
+              fmt.gp(entry.item.high || entry.item.low)+'gp'
+            ),
+          )
+        )
+      )
     )
   );
 }
@@ -2658,12 +3132,61 @@ const APP_NEWS = [
   {
     version: 'Coming Soon',
     items: [
-      'Opportunity Score — single composite ranking for flip potential',
-      'Wishlist — set target buy prices and track how close the market gets',
-      'Price history charts — 7-day and 30-day in-app price graphs',
-      'Portfolio analytics — value over time, profit by category, hold time',
-      'Expanded untradeable items — Dungeoneering, Barbarian Assault, minigame rewards',
-      'DXP Intelligence — track items that historically move before and during DXP weekends',
+      'DXP Intelligence — track items that historically spike before and during DXP weekends; early buy signals ahead of the rush',
+      'Opportunity Score — single composite ranking combining margin, volume, signal strength, and flip potential',
+      'Portfolio Analytics — profit by category, value over time, win rate, hold time distribution, and best possible sale price within your hold window',
+      'Advanced Alerts — signal-based triggers (e.g. alert when SURGE fires on a watchlist item), not just price thresholds',
+      'Price Since Post — track how item prices move after RS3 news articles; see what the market actually reacted to',
+    ]
+  },
+  {
+    version: 'v1.5.0',
+    items: [
+      'Candlestick chart view with 7d / 30d / 90d / 1Y / All time ranges',
+      'Volume chart with current volume and 90-day average line; Y-axis labels added',
+      'Portfolio investor tier badges — current tier, next goal, and all earned tiers',
+      'Portfolio achievement badges — Trades Closed, Profit Made, and more',
+      'Right-click a closed position to delete it',
+      'Date Opened field with calendar picker on the position modal',
+      'Held duration column on the open positions table',
+      'Clicking an item name in the portfolio now opens the item panel',
+      'Click an already-open item to close the panel (toggle)',
+      'Dashboard news section — recent RS3 update articles with mentioned and likely affected items',
+      'Collapsible news section and per-article expand/collapse rows',
+      'Item tags in news articles are clickable to open the item panel directly',
+      'Likely affected items based on update type — still in testing, not perfect',
+      'News snapshot price tracking — item prices are recorded at time of article for future comparison',
+      'Switched to RS3 official RSS feed as sole news source',
+      'In-app update alert — GEnius notifies you when a new version is available',
+    ]
+  },
+  {
+    version: 'v1.4.1 — Security Patch',
+    items: [
+      'Shell injection fix — Python is now invoked with execFile() instead of a string command',
+      'Renderer sandbox — removed an unnecessary sandbox: false override in the browser window config',
+      'External URL validation — open-external now rejects non-http(s) URLs',
+      'Import allowlist — data import now only applies known-safe settings keys',
+      'Atomic file writes — history and snapshot files now write via temp file + rename, preventing corruption on interrupted writes',
+    ]
+  },
+  {
+    version: 'v1.4.0',
+    items: [
+      'All Time chart view — full price history with scroll-wheel zoom and date range filter',
+      'Seasonal chart — average price patterns by week or month across historical data, with a NOW indicator',
+      'Charts now match the Wiki — switched to a data source with no lag',
+      'Price in Big Macs — shows item value in Big Macs using the live bond price; hover for methodology',
+      'Market Personality — flavor description generated from signals, category, and trading behavior',
+      '7d/30d/90d trend badges fixed — were silently broken due to stale data',
+      'Opportunity Score breakdown — click ▾ next to any score to see what contributed; score now displays as X/100',
+      'Market Indexes are now clickable — drill down to see all constituent items',
+      'Mood of the Market — emoji card summarizing current market conditions, hover for explanation',
+      'Item of the Day — a different item every day, click to open it',
+      'Random item button — 🎲 feeling lucky?',
+      'New MANIPULATED signal — fires on extreme volume, large price move, and tiny buy limit simultaneously',
+      'Export and import your data — back up watchlist, portfolio, alerts, and notes; restore on any machine',
+      'Parchment theme removed. Your retinas are safe now.',
     ]
   },
   {
@@ -2722,7 +3245,7 @@ const APP_NEWS = [
   },
 ];
 
-function NewsTab({news, onOpen, description}) {
+function NewsTab({news, onOpen, description, items, onSelect}) {
   const [sub, setSub] = useState('rs3');
   return h('div',null,
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
@@ -2756,9 +3279,73 @@ function NewsTab({news, onOpen, description}) {
             h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Fetch Now to load.')
           )
         : news.map((n,i)=>h('div',{key:i,className:'news-item'},
-            h('div',{className:'row',style:{gap:6,marginBottom:2}},h('span',{className:'news-src'},n.source),h('span',{style:{fontSize:10,color:T.textDim}},n.date)),
+            h('div',{className:'row',style:{gap:6,marginBottom:2}},
+              h('span',{className:'news-src'},n.source),
+              h('span',{style:{fontSize:10,color:T.textDim}},n.date),
+              n.update_type && h('span',{style:{
+                fontSize:9, padding:'1px 6px', borderRadius:2, marginLeft:4,
+                background:'rgba(201,168,76,0.15)', border:`1px solid rgba(201,168,76,0.3)`,
+                color:T.gold, letterSpacing:'0.05em', textTransform:'uppercase',
+              }}, n.update_type),
+            ),
             h('div',{className:'news-title',onClick:()=>n.url&&onOpen(n.url)},n.title),
-            n.mentions&&n.mentions.length>0&&h('div',{style:{display:'flex',flexWrap:'wrap',gap:4,marginTop:3}},n.mentions.map(m=>h('span',{key:m,className:'news-tag'},m)))
+            n.description && h('div',{style:{fontSize:11,color:T.textDim,marginTop:2,lineHeight:1.5}},n.description),
+            n.mentions&&n.mentions.length>0&&h('div',{style:{marginTop:5}},
+              h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}, 'Items mentioned'),
+              h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
+                n.mentions.map(m => {
+                  const item = items && items.find(it => it.name.toLowerCase() === m.toLowerCase());
+                  return h('span',{
+                    key:m, className:'news-tag',
+                    onClick: item && onSelect ? ()=>onSelect(item) : undefined,
+                    style:{cursor: item ? 'pointer' : 'default', color: item ? T.gold : T.textDim},
+                    title: item ? `Click to view ${m}` : m,
+                  }, m);
+                })
+              )
+            ),
+            n.price_since&&n.price_since.length>0&&h('div',{style:{marginTop:6}},
+              h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}},
+                `Price since post · ${n.price_since_days||''}d later`
+              ),
+              h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
+                n.price_since.map(m => {
+                  const it = items && items.find(i => i.name.toLowerCase()===m.name.toLowerCase());
+                  const chgColor = m.pct > 0 ? T.green : m.pct < 0 ? T.red : T.textDim;
+                  return h('span',{
+                    key:m.name, className:'news-tag',
+                    onClick: it && onSelect ? ()=>onSelect(it) : undefined,
+                    style:{cursor:it?'pointer':'default', display:'flex', alignItems:'center', gap:4},
+                  },
+                    h('span',{style:{color:T.text}},m.name),
+                    h('span',{style:{color:chgColor}},(m.pct>0?'+':'')+m.pct+'%'),
+                  );
+                })
+              )
+            ),
+
+            n.impact_items&&n.impact_items.length>0&&h('div',{style:{marginTop:6}},
+              h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}},
+                'Market reaction · ' + (n.impact_categories||[]).join(', ')
+              ),
+              h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
+                n.impact_items.map(m => {
+                  const item = items && items.find(it => it.name.toLowerCase() === m.name.toLowerCase());
+                  const chg = m.change_1d;
+                  const chgColor = chg > 0 ? T.green : chg < 0 ? T.red : T.textDim;
+                  return h('span',{
+                    key:m.name, className:'news-tag',
+                    onClick: item && onSelect ? ()=>onSelect(item) : undefined,
+                    style:{cursor: item ? 'pointer' : 'default', display:'flex', alignItems:'center', gap:4},
+                    title: item ? `Click to view ${m.name}` : m.name,
+                  },
+                    h('span',{style:{color:T.text}}, m.name),
+                    chg != null && h('span',{style:{color:chgColor}}, (chg>0?'+':'')+chg.toFixed(1)+'%'),
+                    (m.signals||[]).map(s=>h('span',{key:s,style:{color:T.gold,fontSize:9}},s))
+                  );
+                })
+              )
+            )
           ))
     ),
 
@@ -2956,6 +3543,14 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       )
     ),
     h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Date Format'),
+      h('select',{className:'ge-input',value:s.dateFormat||'MM/DD/YYYY',onChange:set('dateFormat')},
+        h('option',{value:'MM/DD/YYYY'},'MM/DD/YYYY (US)'),
+        h('option',{value:'DD/MM/YYYY'},'DD/MM/YYYY (EU)'),
+        h('option',{value:'YYYY-MM-DD'},'YYYY-MM-DD (ISO)'),
+      )
+    ),
+    h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Sidebar Order'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},'Drag to reorder. Save settings to apply.'),
       h(SidebarOrderEditor, {
@@ -3084,6 +3679,49 @@ const ALL_CATS = [
   'farming','mining','prayer','archaeology','runes','summoning','construction',
   'treasure_trails','rares','overrides','codex',
   'low_tier','materials','supplies','misc'
+];
+
+const CAT_LABEL = {
+  melee:          'Melee',
+  magic:          'Magic',
+  ranged:         'Ranged',
+  necromancy:     'Necromancy',
+  hybrid:         'Hybrid',
+  ammo:           'Ammunition',
+  boss:           'Boss Drops',
+  invention:      'Invention',
+  herblore:       'Herblore',
+  smithing:       'Smithing',
+  crafting:       'Crafting',
+  fletching:      'Fletching',
+  food:           'Food',
+  farming:        'Farming',
+  mining:         'Mining',
+  prayer:         'Prayer',
+  archaeology:    'Archaeology',
+  runes:          'Runes',
+  summoning:      'Summoning',
+  construction:   'Construction',
+  treasure_trails:'Treasure Trails',
+  rares:          'Rares',
+  overrides:      'Overrides',
+  codex:          'Codex',
+  low_tier:       'Low Tier',
+  materials:      'Materials',
+  supplies:       'Supplies',
+  misc:           'Miscellaneous',
+  gathering:      'Gathering',
+  bones:          'Bones',
+  ashes:          'Ashes',
+  battlestaff:    'Battlestaff',
+  crossbow:       'Crossbow',
+};
+
+const CAT_GROUPS = [
+  { label: 'Combat',      cats: ['melee','magic','ranged','necromancy','hybrid','ammo','boss','codex'] },
+  { label: 'Skills',      cats: ['herblore','smithing','crafting','fletching','farming','mining','prayer','archaeology','summoning','construction','invention','runes'] },
+  { label: 'Economy',     cats: ['supplies','food','materials','low_tier','misc'] },
+  { label: 'Collections', cats: ['rares','treasure_trails','overrides'] },
 ];
 
 
@@ -3392,12 +4030,14 @@ function ItemAutocomplete({items, value, onChange, placeholder}) {
 
 /* ─── Position modal ──────────────────────────────────────────── */
 function PositionModal({items, position, onSave, onClose}) {
+  const todayStr = new Date().toISOString().slice(0,10);
   const blank = { id:Date.now().toString(), item_name:'', quantity:'', cost_basis:'',
-    target_price:'', target_profit_pct:'', stop_loss:'', status:'open', created_at:new Date().toISOString() };
+    target_price:'', target_profit_pct:'', stop_loss:'', status:'open', created_at:new Date().toISOString(), date_opened: todayStr };
   const [form, setForm] = useState(position ? {...position,
     target_price: position.target_price||'',
     stop_loss: position.stop_loss||'',
-    target_profit_pct: position.target_profit_pct||''
+    target_profit_pct: position.target_profit_pct||'',
+    date_opened: position.date_opened || (position.created_at ? position.created_at.slice(0,10) : todayStr),
   } : blank);
   const [createAlert, setCreateAlert] = useState(false);
   const set = k => e => setForm(f => ({...f, [k]:e.target.value}));
@@ -3439,6 +4079,21 @@ function PositionModal({items, position, onSave, onClose}) {
 
         totalCost > 0 && h('div', {style:{fontSize:11,color:T.textDim,marginBottom:12}},
           `Total cost: ${fmt.gp(totalCost)}gp`),
+
+        h('div', {className:'form-grid-2', style:{marginBottom:12}},
+          h('div', null,
+            h('label',{className:'form-lbl'},'Date Opened'),
+            h('div', {style:{display:'flex', gap:6, alignItems:'center'}},
+              h('input',{className:'ge-input', id:'date-opened-input', type:'date', value:form.date_opened, onChange:set('date_opened'), style:{flex:1}}),
+              h('button', {
+                className:'ge-btn',
+                style:{padding:'4px 8px', fontSize:14},
+                title:'Pick a date',
+                onClick: () => { const el = document.getElementById('date-opened-input'); el && (el.showPicker ? el.showPicker() : el.click()); },
+              }, '📅')
+            )
+          )
+        ),
 
         h('div', {className:'ge-section-head'}, 'Optional Targets'),
         h('div', {className:'form-grid-3'},
@@ -3516,11 +4171,12 @@ function SellModal({position, onSell, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, toast}) {
-  const [showModal,  setShowModal]  = useState(false);
-  const [editPos,    setEditPos]    = useState(null);
-  const [sellModal,  setSellModal]  = useState(null);
-  const [showClosed, setShowClosed] = useState(false);
+function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onSelect, toast}) {
+  const [showModal,   setShowModal]   = useState(false);
+  const [editPos,     setEditPos]     = useState(null);
+  const [sellModal,   setSellModal]   = useState(null);
+  const [showClosed,  setShowClosed]  = useState(false);
+  const [ctxMenu,     setCtxMenu]     = useState(null); // {x, y, pos}
 
   const positions  = portfolio?.positions || [];
   const taxStats   = portfolio?.tax_stats  || {};
@@ -3547,6 +4203,55 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const unrealizedPL  = totalCurrent - totalInvested;
   const unrealizedPct = totalInvested > 0 ? (unrealizedPL / totalInvested) * 100 : 0;
   const realizedPL    = closedPos.reduce((s,p) => s+(p.realized_pl||0), 0);
+
+  const PORTFOLIO_TIERS = [
+    { threshold: 100000e6, icon:'🐉', label:'100B Investor',  sub:'Generational wealth' },
+    { threshold:  50000e6, icon:'🌌', label:'50B Investor',   sub:'Legendary wealth' },
+    { threshold:  25000e6, icon:'👑', label:'25B Investor',   sub:'Elite investor' },
+    { threshold:  10000e6, icon:'💠', label:'10B Investor',   sub:'Top tier trader' },
+    { threshold:   5000e6, icon:'💎', label:'5B Investor',    sub:'Serious money' },
+    { threshold:   2500e6, icon:'🏦', label:'2.5B Investor',  sub:'Institutional money' },
+    { threshold:   1000e6, icon:'🥇', label:'1B Investor',    sub:'The billionaire club' },
+    { threshold:    500e6, icon:'🦈', label:'500M Investor',  sub:'Big fish' },
+    { threshold:    250e6, icon:'🐟', label:'250M Investor',  sub:'High-net-worth trader' },
+    { threshold:    100e6, icon:'📈', label:'100M Investor',  sub:'Getting serious' },
+    { threshold:     10e6, icon:'🌱', label:'10M Investor',   sub:'First steps' },
+  ];
+
+  const tierIndex = PORTFOLIO_TIERS.findIndex(t => totalCurrent >= t.threshold);
+  const currentTier = tierIndex >= 0 ? PORTFOLIO_TIERS[tierIndex] : null;
+  const nextTier    = tierIndex > 0  ? PORTFOLIO_TIERS[tierIndex - 1] : null;
+  const earnedTiers = tierIndex >= 0 ? PORTFOLIO_TIERS.slice(tierIndex + 1) : [];
+
+  const milestones = useMemo(() => {
+    const ms = [];
+    if (!closedPos.length) return ms;
+
+    const profits = closedPos.map(p => p.realized_pl || 0);
+    const biggestWin  = Math.max(...profits);
+    const biggestLoss = Math.min(...profits);
+    const biggestWinPos  = closedPos.find(p => (p.realized_pl||0) === biggestWin);
+    const biggestLossPos = closedPos.find(p => (p.realized_pl||0) === biggestLoss);
+    const totalRealized  = profits.reduce((s,n) => s+n, 0);
+
+    ms.push({ icon:'📦', label:'Trades Closed',  value: closedPos.length.toLocaleString(), sub: 'Total closed positions' });
+    if (biggestWin > 0)  ms.push({ icon:'🏆', label:'Biggest Win',  value: '+'+fmt.gp(biggestWin)+'gp',  sub: biggestWinPos?.item_name || '' });
+    if (biggestLoss < 0) ms.push({ icon:'💀', label:'Biggest Loss', value: fmt.gp(biggestLoss)+'gp',     sub: biggestLossPos?.item_name || '' });
+    if (totalRealized >= 100e6) ms.push({ icon:'💰', label:'100m Club',   value: fmt.gp(totalRealized)+'gp total', sub: 'Total realized profit' });
+    if (totalRealized >= 1e9)   ms.push({ icon:'💎', label:'Billionaire', value: fmt.gp(totalRealized)+'gp total', sub: 'Total realized profit' });
+    if (closedPos.length >= 10)  ms.push({ icon:'🔁', label:'10 Trades',  value: closedPos.length+' closed', sub: 'Veteran trader' });
+    if (closedPos.length >= 100) ms.push({ icon:'⚙️', label:'100 Trades', value: closedPos.length+' closed', sub: 'Market machine' });
+    // Flawless — best streak of consecutive profitable trades
+    let bestStreak = 0, currentStreak = 0;
+    for (const p of closedPos) {
+      if ((p.realized_pl||0) > 0) { currentStreak++; bestStreak = Math.max(bestStreak, currentStreak); }
+      else currentStreak = 0;
+    }
+    const isCurrentlyFlawless = profits.every(p => p > 0) && closedPos.length >= 5;
+    if (bestStreak >= 5)
+      ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedPos.length+' for '+closedPos.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
+    return ms;
+  }, [closedPos, totalCurrent]);
 
   // Allocation by item
   const allocations = useMemo(() => {
@@ -3614,11 +4319,14 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             h('th',null,'Item'), h('th',null,'Qty'), h('th',null,'Cost/ea'),
             h('th',null,'Current'), h('th',null,'Value'),
             h('th',null,'Gross P&L'), h('th',null,'Net P&L'), h('th',null,'P&L %'),
-            h('th',null,'Target'), h('th',null,'')
+            h('th',null,'Held'), h('th',null,'Target'), h('th',null,'')
           )),
           h('tbody',null, openPos.map(pos =>
             h('tr',{key:pos.id},
-              h('td',null,pos.item_name),
+              h('td',{
+                style: onSelect ? {cursor:'pointer', color:T.gold} : null,
+                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===pos.item_name.toLowerCase()); if(it) onSelect(it); } : null,
+              }, pos.item_name),
               h('td',null,pos.quantity.toLocaleString()),
               h('td',null,fmt.gp(pos.cost_basis)+'gp'),
               h('td',{style:{color:T.gold}},fmt.gp(pos.currentPrice)+'gp'),
@@ -3626,6 +4334,12 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
               h('td',{className:pos.grossPL>=0?'pct-up':'pct-down'},(pos.grossPL>=0?'+':'')+fmt.gp(pos.grossPL)+'gp'),
               h('td',{className:pos.netPL>=0?'pct-up':'pct-down'},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'),
               h('td',{className:pos.plPct>=0?'pct-up':'pct-down'},fmt.pct(pos.plPct)),
+              h('td',{style:{color:T.textDim}},(() => {
+                const d = pos.date_opened || pos.created_at;
+                if (!d) return '—';
+                const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+                return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
+              })()),
               h('td',{style:{color:pos.target_price?(pos.currentPrice>=pos.target_price?T.green:T.textDim):T.textDim}},
                 pos.target_price ? fmt.gp(pos.target_price)+'gp' : '—'),
               h('td',null,
@@ -3645,17 +4359,21 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     // Allocation
     totalCurrent > 0 && allocations.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
       h('div',{className:'ge-section-head'},'Portfolio Allocation'),
-      allocations.map(({name,val,pct}) =>
-        h('div',{key:name,style:{marginBottom:8}},
+      allocations.map(({name,val,pct}) => {
+        const allocItem = onSelect && items && items.find(i => i.name.toLowerCase() === name.toLowerCase());
+        return h('div',{key:name,style:{marginBottom:8}},
           h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}},
-            h('span',{style:{color:T.text}},name),
+            h('span',{
+              style:{color: allocItem ? T.gold : T.text, cursor: allocItem ? 'pointer' : 'default'},
+              onClick: allocItem ? () => onSelect(allocItem) : undefined,
+            },name),
             h('span',{style:{color:T.textDim}},`${fmt.gp(val)}gp (${pct.toFixed(1)}%)`)
           ),
           h('div',{className:'alloc-bar-bg'},
             h('div',{className:'alloc-bar-fg',style:{width:`${pct}%`}})
           )
-        )
-      )
+        );
+      })
     ),
 
     // Tax tracking
@@ -3670,6 +4388,62 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     ),
 
     // Closed positions
+    currentTier && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
+      h('div',{className:'ge-section-head'},'Investor Tier'),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:8,alignItems:'flex-start'}},
+        // Next tier — goal badge
+        nextTier && h('div',{key:'next',title:`${nextTier.label} · ${nextTier.sub}`,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1px dashed ${T.borderDim}`,background:T.panel,opacity:0.6,
+        }},
+          h('div',{style:{fontSize:20,filter:'grayscale(1)'}},nextTier.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.textDim}},nextTier.label.replace(' Investor','')),
+          h('div',{style:{fontSize:10,color:T.textDim}},'Next'),
+        ),
+        // Current tier — highlighted
+        h('div',{key:'cur',title:`${currentTier.label} · ${currentTier.sub}`,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1.5px solid ${T.gold}`,background:`rgba(201,168,76,0.1)`,
+        }},
+          h('div',{style:{fontSize:20}},currentTier.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.gold}},currentTier.label.replace(' Investor','')),
+          h('div',{style:{fontSize:10,color:T.goldBright}},'Current'),
+        ),
+        // Earned lower tiers — faded
+        earnedTiers.map(t => h('div',{key:t.label,title:`${t.label} · ${t.sub}`,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1px solid ${T.borderDim}`,background:T.panel,opacity:0.55,
+        }},
+          h('div',{style:{fontSize:20}},t.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.text}},t.label.replace(' Investor','')),
+        )),
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:8}},
+        currentTier.label+' · '+currentTier.sub+' · '+fmt.gp(totalCurrent)+'gp invested'
+      ),
+    ),
+
+    milestones.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
+      h('div',{className:'ge-section-head'},'Achievements'),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
+        milestones.map((m,i) => h('div',{key:i,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1.5px solid ${m.dimmed ? T.borderDim : T.gold}`,
+          background: m.dimmed ? T.panel : `rgba(201,168,76,0.1)`,
+          opacity: m.dimmed ? 0.5 : 1,
+        }},
+          h('div',{style:{fontSize:20,filter:m.dimmed?'grayscale(1)':'none'}},m.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:m.dimmed?T.textDim:T.gold}},m.label),
+          m.value && h('div',{style:{fontSize:12,fontWeight:'bold',color:m.dimmed?T.textDim:T.textBright,marginTop:1}},m.value),
+          h('div',{style:{fontSize:10,color:T.textDim,marginTop:1,textAlign:'center'}},m.sub),
+        ))
+      )
+    ),
+
     closedPos.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
       h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',cursor:'pointer',marginBottom:showClosed?8:0},
         onClick:()=>setShowClosed(s=>!s)},
@@ -3682,7 +4456,10 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
           h('th',null,'Sold At'),h('th',null,'Realized P&L')
         )),
         h('tbody',null, closedPos.map(pos=>
-          h('tr',{key:pos.id},
+          h('tr',{key:pos.id,
+            onContextMenu: e => { e.preventDefault(); setCtxMenu({x:e.clientX, y:e.clientY, pos}); },
+            style:{cursor:'context-menu'},
+          },
             h('td',null,pos.item_name),
             h('td',null,(pos.sold_quantity||pos.quantity).toLocaleString()),
             h('td',null,fmt.gp(pos.cost_basis)+'gp'),
@@ -3691,6 +4468,36 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
               (pos.realized_pl>=0?'+':'')+fmt.gp(pos.realized_pl||0)+'gp')
           )
         ))
+      )
+    ),
+
+    // Closed position context menu
+    ctxMenu && h('div', {
+      style:{position:'fixed', inset:0, zIndex:800},
+      onClick: () => setCtxMenu(null),
+      onContextMenu: e => { e.preventDefault(); setCtxMenu(null); },
+    },
+      h('div', {style:{
+        position:'fixed',
+        left: ctxMenu.x + 180 > window.innerWidth  ? ctxMenu.x - 160 : ctxMenu.x,
+        top:  ctxMenu.y + 100 > window.innerHeight ? ctxMenu.y - 80  : ctxMenu.y,
+        zIndex:801,
+        background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
+        boxShadow:'0 4px 12px rgba(0,0,0,0.5)', minWidth:160, overflow:'hidden',
+      }},
+        h('div', {style:{padding:'6px 8px', fontSize:10, color:T.textDim, borderBottom:`1px solid ${T.borderDim}`}},
+          ctxMenu.pos.item_name
+        ),
+        h('div', {
+          onClick: async () => {
+            await onDeletePosition(ctxMenu.pos.id);
+            setCtxMenu(null);
+            toast('Position removed', 'success');
+          },
+          style:{padding:'8px 12px', fontSize:12, color:T.red, cursor:'pointer', display:'flex', alignItems:'center', gap:6},
+          onMouseEnter: e => e.currentTarget.style.background = 'rgba(229,57,53,0.1)',
+          onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+        }, '🗑 Delete position'),
       )
     ),
 
@@ -4093,6 +4900,7 @@ function ScoreTable({rows, selected, onSelect}) {
 }
 
 function OpportunitiesTab({items, selected, onSelect, description}) {
+  const [signalFilter, setSignalFilter] = useState(null);
 
   const withSignal = useCallback((sig) =>
     items.filter(it => it.signals && it.signals.includes(sig)), [items]);
@@ -4176,24 +4984,46 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
     // Summary bar
     h('div', {style:{display:'flex',gap:10,flexWrap:'wrap',marginBottom:18,padding:'10px 12px',background:T.panel2,borderRadius:4,border:`1px solid ${T.borderDim}`}},
       [
-        ['SURGE',    T.green,  surge.length],
-        ['DUMP',     T.red,    dump.length],
-        ['ACCUM',    '#4dd0e1',accum.length],
-        ['DISTRIB',  '#ffb74d',distrib.length],
-        ['FRENZY',   '#ff80ab',frenzy.length],
-        ['ALCH',     '#ce93d8',alchItems.length],
-      ].map(([label,color,count]) =>
-        h('div', {key:label, style:{display:'flex',flexDirection:'column',alignItems:'center',minWidth:56}},
+        ['SURGE',    T.green,   surge.length,     'SURGE'],
+        ['DUMP',     T.red,     dump.length,      'DUMP'],
+        ['ACCUM',    '#4dd0e1', accum.length,     'ACCUMULATION'],
+        ['DISTRIB',  '#ffb74d', distrib.length,   'DISTRIBUTION'],
+        ['FRENZY',   '#ff80ab', frenzy.length,    'FRENZY'],
+        ['ALCH',     '#ce93d8', alchItems.length, 'ALCH'],
+      ].map(([label,color,count,sig]) => {
+        const active = signalFilter === sig;
+        return h('div', {
+          key: label,
+          title: active ? 'Click to show all' : `Filter to ${label} only`,
+          onClick: () => setSignalFilter(active ? null : sig),
+          style: {display:'flex',flexDirection:'column',alignItems:'center',minWidth:56,cursor:'pointer',borderRadius:4,padding:'4px 6px',
+            background: active ? `${color}22` : 'transparent',
+            border: active ? `1px solid ${color}66` : '1px solid transparent',
+            transition:'background 0.15s'}
+        },
           h('span', {style:{fontSize:18,fontWeight:300,color}}, count),
-          h('span', {style:{fontSize:9,color:T.textDim,letterSpacing:'1px',textTransform:'uppercase'}}, label)
-        )
-      )
+          h('span', {style:{fontSize:9,color: active ? color : T.textDim,letterSpacing:'1px',textTransform:'uppercase'}}, label)
+        );
+      })
     ),
 
-    h(ScoreTable, {rows:topScored, selected, onSelect}),
+    // Filtered view
+    signalFilter && h('div', {style:{marginBottom:20}},
+      h('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'6px 10px',background:T.panel2,borderRadius:4,border:`1px solid ${T.borderDim}`}},
+        h('span', {style:{fontSize:11,color:T.textDim}}, `Showing ${signalFilter} only —`),
+        h('span', {style:{fontSize:11,color:T.gold,cursor:'pointer'}, onClick:()=>setSignalFilter(null)}, 'Clear filter ✕')
+      ),
+      h(ItemTable, {
+        items: ({SURGE:surge,DUMP:dump,ACCUMULATION:accum,DISTRIBUTION:distrib,FRENZY:frenzy,ALCH:alchItems})[signalFilter] || [],
+        selected, onSelect,
+        showSignals: true
+      })
+    ),
 
-    // Strong Movers
-    h('div', {style:{marginBottom:20}},
+    !signalFilter && h(ScoreTable, {rows:topScored, selected, onSelect}),
+
+    // Strong Movers (hidden when signal filter active)
+    !signalFilter && h('div', {style:{marginBottom:20}},
       h('div', {style:{fontFamily:'Cinzel,serif',fontSize:12,letterSpacing:'1.5px',textTransform:'uppercase',color:T.gold,marginBottom:8}},
         '📈 Strong Movers'
       ),
@@ -4223,7 +5053,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       )
     ),
 
-    h(SectionTable, {
+    !signalFilter && h(SectionTable, {
       title:'SURGE Signals', icon:'⚡', color:T.green,
       desc:'— price rising with elevated volume',
       rows:surge,
@@ -4238,7 +5068,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ],
     }),
 
-    h(SectionTable, {
+    !signalFilter && h(SectionTable, {
       title:'DUMP Signals', icon:'📉', color:T.red,
       desc:'— price falling with elevated volume',
       rows:dump,
@@ -4253,7 +5083,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ],
     }),
 
-    h(SectionTable, {
+    !signalFilter && h(SectionTable, {
       title:'Accumulation', icon:'📦', color:'#4dd0e1',
       desc:'— price flat, volume quietly building',
       rows:accum,
@@ -4268,7 +5098,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ],
     }),
 
-    h(SectionTable, {
+    !signalFilter && h(SectionTable, {
       title:'Distribution', icon:'🌊', color:'#ffb74d',
       desc:'— price flat, extreme volume — watch for incoming drop',
       rows:distrib,
@@ -4283,7 +5113,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ],
     }),
 
-    h(SectionTable, {
+    !signalFilter && h(SectionTable, {
       title:'Volume Frenzy', icon:'🔥', color:'#ff80ab',
       desc:'— 250%+ above average volume',
       rows:frenzy,
@@ -4298,7 +5128,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ],
     }),
 
-    h(SectionTable, {
+    !signalFilter && h(SectionTable, {
       title:'Alch Opportunities', icon:'⚗', color:'#ce93d8',
       desc:'— alch profit exceeds GE sell after tax + nature rune',
       rows:alchItems,
@@ -4420,8 +5250,10 @@ function App() {
   const [portfolio, setPortfolio] = useState({positions:[], tax_stats:{}});
   const [notes, setNotes] = useState({});
   const [userShorthands, setUserShorthands] = useState({});
+  const [updateInfo, setUpdateInfo]         = useState(null);
   const [historyPopup, setHistoryPopup] = useState(null); // null | {done, total, complete}
   const [selected, setSelected] = useState(null);
+  const [quickAddPos, setQuickAddPos] = useState(null); // pre-filled position from margin calc
   const [fetching, setFetching] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
   const {toasts, add:toast} = useToast();
@@ -4509,7 +5341,8 @@ function App() {
       toast('Prices updated','success');
     });
     window.genius.onFetchError(d => { setFetching(false); toast('Fetch error: '+(d.error||'unknown'),'error'); console.error('[GEnius] fetch-error:', d); });
-    return () => { window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); };
+    window.genius.onUpdateAvailable(d => setUpdateInfo(d));
+    return () => { window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); window.genius.removeAllListeners('update-available'); };
   }, []);
 
   // Global shortcut: S or / focuses the search bar unless a text field is active
@@ -4595,6 +5428,11 @@ function App() {
   const statusText = !lastUpdate ? 'No data' : stale < 1 ? 'Live' : `${stale}m ago`;
   const showDetail = selected && !['news','alerts','settings'].includes(tab);
 
+  const handleSelect = item => {
+    if (selected && item && selected.id === item.id) { setSelected(null); return; }
+    setSelected(item);
+  };
+
   const handleSearchSelect = item => {
     setSelected(item);
     if (item.categories&&item.categories.length) setTab(item.categories[0]);
@@ -4614,6 +5452,33 @@ function App() {
     theme==='black'&&h('style',null,BLACK_CSS),
     h('link',{rel:'preconnect',href:'https://fonts.googleapis.com'}),
     h('link',{href:'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap',rel:'stylesheet'}),
+
+    updateInfo && h('div', {style:{
+      position:'fixed', bottom:16, right:16, zIndex:10000,
+      background:T.panel2, border:`1px solid ${T.gold}`,
+      borderRadius:6, padding:'10px 14px',
+      boxShadow:'0 4px 20px rgba(0,0,0,0.6)',
+      display:'flex', alignItems:'center', gap:12, maxWidth:340,
+    }},
+      h('div', null,
+        h('div', {style:{fontSize:12, fontWeight:'bold', color:T.goldBright, marginBottom:2}},
+          `GEnius v${updateInfo.latest} is available`),
+        h('div', {style:{fontSize:11, color:T.textDim}},
+          `You're on v${updateInfo.current}. Click to download the latest release.`),
+      ),
+      h('div', {style:{display:'flex', flexDirection:'column', gap:4, flexShrink:0}},
+        h('button', {
+          className:'ge-btn gold',
+          style:{padding:'4px 10px', fontSize:11},
+          onClick: () => window.genius?.openExternal(updateInfo.url),
+        }, 'Download'),
+        h('button', {
+          className:'ge-btn',
+          style:{padding:'4px 10px', fontSize:11},
+          onClick: () => setUpdateInfo(null),
+        }, '✕'),
+      )
+    ),
 
     h('nav',{className:'sidebar'},
       h('div',{style:{padding:'12px 12px 8px',borderBottom:`2px solid ${T.border}`,marginBottom:4}},
@@ -4650,24 +5515,25 @@ function App() {
       ),
       h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
         h('div',{className:'content',style:{flex:1}},
-          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio}),
+          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare}),
-          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:setSelected,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist}),
-          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components'}),
-          tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
+          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist}),
+          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components'}),
+          tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
           ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','smithing','crafting','fletching','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','overrides','low_tier','materials','construction','supplies'].includes(tab)&&
-            h(ItemTable,{items:catItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
-          tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
-          tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:setSelected,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
+            h(ItemTable,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
+          tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
+          tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioTab,{
             items, portfolio, toast,
             onSavePosition: async pos => { await window.genius?.savePosition(pos); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
             onDeletePosition: async id => { await window.genius?.deletePosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
             onSellPosition: async opts => { const r = await window.genius?.sellPosition(opts); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
+            onSelect: handleSelect,
           }),
-          tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:setSelected,description:TAB_DESCRIPTIONS.market}),
-          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:setSelected,description:TAB_DESCRIPTIONS.opportunities}),
-          tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news}),
+          tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
+          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.opportunities}),
+          tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
@@ -4675,10 +5541,26 @@ function App() {
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}})
         ),
-        showDetail&&h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items}),
+        showDetail&&h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos)}),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})
       )
     ),
+
+    quickAddPos && h(PositionModal, {
+      items,
+      position: {...quickAddPos, id: Date.now().toString(), status:'open', created_at: new Date().toISOString()},
+      onClose: () => setQuickAddPos(null),
+      onSave: async (pos, createAlert) => {
+        await window.genius?.savePosition(pos);
+        const p = await window.genius?.getPortfolio();
+        if (p) setPortfolio(p);
+        if (createAlert && pos.target_price) {
+          await window.genius?.saveAlert({id:`p-${pos.id}`, item_name:pos.item_name, condition:'above', price:pos.target_price});
+        }
+        setQuickAddPos(null);
+        toast('Position added', 'success');
+      },
+    }),
 
     h('div',{className:'toast-tray'},
       toasts.map(t=>h('div',{key:t.id,className:`toast ${t.type}`},t.msg))

@@ -267,7 +267,7 @@ ipcMain.handle('import-data', async () => {
     if (Array.isArray(bundle.hiddenItems)) store.set('hiddenItems', bundle.hiddenItems);
     if (bundle.itemNotes && typeof bundle.itemNotes === 'object') store.set('itemNotes', bundle.itemNotes);
     if (bundle.settings && typeof bundle.settings === 'object') {
-      const ALLOWED_SETTINGS = ['discordWebhook','fetchInterval','notifications','expensiveThreshold','navOrder','theme'];
+      const ALLOWED_SETTINGS = ['discordWebhook','fetchInterval','notifications','expensiveThreshold','navOrder','theme','dateFormat'];
       ALLOWED_SETTINGS.forEach(k => { if (k in bundle.settings) store.set(k, bundle.settings[k]); });
     }
     if (bundle.alerts    != null) fs.writeFileSync(alertsFile,    JSON.stringify(bundle.alerts,    null, 2), 'utf8');
@@ -719,6 +719,34 @@ ipcMain.handle('get-item-timeseries', async (_, itemId) => {
 });
 
 // ─── App lifecycle ────────────────────────────────────────────────────────────
+async function checkForUpdate() {
+  try {
+    const https = require('https');
+    const current = app.getVersion();
+    const data = await new Promise((resolve, reject) => {
+      const req = https.get(
+        'https://api.github.com/repos/VonDerThWood/GE-Intelligence/releases/latest',
+        { headers: { 'User-Agent': 'GEnius-App' } },
+        res => {
+          let body = '';
+          res.on('data', d => body += d);
+          res.on('end', () => resolve(JSON.parse(body)));
+        }
+      );
+      req.on('error', reject);
+      req.setTimeout(8000, () => req.destroy());
+    });
+    const latest = (data.tag_name || '').replace(/^v/, '');
+    if (latest && latest !== current) {
+      mainWindow?.webContents.send('update-available', { current, latest, url: data.html_url });
+      new Notification({
+        title: 'GEnius Update Available',
+        body: `v${latest} is out — you're on v${current}. Open GEnius to download.`,
+      }).show();
+    }
+  } catch {}
+}
+
 app.whenReady().then(() => {
   // Initialize data paths here — app.getPath() requires app to be ready
   dataDir       = path.join(app.getPath('userData'), 'data');
@@ -737,6 +765,7 @@ app.whenReady().then(() => {
   createTray();
   startScheduler();
   setTimeout(() => runPython('prices'), 3000);
+  setTimeout(() => checkForUpdate(), 8000);
 });
 
 app.on('window-all-closed', (e) => {

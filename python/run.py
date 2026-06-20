@@ -63,10 +63,18 @@ def fetch_prices(data_dir, webhook_url=None, existing_items=None):
                     continue
                 # Sort by timestamp ascending
                 sorted_pts = sorted(points, key=lambda p: p.get('timestamp', 0))
-                # Volume average from all points
-                vols = [p.get('volume') for p in sorted_pts if p.get('volume') is not None]
+                # Volume average from last 90 days only
+                # Timestamps may be in seconds or milliseconds — normalise to seconds
+                def to_sec(ts):
+                    return ts / 1000 if ts and ts > 1e11 else ts or 0
+                cutoff_90d = time.time() - 90 * 86400
+                recent_pts = [p for p in sorted_pts if to_sec(p.get('timestamp') or 0) >= cutoff_90d]
+                pts_for_vol = recent_pts if len(recent_pts) >= 7 else sorted_pts
+                vols = sorted([p.get('volume') for p in pts_for_vol if p.get('volume') is not None])
                 if vols:
-                    history_vol_avg[str(item_id)] = round(sum(vols) / len(vols))
+                    mid = len(vols) // 2
+                    median_vol = vols[mid] if len(vols) % 2 else (vols[mid-1] + vols[mid]) // 2
+                    history_vol_avg[str(item_id)] = median_vol
                 # Previous price = second most recent point
                 prev = sorted_pts[-2]
                 if prev.get('price'):
@@ -419,13 +427,65 @@ def fmt_gp(n):
     return str(n)
 
 # ── News ──────────────────────────────────────────────────────────────────────
-def fetch_news_data():
+def fetch_news_data(items=None):
     try:
         from news import fetch_all_news
-        return fetch_all_news()
+        return fetch_all_news(items=items)
     except Exception as e:
         print(f"[news] Error: {e}")
         return []
+
+def update_news_snapshots(news, items, data_dir):
+    """Snapshot prices for article items on first fetch; annotate price_since on subsequent fetches."""
+    snap_file = data_dir / "news_snapshots.json"
+    try:
+        snapshots = json.loads(snap_file.read_text(encoding='utf-8')) if snap_file.exists() else {}
+    except:
+        snapshots = {}
+
+    price_map = {it['name'].lower(): it.get('high') or it.get('low') for it in items if it.get('name')}
+    now = int(time.time())
+    min_age = 0  # show delta immediately on second fetch
+
+    for article in news:
+        url = article.get('url') or article.get('title', '')
+        if not url:
+            continue
+
+        # Collect relevant item names for this article
+        relevant = list({m.lower() for m in (article.get('mentions') or [])}) + \
+                   [m['name'].lower() for m in (article.get('impact_items') or [])]
+        relevant = list(set(relevant))
+
+        if url not in snapshots:
+            # First time seeing this article — save price snapshot
+            snap = {'ts': now, 'prices': {}}
+            for name in relevant:
+                if name in price_map and price_map[name]:
+                    snap['prices'][name] = price_map[name]
+            if snap['prices']:
+                snapshots[url] = snap
+        else:
+            snap = snapshots[url]
+            age = now - snap.get('ts', now)
+            if age >= min_age:
+                # Annotate article with price changes
+                deltas = []
+                for name in relevant:
+                    old = snap['prices'].get(name)
+                    cur = price_map.get(name)
+                    if old and cur and old > 0:
+                        pct = round((cur - old) / old * 100, 1)
+                        deltas.append({'name': name.title(), 'pct': pct, 'old': old, 'cur': cur})
+                deltas.sort(key=lambda d: -abs(d['pct']))
+                if deltas:
+                    article['price_since'] = deltas
+                    article['price_since_days'] = round(age / 86400)
+
+    try:
+        snap_file.write_text(json.dumps(snapshots, indent=2, ensure_ascii=False), encoding='utf-8')
+    except Exception as e:
+        print(f"[news] Snapshot save error: {e}")
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 def main():
@@ -451,7 +511,9 @@ def main():
         items = fetch_prices(data_dir, args.webhook, existing_items)
 
     if args.mode in ("full", "news"):
-        news = fetch_news_data()
+        news = fetch_news_data(items=items if items else None)
+        if items:
+            update_news_snapshots(news, items, data_dir)
 
     # Append untradeable items (Invention components + combo potions)
     # Uses a 24h cache so this is fast on repeat fetches

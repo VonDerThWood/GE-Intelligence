@@ -13,6 +13,115 @@ from datetime import datetime
 _HEADERS = {'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)'}
 _DIR = os.path.dirname(os.path.abspath(__file__))
 
+# ─── Update type → affected categories ──────────────────────────────────────
+
+UPDATE_RULES = [
+    # Each rule: (keywords_any, update_label, affected_categories)
+    (['dxp', 'double xp', 'double experience', 'bonus xp'],
+     'DXP Weekend',
+     ['herblore', 'summoning', 'construction', 'fletching', 'crafting', 'smithing', 'farming', 'archaeology', 'gathering']),
+
+    (['archaeology', 'digsite', 'dig site', 'excavation', 'artifact', 'chronotes', 'mattock',
+      'kharid-et', 'everlight', 'stormguard', 'warforge', 'city of senntisten', 'anachronia'],
+     'Archaeology Update',
+     ['archaeology', 'gathering']),
+
+    (['new boss', 'new monster', 'raid', 'dungeon', 'slayer creature', 'combat update', 'combat rework',
+      'boss encounter', 'boss fight', 'boss drop'],
+     'Combat / Boss Update',
+     ['boss', 'melee', 'ranged', 'magic', 'necromancy', 'supplies', 'herblore', 'food']),
+
+    (['necromancy', 'ritual', 'ectoplasm', 'necrosis', 'conjure'],
+     'Necromancy Update',
+     ['necromancy', 'runes', 'prayer', 'supplies']),
+
+    (['herblore', 'potion', 'overload', 'brew'],
+     'Herblore Update',
+     ['herblore', 'supplies']),
+
+    (['slayer', 'slayer master', 'slayer task'],
+     'Slayer Update',
+     ['boss', 'melee', 'ranged', 'magic', 'supplies', 'herblore']),
+
+    (['farming', 'seed', 'harvest', 'patch'],
+     'Farming Update',
+     ['farming', 'gathering', 'supplies']),
+
+    (['mining', 'smithing', 'ore', 'smelting', 'metal'],
+     'Mining & Smithing Update',
+     ['mining', 'smithing', 'gathering']),
+
+    (['prayer', 'bone', 'ashes', 'altar', 'ensoul'],
+     'Prayer Update',
+     ['prayer', 'bones', 'ashes']),
+
+    (['summoning', 'familiar', 'pouch', 'charm'],
+     'Summoning Update',
+     ['summoning', 'supplies']),
+
+    (['invention', 'perk', 'gizmo', 'component', 'disassemble'],
+     'Invention Update',
+     ['invention', 'supplies']),
+
+    (['construction', 'player owned house', 'poh', 'butler', 'flatpack'],
+     'Construction Update',
+     ['construction', 'supplies']),
+
+    (['wilderness', 'pvp', 'player vs player', 'bounty hunter'],
+     'Wilderness / PvP Update',
+     ['melee', 'ranged', 'magic', 'supplies', 'runes']),
+
+    (['treasure trail', 'clue scroll', 'clue reward'],
+     'Treasure Trails Update',
+     ['treasure_trails', 'rares']),
+
+    (['grand exchange', 'ge update', 'trade update', 'tax', 'ge tax'],
+     'Grand Exchange Update',
+     ['rares', 'boss', 'melee', 'ranged', 'magic', 'necromancy']),
+
+    (['quest', 'miniquest', 'storyline', 'lore update'],
+     'Quest / Lore Update',
+     ['supplies', 'herblore', 'melee', 'ranged', 'magic']),
+
+    (['seasonal', 'holiday', 'christmas', 'halloween', 'easter', 'event'],
+     'Seasonal Event',
+     ['rares', 'supplies']),
+
+    (['graphical', 'rendering', 'visual update', 'client update', 'interface', 'ui update',
+      'quality of life', 'qol update', 'bug fix', 'hotfix', 'patch notes', 'game update'],
+     'Game Update',
+     []),
+]
+
+def detect_update_type(title, description=''):
+    text = (title + ' ' + description).lower()
+    for keywords, label, cats in UPDATE_RULES:
+        if any(re.search(r'\b' + re.escape(kw) + r'\b', text) for kw in keywords):
+            return label, cats
+    return None, []
+
+def get_impacted_items(cats, all_items, limit=10):
+    """Return top movers from the given categories, ranked by signal strength then change."""
+    if not cats or not all_items:
+        return []
+    cat_set = set(cats)
+    relevant = [it for it in all_items if any(c in cat_set for c in (it.get('categories') or []))]
+    signal_rank = {'FRENZY': 0, 'SURGE': 1, 'DUMP': 2, 'MANIPULATED': 3}
+    def sort_key(it):
+        sigs = it.get('signals') or []
+        top = min((signal_rank[s] for s in sigs if s in signal_rank), default=99)
+        return (top, -abs(it.get('change_1d') or 0))
+    relevant.sort(key=sort_key)
+    movers = [it for it in relevant if (it.get('signals') or it.get('change_1d'))]
+    return [
+        {
+            'name': it['name'],
+            'change_1d': it.get('change_1d'),
+            'signals': [s for s in (it.get('signals') or []) if s in signal_rank],
+        }
+        for it in movers[:limit]
+    ]
+
 # ─── Item name index (built lazily from price cache) ─────────────────────────
 
 _ITEM_INDEX = None
@@ -37,10 +146,15 @@ def _get_index(items=None):
 def detect_mentions(text, items=None):
     text_lower = text.lower()
     found = []
+    seen = set()
     for name in _get_index(items):
-        if name in text_lower:
+        if name in text_lower and name not in seen:
+            # Skip overly generic single words that produce false positives
+            if len(name) <= 3 and name in ('ore', 'log', 'bar', 'axe', 'bow', 'kit', 'dye', 'tar', 'oil', 'ash', 'wax'):
+                continue
+            seen.add(name)
             found.append(name.title())
-            if len(found) >= 5:
+            if len(found) >= 15:
                 break
     return found
 
@@ -55,7 +169,7 @@ def _get(url, params=None):
 
 # ─── RS3 Official News (RSS) ─────────────────────────────────────────────────
 
-def fetch_rs3_news(limit=20):
+def fetch_rs3_news(limit=20, all_items=None):
     results = []
     try:
         html = _get('https://services.runescape.com/m=news/latest_news.rss')
@@ -65,12 +179,17 @@ def fetch_rs3_news(limit=20):
                       re.search(r'<title>(.*?)</title>', entry)
             link_m  = re.search(r'<link>(.*?)</link>', entry)
             date_m  = re.search(r'<pubDate>(.*?)</pubDate>', entry)
+            desc_m  = re.search(r'<description><!\[CDATA\[(.*?)\]\]></description>', entry, re.DOTALL) or \
+                      re.search(r'<description>(.*?)</description>', entry, re.DOTALL)
             if not title_m:
                 continue
             title = title_m.group(1).strip()
             title = title.replace('&amp;', '&').replace('&apos;', "'").replace('&quot;', '"').replace('&#39;', "'")
             link  = link_m.group(1).strip() if link_m else ''
             date  = date_m.group(1).strip() if date_m else ''
+            desc_raw = desc_m.group(1) if desc_m else ''
+            # Strip HTML tags from description for text scanning
+            desc  = re.sub(r'<[^>]+>', ' ', desc_raw).strip()
             try:
                 # RSS dates vary: "Mon, 10 Jun 2025 12:00:00 +0000" or "...GMT"
                 for fmt in ('%a, %d %b %Y %H:%M:%S %z', '%a, %d %b %Y %H:%M:%S GMT'):
@@ -90,7 +209,13 @@ def fetch_rs3_news(limit=20):
                 'title': title,
                 'url': link,
                 'date': date,
-                'mentions': detect_mentions(title),
+                'mentions': detect_mentions(title + ' ' + desc),
+                'description': desc[:200] if desc else '',
+                **( lambda ut, cats: {
+                    'update_type': ut,
+                    'impact_categories': cats,
+                    'impact_items': get_impacted_items(cats, all_items) if all_items else [],
+                })(*detect_update_type(title, desc)),
             })
     except Exception as e:
         print(f'[news] RS3 RSS error: {e}')
@@ -143,16 +268,11 @@ def fetch_all_news(items=None):
         _get_index(items)
 
     print('[news] Fetching RS3 official news…')
-    rs_news = fetch_rs3_news()
+    rs_news = fetch_rs3_news(all_items=items)
     print(f'[news] {len(rs_news)} articles')
 
-    print('[news] Fetching RS Wiki recent changes…')
-    wiki = fetch_wiki_changes()
-    print(f'[news] {len(wiki)} wiki edits matching items')
-
-    combined = rs_news + wiki
-    combined.sort(key=lambda x: x.get('date', ''), reverse=True)
-    return combined
+    rs_news.sort(key=lambda x: x.get('date', ''), reverse=True)
+    return rs_news
 
 
 if __name__ == '__main__':
