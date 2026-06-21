@@ -3696,7 +3696,7 @@ const CAT_LABEL = {
   fletching:      'Fletching',
   food:           'Food',
   farming:        'Farming',
-  mining:         'Mining',
+  mining:         'Gathering',
   prayer:         'Prayer',
   archaeology:    'Archaeology',
   runes:          'Runes',
