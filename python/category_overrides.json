@@ -5019,13 +5019,13 @@
     "melee"
   ],
   "dragonfire ward": [
-    "ranged"
+    "magic"
   ],
   "fleeting boots": [
     "ranged"
   ],
   "dragonfire deflector": [
-    "magic"
+    "ranged"
   ],
   "dragonfire shroud": [
     "necromancy"
@@ -5451,5 +5451,16 @@
   ],
   "zamorakian essence": [
     "boss"
+  ],
+  "hand cannon shot": [
+    "ammo"
+  ],
+  "algarum thread": [
+    "crafting"
+  ],
+  "super restore flask (6)": [
+    "herblore",
+    "materials",
+    "supplies"
   ]
 }
