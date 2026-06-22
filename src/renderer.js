@@ -28,6 +28,7 @@ const T = {
 const CSS = `
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 html, body, #root { height: 100%; overflow: hidden; }
+#scale-root { transform-origin: top left; overflow: hidden; }
 body {
   background: ${T.bg}; color: ${T.text};
   font-family: 'Cinzel', 'Georgia', serif; font-size: 14px;
@@ -90,6 +91,8 @@ body {
 .ge-btn.danger:hover { background: rgba(229,57,53,0.15); }
 .content { flex: 1; overflow-y: auto; padding: 14px 16px; }
 .ge-table-wrap { overflow-x: auto; }
+.col-resize-handle::after { content: ''; position: absolute; right: 3px; top: 4px; bottom: 4px; width: 1px; background: ${T.borderDim}; }
+.col-resize-handle:hover::after { background: ${T.gold}; width: 2px; }
 .ge-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ge-table th { padding: 6px 10px; font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: ${T.gold}; border-bottom: 2px solid ${T.border}; text-align: left; cursor: pointer; user-select: none; background: rgba(0,0,0,0.2); white-space: nowrap; }
 .ge-table th:hover { color: ${T.goldBright}; }
@@ -471,10 +474,13 @@ function VolDisplay({volume, avgVolume}) {
 }
 
 /* ─── Sparkline — small and modal versions ───────────────────── */
-function SparklineSVG({data, color, w, ht}) {
+function SparklineSVG({data, color, w, ht, showLabels}) {
   if (!data || data.length < 2) return null;
   const mn = Math.min(...data), mx = Math.max(...data), rng = mx - mn || 1;
-  const pts = data.map((v,i) => `${(i/(data.length-1))*w},${ht - ((v-mn)/rng)*(ht-6) - 3}`);
+  const PAD_L = showLabels ? 38 : 0;
+  const PAD_R = showLabels ? 4 : 0;
+  const chartW = w - PAD_L - PAD_R;
+  const pts = data.map((v,i) => `${PAD_L + (i/(data.length-1))*chartW},${ht - ((v-mn)/rng)*(ht-14) - 7}`);
   const line = pts.join(' L ');
   const gid = `sg${color.replace('#','')}${w}`;
   return h('svg', {viewBox:`0 0 ${w} ${ht}`, style:{width:'100%',height:ht,display:'block'}},
@@ -484,8 +490,11 @@ function SparklineSVG({data, color, w, ht}) {
         h('stop',{offset:'100%',stopColor:color,stopOpacity:0})
       )
     ),
-    h('path',{d:`M ${pts[0]} L ${line} L ${w},${ht} L 0,${ht} Z`,fill:`url(#${gid})`}),
-    h('path',{d:`M ${line}`,fill:'none',stroke:color,strokeWidth:1.5,strokeLinejoin:'round'})
+    h('path',{d:`M ${pts[0]} L ${line} L ${PAD_L+chartW},${ht} L ${PAD_L},${ht} Z`,fill:`url(#${gid})`}),
+    h('path',{d:`M ${line}`,fill:'none',stroke:color,strokeWidth:1.5,strokeLinejoin:'round'}),
+    showLabels && h('text',{x:PAD_L-3, y:10, fontSize:8, fill:T.textDim, textAnchor:'end'}, fmt.gp(mx)),
+    showLabels && h('text',{x:PAD_L-3, y:ht-2, fontSize:8, fill:T.textDim, textAnchor:'end'}, fmt.gp(mn)),
+    showLabels && h('text',{x:w-PAD_R, y:10, fontSize:8, fill:color, textAnchor:'end'}, fmt.gp(data[data.length-1])),
   );
 }
 
@@ -1259,7 +1268,7 @@ const BUILTIN_SHORTHANDS = {
   'AGS':    'Armadyl godsword',
   'BGS':    'Bandos godsword',
   'SGS':    'Saradomin godsword',
-  'ZGS':    'Zamorak godsword',
+  'ZGS':    ['Zamorak godsword', 'Zaros godsword'],
   // Staves
   'ABS':    'Armadyl battlestaff',
   'MWSOA':  'Masterwork Spear of Annihilation',
@@ -1283,12 +1292,30 @@ const BUILTIN_SHORTHANDS = {
   // Consumables / misc
   'PHAT':   'Blue partyhat',
   'BOND':   'Bond',
+  // Crossbows
+  'ECB':    'Eldritch crossbow',
+  // Ability codexes
+  'GCONC':  'Greater Concentrated Blast ability codex',
+  'GRICO':  'Greater Ricochet ability codex',
+  'GSUN':   'Greater Sunshine ability codex',
+  'GSWIFT': 'Greater Death\'s Swiftness ability codex',
+  'IOH':    'Ingenuity of the Humans ability codex',
+  'IOTH':   'Ingenuity of the Humans ability codex',
+  'GFURY':  'Greater Fury ability codex',
+  'GBARGE': 'Greater Barge ability codex',
+  'GFLURRY':'Greater Flurry ability codex',
+  'GCHAIN': 'Greater Chain ability codex',
+  'CROAR':  'Chaos Roar ability codex',
+  'GSONIC': 'Greater Sonic Wave ability codex',
+  'GSW':    'Greater Sonic Wave ability codex',
 };
 
 function resolveShorthand(query, userShorthands) {
   const key = query.trim().toUpperCase();
   const merged = {...BUILTIN_SHORTHANDS, ...userShorthands};
-  return merged[key] || null;
+  const val = merged[key];
+  if (!val) return null;
+  return Array.isArray(val) ? val : [val];
 }
 
 function useSearch(items, userShorthands = {}) {
@@ -1299,7 +1326,23 @@ function useSearch(items, userShorthands = {}) {
   const results = useMemo(() => {
     if (!query.trim() || query.length < 2) return [];
     const resolved = resolveShorthand(query, userShorthands);
-    const q = (resolved || query).toLowerCase();
+    if (resolved) {
+      const seen = new Set();
+      const out = [];
+      for (const name of resolved) {
+        const q = name.toLowerCase();
+        items
+          .filter(it => it.name.toLowerCase().includes(q) && !seen.has(it.id))
+          .sort((a,b) => {
+            const ai=a.name.toLowerCase().indexOf(q), bi=b.name.toLowerCase().indexOf(q);
+            if (ai !== bi) return ai - bi;
+            return a.name.localeCompare(b.name);
+          })
+          .forEach(it => { seen.add(it.id); out.push(it); });
+      }
+      return out.slice(0, 12);
+    }
+    const q = query.toLowerCase();
     return items
       .filter(it => it.name.toLowerCase().includes(q))
       .sort((a,b) => {
@@ -1566,7 +1609,7 @@ function FlipCalculator({item, onAddToPortfolio}) {
   );
 }
 
-function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio}) {
+function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth}) {
   const [chartOpen, setChartOpen]     = useState(false);
   const [imageOpen, setImageOpen]     = useState(false);
   const [wikiStats, setWikiStats]     = useState(null);
@@ -1608,9 +1651,22 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const inWatch = watchlist.includes(item.id);
   const chg = item.change_1d;
   const sparkColor = chg != null && chg < 0 ? T.red : T.green;
-  const mockHistory = useMemo(() => {
-    const base = item.high || 100000;
-    return Array.from({length:24}, (_,i) => base*(0.9+Math.random()*0.2)*(1+(i-12)*0.003));
+  const [sparkHistory, setSparkHistory] = useState([]);
+  useEffect(() => {
+    if (!item?.id) return;
+    setSparkHistory([]);
+    window.genius?.getItemHistory(item.id).then(hist => {
+      if (!hist || !hist.length) return;
+      const cutoff = Date.now() - 30 * 86400000;
+      const pts = hist
+        .filter(p => {
+          const ts = typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
+          return ts >= cutoff;
+        })
+        .map(p => p.price ?? p.high ?? p.low ?? 0)
+        .filter(Boolean);
+      setSparkHistory(pts);
+    }).catch(() => {});
   }, [item.id]);
 
   const slotLabel = (slot) => {
@@ -1622,7 +1678,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     return slot;
   };
 
-  return h('div', {className:'detail-panel'},
+  return h('div', {className:'detail-panel', style: panelWidth ? {width:panelWidth, minWidth:260} : undefined},
     chartOpen && h(ChartModal, {item, onClose:()=>setChartOpen(false), dateFormat}),
     imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
@@ -1702,7 +1758,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     ),
     h('div', {className:'detail-body'},
       h('div', {className:'sparkline-wrap', onClick:()=>setChartOpen(true), title:'Click to enlarge'},
-        h(SparklineSVG, {data:mockHistory, color:sparkColor, w:260, ht:52}),
+        h(SparklineSVG, {data:sparkHistory.length ? sparkHistory : [item.high||0, item.high||0], color:sparkColor, w:260, ht:52, showLabels:sparkHistory.length > 0}),
         h('span', {className:'sparkline-expand-hint'}, 'click to expand')
       ),
       item.untradeable
@@ -1872,9 +1928,38 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 }
 
 /* ─── Item table ─────────────────────────────────────────────── */
+const DEFAULT_COL_WIDTHS = {name:null, high:110, change_1d:110, volume:140, signals:160, star:30};
+function loadColWidths() {
+  try { return {...DEFAULT_COL_WIDTHS, ...JSON.parse(localStorage.getItem('genius_col_widths')||'{}')}; }
+  catch { return {...DEFAULT_COL_WIDTHS}; }
+}
+
 function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, showSignals}) {
   const [sort, setSort] = useState({key:'name',dir:1});
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, item}
+  const [colWidths, setColWidths] = useState(loadColWidths);
+  const colWidthsRef = useRef(colWidths);
+  const startColResize = (key) => e => {
+    e.preventDefault();
+    const startX = e.clientX, startW = colWidthsRef.current[key] || 110;
+    const onMove = me => {
+      const w = Math.max(50, startW + (me.clientX - startX));
+      colWidthsRef.current = {...colWidthsRef.current, [key]: w};
+      setColWidths(colWidthsRef.current);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      try { localStorage.setItem('genius_col_widths', JSON.stringify(colWidthsRef.current)); } catch {}
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+  const resizeHandle = key => h('span', {
+    onMouseDown: startColResize(key),
+    className: 'col-resize-handle',
+    style:{position:'absolute', right:0, top:0, bottom:0, width:8, cursor:'col-resize', zIndex:5},
+  });
 
   const openCtx = (e, it) => {
     e.preventDefault();
@@ -2050,13 +2135,21 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
       }, '⇌ Compare all'),
       h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},onClick:clearMulti},'✕ Clear')
     ),
-    h('table',{className:'ge-table'},
+    h('table',{className:'ge-table', style:{tableLayout:'fixed'}},
+      h('colgroup',null,
+        h('col',null),
+        h('col',{style:{width:colWidths.high}}),
+        h('col',{style:{width:colWidths.change_1d}}),
+        h('col',{style:{width:colWidths.volume}}),
+        showSignals && h('col',{style:{width:colWidths.signals}}),
+        h('col',{style:{width:colWidths.star}}),
+      ),
       h('thead',null,h('tr',null,
-        h('th',{onClick:()=>tog('name')},'Item'+arr('name')),
-        h('th',{onClick:()=>tog('high')},'Price'+arr('high')),
-        h('th',{onClick:()=>tog('change_1d')},'Change'+arr('change_1d')),
-        h('th',{onClick:()=>tog('volume')},'Volume'+arr('volume')),
-        showSignals && h('th',null,'Signals'),
+        h('th',{onClick:()=>tog('name'), style:{position:'relative'}},'Item'+arr('name'), resizeHandle('high')),
+        h('th',{onClick:()=>tog('high'), style:{position:'relative'}},'Price'+arr('high'), resizeHandle('change_1d')),
+        h('th',{onClick:()=>tog('change_1d'), style:{position:'relative'}},'Change'+arr('change_1d'), resizeHandle('volume')),
+        h('th',{onClick:()=>tog('volume'), style:{position:'relative'}},'Volume'+arr('volume'), showSignals && resizeHandle('signals')),
+        showSignals && h('th',{style:{position:'relative'}},'Signals'),
         h('th',{style:{width:30}},null)
       )),
       h('tbody',null, sorted.map(it =>
@@ -2094,6 +2187,29 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const [activeSector, setActiveSector] = useState(null);
   const [newsExpanded, setNewsExpanded] = useState(true);
   const [expandedArticle, setExpandedArticle] = useState(null);
+  const [signalTrend, setSignalTrend] = useState(null);
+  const [signalWindow, setSignalWindow] = useState('today');
+  useEffect(() => { setSignalWindow('today'); }, [activeSignal]);
+  useEffect(() => {
+    const limits = {};
+    items.forEach(it => { if (it.id && it.limit) limits[it.id] = it.limit; });
+    window.genius?.getSignalTrend?.(limits).then(setSignalTrend).catch(() => {});
+  }, [items]);
+
+  // Backspace backs out of a drill-down view (signal / index / sector)
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key !== 'Backspace') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (document.activeElement?.isContentEditable) return;
+      if (activeSignal) { e.preventDefault(); setActiveSignal(null); }
+      else if (activeIndexId) { e.preventDefault(); setActiveIndexId(null); }
+      else if (activeSector) { e.preventDefault(); setActiveSector(null); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [activeSignal, activeIndexId, activeSector]);
   const tradeableItems = useMemo(() => items.filter(it => !it.untradeable), [items]);
 
   const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000)
@@ -2306,8 +2422,10 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const SignalPill = ({signal, count}) => {
     const c = SIG_COLORS[signal] || {bg:T.panel,border:T.border,text:T.text};
     const active = activeSignal === signal;
+    const trend = signalTrend?.counts?.[signal];
     return h('div', {
       onClick: () => setActiveSignal(s => s === signal ? null : signal),
+      title: trend ? `Past ${trend.length} days: ${trend.join(', ')}` : undefined,
       style:{
         background: active ? c.border : c.bg,
         border:`1px solid ${c.border}`, borderRadius:4,
@@ -2317,7 +2435,18 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       }
     },
       h('div', {style:{fontSize:18, fontWeight:'bold', color: active ? T.bg : c.text}}, count),
-      h('div', {style:{fontSize:10, color: active ? T.bg : c.text, opacity: active ? 1 : 0.8, marginTop:2}}, signal)
+      h('div', {style:{fontSize:10, color: active ? T.bg : c.text, opacity: active ? 1 : 0.8, marginTop:2}}, signal),
+      trend && h('div', {style:{display:'flex', alignItems:'flex-end', gap:2, marginTop:5, height:16}},
+        trend.map((v,i) => {
+          const max = Math.max(...trend, 1);
+          const isToday = i === trend.length - 1;
+          return h('div', {key:i, style:{
+            width:5, height: Math.max(2, (v/max)*16),
+            background: isToday ? (active ? T.bg : c.text) : (active ? `${T.bg}99` : `${c.text}55`),
+            borderRadius:1,
+          }, title:`${v}`});
+        })
+      )
     );
   };
 
@@ -2373,9 +2502,26 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
   // Signal drill-down view
   if (activeSignal) {
-    const sigItems = tradeableItems
-      .filter(it => (it.signals||[]).includes(activeSignal))
+    const todayItems = tradeableItems.filter(it => (it.signals||[]).includes(activeSignal));
+    const weekEntries = signalTrend?.itemIds?.[activeSignal] || [];
+    const lastDayIdx = signalTrend ? signalTrend.days.length - 1 : 0;
+    const weekItems = signalWindow === '7d'
+      ? (() => {
+          const byId = new Map();
+          weekEntries.forEach(e => byId.set(String(e.id), e.lastDayIdx));
+          todayItems.forEach(it => byId.set(String(it.id), lastDayIdx)); // today's live signals always count
+          return [...byId.entries()].map(([id, idx]) => {
+            const it = tradeableItems.find(t => String(t.id) === id);
+            return it ? {...it, _lastDayIdx: idx} : null;
+          }).filter(Boolean);
+        })()
+      : [];
+    const sigItems = (signalWindow === '7d' ? weekItems : todayItems)
       .sort((a,b) => {
+        if (signalWindow === '7d') {
+          const da = a._lastDayIdx ?? 0, db = b._lastDayIdx ?? 0;
+          if (da !== db) return db - da;
+        }
         if (activeSignal === 'DUMP') return (a.change_1d||0) - (b.change_1d||0);
         if (activeSignal === 'SURGE') return (b.change_1d||0) - (a.change_1d||0);
         const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
@@ -2387,8 +2533,24 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       h('div', {style:{display:'flex', alignItems:'center', gap:10, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexShrink:0}},
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:12}, onClick:()=>setActiveSignal(null)}, '← Back'),
         h('div', {style:{fontSize:12, fontWeight:'bold', color:c.text, letterSpacing:'0.08em'}}, activeSignal),
-        h('div', {style:{fontSize:11, color:T.textDim}}, `${sigItems.length} items`)
+        h('div', {style:{fontSize:11, color:T.textDim}}, `${sigItems.length} items`),
+        h('div', {style:{display:'flex', gap:4, marginLeft:'auto'}},
+          ['today','7d'].map(w => h('button', {
+            key:w,
+            onClick:()=>setSignalWindow(w),
+            style:{
+              padding:'3px 10px', fontSize:11, cursor:'pointer', borderRadius:3,
+              background: signalWindow===w ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border:`1px solid ${signalWindow===w ? T.gold : T.border}`,
+              color: signalWindow===w ? T.goldBright : T.textDim,
+            }
+          }, w==='today' ? 'Today' : 'Last 7 Days'))
+        )
       ),
+      SIGNAL_INFO[activeSignal] && h('div', {style:{
+        padding:'8px 14px', fontSize:11, color:T.textDim, fontStyle:'italic', lineHeight:1.5,
+        borderBottom:`1px solid ${T.borderDim}`, flexShrink:0,
+      }}, SIGNAL_INFO[activeSignal] + (signalWindow==='7d' ? ' Showing any item that triggered this in the last 7 days.' : '')),
       h('div', {style:{flex:1, overflowY:'auto'}},
         h(ItemTable, {items:sigItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
 
@@ -3137,6 +3299,24 @@ const APP_NEWS = [
       'Portfolio Analytics — profit by category, value over time, win rate, hold time distribution, and best possible sale price within your hold window',
       'Advanced Alerts — signal-based triggers (e.g. alert when SURGE fires on a watchlist item), not just price thresholds',
       'Price Since Post — track how item prices move after RS3 news articles; see what the market actually reacted to',
+      'Reopen Position — undo a sale on a closed position and put it back into open positions',
+    ]
+  },
+  {
+    version: 'v1.6.0',
+    items: [
+      'UI Scale setting — resize the entire app interface from 80% to 150%',
+      'Resizable item detail panel — drag the handle on its left edge',
+      'Resizable table columns — drag column header edges to adjust width',
+      'Signal history — each Dashboard signal now shows a 7-day trend, hover for daily breakdown',
+      'Today / Last 7 Days toggle on signal drill-down pages — see everything that triggered a signal this week, not just today',
+      'Brief description added to every signal drill-down page',
+      'Fixed MANIPULATED signal — was defined in the UI but never actually computed; now properly flags extreme volume + large price move + tiny buy limit',
+      'New shorthands — ECB and a batch of Greater/lesser ability codexes (Gconc, Grico, Gsun, Gswift, IOH/IOTH, GFury, gbarge, gflurry, gchain, croar, gsonic)',
+      'ZGS now suggests both Zamorak godsword and Zaros godsword instead of only one',
+      'Shorthand item name field now validates against real items live, with a dropdown of matches as you type',
+      'Backspace now closes the item detail panel and backs out of Dashboard drill-down views',
+      'Quit button added to the header — closing the window still minimizes to tray, this fully exits',
     ]
   },
   {
@@ -3497,6 +3677,24 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   const [s, setS] = useState(settings);
   const [shDraft, setShDraft] = useState('');
   const [shKey, setShKey]     = useState('');
+  const [shFocused, setShFocused] = useState(false);
+  const shMatches = useMemo(() => {
+    const q = shDraft.trim().toLowerCase();
+    if (!q || q.length < 2) return [];
+    return (items||[]).filter(it => it.name.toLowerCase().includes(q)).slice(0, 8);
+  }, [shDraft, items]);
+  const shExactMatch = useMemo(() =>
+    (items||[]).some(it => it.name.toLowerCase() === shDraft.trim().toLowerCase()),
+  [shDraft, items]);
+  const addShorthand = () => {
+    const k = shKey.trim(), v = shDraft.trim();
+    if (!k || !v) { toast('Enter both a shorthand and an item name','error'); return; }
+    if (!shExactMatch) { toast(`"${v}" doesn't match any known item — check the spelling`, 'error'); return; }
+    const updated = {...(userShorthands||{}), [k]: v};
+    onSaveShorthands(updated);
+    setShKey(''); setShDraft('');
+    toast(`Shorthand "${k}" saved`, 'success');
+  };
   useEffect(()=>setS(settings),[settings]);
   const set = k => e => setS(x=>({...x,[k]:e.target.value}));
   const setChk = k => e => setS(x=>({...x,[k]:e.target.checked}));
@@ -3541,6 +3739,26 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         h('option',{value:'dark'},'Dark (default)'),
         h('option',{value:'black'},'Black'),
       )
+    ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'UI Scale'),
+      h('div',{style:{display:'flex', alignItems:'center', gap:10}},
+        h('input',{
+          type:'range', min:80, max:150, step:5,
+          value: s.uiScale || 100,
+          onChange: e => {
+            const v = parseInt(e.target.value,10);
+            setS(x=>({...x, uiScale: v}));
+            onChange({...s, uiScale: v});
+          },
+          style:{flex:1},
+        }),
+        h('span',{style:{fontSize:12, color:T.gold, minWidth:42, textAlign:'right'}}, `${s.uiScale||100}%`),
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim, marginTop:4}}, 'Scales the whole app UI. Takes effect immediately, no need to save.'),
+      h('button',{className:'ge-btn', style:{marginTop:6, fontSize:11, padding:'2px 8px'},
+        onClick:()=>{setS(x=>({...x,uiScale:100})); window.genius?.saveSettings({...s,uiScale:100}); onChange({...s,uiScale:100});}
+      }, 'Reset to 100%')
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Date Format'),
@@ -3607,34 +3825,35 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}},
         'Add your own abbreviations. Type them in the search bar to jump straight to an item. (e.g. "T90" → "Noxious scythe")'
       ),
-      h('div',{style:{display:'flex',gap:6,marginBottom:10}},
+      h('div',{style:{display:'flex',gap:6,marginBottom:10, position:'relative'}},
         h('input',{
           className:'ge-input', placeholder:'Shorthand (e.g. T90)',
           value:shKey, onChange:e=>setShKey(e.target.value.toUpperCase()),
           style:{width:120, textTransform:'uppercase'},
         }),
-        h('input',{
-          className:'ge-input', placeholder:'Item name (e.g. Noxious scythe)',
-          value:shDraft, onChange:e=>setShDraft(e.target.value),
-          style:{flex:1},
-          onKeyDown: e => {
-            if (e.key !== 'Enter') return;
-            const k = shKey.trim(), v = shDraft.trim();
-            if (!k || !v) return;
-            const updated = {...(userShorthands||{}), [k]: v};
-            onSaveShorthands(updated);
-            setShKey(''); setShDraft('');
-            toast(`Shorthand "${k}" saved`, 'success');
-          }
-        }),
-        h('button',{className:'ge-btn gold',onClick:()=>{
-          const k = shKey.trim(), v = shDraft.trim();
-          if (!k || !v) { toast('Enter both a shorthand and an item name','error'); return; }
-          const updated = {...(userShorthands||{}), [k]: v};
-          onSaveShorthands(updated);
-          setShKey(''); setShDraft('');
-          toast(`Shorthand "${k}" saved`, 'success');
-        }},'Add'),
+        h('div',{style:{flex:1, position:'relative'}},
+          h('input',{
+            className:'ge-input', placeholder:'Item name (e.g. Noxious scythe)',
+            value:shDraft, onChange:e=>setShDraft(e.target.value),
+            onFocus:()=>setShFocused(true),
+            onBlur:()=>setTimeout(()=>setShFocused(false),150),
+            style:{width:'100%', borderColor: shDraft.trim() ? (shExactMatch ? T.green : T.red) : undefined},
+            onKeyDown: e => { if (e.key === 'Enter') addShorthand(); }
+          }),
+          shFocused && shMatches.length > 0 && h('div',{style:{
+            position:'absolute', top:'100%', left:0, right:0, zIndex:20,
+            background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:4,
+            maxHeight:200, overflowY:'auto', boxShadow:'0 4px 16px rgba(0,0,0,0.6)',
+          }},
+            shMatches.map(it => h('div',{
+              key:it.id, style:{padding:'6px 10px', fontSize:12, cursor:'pointer'},
+              onMouseDown: () => setShDraft(it.name),
+              onMouseEnter: e => e.currentTarget.style.background = T.panel,
+              onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+            }, it.name))
+          )
+        ),
+        h('button',{className:'ge-btn gold',onClick:addShorthand},'Add'),
       ),
       Object.keys(userShorthands||{}).length > 0 && h('div',{style:{display:'flex',flexDirection:'column',gap:4}},
         Object.entries(userShorthands).map(([k,v]) =>
@@ -5258,6 +5477,33 @@ function App() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const {toasts, add:toast} = useToast();
   const theme = settings.theme || 'dark';
+  const [detailPanelWidth, setDetailPanelWidth] = useState(settings.detailPanelWidth || 296);
+  useEffect(() => { if (settings.detailPanelWidth) setDetailPanelWidth(settings.detailPanelWidth); }, [settings.detailPanelWidth]);
+  const panelWidthRef = useRef(detailPanelWidth);
+  const startPanelResize = e => {
+    e.preventDefault();
+    const startX = e.clientX, startW = detailPanelWidth;
+    const onMove = me => {
+      const w = Math.min(600, Math.max(260, startW - (me.clientX - startX)));
+      panelWidthRef.current = w;
+      setDetailPanelWidth(w);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.genius?.saveSettings({...settings, detailPanelWidth: panelWidthRef.current});
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  const uiScale = (settings.uiScale || 100) / 100;
+  const [scaleDims, setScaleDims] = useState({w: window.innerWidth, h: window.innerHeight});
+  useEffect(() => {
+    const onResize = () => setScaleDims({w: window.innerWidth, h: window.innerHeight});
+    window.addEventListener('resize', onResize);
+    return () => window.removeEventListener('resize', onResize);
+  }, []);
 
   // Custom nav order — flatten NAV when user has custom order (no group separators)
   const navItems = useMemo(() => {
@@ -5360,6 +5606,19 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
+  // Backspace closes the item detail panel (when no text field is focused)
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key !== 'Backspace') return;
+      const tag = document.activeElement?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+      if (document.activeElement?.isContentEditable) return;
+      if (selected) { e.preventDefault(); setSelected(null); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selected]);
+
   const toggleWatch = useCallback(async id => {
     const nw = watchlist.includes(id) ? watchlist.filter(x=>x!==id) : [...watchlist,id];
     setWatchlist(nw);
@@ -5447,7 +5706,12 @@ function App() {
     }, 80);
   };
 
-  return h('div',{className:'app'},
+  const logicalW = scaleDims.w / uiScale, logicalH = scaleDims.h / uiScale;
+  return h('div',{id:'scale-root', style:{
+    width: logicalW, height: logicalH,
+    transform: `scale(${uiScale})`,
+  }},
+  h('div',{className:'app', style:{width: logicalW, height: logicalH}},
     h('style',null,CSS),
     theme==='black'&&h('style',null,BLACK_CSS),
     h('link',{rel:'preconnect',href:'https://fonts.googleapis.com'}),
@@ -5511,7 +5775,13 @@ function App() {
         },
           fetching&&h('span',{className:'spinner'}),
           fetching?'Fetching...':'Fetch Now'
-        )
+        ),
+        h('div',{style:{width:1,height:20,background:T.borderDim,flexShrink:0,margin:'0 2px'}}),
+        h('button',{
+          className:'ge-btn danger', title:'Quit GEnius',
+          style:{padding:'4px 8px', flexShrink:0},
+          onClick:()=>{ if (window.confirm('Quit GEnius? Background price fetching will stop.')) window.genius?.quitApp(); }
+        }, '⏻')
       ),
       h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
         h('div',{className:'content',style:{flex:1}},
@@ -5541,7 +5811,14 @@ function App() {
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}})
         ),
-        showDetail&&h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos)}),
+        showDetail&&h('div',{style:{position:'relative', display:'flex'}},
+          h('div',{
+            onMouseDown:startPanelResize,
+            style:{width:5, cursor:'col-resize', flexShrink:0, background:'transparent'},
+            title:'Drag to resize',
+          }),
+          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth}),
+        ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})
       )
     ),
@@ -5565,7 +5842,7 @@ function App() {
     h('div',{className:'toast-tray'},
       toasts.map(t=>h('div',{key:t.id,className:`toast ${t.type}`},t.msg))
     )
-  );
+  ));
 }
 
 createRoot(document.getElementById('root')).render(h(App,null));

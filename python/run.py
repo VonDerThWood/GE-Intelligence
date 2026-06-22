@@ -283,6 +283,12 @@ def run_signals(items):
             elif vol_ratio >= ACCUM_VOL_MIN:
                 signals.append("ACCUMULATION")
 
+        # MANIPULATED: extreme volume + large price move + tiny buy limit —
+        # a small buy limit means volume this high can't be organic demand.
+        limit = item.get("limit") or 0
+        if has_avg and vol_ratio >= 2.5 and abs(chg) >= 8.0 and 0 < limit <= 100:
+            signals.append("MANIPULATED")
+
         # Volume tier badge — always shown when volume deviates ≥10% from average.
         # Independent of price signals; answers "how unusual is today's volume?"
         if vol >= MIN_VOL_ABS and avg_vol:

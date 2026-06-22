@@ -181,6 +181,8 @@ ipcMain.handle('get-data', async () => {
   }
 });
 
+ipcMain.handle('quit-app', () => { isQuitting = true; app.quit(); return { success: true }; });
+
 ipcMain.handle('fetch-now', async (_, mode) => {
   try { await runPython(mode || 'prices'); return { success: true }; }
   catch (e) { return { success: false, error: e.message }; }
@@ -193,6 +195,9 @@ ipcMain.handle('get-settings', () => ({
   notifications:      store.get('notifications', true),
   expensiveThreshold: store.get('expensiveThreshold', 500000000),
   navOrder:           store.get('navOrder', []),
+  uiScale:            store.get('uiScale', 100),
+  detailPanelWidth:   store.get('detailPanelWidth', 296),
+  columnWidths:       store.get('columnWidths', {}),
 }));
 
 ipcMain.handle('save-settings', (_, settings) => {
@@ -613,6 +618,81 @@ ipcMain.handle('start-history-population', (_, itemIds) => {
 ipcMain.handle('stop-history-population', () => {
   historyFetchStop = true;
   return { success: true };
+});
+
+// ─── Signal trend — recompute historical signals from history.json ──────────
+// Mirrors the thresholds in python/run.py compute_signals()
+const SIGNAL_TREND_DAYS = 7;
+ipcMain.handle('get-signal-trend', (_, itemLimits) => {
+  const limits = itemLimits || {};
+  const toSec = ts => (ts && ts > 1e11 ? ts / 1000 : (ts || 0));
+  const dayKey = sec => new Date(sec * 1000).toDateString();
+  const days = [];
+  const now = new Date();
+  for (let i = SIGNAL_TREND_DAYS - 1; i >= 0; i--) {
+    const d = new Date(now); d.setDate(now.getDate() - i);
+    days.push(d.toDateString());
+  }
+  const counts = {SURGE:[], DUMP:[], ACCUMULATION:[], DISTRIBUTION:[], FRENZY:[], HIGH_VOL:[], MANIPULATED:[]};
+  for (const key of Object.keys(counts)) counts[key] = days.map(() => 0);
+  const itemDays = {SURGE:{}, DUMP:{}, ACCUMULATION:{}, DISTRIBUTION:{}, FRENZY:{}, HIGH_VOL:{}, MANIPULATED:{}};
+
+  for (const itemId in historyData) {
+    const points = historyData[itemId];
+    if (!points || points.length < 8) continue;
+    // One point per day — keep latest per day, sorted ascending
+    const byDay = {};
+    for (const p of points) {
+      const sec = toSec(p.timestamp);
+      const dk = dayKey(sec);
+      if (!byDay[dk] || sec > toSec(byDay[dk].timestamp)) byDay[dk] = p;
+    }
+    const sorted = Object.values(byDay).sort((a,b) => toSec(a.timestamp) - toSec(b.timestamp));
+    if (sorted.length < 8) continue;
+
+    const vols = sorted.map(p => p.volume).filter(v => v != null).sort((a,b) => a-b);
+    if (!vols.length) continue;
+    const mid = Math.floor(vols.length / 2);
+    const avgVol = vols.length % 2 ? vols[mid] : (vols[mid-1] + vols[mid]) / 2;
+    if (!avgVol) continue;
+
+    for (let di = 0; di < days.length; di++) {
+      const dayStr = days[di];
+      const idx = sorted.findIndex(p => dayKey(toSec(p.timestamp)) === dayStr);
+      if (idx < 1) continue; // need a previous day to compute change
+      const cur = sorted[idx], prev = sorted[idx-1];
+      if (!cur.price || !prev.price) continue;
+      const chg = ((cur.price - prev.price) / prev.price) * 100;
+      const vol = cur.volume || 0;
+      const volRatio = avgVol ? vol / avgVol : 0;
+      const absChgGp = Math.abs(chg / 100 * cur.price);
+
+      const mark = (sig) => {
+        counts[sig][di]++;
+        if (!itemDays[sig][itemId] || itemDays[sig][itemId] < di) itemDays[sig][itemId] = di;
+      };
+
+      if (chg >= 5 && absChgGp >= 1000 && volRatio >= 1.2) mark('SURGE');
+      else if (chg <= -5 && absChgGp >= 1000 && volRatio >= 1.2) mark('DUMP');
+      else if (chg >= -3 && chg <= 3) {
+        if (volRatio >= 2.5) mark('DISTRIBUTION');
+        else if (volRatio >= 1.3) mark('ACCUMULATION');
+      }
+      if (vol >= 5000 && avgVol) {
+        if (volRatio >= 2.5) mark('FRENZY');
+        else if (volRatio >= 1.5) mark('HIGH_VOL');
+      }
+      const limit = limits[itemId] || 0;
+      if (volRatio >= 2.5 && Math.abs(chg) >= 8.0 && limit > 0 && limit <= 100) mark('MANIPULATED');
+    }
+  }
+
+  const itemIds = {};
+  for (const sig of Object.keys(itemDays)) {
+    itemIds[sig] = Object.entries(itemDays[sig]).map(([id, lastDayIdx]) => ({id, lastDayIdx}));
+  }
+
+  return { days, counts, itemIds };
 });
 
 ipcMain.handle('get-item-history', async (_, itemId) => {
