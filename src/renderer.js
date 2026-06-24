@@ -3357,6 +3357,14 @@ const APP_NEWS = [
     ]
   },
   {
+    version: 'v1.7.1',
+    items: [
+      'Watchlist daily digest — optional once-a-day desktop notification listing any watchlist item that moved past a threshold you set, even with GEnius minimized to the tray. Configure in Settings',
+      'Reminders — new section in the Alerts tab for plain date-triggered reminders ("remind me to buy X on this date"), separate from price alerts, with an optional item link',
+      'Adding a position to Portfolio now automatically adds that item to your Watchlist if it isn\'t already on there',
+    ]
+  },
+  {
     version: 'v1.7.0',
     items: [
       'New app icon and logo',
@@ -3638,11 +3646,38 @@ function alertSummary(a) {
   }
 }
 
-function AlertsTab({items, alerts, onSave, onDelete, toast, description}) {
+function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder}) {
   const BLANK = {item_name:'', condition:'above', price:'', pct:'', signal_type:'SURGE'};
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
   const set = k => e => setForm(f=>({...f,[k]:e.target.value}));
+
+  const REM_BLANK = {item_name:'', due_date:'', message:''};
+  const [remForm, setRemForm] = useState(REM_BLANK);
+  const [remEditId, setRemEditId] = useState(null);
+  const setRem = k => e => setRemForm(f=>({...f,[k]:e.target.value}));
+
+  const submitReminder = async () => {
+    if (!remForm.due_date) { toast('Pick a date','error'); return; }
+    if (!remForm.message)  { toast('Enter a reminder message','error'); return; }
+    const r = {
+      id: remEditId || Date.now().toString(),
+      itemName: remForm.item_name,
+      dueDate: remForm.due_date,
+      message: remForm.message,
+      fired: false,
+    };
+    await window.genius?.saveReminder(r);
+    onSaveReminder(r);
+    setRemForm(REM_BLANK);
+    setRemEditId(null);
+    toast('Reminder saved','success');
+  };
+  const startEditReminder = r => {
+    setRemEditId(r.id);
+    setRemForm({item_name:r.itemName||'', due_date:r.dueDate||'', message:r.message||''});
+  };
+  const cancelEditReminder = () => { setRemEditId(null); setRemForm(REM_BLANK); };
 
   const needsPrice  = ['above','below'].includes(form.condition);
   const needsPct    = ['pct_up','pct_down'].includes(form.condition);
@@ -3737,6 +3772,55 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description}) {
                 onClick:async()=>{await window.genius?.deleteAlert(a.id);onDelete(a.id);toast('Deleted','info')}},'Del')
             ))
       )
+    ),
+    h('div',{style:{marginTop:24, paddingTop:18, borderTop:`1px solid ${T.border}`}},
+      h('div',{className:'two-col'},
+        h('div',null,
+          h('div',{className:'ge-section-head'}, remEditId ? 'Edit reminder' : 'New reminder'),
+          h('div',{style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
+            'Plain date-triggered reminders — no price involved, just "remind me on this date." Fires once via desktop notification (works even minimized to the tray), then it\'s done.'
+          ),
+          h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
+            h('div',null,
+              h('label',{className:'form-lbl'},'Item (optional)'),
+              h(ItemAutocomplete,{items, value:remForm.item_name, onChange:name=>setRemForm(f=>({...f,item_name:name})), placeholder:'Search item... (optional)'})
+            ),
+            h('div',null,
+              h('label',{className:'form-lbl'},'Due date'),
+              h('input',{className:'ge-input', type:'date', value:remForm.due_date, onChange:setRem('due_date')})
+            ),
+            h('div',null,
+              h('label',{className:'form-lbl'},'Message'),
+              h('textarea',{className:'ge-input', rows:2, value:remForm.message, onChange:setRem('message'), placeholder:'e.g. Buy Shard of Genesis Essence — tail end of Autumn before the Winter boss'})
+            ),
+            h('div',{className:'row'},
+              h('button',{className:'ge-btn gold',onClick:submitReminder}, remEditId?'Update':'Add reminder'),
+              remEditId && h('button',{className:'ge-btn',onClick:cancelEditReminder},'Cancel')
+            )
+          )
+        ),
+        h('div',null,
+          h('div',{className:'ge-section-head'},`Reminders (${reminders.length})`),
+          !reminders.length
+            ? h('div',{className:'empty',style:{padding:'20px 0'}},
+                h('div',{className:'icon'},'◷'),
+                h('p',null,'No reminders set yet.'),
+              )
+            : reminders.slice().sort((a,b)=>(a.dueDate||'').localeCompare(b.dueDate||'')).map(r => h('div',{key:r.id,className:'alert-row'},
+                h('span',{style:{flex:1,color:T.text,fontSize:12}},
+                  r.itemName ? `${r.itemName} — ${r.message}` : r.message
+                ),
+                h('span',{className:'alert-cond',style:{
+                  fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
+                  background: r.fired ? 'rgba(76,175,80,0.1)' : 'rgba(201,168,76,0.1)',
+                  border:`1px solid ${T.borderDim}`, color: r.fired ? T.green : T.textDim,
+                }}, r.fired ? `Fired ${r.dueDate}` : `Due ${r.dueDate}`),
+                h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:11},onClick:()=>startEditReminder(r)},'Edit'),
+                h('button',{className:'ge-btn danger',style:{padding:'2px 8px',fontSize:11},
+                  onClick:async()=>{await window.genius?.deleteReminder(r.id);onDeleteReminder(r.id);toast('Deleted','info')}},'Del')
+              ))
+        )
+      )
     )
   );
 }
@@ -3787,6 +3871,10 @@ const NEGLIGIBLE_MEDIAN_PCT = 3;
 // "why are we showing items with a profit per buy limit as low as 27k?").
 // Below this, treat as negligible regardless of how clean the % looks.
 const NEGLIGIBLE_PROFIT_FOR_LIMIT_GP = 100000;
+// RS3 Grand Exchange offer slots (6 base + 2 from Premier Club) — the
+// Recommendations engine targets filling this many slots rather than
+// dumping the whole budget into whichever single item has the best %.
+const GE_SLOTS = 8;
 
 // Curated from research/dxp_findings_v2.md — popular DXP theories that
 // looked promising at first pass but didn't hold up once checked for
@@ -3838,22 +3926,6 @@ const DXP_DEBUNKED_THEORIES = [
   },
 ];
 
-// A GE buy limit caps how much fills per 4-hour window, NOT a lifetime
-// total — leave an offer in (as Ben does, e.g. 100k Vulnerability bombs
-// at a 1,000/4hr limit) and it just keeps refilling for as long as the
-// offer sits there. The realistic ceiling on accumulation is the buy
-// limit multiplied by how many 4-hour cycles fit inside the actual buy
-// window (the gap between the buy day and the sell day), not the bare
-// limit on its own — treating the limit as a hard cap was shortsighted
-// and understated every "Profit (buy limit)" figure and every
-// Recommendations allocation in this tab until Ben caught it.
-function realisticMaxQty(limit, buyDay, sellDay) {
-  if (!limit) return Infinity;
-  const windowDays = Math.max(0.1, Math.abs((sellDay ?? buyDay) - buyDay));
-  const cycles = Math.max(1, Math.floor(windowDays * 6)); // 6 four-hour cycles/day
-  return limit * cycles;
-}
-
 // Combines the buy-day and sell-day timing data into one "trade idea" —
 // the actual point of this research is finding where the bottom and top are,
 // not reporting a hypothetical loss on a buy-limit's worth of units.
@@ -3872,14 +3944,19 @@ function buildTradeIdea(timing, price, limit) {
   const sellPrice = Math.round(price * (1 + sellPct / 100));
   const netSellPrice = applyTax(sellPrice);
   const profitPerItem = netSellPrice - buyPrice;
-  const realisticQty = realisticMaxQty(limit, buyDay, sellDay);
-  const profitForLimit = limit && realisticQty !== Infinity ? profitPerItem * realisticQty : null;
+  // "Profit (buy limit)" is literally profit per item * the bare buy limit —
+  // one full limit's worth of units (Ben: "if my buy limit is 10k and I can
+  // make 1k per item, the profit per buy limit is 10m. That's how it should
+  // show."). Deliberately NOT scaled by any assumed holding window — how
+  // long someone actually leaves an offer open varies too much per player
+  // to project a single "realistic" total from.
+  const profitForLimit = limit ? profitPerItem * limit : null;
   const netProfitPct = buyPrice ? (profitPerItem / buyPrice) * 100 : profitPct;
 
   return {
     buyDay, sellDay, buyPct, sellPct, sameySequence,
     buyDayStd: timing.best_buy_day_std, sellDayStd: timing.best_sell_day_std,
-    buyPrice, sellPrice, netSellPrice, profitPct, netProfitPct, profitPerItem, profitForLimit, realisticQty,
+    buyPrice, sellPrice, netSellPrice, profitPct, netProfitPct, profitPerItem, profitForLimit,
     nEvents: timing.n_events,
     // Day offset (relative to event START, negative = before) of the
     // lowest price point in the pre-event baseline window — was already
@@ -3899,11 +3976,13 @@ function DXPIntelTab({items, onSelect}) {
   const [sort, setSort] = useState({key:'confidence', dir:-1});
   const [tier, setTier] = useState('confirmed'); // 'confirmed' | 'negligible' | 'speculative' | 'debunked' | 'watchlist' | 'recommendations'
   const [expanded, setExpanded] = useState(null);
+  const [search, setSearch] = useState('');
   const [dxpWatchlist, setDxpWatchlistState] = useState([]);
   const [notifSettings, setNotifSettings] = useState({enabled:false, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
   const [riskTolerance, setRiskTolerance] = useState('safe'); // 'safe' | 'risky'
   const [budgetInput, setBudgetInput] = useState('');
-  const [recSort, setRecSort] = useState({key:'profit', dir:-1}); // default: biggest gp profit first, not best %
+  const [slotsInput, setSlotsInput] = useState(String(GE_SLOTS));
+  const [recSort, setRecSort] = useState({key:'profitForLimit', dir:-1}); // default: biggest buy-limit profit first
   const toggleRecSort = key => setRecSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
   const recSortArrow = key => recSort.key===key ? (recSort.dir>0?' ↑':' ↓') : '';
 
@@ -4022,45 +4101,31 @@ function DXPIntelTab({items, onSelect}) {
     return out;
   }, [data, priceById]);
 
-  const buildRecommendations = (riskTolerance, budget) => {
-    if (!budget || budget <= 0) return { allocations: [], spent: 0, profit: 0 };
+  // How long someone actually leaves a buy offer open varies hugely by
+  // player (Ben's real Vulnerability bomb offer sat ~16.6 days at 1,000/4hr
+  // for 100k units; someone else might check back every couple days) — there's
+  // no single "realistic window" to project a total qty/spend/profit from.
+  // So this doesn't try to size a quantity at all: it just ranks the
+  // strongest plays and shows profit/item and profit-per-buy-limit, and
+  // lets the player decide their own qty based on their own patience and gp.
+  const buildRecommendations = (riskTolerance, budget, slots) => {
+    const numSlots = Math.max(1, slots || GE_SLOTS);
     let pool = recommendationCandidates.filter(r => !r.negligible);
     if (riskTolerance === 'safe') pool = pool.filter(r => r.bestRatio >= ALMANAC_CONFIDENCE_THRESHOLD);
-    // Capital efficiency first (best net % return), then greedily fill each
-    // item up to its buy limit or the remaining budget before moving on —
-    // naturally diversifies across items rather than dumping everything
-    // into one, since buy limits cap how much any single item can absorb.
+    if (budget > 0) pool = pool.filter(r => r.trade.buyPrice <= budget); // can afford at least one unit
     pool = [...pool].sort((a, b) => b.trade.netProfitPct - a.trade.netProfitPct);
-    let remaining = budget;
-    const allocations = [];
-    // GE buy limits cap how much gp any single item can actually absorb —
-    // with a large budget, the best-%-return item is often a cheap, thin
-    // resource whose ENTIRE buy-limit capacity is a rounding error against
-    // the budget (e.g. recommending teak plank for a 5b budget). Skip
-    // allocations too small to matter at the requested budget's scale
-    // rather than padding the list with trivial fills — the unspent total
-    // below already communicates "nothing bigger qualifies" honestly.
-    const minMeaningfulSpend = Math.max(10000, budget * 0.002);
-    for (const r of pool) {
-      if (remaining < r.price) continue;
-      const maxByBudget = Math.floor(remaining / r.trade.buyPrice);
-      const maxByLimit = realisticMaxQty(r.limit, r.trade.buyDay, r.trade.sellDay);
-      const qty = Math.min(maxByBudget, maxByLimit);
-      if (qty < 1) continue;
-      const spend = qty * r.trade.buyPrice;
-      if (spend < minMeaningfulSpend) continue;
-      const profit = qty * r.trade.profitPerItem;
-      allocations.push({ ...r, qty, spend, profit });
-      remaining -= spend;
-    }
-    const spent = allocations.reduce((s, a) => s + a.spend, 0);
-    const profit = allocations.reduce((s, a) => s + a.profit, 0);
-    return { allocations, spent, profit };
+    const picks = pool.slice(0, numSlots);
+    // Honorable mentions: the next-best plays just outside the requested
+    // slot count — worth swapping in if a slot frees up.
+    const honorableMentions = pool.slice(numSlots, numSlots * 2);
+    return { picks, honorableMentions };
   };
 
   const rows = useMemo(() => {
     const confident = r => r.ratio >= ALMANAC_CONFIDENCE_THRESHOLD;
+    const q = search.trim().toLowerCase();
     const filtered = allRows.filter(r => {
+      if (q && !r.name?.toLowerCase().includes(q)) return false;
       if (tier === 'watchlist') return dxpWatchlist.includes(r.id);
       if (tier === 'confirmed') return confident(r) && !r.negligible;
       if (tier === 'negligible') return confident(r) && r.negligible;
@@ -4090,10 +4155,33 @@ function DXPIntelTab({items, onSelect}) {
       return (b.total - a.total);
     });
     return filtered;
-  }, [allRows, sort, tier, dxpWatchlist]);
+  }, [allRows, sort, tier, dxpWatchlist, search]);
 
   const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
   const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
+  // Shared "Trade idea" writeup shown when expanding a row — used by the
+  // main Confirmed/Negligible/Speculative table AND Recommendations/
+  // Honorable mentions, so the trade-idea expand behaves identically
+  // everywhere instead of being a main-table-only feature.
+  const tradeDetailBlock = t => !t ? null : h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`}},
+    h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
+      `Trade idea — based on ${t.nEvents} tracked cycles`
+    ),
+    h('div', {style:{fontSize:12, color:T.text, lineHeight:1.6}},
+      t.preTroughOffset != null && t.preTroughOffset < -1 && h('span', null,
+        `Starts dipping as early as day ${t.preTroughOffset} relative to the event start (typically announced ~2-3 weeks before that) — for items that move ahead of the event, this is roughly when to start buying, earlier than the in-event "Bottom" day below.`, h('br',null),
+      ),
+      `Bottom: day ${t.buyDay} (±${t.buyDayStd}d), ${t.buyPct>=0?'+':''}${t.buyPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.buyPrice)}gp.`, h('br',null),
+      `Top: day ${t.sellDay} (±${t.sellDayStd}d), ${t.sellPct>=0?'+':''}${t.sellPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.sellPrice)}gp before tax, ~${fmt.gp(t.netSellPrice)}gp after 2% GE tax.`, h('br',null),
+      `Net: ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item after tax.`, h('br',null),
+      h('span', {style:{color:T.textDim, fontStyle:'italic'}},
+        'Day 0 = the moment the event starts. Fractional days are sub-day precision — day 0.5 means about 12 hours in, day 2.5 means 2.5 days in, etc.'
+      ), h('br',null),
+      !t.sameySequence && h('span', {style:{color:T.textDim, fontStyle:'italic'}},
+        'Top happens before bottom in this cycle — better suited to selling existing stock early, then buying the dip for next time.'
+      ),
+    )
+  );
   const confidentRows = allRows.filter(r => r.ratio >= ALMANAC_CONFIDENCE_THRESHOLD);
   const confirmedCount = confidentRows.filter(r => !r.negligible).length;
   const negligibleRows = confidentRows.filter(r => r.negligible);
@@ -4101,16 +4189,16 @@ function DXPIntelTab({items, onSelect}) {
   const negligibleNetNegativeCount = negligibleRows.filter(r => (r.trade?.profitPerItem ?? 0) < 0).length;
   const speculativeCount = allRows.length - confidentRows.length;
   const recBudget = parseGP(budgetInput) || 0;
-  const recs = buildRecommendations(riskTolerance, recBudget);
+  const recSlots = Math.max(1, parseInt(slotsInput, 10) || GE_SLOTS);
+  const recs = buildRecommendations(riskTolerance, recBudget, recSlots);
   const REC_SORT_KEYS = {
     name: a => a.name?.toLowerCase() || '',
-    qty: a => a.qty,
-    spend: a => a.spend,
-    profit: a => a.profit,
     netRoi: a => a.trade.netProfitPct,
+    profitPerItem: a => a.trade.profitPerItem,
+    profitForLimit: a => a.trade.profitForLimit ?? -Infinity,
   };
-  const sortedAllocations = [...recs.allocations].sort((a, b) => {
-    const getKey = REC_SORT_KEYS[recSort.key] || REC_SORT_KEYS.netRoi;
+  const sortedPicks = [...recs.picks].sort((a, b) => {
+    const getKey = REC_SORT_KEYS[recSort.key] || REC_SORT_KEYS.profitForLimit;
     const av = getKey(a), bv = getKey(b);
     return (av < bv ? -1 : av > bv ? 1 : 0) * recSort.dir;
   });
@@ -4183,7 +4271,7 @@ function DXPIntelTab({items, onSelect}) {
         {key:'negligible', label:`Real but Negligible (${negligibleCount})`},
         {key:'speculative', label:`Highly Speculative (${speculativeCount})`},
         {key:'watchlist', label:`⭐ My Watchlist (${dxpWatchlist.length})`},
-        {key:'recommendations', label:`🎯 My Recommendations`},
+        {key:'recommendations', label:`🎯 Recommendations`},
         {key:'debunked', label:`📖 Debunked Theories (${DXP_DEBUNKED_THEORIES.length})`},
       ].map(t => {
         const golden = t.key==='debunked' || t.key==='watchlist' || t.key==='recommendations';
@@ -4199,6 +4287,14 @@ function DXPIntelTab({items, onSelect}) {
       }, t.label);
       })
     ),
+    tier !== 'debunked' && tier !== 'recommendations' && h('input', {
+      type:'text', value:search, placeholder:'Search items in this view…',
+      onChange:e=>setSearch(e.target.value),
+      style:{
+        width:'100%', maxWidth:280, marginBottom:12, padding:'6px 10px', fontSize:12,
+        background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text,
+      },
+    }),
     tier === 'watchlist' && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
       dxpWatchlist.length === 0
         ? 'No items pinned yet — click the ☆ next to any item in Confirmed/Negligible/Speculative to add it here.'
@@ -4238,8 +4334,16 @@ function DXPIntelTab({items, onSelect}) {
           ),
         ),
         h('div', null,
-          h('div', {className:'form-lbl'}, 'GP you\'re willing to invest'),
+          h('div', {className:'form-lbl', title:'Optional — just filters out items you can\'t afford even one unit of'}, 'GP you have (optional)'),
           h(GpInput, {value:budgetInput, placeholder:'e.g. 50m', onChange:setBudgetInput}),
+        ),
+        h('div', null,
+          h('div', {className:'form-lbl', title:'How many GE offer slots you want filled — not necessarily all of them (e.g. one tied up in a standing collection-log offer)'}, 'GE slots to fill'),
+          h('input', {
+            type:'number', min:1, max:16, value:slotsInput,
+            onChange:e=>setSlotsInput(e.target.value),
+            style:{width:60, padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
+          }),
         ),
       ),
       h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:14}},
@@ -4247,37 +4351,83 @@ function DXPIntelTab({items, onSelect}) {
           ? `Safe: only items at ${Math.round(ALMANAC_CONFIDENCE_THRESHOLD*100)}%+ direction confidence somewhere in their cycle (the same bar as Confirmed), with a real net-of-tax margin.`
           : 'Risky: also includes Highly Speculative items (below the confidence bar) for a shot at bigger moves — these are less reliable, by definition.'
       ),
-      recBudget <= 0 && h('div', {className:'empty-state'}, h('div', null, 'Enter a gp amount above to get a shopping list.')),
-      recBudget > 0 && recs.allocations.length === 0 && h('div', {className:'empty-state'}, h('div', null, 'No items currently qualify for this risk tolerance and budget — try Risky, or check back after the next fetch.')),
-      recBudget > 0 && recs.allocations.length > 0 && h('div', null,
-        h('div', {style:{display:'flex', gap:20, marginBottom:14, flexWrap:'wrap'}},
-          h('div', null, h('div', {className:'form-lbl'}, 'Your budget'), h('div', {style:{fontSize:16, color:T.text}}, fmt.gp(recBudget)+'gp')),
-          h('div', null, h('div', {className:'form-lbl'}, 'Actually allocated'), h('div', {style:{fontSize:16, color:T.text}}, fmt.gp(recs.spent)+'gp')),
-          h('div', null, h('div', {className:'form-lbl'}, 'Expected net profit'), h('div', {style:{fontSize:16, color: recs.profit>=0?T.green:T.red}}, (recs.profit>=0?'+':'')+fmt.gp(recs.profit)+'gp')),
-          h('div', null, h('div', {className:'form-lbl'}, 'Expected ROI'), h('div', {style:{fontSize:16, color: recs.profit>=0?T.green:T.red}}, recs.spent ? ((recs.profit/recs.spent*100).toFixed(1)+'%') : '—')),
-          recBudget > recs.spent && h('div', null, h('div', {className:'form-lbl'}, 'Couldn\'t place (no item can absorb more)'), h('div', {style:{fontSize:16, color:T.textDim}}, fmt.gp(recBudget-recs.spent)+'gp')),
-        ),
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8}},
+        'No assumed qty, spend, or total profit here — how long you\'ll actually leave a buy offer open varies too much person to person. Profit/item and Profit (buy limit) are shown so you can size it yourself.'
+      ),
+      h('div', {style:{fontSize:11, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'8px 10px', marginBottom:14}},
+        '⚠ Not a guarantee. These are historical buy/sell-day medians from past DXP events, not a live promise — actual prices move, buy orders may not fill in time, and any single future event can behave differently. Treat this as "extremely likely based on the data," not certain.'
+      ),
+      recs.picks.length === 0 && h('div', {className:'empty-state'}, h('div', null, 'No items currently qualify for this risk tolerance — try Risky, or check back after the next fetch.')),
+      recs.picks.length > 0 && h('div', null,
         h('table', {className:'ge-table'},
           h('thead', null, h('tr', null,
             h('th', {onClick:()=>toggleRecSort('name'), style:{cursor:'pointer'}}, 'Item'+recSortArrow('name')),
             h('th', null, 'Trade Idea'),
-            h('th', {onClick:()=>toggleRecSort('qty'), style:{cursor:'pointer'}}, 'Qty'+recSortArrow('qty')),
-            h('th', {onClick:()=>toggleRecSort('spend'), style:{cursor:'pointer'}}, 'Spend'+recSortArrow('spend')),
-            h('th', {onClick:()=>toggleRecSort('profit'), style:{cursor:'pointer'}}, 'Net Profit'+recSortArrow('profit')),
-            h('th', {onClick:()=>toggleRecSort('netRoi'), style:{cursor:'pointer'}}, 'Net ROI'+recSortArrow('netRoi')),
+            h('th', {onClick:()=>toggleRecSort('netRoi'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax'}, 'Net ROI'+recSortArrow('netRoi')),
+            h('th', {onClick:()=>toggleRecSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax'}, 'Profit/item'+recSortArrow('profitPerItem')),
+            h('th', {onClick:()=>toggleRecSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest'}, 'Profit (buy limit)'+recSortArrow('profitForLimit')),
           )),
-          h('tbody', null, sortedAllocations.map(a => h('tr', {key:a.id},
-            h('td', null, a.name),
-            h('td', {style:{fontSize:11, color:T.textDim}},
-              a.trade.sameySequence
-                ? `Buy ~day ${a.trade.buyDay} → Sell ~day ${a.trade.sellDay}`
-                : `Sell ~day ${a.trade.sellDay} → Buy ~day ${a.trade.buyDay} (next cycle)`
+          h('tbody', null, sortedPicks.flatMap(r => [
+            h('tr', {
+              key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
+              onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
+            },
+              h('td', null, r.name),
+              h('td', {
+                style:{fontSize:11, color:T.textDim, cursor:'pointer'},
+                onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
+                title:'Show trade idea details',
+              },
+                r.trade.sameySequence
+                  ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
+                  : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
+              ),
+              h('td', {style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%'),
+              h('td', {style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp'),
+              h('td', {style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—'),
             ),
-            h('td', null, a.qty.toLocaleString()),
-            h('td', null, fmt.gp(a.spend)+'gp'),
-            h('td', {style:{color: a.profit>=0?T.gold:T.red}}, (a.profit>=0?'+':'')+fmt.gp(a.profit)+'gp'),
-            h('td', {style:{color: a.trade.netProfitPct>=0?T.green:T.red}}, (a.trade.netProfitPct>=0?'+':'')+a.trade.netProfitPct.toFixed(2)+'%'),
-          )))
+            expanded===r.id && h('tr', {key:r.id+'-detail'},
+              h('td', {colSpan:5, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
+            ),
+          ]))
+        ),
+        recs.honorableMentions.length > 0 && h('div', {style:{marginTop:18}},
+          h('div', {className:'form-lbl', style:{marginBottom:6}}, 'Honorable mentions'),
+          h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8}},
+            `Next best plays just outside your ${recSlots} slot${recSlots===1?'':'s'} — worth swapping in if one frees up.`
+          ),
+          h('table', {className:'ge-table'},
+            h('thead', null, h('tr', null,
+              h('th', null, 'Item'),
+              h('th', null, 'Trade Idea'),
+              h('th', {title:'Net of the 2% GE sell tax'}, 'Net ROI'),
+              h('th', {title:'Net of the 2% GE sell tax'}, 'Profit/item'),
+              h('th', {title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit'}, 'Profit (buy limit)'),
+            )),
+            h('tbody', null, recs.honorableMentions.flatMap(r => [
+              h('tr', {
+                key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
+                onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
+              },
+                h('td', null, r.name),
+                h('td', {
+                  style:{fontSize:11, color:T.textDim, cursor:'pointer'},
+                  onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
+                  title:'Show trade idea details',
+                },
+                  r.trade.sameySequence
+                    ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
+                    : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
+                ),
+                h('td', {style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%'),
+                h('td', {style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp'),
+                h('td', {style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—'),
+              ),
+              expanded===r.id && h('tr', {key:r.id+'-detail'},
+                h('td', {colSpan:5, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
+              ),
+            ]))
+          ),
         ),
       ),
     ),
@@ -4320,8 +4470,8 @@ function DXPIntelTab({items, onSelect}) {
               h('th', {onClick:()=>toggleSort('confidence'), style:{cursor:'pointer'}}, 'Confidence'+sortArrow('confidence')),
               h('th', {onClick:()=>toggleSort('medianPct'), style:{cursor:'pointer'}}, 'Median %'+sortArrow('medianPct')),
               h('th', null, 'Trade Idea'),
-              h('th', {onClick:()=>toggleSort('profitPerItem'), style:{cursor:'pointer'}}, 'Profit/item'+sortArrow('profitPerItem')),
-              h('th', {onClick:()=>toggleSort('profitForLimit'), style:{cursor:'pointer'}, title:'Assumes an offer left in the whole buy window, refilling every 4 hours — not a single 4-hour fill'}, 'Profit (full window)'+sortArrow('profitForLimit')),
+              h('th', {onClick:()=>toggleSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax'}, 'Profit/item'+sortArrow('profitPerItem')),
+              h('th', {onClick:()=>toggleSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest'}, 'Profit (buy limit)'+sortArrow('profitForLimit')),
               h('th', {onClick:()=>toggleSort('volRatio'), style:{cursor:'pointer'}}, 'Vol'+sortArrow('volRatio')),
               h('th', {style:{width:24}}, null),
             )),
@@ -4363,25 +4513,7 @@ function DXPIntelTab({items, onSelect}) {
               ),
               expanded===r.id && h('tr', {key:r.id+'-detail'},
                 h('td', {colSpan:10, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}},
-                  t && h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`}},
-                    h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
-                      `Trade idea — based on ${t.nEvents} tracked cycles`
-                    ),
-                    h('div', {style:{fontSize:12, color:T.text, lineHeight:1.6}},
-                      t.preTroughOffset != null && t.preTroughOffset < -1 && h('span', null,
-                        `Starts dipping as early as day ${t.preTroughOffset} relative to the event start (typically announced ~2-3 weeks before that) — for items that move ahead of the event, this is roughly when to start buying, earlier than the in-event "Bottom" day below.`, h('br',null),
-                      ),
-                      `Bottom: day ${t.buyDay} (±${t.buyDayStd}d), ${t.buyPct>=0?'+':''}${t.buyPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.buyPrice)}gp.`, h('br',null),
-                      `Top: day ${t.sellDay} (±${t.sellDayStd}d), ${t.sellPct>=0?'+':''}${t.sellPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.sellPrice)}gp before tax, ~${fmt.gp(t.netSellPrice)}gp after 2% GE tax.`, h('br',null),
-                      `Net: ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item after tax.`, h('br',null),
-                      h('span', {style:{color:T.textDim, fontStyle:'italic'}},
-                        'Day 0 = the moment the event starts. Fractional days are sub-day precision — day 0.5 means about 12 hours in, day 2.5 means 2.5 days in, etc.'
-                      ), h('br',null),
-                      !t.sameySequence && h('span', {style:{color:T.textDim, fontStyle:'italic'}},
-                        'Top happens before bottom in this cycle — better suited to selling existing stock early, then buying the dip for next time.'
-                      ),
-                    )
-                  ),
+                  tradeDetailBlock(t),
                   h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
                     `Tracked DXP events — ${r.events.length} with data for this phase`
                   ),
@@ -4407,6 +4539,15 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
+  const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7});
+  useEffect(() => { window.genius?.getWatchlistNotificationSettings?.().then(w => w && setWatchNotif(w)); }, []);
+  const updateWatchNotif = patch => {
+    setWatchNotif(prev => {
+      const next = {...prev, ...patch};
+      window.genius?.setWatchlistNotificationSettings?.(next);
+      return next;
+    });
+  };
   const [pyHealth, setPyHealth] = useState(null);
   const [pyChecking, setPyChecking] = useState(false);
   const runPyHealthCheck = async () => {
@@ -4610,6 +4751,34 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
           else toast('Test notification sent!', 'success');
         }
       },'Test notification')
+    ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Watchlist Daily Digest'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
+        'Once-a-day desktop notification (works even with GEnius minimized to the tray) listing any watchlist item that moved more than the thresholds below. Stays silent if nothing crossed either bar that day.'
+      ),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:10}},
+        h('input',{type:'checkbox',checked:!!watchNotif.enabled,onChange:e=>updateWatchNotif({enabled:e.target.checked})}),
+        h('span',null,'Enable watchlist daily digest')
+      ),
+      h('div',{style:{display:'flex',gap:20,flexWrap:'wrap',opacity:watchNotif.enabled?1:0.5}},
+        h('div',null,
+          h('div',{className:'form-lbl'},'Daily move threshold (%)'),
+          h('input',{
+            type:'number', min:0.5, step:0.5, value:watchNotif.dailyThresholdPct, disabled:!watchNotif.enabled,
+            onChange:e=>updateWatchNotif({dailyThresholdPct: parseFloat(e.target.value)||0}),
+            style:{width:70, padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
+          }),
+        ),
+        h('div',null,
+          h('div',{className:'form-lbl', title:'A sustained week-long drift is a different signal than a single-day spike, so this defaults a bit higher.'},'7-day trend threshold (%)'),
+          h('input',{
+            type:'number', min:0.5, step:0.5, value:watchNotif.trendThresholdPct, disabled:!watchNotif.enabled,
+            onChange:e=>updateWatchNotif({trendThresholdPct: parseFloat(e.target.value)||0}),
+            style:{width:70, padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
+          }),
+        ),
+      ),
     ),
     h('button',{className:'ge-btn gold',onClick:save},'Save settings'),
 
@@ -6291,6 +6460,7 @@ function App() {
   const [watchlist, setWatchlist] = useState([]);
   const [hiddenItems, setHiddenItems] = useState([]);
   const [alerts, setAlerts] = useState([]);
+  const [reminders, setReminders] = useState([]);
   const [settings, setSettings] = useState({});
   const [portfolio, setPortfolio] = useState({positions:[], tax_stats:{}});
   const [notes, setNotes] = useState({});
@@ -6362,7 +6532,8 @@ function App() {
       window.genius.getHidden(),
       window.genius.getNotes(),
       window.genius.getShorthands(),
-    ]).then(([data,wl,al,s,pf,hidden,nt,sh]) => {
+      window.genius.getReminders(),
+    ]).then(([data,wl,al,s,pf,hidden,nt,sh,rm]) => {
       console.log('[GEnius] getData returned:', data?.items?.length ?? 0, 'items, timestamp:', data?.timestamp);
       if (data.items)     setItems(data.items);
       if (data.news)      setNews(data.news);
@@ -6375,6 +6546,7 @@ function App() {
       setHiddenItems(hidden||[]);
       setNotes(nt||{});
       setUserShorthands(sh||{});
+      setReminders(rm||[]);
 
       const splash = document.getElementById('splash');
       if (splash) {
@@ -6640,7 +6812,19 @@ function App() {
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioTab,{
             items, portfolio, toast,
-            onSavePosition: async pos => { await window.genius?.savePosition(pos); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
+            onSavePosition: async pos => {
+              await window.genius?.savePosition(pos);
+              const p = await window.genius?.getPortfolio();
+              if (p) setPortfolio(p);
+              // Anything you put real gp into is worth tracking on the
+              // watchlist too — auto-add the item if it isn't there yet.
+              const it = items.find(i => i.name === pos.item_name);
+              if (it && !watchlist.includes(it.id)) {
+                const nw = [...watchlist, it.id];
+                setWatchlist(nw);
+                await window.genius?.setWatchlist(nw);
+              }
+            },
             onDeletePosition: async id => { await window.genius?.deletePosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
             onSellPosition: async opts => { const r = await window.genius?.sellPosition(opts); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
             onSelect: handleSelect,
@@ -6651,7 +6835,10 @@ function App() {
           tab==='alerts'  &&h(AlertsTab,  {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
-            onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id))
+            onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id)),
+            reminders,
+            onSaveReminder: r =>setReminders(rl=>{const i=rl.findIndex(x=>x.id===r.id);return i>=0?rl.map((x,j)=>j===i?r:x):[...rl,r];}),
+            onDeleteReminder: id=>setReminders(rl=>rl.filter(r=>r.id!==id)),
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}}),
           tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})

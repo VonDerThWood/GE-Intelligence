@@ -329,13 +329,115 @@ function checkDxpNotifications() {
   }
 }
 
+// ─── Watchlist daily digest ───────────────────────────────────────────────────
+// % change from the latest stored point back to whichever point is the
+// closest at-or-before `now - days`. Returns null if there isn't enough
+// history to compare (item never had its history backfilled, etc).
+function pctChangeOverDays(itemId, days) {
+  const points = historyData[String(itemId)];
+  if (!points || points.length < 2) return null;
+  const toMs = ts => (ts && ts < 1e11 ? ts * 1000 : ts);
+  const sorted = [...points].sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
+  const latest = sorted[sorted.length - 1];
+  const targetMs = toMs(latest.timestamp) - days * 86400000;
+  let ref = sorted[0];
+  for (const p of sorted) {
+    if (toMs(p.timestamp) <= targetMs) ref = p; else break;
+  }
+  if (!ref || !ref.price || !latest.price || ref === latest) return null;
+  return ((latest.price - ref.price) / ref.price) * 100;
+}
+
+// Fires at most once per calendar day, checking each watchlist item for
+// either a same-day move past `dailyThresholdPct` or a 7-day drift past
+// `trendThresholdPct` (kept as a separate, slightly higher bar by default
+// since a sustained week-long move is a different signal than a single-day
+// spike — Ben: "with a little higher of one"). Stays silent entirely if
+// nothing on the watchlist crossed either bar, rather than notifying daily
+// regardless of whether anything happened.
+function checkWatchlistDigest() {
+  const settings = store.get('watchlistNotificationSettings', {
+    enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
+  });
+  if (!settings.enabled) return;
+
+  const watchlist = store.get('watchlist', []);
+  if (!watchlist.length) return;
+
+  const todayStr = new Date().toISOString().slice(0, 10);
+  if (store.get('watchlistDigestLastSent', null) === todayStr) return;
+
+  let itemsById = {};
+  try {
+    itemsById = Object.fromEntries(
+      (JSON.parse(fs.readFileSync(dataFile, 'utf8')).items || []).map(i => [String(i.id), i])
+    );
+  } catch {}
+
+  const movers = [];
+  for (const id of watchlist) {
+    const dayPct = pctChangeOverDays(id, 1);
+    const weekPct = pctChangeOverDays(id, 7);
+    const dayHit = dayPct != null && Math.abs(dayPct) >= settings.dailyThresholdPct;
+    const weekHit = weekPct != null && Math.abs(weekPct) >= settings.trendThresholdPct;
+    if (dayHit || weekHit) {
+      const name = itemsById[String(id)]?.name || id;
+      movers.push({ id, name, dayPct, weekPct, dayHit, weekHit });
+    }
+  }
+  if (!movers.length) return;
+
+  movers.sort((a, b) =>
+    Math.max(Math.abs(b.dayPct || 0), Math.abs(b.weekPct || 0)) -
+    Math.max(Math.abs(a.dayPct || 0), Math.abs(a.weekPct || 0))
+  );
+  const top = movers.slice(0, 5);
+  const lines = top.map(m => {
+    const parts = [];
+    if (m.dayHit) parts.push(`${m.dayPct >= 0 ? '+' : ''}${m.dayPct.toFixed(1)}% today`);
+    if (m.weekHit) parts.push(`${m.weekPct >= 0 ? '+' : ''}${m.weekPct.toFixed(1)}% over 7d`);
+    return `${m.name}: ${parts.join(', ')}`;
+  });
+  if (movers.length > top.length) lines.push(`+${movers.length - top.length} more`);
+
+  new Notification({
+    title: `Watchlist — ${movers.length} item${movers.length === 1 ? '' : 's'} moving`,
+    body: lines.join('\n'),
+    icon: path.join(resourcesPath, 'assets', 'icon.ico'),
+  }).show();
+
+  store.set('watchlistDigestLastSent', todayStr);
+}
+
+// ─── Reminders ────────────────────────────────────────────────────────────────
+// Plain date-triggered reminders, no price involved (e.g. "buy Shard of
+// Genesis Essence — tail end of Autumn before the Winter boss"). Fires once
+// the day arrives, then marked fired so it never repeats.
+function checkReminders() {
+  const reminders = store.get('reminders', []);
+  if (!reminders.length) return;
+  const todayStr = new Date().toISOString().slice(0, 10);
+  let changed = false;
+  for (const r of reminders) {
+    if (r.fired || !r.dueDate || r.dueDate > todayStr) continue;
+    new Notification({
+      title: r.itemName ? `Reminder: ${r.itemName}` : 'GEnius Reminder',
+      body: r.message || 'Reminder due.',
+      icon: path.join(resourcesPath, 'assets', 'icon.ico'),
+    }).show();
+    r.fired = true;
+    changed = true;
+  }
+  if (changed) store.set('reminders', reminders);
+}
+
 // ─── Scheduler ────────────────────────────────────────────────────────────────
 function startScheduler() {
   stopScheduler();
   const intervalMinutes = store.get('fetchInterval', 15);
   const ms = intervalMinutes * 60 * 1000;
   console.log(`[Scheduler] Fetching every ${intervalMinutes} min`);
-  schedulerInterval = setInterval(() => { runPython('prices'); checkDxpNotifications(); }, ms);
+  schedulerInterval = setInterval(() => { runPython('prices'); checkDxpNotifications(); checkWatchlistDigest(); checkReminders(); }, ms);
 }
 
 function stopScheduler() {
@@ -417,6 +519,32 @@ ipcMain.handle('get-dxp-notification-settings', () => store.get('dxpNotification
 }));
 ipcMain.handle('set-dxp-notification-settings', (_, settings) => {
   store.set('dxpNotificationSettings', settings);
+  return { success: true };
+});
+
+// dailyThresholdPct gates a 1-day move, trendThresholdPct gates a 7-day
+// move — kept separate (trend defaults a bit higher) since a sustained
+// week-long drift is a different signal than a single-day spike.
+ipcMain.handle('get-watchlist-notification-settings', () => store.get('watchlistNotificationSettings', {
+  enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
+}));
+ipcMain.handle('set-watchlist-notification-settings', (_, settings) => {
+  store.set('watchlistNotificationSettings', settings);
+  return { success: true };
+});
+
+// Date-based reminders (Alerts tab, second section) — one-shot, not tied
+// to price at all. {id, itemName, dueDate ('YYYY-MM-DD'), message, fired}.
+ipcMain.handle('get-reminders', () => store.get('reminders', []));
+ipcMain.handle('save-reminder', (_, reminder) => {
+  const reminders = store.get('reminders', []);
+  const i = reminders.findIndex(r => r.id === reminder.id);
+  if (i >= 0) reminders[i] = reminder; else reminders.push(reminder);
+  store.set('reminders', reminders);
+  return { success: true };
+});
+ipcMain.handle('delete-reminder', (_, id) => {
+  store.set('reminders', store.get('reminders', []).filter(r => r.id !== id));
   return { success: true };
 });
 
@@ -1074,6 +1202,8 @@ app.whenReady().then(() => {
   startScheduler();
   setTimeout(() => runPython('prices'), 3000);
   setTimeout(() => checkDxpNotifications(), 5000);
+  setTimeout(() => checkWatchlistDigest(), 6000);
+  setTimeout(() => checkReminders(), 7000);
   setTimeout(() => checkForUpdate(), 8000);
 });
 

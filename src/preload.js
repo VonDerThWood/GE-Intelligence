@@ -37,6 +37,15 @@ contextBridge.exposeInMainWorld('genius', {
   getDxpNotificationSettings: () => ipcRenderer.invoke('get-dxp-notification-settings'),
   setDxpNotificationSettings: (s) => ipcRenderer.invoke('set-dxp-notification-settings', s),
 
+  // Main watchlist daily digest notification (separate from DXP's own)
+  getWatchlistNotificationSettings: () => ipcRenderer.invoke('get-watchlist-notification-settings'),
+  setWatchlistNotificationSettings: (s) => ipcRenderer.invoke('set-watchlist-notification-settings', s),
+
+  // Date-based reminders (Alerts tab)
+  getReminders: () => ipcRenderer.invoke('get-reminders'),
+  saveReminder: (r) => ipcRenderer.invoke('save-reminder', r),
+  deleteReminder: (id) => ipcRenderer.invoke('delete-reminder', id),
+
   // Alerts
   getAlerts: () => ipcRenderer.invoke('get-alerts'),
   saveAlert: (alert) => ipcRenderer.invoke('save-alert', alert),
