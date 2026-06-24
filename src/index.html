@@ -3,16 +3,21 @@
 <head>
   <meta charset="UTF-8" />
   <meta http-equiv="Content-Security-Policy"
-    content="default-src 'self'; script-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.weirdgloop.org https://prices.runescape.wiki https://discord.com;" />
+    content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://api.weirdgloop.org https://prices.runescape.wiki https://discord.com;" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>GEnius — RS3 Market Intelligence</title>
+  <style>html, body { background: #1a1209; margin: 0; }</style>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,300&display=swap" rel="stylesheet" />
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="vendor/react.production.min.js" defer></script>
+  <script src="vendor/react-dom.production.min.js" defer></script>
 </head>
 <body>
+  <div id="splash" style="position:fixed; inset:0; z-index:99999; background:#1a1209; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.4s ease;">
+    <img src="../assets/logo-full.png" alt="GEnius" style="width:340px; max-width:80vw; filter:drop-shadow(0 4px 24px rgba(0,0,0,0.6));" />
+    <div style="margin-top:18px; color:#9c7b3f; font-family:Georgia,serif; font-size:13px; letter-spacing:2px; text-transform:uppercase;">Loading market data…</div>
+  </div>
   <div id="root"></div>
-  <script src="renderer.js"></script>
+  <script src="renderer.js" defer></script>
 </body>
 </html>

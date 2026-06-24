@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('genius', {
   fetchNow: (mode) => ipcRenderer.invoke('fetch-now', mode),
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
   quitApp: () => ipcRenderer.invoke('quit-app'),
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+  getDxpIntelligence: () => ipcRenderer.invoke('get-dxp-intelligence'),
+  getPythonHealth: () => ipcRenderer.invoke('get-python-health'),
 
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
@@ -27,6 +30,12 @@ contextBridge.exposeInMainWorld('genius', {
 
   getHidden:    () => ipcRenderer.invoke('get-hidden'),
   setHidden:    (list) => ipcRenderer.invoke('set-hidden', list),
+
+  // DXP Almanac watchlist + notifications (separate from the main watchlist)
+  getDxpWatchlist: () => ipcRenderer.invoke('get-dxp-watchlist'),
+  setDxpWatchlist: (list) => ipcRenderer.invoke('set-dxp-watchlist', list),
+  getDxpNotificationSettings: () => ipcRenderer.invoke('get-dxp-notification-settings'),
+  setDxpNotificationSettings: (s) => ipcRenderer.invoke('set-dxp-notification-settings', s),
 
   // Alerts
   getAlerts: () => ipcRenderer.invoke('get-alerts'),

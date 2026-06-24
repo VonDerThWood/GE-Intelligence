@@ -81,20 +81,31 @@ function createTray() {
 }
 
 // ─── Python runner ────────────────────────────────────────────────────────────
-function getPythonExecutable() {
+// Tracks how the last-resolved Python was found, so a failed fetch can tell
+// the user WHY (e.g. the embedded runtime is missing — almost always AVG
+// quarantining/deleting it during install, see Settings > Troubleshooting)
+// instead of just surfacing a raw ENOENT/spawn error.
+let lastPythonSource = 'embedded';
+
+function getEmbeddedPythonPath() {
   const base = isDev
     ? path.join(__dirname, '..')
     : process.resourcesPath;
+  return path.join(base, 'python-embed', 'python.exe');
+}
 
-  const embeddedPython = path.join(base, 'python-embed', 'python.exe');
+function getPythonExecutable() {
+  const embeddedPython = getEmbeddedPythonPath();
   console.log('[Python] Checking embedded:', embeddedPython);
 
   if (fs.existsSync(embeddedPython)) {
     console.log('[Python] Using embedded Python');
+    lastPythonSource = 'embedded';
     return embeddedPython;
   }
 
   console.log('[Python] Embedded not found, trying system Python');
+  lastPythonSource = 'embedded-missing';
 
   // Fallback: find system Python, skip Microsoft Store stub
   try {
@@ -104,6 +115,7 @@ function getPythonExecutable() {
     for (const p of paths) {
       if (p && !p.includes('WindowsApps') && fs.existsSync(p)) {
         console.log('[Python] Using system Python:', p);
+        lastPythonSource = 'system';
         return p;
       }
     }
@@ -114,12 +126,51 @@ function getPythonExecutable() {
     const result = execSync('where py', { timeout: 3000 }).toString().trim().split('\n')[0].trim();
     if (result && fs.existsSync(result)) {
       console.log('[Python] Using py launcher:', result);
+      lastPythonSource = 'system';
       return result;
     }
   } catch {}
 
   console.log('[Python] Falling back to bare python command');
+  lastPythonSource = 'embedded-missing';
   return 'python';
+}
+
+let dxpIntelCache = null;       // { historyMtimeMs, data }
+function runDxpIntelligence() {
+  return new Promise((resolve, reject) => {
+    // Skip recomputation entirely if history.json hasn't changed since the
+    // last run — recomputing on every tab open was the main source of the
+    // "takes a while" delay, not just the per-item math.
+    let historyMtimeMs = 0;
+    try { historyMtimeMs = fs.statSync(path.join(dataDir, 'history.json')).mtimeMs; } catch {}
+    if (dxpIntelCache && dxpIntelCache.historyMtimeMs === historyMtimeMs) {
+      resolve(dxpIntelCache.data);
+      return;
+    }
+
+    const python = getPythonExecutable();
+    const scriptPath = path.join(pythonDir, 'dxp_intelligence.py');
+    const args = [scriptPath, `--data-dir=${dataDir}`];
+
+    console.log('[DXP Intel] Running:', python, args.join(' '));
+
+    execFile(python, args, { env: process.env }, (error, stdout, stderr) => {
+      if (stderr) console.warn('[DXP Intel] stderr:', stderr.slice(0, 500));
+      if (error) {
+        console.error('[DXP Intel] Error:', error.message);
+        reject(error);
+        return;
+      }
+      try {
+        const out = JSON.parse(fs.readFileSync(path.join(dataDir, 'dxp_intelligence.json'), 'utf8'));
+        dxpIntelCache = { historyMtimeMs, data: out };
+        resolve(out);
+      } catch (e) {
+        reject(e);
+      }
+    });
+  });
 }
 
 function runPython(mode = 'prices') {
@@ -136,7 +187,11 @@ function runPython(mode = 'prices') {
       if (stderr) console.warn('[Python] stderr:', stderr.slice(0, 500));
       if (error) {
         console.error('[Python] Error:', error.message);
-        notifyRenderer('fetch-error', { error: error.message });
+        const pythonMissing = lastPythonSource === 'embedded-missing';
+        const message = pythonMissing
+          ? `Embedded Python runtime not found. This is usually caused by antivirus (AVG especially) quarantining or deleting it during install — see Settings > Troubleshooting. (${error.message})`
+          : error.message;
+        notifyRenderer('fetch-error', { error: message, pythonMissing });
         reject(error);
       } else {
         console.log('[Python] stdout:', stdout);
@@ -154,13 +209,133 @@ function notifyRenderer(channel, data) {
   }
 }
 
+// ─── DXP Almanac notifications ─────────────────────────────────────────────────
+// Conservative calendar anchors per season — the earliest a DXP
+// announcement's pre_announce phase has EVER historically begun (21 days
+// before the earliest announcement on record for that season), computed
+// from the full 2017-2026 history in research/dxp_event_history.md. Used
+// to fire a once-a-year "window approaching" heads-up BEFORE any real
+// event exists in dxp_events.json — a forward-looking nudge based on
+// historical clustering, not a confirmed date. May/Nov are tight and
+// reliable (n=8, narrow spread); Feb/Aug have wider historical variance,
+// so their anchors are less precise — noted in the fired message itself.
+const DXP_SEASON_ANCHORS = [
+  { label: 'Winter/February', month: 1,  day: 2,  wide: true },
+  { label: 'Spring/May',      month: 3,  day: 25, wide: false },
+  { label: 'Summer/August',   month: 6,  day: 8,  wide: true },
+  { label: 'Autumn/November', month: 9,  day: 27, wide: false },
+];
+
+// Proactively alerts the user about pinned DXP-watchlist items when today
+// falls on (or near) that item's historical best-buy/best-sell day within an
+// active DXP event window, when a new event has just been announced, or
+// when the calendar enters a season's historical "could be announced any
+// time now" window before any event is even confirmed yet. Cheap to run
+// often — just JSON reads + date math, no Python involved — so it's
+// checked on the same cadence as the price scheduler. dxpNotifiedLog
+// dedupes so each item/type/event/season-year only fires once.
+function checkDxpNotifications() {
+  const settings = store.get('dxpNotificationSettings', {
+    enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+  });
+  if (!settings.enabled) return;
+
+  const today = new Date();
+  const todayStr = today.toISOString().slice(0, 10);
+  const notifiedLog = store.get('dxpNotifiedLog', {});
+  let logChanged = false;
+  const fire = (key, title, body) => {
+    if (notifiedLog[key]) return;
+    new Notification({ title, body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+    notifiedLog[key] = todayStr;
+    logChanged = true;
+  };
+
+  let events = [];
+  try { events = JSON.parse(fs.readFileSync(path.join(dataDir, 'dxp_events.json'), 'utf8')); } catch {}
+
+  if (settings.windowApproachingAlerts) {
+    const year = today.getFullYear();
+    for (const season of DXP_SEASON_ANCHORS) {
+      const anchor = new Date(year, season.month - 1, season.day);
+      const fireWindowEnd = new Date(anchor.getTime() + 3 * 86400000);
+      if (today < anchor || today > fireWindowEnd) continue;
+      // Skip if a real announcement already landed in the last 21 days —
+      // the actual "DXP Announced" alert below covers that case, no need
+      // to also nudge with the speculative heads-up.
+      const alreadyAnnounced = events.some(([announced]) => {
+        const days = (today - new Date(announced + 'T00:00:00Z')) / 86400000;
+        return days >= 0 && days <= 21;
+      });
+      if (alreadyAnnounced) continue;
+      fire(`window_${season.label}_${year}`, '📅 DXP Window Approaching',
+        `Historically, ${season.label} Double XP gets announced around this time of year` +
+        (season.wide ? ' (this season\'s timing varies more than others)' : '') +
+        '. Nothing confirmed yet — just a heads-up based on past years.');
+    }
+  }
+
+  const watchlist = store.get('dxpWatchlist', []);
+  let dxpData = null;
+  if (watchlist.length) {
+    try { dxpData = JSON.parse(fs.readFileSync(path.join(dataDir, 'dxp_intelligence.json'), 'utf8')); } catch {}
+  }
+
+  const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+
+  for (const [announced, start, end] of events) {
+    if (settings.announceAlerts && todayStr === announced) {
+      fire(`announce_${announced}`, '📅 DXP Announced',
+        `A new Double XP event has been announced (${start} to ${end}). Check your Almanac watchlist for buy timing.`);
+      continue;
+    }
+
+    const startDt = new Date(start + 'T00:00:00Z');
+    const endDt = new Date(end + 'T00:00:00Z');
+    const baselineDt = new Date(startDt.getTime() - 21 * 86400000);
+    const afterDt = new Date(endDt.getTime() + 21 * 86400000);
+    if (today < baselineDt || today > afterDt) continue;
+    const dayOffset = daysBetween(startDt, today);
+
+    for (const itemId of (dxpData ? watchlist : [])) {
+      const entry = dxpData[itemId];
+      const timing = entry?.timing;
+      if (!timing) continue;
+      const name = entry.name || itemId;
+
+      if (settings.buyAlerts && timing.best_buy_day_offset != null) {
+        const std = Math.max(timing.best_buy_day_std || 0, 0.5);
+        if (Math.abs(dayOffset - timing.best_buy_day_offset) <= std) {
+          fire(`${itemId}_buy_${start}_${todayStr}`, '📅 DXP Buy Window',
+            `${name} is at its historical best-buy day (day ${dayOffset} of the event).`);
+        }
+      }
+      if (settings.sellAlerts && timing.best_sell_day_offset != null) {
+        const std = Math.max(timing.best_sell_day_std || 0, 0.5);
+        if (Math.abs(dayOffset - timing.best_sell_day_offset) <= std) {
+          fire(`${itemId}_sell_${start}_${todayStr}`, '📅 DXP Sell Window',
+            `${name} is at its historical best-sell day (day ${dayOffset} of the event).`);
+        }
+      }
+    }
+  }
+
+  if (logChanged) {
+    const cutoff = Date.now() - 60 * 86400000; // prune entries older than ~60 days
+    for (const k in notifiedLog) {
+      if (new Date(notifiedLog[k]).getTime() < cutoff) delete notifiedLog[k];
+    }
+    store.set('dxpNotifiedLog', notifiedLog);
+  }
+}
+
 // ─── Scheduler ────────────────────────────────────────────────────────────────
 function startScheduler() {
   stopScheduler();
   const intervalMinutes = store.get('fetchInterval', 15);
   const ms = intervalMinutes * 60 * 1000;
   console.log(`[Scheduler] Fetching every ${intervalMinutes} min`);
-  schedulerInterval = setInterval(() => runPython('prices'), ms);
+  schedulerInterval = setInterval(() => { runPython('prices'); checkDxpNotifications(); }, ms);
 }
 
 function stopScheduler() {
@@ -182,10 +357,30 @@ ipcMain.handle('get-data', async () => {
 });
 
 ipcMain.handle('quit-app', () => { isQuitting = true; app.quit(); return { success: true }; });
+ipcMain.handle('get-app-version', () => app.getVersion());
+
+ipcMain.handle('get-dxp-intelligence', async () => {
+  try { return await runDxpIntelligence(); }
+  catch (e) { console.error('[DXP Intel] get-dxp-intelligence failed:', e.message); return {}; }
+});
 
 ipcMain.handle('fetch-now', async (_, mode) => {
   try { await runPython(mode || 'prices'); return { success: true }; }
   catch (e) { return { success: false, error: e.message }; }
+});
+
+// Proactive check for the Settings > Troubleshooting section — lets the user
+// see the Python runtime is missing (almost always AVG quarantining it)
+// without having to run a fetch and watch it fail first.
+ipcMain.handle('get-python-health', () => {
+  const embeddedPython = getEmbeddedPythonPath();
+  const embeddedFound = fs.existsSync(embeddedPython);
+  let itemCount = 0;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
+    itemCount = parsed.items?.length || 0;
+  } catch {}
+  return { embeddedFound, embeddedPath: embeddedPython, itemCount };
 });
 
 ipcMain.handle('get-settings', () => ({
@@ -198,6 +393,8 @@ ipcMain.handle('get-settings', () => ({
   uiScale:            store.get('uiScale', 100),
   detailPanelWidth:   store.get('detailPanelWidth', 296),
   columnWidths:       store.get('columnWidths', {}),
+  showThumbnails:     store.get('showThumbnails', true),
+  devMode:            store.get('devMode', false),
 }));
 
 ipcMain.handle('save-settings', (_, settings) => {
@@ -208,6 +405,20 @@ ipcMain.handle('save-settings', (_, settings) => {
 
 ipcMain.handle('get-watchlist', () => store.get('watchlist', []));
 ipcMain.handle('set-watchlist', (_, list) => { store.set('watchlist', list); return { success: true }; });
+
+// DXP Almanac watchlist — deliberately separate from the main watchlist
+// above (per TODO.txt spec). Item ids are stored as strings to match how
+// dxp_intelligence.json keys its per-item entries.
+ipcMain.handle('get-dxp-watchlist', () => store.get('dxpWatchlist', []));
+ipcMain.handle('set-dxp-watchlist', (_, list) => { store.set('dxpWatchlist', list); return { success: true }; });
+
+ipcMain.handle('get-dxp-notification-settings', () => store.get('dxpNotificationSettings', {
+  enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+}));
+ipcMain.handle('set-dxp-notification-settings', (_, settings) => {
+  store.set('dxpNotificationSettings', settings);
+  return { success: true };
+});
 
 ipcMain.handle('get-hidden',    () => store.get('hiddenItems', []));
 ipcMain.handle('set-hidden',    (_, list) => { store.set('hiddenItems', list); return { success: true }; });
@@ -798,6 +1009,23 @@ ipcMain.handle('get-item-timeseries', async (_, itemId) => {
   return athCache[key] ? athCache[key].data : null;
 });
 
+// Proper semver "is a newer than b" check — was previously just `latest !==
+// current`, which fires an "update available" notification any time the
+// two differ AT ALL, including when the local build is actually AHEAD of
+// the last published GitHub release (e.g. a version bump that hasn't been
+// tagged/pushed yet). Caught by Ben seeing a "v1.6.0 is available" prompt
+// while already running the newer v1.7.0.
+function isNewerVersion(latest, current) {
+  const a = latest.split('.').map(Number);
+  const b = current.split('.').map(Number);
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    const ai = a[i] || 0, bi = b[i] || 0;
+    if (ai > bi) return true;
+    if (ai < bi) return false;
+  }
+  return false;
+}
+
 // ─── App lifecycle ────────────────────────────────────────────────────────────
 async function checkForUpdate() {
   try {
@@ -817,7 +1045,7 @@ async function checkForUpdate() {
       req.setTimeout(8000, () => req.destroy());
     });
     const latest = (data.tag_name || '').replace(/^v/, '');
-    if (latest && latest !== current) {
+    if (latest && isNewerVersion(latest, current)) {
       mainWindow?.webContents.send('update-available', { current, latest, url: data.html_url });
       new Notification({
         title: 'GEnius Update Available',
@@ -845,6 +1073,7 @@ app.whenReady().then(() => {
   createTray();
   startScheduler();
   setTimeout(() => runPython('prices'), 3000);
+  setTimeout(() => checkDxpNotifications(), 5000);
   setTimeout(() => checkForUpdate(), 8000);
 });
 

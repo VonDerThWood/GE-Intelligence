@@ -88,6 +88,22 @@ On first launch, GEnius will fetch the current GE price data and begin populatin
 
 ---
 
+## Troubleshooting
+
+**Fetch Now fails, or your item count stays unusually low after install.**
+
+This is almost always caused by **AVG Antivirus** flagging GEnius's bundled Python runtime as suspicious and quarantining or silently deleting it during install. This is a known false positive — bundled/embedded Python interpreters in general trip AVG's heuristics, not a sign that GEnius itself is unsafe.
+
+To fix it:
+1. Open AVG and check **Quarantine** / **Protection history** for anything related to GEnius or `python.exe`.
+2. If found, **restore it**, then add the GEnius install folder to AVG's exceptions list (**Menu > Settings > Exceptions** in AVG).
+3. If it's not in Quarantine either, AVG likely deleted the files outright before they could be quarantined — **reinstall GEnius** after adding the exception so the files aren't removed again.
+4. In-app: open **Settings**, scroll to the **Troubleshooting** section, and click **Run check** — it tells you directly whether the embedded Python runtime is present.
+
+If you're on a different antivirus and see similar symptoms, the same exceptions-list approach applies — just substitute your AV's equivalent setting.
+
+---
+
 ## Stack
 
 - [Electron](https://www.electronjs.org/) v28

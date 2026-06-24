@@ -5,6 +5,20 @@
 const { createElement: h, useState, useEffect, useCallback, useRef, useMemo } = React;
 const { createRoot } = ReactDOM;
 
+let SHOW_THUMBNAILS = true;
+
+function ItemThumb({name, size}) {
+  const [hidden, setHidden] = useState(false);
+  if (hidden) return null;
+  const wikiName = name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
+  const src = `https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`;
+  return h('img', {
+    src, alt:'', draggable:false,
+    style:{width:size||24, height:size||24, objectFit:'contain', flexShrink:0, marginLeft:6, verticalAlign:'middle'},
+    onError: () => setHidden(true),
+  });
+}
+
 const T = {
   bg:        '#1a1209',
   panel:     '#2b1f0e',
@@ -331,8 +345,11 @@ function ChangeDisplay({change_1d, price}) {
     )
   );
 }
-// GE tax: 2% on items over 50gp, capped at 5,000,000gp
-const applyTax = price => price <= 50 ? price : Math.min(Math.floor(price * 0.98), price - Math.min(Math.floor(price * 0.02), 5000000));
+// GE tax: 2% on items over 50gp. RS3 has NO cap on the tax (unlike OSRS,
+// which caps at 5m/item) — corrected 2026-06-24 after Ben caught the old
+// 5,000,000gp cap, which was an OSRS-only mechanic that had been wrongly
+// applied here, affecting the margin calculator and item detail panel too.
+const applyTax = price => price <= 50 ? price : Math.floor(price * 0.98);
 
 // ── Fun features ─────────────────────────────────────────────────────────────
 
@@ -1928,7 +1945,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 }
 
 /* ─── Item table ─────────────────────────────────────────────── */
-const DEFAULT_COL_WIDTHS = {name:null, high:110, change_1d:110, volume:140, signals:160, star:30};
+const DEFAULT_COL_WIDTHS = {name:340, high:110, change_1d:110, volume:140, signals:160, star:30};
 function loadColWidths() {
   try { return {...DEFAULT_COL_WIDTHS, ...JSON.parse(localStorage.getItem('genius_col_widths')||'{}')}; }
   catch { return {...DEFAULT_COL_WIDTHS}; }
@@ -1941,9 +1958,17 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
   const colWidthsRef = useRef(colWidths);
   const startColResize = (key) => e => {
     e.preventDefault();
-    const startX = e.clientX, startW = colWidthsRef.current[key] || 110;
+    e.stopPropagation();
+    const table = e.currentTarget.closest('.ge-table-wrap')?.querySelector('table');
+    const startW = colWidthsRef.current[key] || 110;
+    const logicalTotal = Object.values(colWidthsRef.current).reduce((a,b) => a + (b||0), 0);
+    // Derive the real-world scale factor (handles UI Scale zoom) from rendered vs logical total width
+    const scaleFactor = table && logicalTotal ? (table.getBoundingClientRect().width / logicalTotal) : 1;
+    const startX = e.clientX;
     const onMove = me => {
-      const w = Math.max(50, startW + (me.clientX - startX));
+      const deltaReal = me.clientX - startX;
+      const deltaLogical = scaleFactor ? deltaReal / scaleFactor : deltaReal;
+      const w = Math.max(50, Math.round(startW + deltaLogical));
       colWidthsRef.current = {...colWidthsRef.current, [key]: w};
       setColWidths(colWidthsRef.current);
     };
@@ -1955,10 +1980,36 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
     window.addEventListener('mousemove', onMove);
     window.addEventListener('mouseup', onUp);
   };
-  const resizeHandle = key => h('span', {
+  const COL_ORDER = ['name','high','change_1d','volume', ...(showSignals?['signals']:[]), 'star'];
+  const tableWrapRef = useRef(null);
+  const [handleLefts, setHandleLefts] = useState({});
+  useEffect(() => {
+    const measure = () => {
+      const wrap = tableWrapRef.current;
+      if (!wrap) return;
+      const ths = wrap.querySelectorAll('thead th');
+      const wrapRect = wrap.getBoundingClientRect();
+      const lefts = {};
+      COL_ORDER.filter(k => k !== 'star').forEach((k, i) => {
+        const th = ths[i];
+        if (th) lefts[k] = th.getBoundingClientRect().right - wrapRect.left + wrap.scrollLeft;
+      });
+      setHandleLefts(lefts);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [colWidths, items.length, showSignals]);
+  // Full-height overlay handles — rendered over the table so the divider is grabbable at any row, not just the header
+  const overlayHandle = key => h('span', {
+    key,
     onMouseDown: startColResize(key),
     className: 'col-resize-handle',
-    style:{position:'absolute', right:0, top:0, bottom:0, width:8, cursor:'col-resize', zIndex:5},
+    style:{
+      position:'absolute', top:0, bottom:0,
+      left: (handleLefts[key] || 0) - 4,
+      width:8, cursor:'col-resize', zIndex:10,
+    },
   });
 
   const openCtx = (e, it) => {
@@ -2030,7 +2081,8 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
   const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
   if (!items.length) return h('div',{className:'empty'},h('div',{className:'icon'},'◎'),h('p',null,'No items in this category yet.'));
-  return h('div',{className:'ge-table-wrap', onClick: ctxMenu ? closeCtx : undefined},
+  return h('div',{className:'ge-table-wrap', style:{position:'relative'}, ref:tableWrapRef, onClick: ctxMenu ? closeCtx : undefined},
+    COL_ORDER.filter(k => k !== 'star').map(k => overlayHandle(k)),
     ctxMenu && h('div', {
       style:{
         position:'fixed', zIndex:9999, left:ctxMenu.x, top:ctxMenu.y,
@@ -2135,9 +2187,9 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
       }, '⇌ Compare all'),
       h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},onClick:clearMulti},'✕ Clear')
     ),
-    h('table',{className:'ge-table', style:{tableLayout:'fixed'}},
+    h('table',{className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
       h('colgroup',null,
-        h('col',null),
+        h('col',{style:{width:colWidths.name}}),
         h('col',{style:{width:colWidths.high}}),
         h('col',{style:{width:colWidths.change_1d}}),
         h('col',{style:{width:colWidths.volume}}),
@@ -2145,11 +2197,11 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
         h('col',{style:{width:colWidths.star}}),
       ),
       h('thead',null,h('tr',null,
-        h('th',{onClick:()=>tog('name'), style:{position:'relative'}},'Item'+arr('name'), resizeHandle('high')),
-        h('th',{onClick:()=>tog('high'), style:{position:'relative'}},'Price'+arr('high'), resizeHandle('change_1d')),
-        h('th',{onClick:()=>tog('change_1d'), style:{position:'relative'}},'Change'+arr('change_1d'), resizeHandle('volume')),
-        h('th',{onClick:()=>tog('volume'), style:{position:'relative'}},'Volume'+arr('volume'), showSignals && resizeHandle('signals')),
-        showSignals && h('th',{style:{position:'relative'}},'Signals'),
+        h('th',{onClick:()=>tog('name')},'Item'+arr('name')),
+        h('th',{onClick:()=>tog('high')},'Price'+arr('high')),
+        h('th',{onClick:()=>tog('change_1d')},'Change'+arr('change_1d')),
+        h('th',{onClick:()=>tog('volume')},'Volume'+arr('volume')),
+        showSignals && h('th',null,'Signals'),
         h('th',{style:{width:30}},null)
       )),
       h('tbody',null, sorted.map(it =>
@@ -2162,7 +2214,10 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
           },
           onContextMenu: e => openCtx(e, it),
         },
-          h('td',null,it.name),
+          h('td',null, h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between'}},
+            h('span',null, it.name),
+            SHOW_THUMBNAILS && h(ItemThumb,{name:it.name}),
+          )),
           h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
           h('td',null, h(ChangeDisplay,{change_1d:it.change_1d, price:it.high||it.low})),
           h('td',null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
@@ -3294,12 +3349,22 @@ const APP_NEWS = [
   {
     version: 'Coming Soon',
     items: [
-      'DXP Intelligence — track items that historically spike before and during DXP weekends; early buy signals ahead of the rush',
-      'Opportunity Score — single composite ranking combining margin, volume, signal strength, and flip potential',
+      'GEnius Almanac — track items that historically spike around seasonal events like DXP weekends; early buy signals ahead of the rush',
       'Portfolio Analytics — profit by category, value over time, win rate, hold time distribution, and best possible sale price within your hold window',
       'Advanced Alerts — signal-based triggers (e.g. alert when SURGE fires on a watchlist item), not just price thresholds',
       'Price Since Post — track how item prices move after RS3 news articles; see what the market actually reacted to',
       'Reopen Position — undo a sale on a closed position and put it back into open positions',
+    ]
+  },
+  {
+    version: 'v1.7.0',
+    items: [
+      'New app icon and logo',
+      'Item thumbnails — small item icons now show next to names across every table and listing in the app, not just the item detail panel. Toggleable on/off from Settings',
+      'Discord link added to Settings — join the community',
+      'Fixed white screen on launch — the app now shows the splash screen immediately instead of a brief white flash before it loads',
+      'Troubleshooting section in Settings — checks whether the bundled Python runtime is present and walks through the fix if your antivirus quarantined it (a known false positive with AVG specifically)',
+      'Same Troubleshooting guidance added to the GitHub README for anyone who can\'t get the app running well enough to reach Settings',
     ]
   },
   {
@@ -3428,6 +3493,9 @@ const APP_NEWS = [
 function NewsTab({news, onOpen, description, items, onSelect}) {
   const [sub, setSub] = useState('rs3');
   return h('div',null,
+    h('div',{style:{display:'flex', justifyContent:'center', padding:'16px 0 4px'}},
+      h('img',{src:'../assets/logo-full.png', alt:'GEnius', style:{width:200, maxWidth:'70%'}}),
+    ),
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
 
     // Sub-tab pills
@@ -3673,8 +3741,696 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description}) {
   );
 }
 
+/* ─── GEnius Almanac — Event Intelligence, DXP is the first event type covered (hidden, dev-mode only) ─ */
+// Items explicitly named in DXP_DEBUNKED_THEORIES below as confirmed noise
+// — hard-excluded from Confirmed/Negligible/Speculative/Recommendations
+// regardless of which specific phase happens to clear the volume floor.
+// Ben caught "Logs" still surfacing in Recommendations via a different
+// phase than the one flagged as noise — the per-phase volume check alone
+// wasn't enough once an item has ANY phase that narrowly clears 0.5x, so
+// this is a second, simpler filter: if we've told users in Debunked
+// Theories that an item is noise, it should never show up as a live
+// recommendation no matter which phase technically passes.
+const DXP_DEBUNKED_EXACT_NAMES = new Set([
+  'logs', 'oak logs', 'magic logs', 'yew logs', 'adamant bar', 'chaos rune',
+  'cadmium red', 'soapstone', 'ruby', 'xp capacitor 5000 (charged)',
+]);
+function isDebunkedDxpItem(name) {
+  const n = (name || '').toLowerCase();
+  return DXP_DEBUNKED_EXACT_NAMES.has(n) || n.includes('wood spirit');
+}
+
+const ALMANAC_PHASES = [
+  {key:'pre_announce', label:'Pre-Announcement'},
+  {key:'anticipation', label:'Post-Announcement'},
+  {key:'early_event',  label:'First 5 Days'},
+  {key:'late_event',   label:'Last 5 Days'},
+  {key:'post_event',   label:'Post-Event'},
+];
+
+const ALMANAC_CONFIDENCE_THRESHOLD = 0.7; // 7/10 or higher = Confirmed, below = Speculative
+
+// Confidence (direction consistency) and margin (how much it actually moves)
+// are deliberately kept as separate axes, not blended into one score — a low
+// score can mean "inconsistent" or "consistent but tiny," and those need
+// different responses from the user. An item can be highly confident AND
+// have a margin too small to bother with once GE tax eats into it (e.g. the
+// Summoning pouches in the Debunked Theories section — 8/10 confidence, but
+// only a 2-5% median move). NEGLIGIBLE_NET_PROFIT_PCT is checked against the
+// actual net-of-tax round-trip from buildTradeIdea() when timing data exists;
+// NEGLIGIBLE_MEDIAN_PCT is the fallback gross-magnitude bar for phase-only
+// rows that don't have a full buy/sell timing pair to compute tax against.
+const NEGLIGIBLE_NET_PROFIT_PCT = 2;
+const NEGLIGIBLE_MEDIAN_PCT = 3;
+// Absolute floor, separate from the percentage check above — a high %
+// return on a tiny buy-limit item still nets a trivial total profit (Ben:
+// "why are we showing items with a profit per buy limit as low as 27k?").
+// Below this, treat as negligible regardless of how clean the % looks.
+const NEGLIGIBLE_PROFIT_FOR_LIMIT_GP = 100000;
+
+// Curated from research/dxp_findings_v2.md — popular DXP theories that
+// looked promising at first pass but didn't hold up once checked for
+// consistency, magnitude, AND real trading volume. Static write-up, not
+// computed from live data, since this is about documenting what we tested
+// and ruled out, not a live signal.
+const DXP_DEBUNKED_THEORIES = [
+  {
+    title: 'Burial set destruction',
+    belief: 'Players buy burial-style armour sets to destroy for DXP, pumping their price.',
+    reality: 'Flat — no signal at all — for every tier 0 through +4, every metal, bundled or individual pieces. The ONE real exception: Elder rune +5 individual pieces specifically (not the bundled set, not other metals, not lower tiers) show a genuine buy-up-then-dump cycle on real volume (1.0-1.8x baseline). Checking only the bundled set item was masking the real behavior happening in its individual pieces — a good lesson that composite GE items don\'t always reflect what\'s happening with their components.',
+    verdict: 'Partially true, much narrower than believed',
+  },
+  {
+    title: 'Summoning pouch spam-training',
+    belief: 'Players stock up Summoning pouches to mass-train during DXP, and the generic creation materials (charms, scrolls) drive the price action.',
+    reality: 'Mixed, and more layered than either the believers or the original "it\'s all noise" correction assumed. Triple-checked against the live 11-event dataset (2026-06-24): Geyser titan, Lava titan, Bunyip, and Spirit wolf pouches all show real, consistent, volume-backed direction signals (8/10, 8/10, 8/11, and 7/10 respectively, all on real volume up to 15x baseline) — these specific high-tier combat pouches are genuinely DXP-sensitive. But the magnitude is modest: all four land in a -2% to -5% median range, nowhere near the dataset\'s headline movers (Vulnerability bomb -14.5%) — a real, repeatable small bonus, not a "buy a stack and retire" opportunity. The generic creation materials people assume drive the price (charms, scrolls) show no signal of their own — the real bottleneck is the per-creature TERTIARY ingredient each pouch needs (e.g. Water talisman for Geyser titan — a perfect 10/10 anticipation rise and 10/10 post-event drop, the cleanest signal in the whole dataset).',
+    verdict: 'Real, but small — several pouches ARE genuine signals, just modest ones',
+  },
+  {
+    title: 'Chaos rune / Runecrafting',
+    belief: 'Chaos rune looked like the best Runecrafting DXP signal in early passes (rise 7/10 early in the event, drop 8/10 after).',
+    reality: 'Volume check killed it: only 0.16-0.32x of baseline volume across every phase — the price moves aren\'t backed by real trading, just noise on a thin market. After this correction, Runecrafting has no confirmed DXP signal in any rune or essence tested.',
+    verdict: 'Debunked — looked clean, wasn\'t real',
+  },
+  {
+    title: 'Basic logs and Adamant bar',
+    belief: 'Logs, Oak logs, Magic logs, Yew logs, and Adamant bar looked consistent enough (70%+ direction agreement) to pass the confidence bar.',
+    reality: 'Volume ratios crash to 0.01-0.2x of baseline on every one of them. These are bulk-traded, near-worthless commodities — at that volume and price point, background market noise alone is enough to produce a fluky 70%+ direction match across 10 cycles by chance. Nobody is buying basic logs because of DXP.',
+    verdict: 'Debunked — statistical flukes from bulk junk items',
+  },
+  {
+    title: 'Wood spirits',
+    belief: 'Wood spirits (all tiers) show strong, consistent rises across multiple DXP phases.',
+    reality: 'True that they rise — but they never show a corresponding drop to complete the cycle, the way every other real signal does (Vulnerability bomb, Dragonstone, Water talisman, etc. all rise then correct). Wood spirits just keep climbing regardless of phase, which looks much more like a secular adoption trend — a newer item category gradually getting more popular over time — than anything DXP actually causes.',
+    verdict: 'Real price trend, wrong cause',
+  },
+  {
+    title: 'XP Capacitor 5000',
+    belief: 'The obvious DXP-banking play — store double-value XP during the event, redeem it later — should show up as a clear buy-ahead signal.',
+    reality: 'Anticipation-window swings range from -7.8% to +18.2% across different cycles with no consistent direction at all. Likely too high-priced (2.6M-4.3M gp) and thin-volume for broad DXP demand to outweigh the noise of a handful of large individual trades.',
+    verdict: 'Plausible in theory, absent in the data',
+  },
+  {
+    title: 'Cadmium red, Soapstone, Ruby (cut)',
+    belief: 'Early checkpoint sampling showed promising rise/drop patterns for these items.',
+    reality: 'Pulling the FULL continuous price trajectory (not just the 5 checkpoint snapshots) across sample cycles showed no repeatable shape at all — sometimes the price ends near a peak, sometimes near a trough, with no consistency. The original "signal" was a checkpoint-sampling artifact: catching a narrow window in a favorable spot by chance a few times in a row, not a real repeatable pattern.',
+    verdict: 'Debunked — a sampling artifact, not a real pattern',
+  },
+];
+
+// A GE buy limit caps how much fills per 4-hour window, NOT a lifetime
+// total — leave an offer in (as Ben does, e.g. 100k Vulnerability bombs
+// at a 1,000/4hr limit) and it just keeps refilling for as long as the
+// offer sits there. The realistic ceiling on accumulation is the buy
+// limit multiplied by how many 4-hour cycles fit inside the actual buy
+// window (the gap between the buy day and the sell day), not the bare
+// limit on its own — treating the limit as a hard cap was shortsighted
+// and understated every "Profit (buy limit)" figure and every
+// Recommendations allocation in this tab until Ben caught it.
+function realisticMaxQty(limit, buyDay, sellDay) {
+  if (!limit) return Infinity;
+  const windowDays = Math.max(0.1, Math.abs((sellDay ?? buyDay) - buyDay));
+  const cycles = Math.max(1, Math.floor(windowDays * 6)); // 6 four-hour cycles/day
+  return limit * cycles;
+}
+
+// Combines the buy-day and sell-day timing data into one "trade idea" —
+// the actual point of this research is finding where the bottom and top are,
+// not reporting a hypothetical loss on a buy-limit's worth of units.
+// Profit is computed NET of GE tax (applyTax, defined above) — this was
+// missing entirely until Ben caught it 2026-06-24; the raw sell-buy
+// difference overstates every single trade idea in this tab by ~2%.
+function buildTradeIdea(timing, price, limit) {
+  if (!timing || !price) return null;
+  const buyDay = timing.best_buy_day_offset, sellDay = timing.best_sell_day_offset;
+  const buyPct = timing.best_buy_pct_median, sellPct = timing.best_sell_pct_median;
+  if (buyDay == null || sellDay == null || buyPct == null || sellPct == null) return null;
+
+  const sameySequence = buyDay <= sellDay; // buy happens first, sell happens after — the normal case
+  const profitPct = sellPct - buyPct;
+  const buyPrice = Math.round(price * (1 + buyPct / 100));
+  const sellPrice = Math.round(price * (1 + sellPct / 100));
+  const netSellPrice = applyTax(sellPrice);
+  const profitPerItem = netSellPrice - buyPrice;
+  const realisticQty = realisticMaxQty(limit, buyDay, sellDay);
+  const profitForLimit = limit && realisticQty !== Infinity ? profitPerItem * realisticQty : null;
+  const netProfitPct = buyPrice ? (profitPerItem / buyPrice) * 100 : profitPct;
+
+  return {
+    buyDay, sellDay, buyPct, sellPct, sameySequence,
+    buyDayStd: timing.best_buy_day_std, sellDayStd: timing.best_sell_day_std,
+    buyPrice, sellPrice, netSellPrice, profitPct, netProfitPct, profitPerItem, profitForLimit, realisticQty,
+    nEvents: timing.n_events,
+    // Day offset (relative to event START, negative = before) of the
+    // lowest price point in the pre-event baseline window — was already
+    // computed by the Python backend but never surfaced in the UI until
+    // now. Useful for items like Yew frame that rise BEFORE the event:
+    // tells you roughly how early to start buying, not just the in-event
+    // buy/sell days above.
+    preTroughOffset: timing.pre_trough_offset_median,
+  };
+}
+
+function DXPIntelTab({items, onSelect}) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(false);
+  const [activePhase, setActivePhase] = useState('anticipation');
+  const [sort, setSort] = useState({key:'confidence', dir:-1});
+  const [tier, setTier] = useState('confirmed'); // 'confirmed' | 'negligible' | 'speculative' | 'debunked' | 'watchlist' | 'recommendations'
+  const [expanded, setExpanded] = useState(null);
+  const [dxpWatchlist, setDxpWatchlistState] = useState([]);
+  const [notifSettings, setNotifSettings] = useState({enabled:false, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
+  const [riskTolerance, setRiskTolerance] = useState('safe'); // 'safe' | 'risky'
+  const [budgetInput, setBudgetInput] = useState('');
+  const [recSort, setRecSort] = useState({key:'profit', dir:-1}); // default: biggest gp profit first, not best %
+  const toggleRecSort = key => setRecSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
+  const recSortArrow = key => recSort.key===key ? (recSort.dir>0?' ↑':' ↓') : '';
+
+  useEffect(() => {
+    setLoading(true); setError(false);
+    window.genius?.getDxpIntelligence?.().then(d => {
+      setData(d || {});
+      setLoading(false);
+    }).catch(() => { setError(true); setLoading(false); });
+    window.genius?.getDxpWatchlist?.().then(list => setDxpWatchlistState(list || []));
+    window.genius?.getDxpNotificationSettings?.().then(s => s && setNotifSettings(s));
+  }, []);
+
+  const toggleDxpWatch = id => {
+    setDxpWatchlistState(prev => {
+      const next = prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id];
+      window.genius?.setDxpWatchlist?.(next);
+      return next;
+    });
+  };
+
+  const updateNotifSettings = patch => {
+    setNotifSettings(prev => {
+      const next = {...prev, ...patch};
+      window.genius?.setDxpNotificationSettings?.(next);
+      return next;
+    });
+  };
+
+  const priceById = useMemo(() => {
+    const m = {};
+    items.forEach(it => { if (it.id) m[String(it.id)] = it; });
+    return m;
+  }, [items]);
+
+  const eventCount = data?._meta?.event_count ?? null;
+  const itemCount = data ? Object.keys(data).filter(k => k !== '_meta').length : 0;
+
+  const allRows = useMemo(() => {
+    if (!data) return [];
+    const out = [];
+    for (const id in data) {
+      if (id === '_meta') continue;
+      const entry = data[id];
+      if (isDebunkedDxpItem(entry.name || priceById[id]?.name)) continue;
+      const ph = entry.phases?.[activePhase];
+      if (!ph || !ph.total || ph.total < 5) continue;
+      // Thin-volume noise filter — the DXP research repeatedly found that
+      // "consistent" direction agreement on a sub-0.5x-baseline-volume item
+      // is a statistical fluke from bulk junk items (Mahogany plank, Logs,
+      // Brilliant energy, etc — all explicitly named in Debunked Theories),
+      // not a real signal. This floor was applied throughout the
+      // qualitative research write-up but was never wired into the live
+      // computation until Ben caught it testing the recommendation engine
+      // 2026-06-24 — without it, Confirmed/Recommendations could surface
+      // items the research itself already debunked.
+      if (ph.avg_vol_ratio != null && ph.avg_vol_ratio < 0.5) continue;
+      const dominant = ph.rise >= ph.drop ? 'rise' : 'drop';
+      const score = dominant === 'rise' ? ph.rise : ph.drop;
+      const ratio = score / ph.total;
+      if (ratio < 0.5) continue;
+      const liveItem = priceById[id];
+      const price = liveItem ? (liveItem.high || liveItem.low || 0) : 0;
+      const medianPct = ph.median_pct ?? ph.avg_pct ?? 0;
+      const limit = entry.limit || liveItem?.limit || null;
+      const trade = buildTradeIdea(entry.timing, price, limit);
+      const negligible = trade
+        ? trade.netProfitPct < NEGLIGIBLE_NET_PROFIT_PCT
+          || (trade.profitForLimit != null && trade.profitForLimit < NEGLIGIBLE_PROFIT_FOR_LIMIT_GP)
+        : Math.abs(medianPct) < NEGLIGIBLE_MEDIAN_PCT;
+      out.push({
+        id, name: entry.name || liveItem?.name || id, price, limit,
+        dominant, score, total: ph.total, ratio, medianPct, negligible,
+        volRatio: ph.avg_vol_ratio,
+        timing: entry.timing,
+        trade,
+        events: ph.events || [],
+      });
+    }
+    return out;
+  }, [data, activePhase, priceById]);
+
+  // Recommendation engine candidates — item-level, independent of the
+  // activePhase tab above. A trade idea (buy day -> sell day) is computed
+  // once per item from its timing data, not per phase, so this rebuilds
+  // straight from `data` rather than reusing allRows (which is filtered to
+  // whichever phase pill happens to be selected). "Confidence" here is the
+  // strongest phase-direction agreement found anywhere across the item's 5
+  // phases — used only to gate the Safe risk tier, not shown as a column.
+  const recommendationCandidates = useMemo(() => {
+    if (!data) return [];
+    const out = [];
+    for (const id in data) {
+      if (id === '_meta') continue;
+      const entry = data[id];
+      const liveItem = priceById[id];
+      if (isDebunkedDxpItem(entry.name || liveItem?.name)) continue;
+      const price = liveItem ? (liveItem.high || liveItem.low || 0) : 0;
+      if (!price || !entry.timing) continue;
+      const limit = entry.limit || liveItem?.limit || null;
+      const trade = buildTradeIdea(entry.timing, price, limit);
+      if (!trade || trade.profitPerItem == null) continue;
+      let bestRatio = 0;
+      for (const p of ALMANAC_PHASES) {
+        const ph = entry.phases?.[p.key];
+        if (!ph || !ph.total) continue;
+        if (ph.avg_vol_ratio != null && ph.avg_vol_ratio < 0.5) continue; // same thin-volume noise filter as allRows
+        bestRatio = Math.max(bestRatio, Math.max(ph.rise, ph.drop) / ph.total);
+      }
+      const negligible = trade.netProfitPct < NEGLIGIBLE_NET_PROFIT_PCT
+        || (trade.profitForLimit != null && trade.profitForLimit < NEGLIGIBLE_PROFIT_FOR_LIMIT_GP);
+      out.push({
+        id, name: entry.name || liveItem?.name || id, price, limit, trade, bestRatio, negligible,
+      });
+    }
+    return out;
+  }, [data, priceById]);
+
+  const buildRecommendations = (riskTolerance, budget) => {
+    if (!budget || budget <= 0) return { allocations: [], spent: 0, profit: 0 };
+    let pool = recommendationCandidates.filter(r => !r.negligible);
+    if (riskTolerance === 'safe') pool = pool.filter(r => r.bestRatio >= ALMANAC_CONFIDENCE_THRESHOLD);
+    // Capital efficiency first (best net % return), then greedily fill each
+    // item up to its buy limit or the remaining budget before moving on —
+    // naturally diversifies across items rather than dumping everything
+    // into one, since buy limits cap how much any single item can absorb.
+    pool = [...pool].sort((a, b) => b.trade.netProfitPct - a.trade.netProfitPct);
+    let remaining = budget;
+    const allocations = [];
+    // GE buy limits cap how much gp any single item can actually absorb —
+    // with a large budget, the best-%-return item is often a cheap, thin
+    // resource whose ENTIRE buy-limit capacity is a rounding error against
+    // the budget (e.g. recommending teak plank for a 5b budget). Skip
+    // allocations too small to matter at the requested budget's scale
+    // rather than padding the list with trivial fills — the unspent total
+    // below already communicates "nothing bigger qualifies" honestly.
+    const minMeaningfulSpend = Math.max(10000, budget * 0.002);
+    for (const r of pool) {
+      if (remaining < r.price) continue;
+      const maxByBudget = Math.floor(remaining / r.trade.buyPrice);
+      const maxByLimit = realisticMaxQty(r.limit, r.trade.buyDay, r.trade.sellDay);
+      const qty = Math.min(maxByBudget, maxByLimit);
+      if (qty < 1) continue;
+      const spend = qty * r.trade.buyPrice;
+      if (spend < minMeaningfulSpend) continue;
+      const profit = qty * r.trade.profitPerItem;
+      allocations.push({ ...r, qty, spend, profit });
+      remaining -= spend;
+    }
+    const spent = allocations.reduce((s, a) => s + a.spend, 0);
+    const profit = allocations.reduce((s, a) => s + a.profit, 0);
+    return { allocations, spent, profit };
+  };
+
+  const rows = useMemo(() => {
+    const confident = r => r.ratio >= ALMANAC_CONFIDENCE_THRESHOLD;
+    const filtered = allRows.filter(r => {
+      if (tier === 'watchlist') return dxpWatchlist.includes(r.id);
+      if (tier === 'confirmed') return confident(r) && !r.negligible;
+      if (tier === 'negligible') return confident(r) && r.negligible;
+      if (tier === 'speculative') return !confident(r);
+      return false; // 'debunked' renders its own static content, not allRows
+    });
+    const SORT_KEYS = {
+      name:        r => r.name?.toLowerCase() || '',
+      direction:   r => r.dominant === 'rise' ? 1 : 0,
+      confidence:  r => r.ratio,
+      medianPct:   r => r.medianPct,
+      profitPerItem: r => r.trade?.profitPerItem ?? -Infinity,
+      profitForLimit: r => r.trade?.profitForLimit ?? -Infinity,
+      volRatio:    r => r.volRatio ?? -Infinity,
+    };
+    const getKey = SORT_KEYS[sort.key] || SORT_KEYS.confidence;
+    filtered.sort((a,b) => {
+      const av = getKey(a), bv = getKey(b);
+      const primary = (av < bv ? -1 : av > bv ? 1 : 0) * sort.dir;
+      if (primary !== 0) return primary;
+      // Tiebreaker: when sorting by confidence, use realistic round-trip
+      // profit opportunity to order within the same confidence tier.
+      if (sort.key === 'confidence') {
+        const ag = a.trade?.profitForLimit ?? -Infinity, bg = b.trade?.profitForLimit ?? -Infinity;
+        return (bg - ag);
+      }
+      return (b.total - a.total);
+    });
+    return filtered;
+  }, [allRows, sort, tier, dxpWatchlist]);
+
+  const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
+  const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
+  const confidentRows = allRows.filter(r => r.ratio >= ALMANAC_CONFIDENCE_THRESHOLD);
+  const confirmedCount = confidentRows.filter(r => !r.negligible).length;
+  const negligibleRows = confidentRows.filter(r => r.negligible);
+  const negligibleCount = negligibleRows.length;
+  const negligibleNetNegativeCount = negligibleRows.filter(r => (r.trade?.profitPerItem ?? 0) < 0).length;
+  const speculativeCount = allRows.length - confidentRows.length;
+  const recBudget = parseGP(budgetInput) || 0;
+  const recs = buildRecommendations(riskTolerance, recBudget);
+  const REC_SORT_KEYS = {
+    name: a => a.name?.toLowerCase() || '',
+    qty: a => a.qty,
+    spend: a => a.spend,
+    profit: a => a.profit,
+    netRoi: a => a.trade.netProfitPct,
+  };
+  const sortedAllocations = [...recs.allocations].sort((a, b) => {
+    const getKey = REC_SORT_KEYS[recSort.key] || REC_SORT_KEYS.netRoi;
+    const av = getKey(a), bv = getKey(b);
+    return (av < bv ? -1 : av > bv ? 1 : 0) * recSort.dir;
+  });
+
+  return h('div', {style:{padding:'16px 20px', maxWidth:900}},
+    h('div', {style:{display:'flex', alignItems:'center', gap:8, marginBottom:4}},
+      h('span', {style:{fontSize:16}}, '📅'),
+      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac — DXP Edition'),
+    ),
+    h('div', {style:{fontSize:12, color:T.gold, fontStyle:'italic', marginBottom:6}},
+      'The market has seasons too. This is their almanac.'
+    ),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
+      `Hidden developer build. Backed by ${itemCount || '700+'} items across ${eventCount ?? '10+'} historical DXP events. Estimates only — GE prices lag real trading activity during DXP.`
+    ),
+
+    h('div', {style:{border:`1px solid ${T.borderDim}`, borderRadius:6, padding:'10px 14px', marginBottom:14}},
+      h('label', {style:{display:'flex', alignItems:'center', gap:8, cursor:'pointer', fontSize:12, color:T.text, marginBottom: notifSettings.enabled ? 8 : 0}},
+        h('input', {
+          type:'checkbox', checked:!!notifSettings.enabled,
+          onChange:e => updateNotifSettings({enabled:e.target.checked}),
+        }),
+        '🔔 Notify me about my DXP watchlist',
+      ),
+      notifSettings.enabled && h('div', {style:{display:'flex', gap:14, flexWrap:'wrap', paddingLeft:24}},
+        [
+          {key:'windowApproachingAlerts', label:'DXP window approaching (heads-up before any announcement)'},
+          {key:'announceAlerts', label:'New DXP announced'},
+          {key:'buyAlerts', label:'Best-buy day hit'},
+          {key:'sellAlerts', label:'Best-sell day hit'},
+        ].map(o => h('label', {key:o.key, style:{display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:11, color:T.textDim}},
+          h('input', {
+            type:'checkbox', checked:!!notifSettings[o.key],
+            onChange:e => updateNotifSettings({[o.key]: e.target.checked}),
+          }),
+          o.label,
+        ))
+      ),
+      notifSettings.enabled && h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic', paddingLeft:24, marginTop:6}},
+        '"DXP window approaching" doesn\'t need a watchlist — it\'s a once-a-year calendar nudge based on historical clustering. Best-buy/sell/announced alerts need items pinned with the ☆ below.'
+      ),
+      notifSettings.enabled && dxpWatchlist.length === 0 && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', paddingLeft:24, marginTop:4}},
+        'No items pinned yet — click the ☆ next to any item below to add one.'
+      ),
+    ),
+
+    h('div', {style:{display:'flex', gap:6, marginBottom:10, flexWrap:'wrap'}},
+      ALMANAC_PHASES.map(p => h('button', {
+        key:p.key,
+        onClick:()=>{
+          setActivePhase(p.key); setExpanded(null);
+          // Debunked Theories and Recommendations are phase-independent
+          // panels that otherwise stay open forever — clicking a phase
+          // pill should always return you to the normal phase-filtered
+          // table, not silently no-op while the old panel keeps showing.
+          if (tier === 'debunked' || tier === 'recommendations') setTier('confirmed');
+        },
+        style:{
+          padding:'6px 12px', fontSize:11, borderRadius:4, cursor:'pointer',
+          border:`1px solid ${activePhase===p.key ? T.gold : T.border}`,
+          background: activePhase===p.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+          color: activePhase===p.key ? T.goldBright : T.textDim,
+        }
+      }, p.label))
+    ),
+
+    h('div', {style:{display:'flex', gap:6, marginBottom:14, flexWrap:'wrap'}},
+      [
+        {key:'confirmed', label:`Confirmed (${confirmedCount})`},
+        {key:'negligible', label:`Real but Negligible (${negligibleCount})`},
+        {key:'speculative', label:`Highly Speculative (${speculativeCount})`},
+        {key:'watchlist', label:`⭐ My Watchlist (${dxpWatchlist.length})`},
+        {key:'recommendations', label:`🎯 My Recommendations`},
+        {key:'debunked', label:`📖 Debunked Theories (${DXP_DEBUNKED_THEORIES.length})`},
+      ].map(t => {
+        const golden = t.key==='debunked' || t.key==='watchlist' || t.key==='recommendations';
+        return h('button', {
+        key:t.key,
+        onClick:()=>{setTier(t.key); setExpanded(null);},
+        style:{
+          padding:'5px 12px', fontSize:11, borderRadius:4, cursor:'pointer',
+          border:`1px solid ${tier===t.key ? (t.key==='confirmed'?T.green:golden?T.gold:T.textDim) : T.borderDim}`,
+          background: tier===t.key ? (t.key==='confirmed'?'rgba(76,175,80,0.15)':golden?'rgba(201,168,76,0.15)':'rgba(156,123,63,0.15)') : 'transparent',
+          color: tier===t.key ? (t.key==='confirmed'?T.green:golden?T.goldBright:T.text) : T.textDim,
+        }
+      }, t.label);
+      })
+    ),
+    tier === 'watchlist' && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
+      dxpWatchlist.length === 0
+        ? 'No items pinned yet — click the ☆ next to any item in Confirmed/Negligible/Speculative to add it here.'
+        : 'Items you\'ve pinned, regardless of confidence tier. Use the 🔔 Notifications panel below to get alerted at the right buy/sell day.'
+    ),
+    tier === 'confirmed' && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
+      `${Math.round(ALMANAC_CONFIDENCE_THRESHOLD*100)}%+ direction agreement across tracked DXP cycles, on real trading volume, with a worthwhile net-of-tax margin. The closest thing to a reliable signal this data can offer — still estimates, not guarantees.`
+    ),
+    tier === 'speculative' && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
+      `Below ${Math.round(ALMANAC_CONFIDENCE_THRESHOLD*100)}% direction agreement — interesting to look at, not reliable enough to act on.`
+    ),
+    tier === 'negligible' && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
+      `Same direction-confidence bar as Confirmed (${Math.round(ALMANAC_CONFIDENCE_THRESHOLD*100)}%+ agreement, real volume) — these items genuinely do move this way every cycle. But the opportunity is too small to matter: either under ${NEGLIGIBLE_NET_PROFIT_PCT}% net profit per item after 2% GE tax, under ${fmt.gp(NEGLIGIBLE_PROFIT_FOR_LIMIT_GP)}gp total profit even buying the full GE limit, or under ${NEGLIGIBLE_MEDIAN_PCT}% gross movement where full timing data isn't available. Real pattern, not worth the effort.`,
+      negligibleNetNegativeCount > 0 && h('div', {style:{color:T.red, marginTop:6, fontWeight:'bold'}},
+        `⚠ ${negligibleNetNegativeCount} of these are actually net-LOSING trades after tax (shown in red below) — the price moves the predicted direction, but not far enough to clear the 2% sell tax.`
+      ),
+    ),
+
+    tier === 'recommendations' && h('div', null,
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:14}},
+        'Set your risk tolerance and how much gp you\'re willing to put into DXP trades — this builds a concrete shopping list from the live data above, not just a vibe.'
+      ),
+      h('div', {style:{border:`1px solid ${T.borderDim}`, borderRadius:6, padding:'12px 14px', marginBottom:14, display:'flex', gap:20, flexWrap:'wrap', alignItems:'flex-end'}},
+        h('div', null,
+          h('div', {className:'form-lbl'}, 'Risk tolerance'),
+          h('div', {style:{display:'flex', gap:6}},
+            [{key:'safe', label:'Safe'}, {key:'risky', label:'Risky'}].map(o => h('button', {
+              key:o.key,
+              onClick:()=>setRiskTolerance(o.key),
+              style:{
+                padding:'5px 14px', fontSize:11, borderRadius:4, cursor:'pointer',
+                border:`1px solid ${riskTolerance===o.key ? T.gold : T.borderDim}`,
+                background: riskTolerance===o.key ? 'rgba(201,168,76,0.15)' : 'transparent',
+                color: riskTolerance===o.key ? T.goldBright : T.textDim,
+              }
+            }, o.label))
+          ),
+        ),
+        h('div', null,
+          h('div', {className:'form-lbl'}, 'GP you\'re willing to invest'),
+          h(GpInput, {value:budgetInput, placeholder:'e.g. 50m', onChange:setBudgetInput}),
+        ),
+      ),
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:14}},
+        riskTolerance === 'safe'
+          ? `Safe: only items at ${Math.round(ALMANAC_CONFIDENCE_THRESHOLD*100)}%+ direction confidence somewhere in their cycle (the same bar as Confirmed), with a real net-of-tax margin.`
+          : 'Risky: also includes Highly Speculative items (below the confidence bar) for a shot at bigger moves — these are less reliable, by definition.'
+      ),
+      recBudget <= 0 && h('div', {className:'empty-state'}, h('div', null, 'Enter a gp amount above to get a shopping list.')),
+      recBudget > 0 && recs.allocations.length === 0 && h('div', {className:'empty-state'}, h('div', null, 'No items currently qualify for this risk tolerance and budget — try Risky, or check back after the next fetch.')),
+      recBudget > 0 && recs.allocations.length > 0 && h('div', null,
+        h('div', {style:{display:'flex', gap:20, marginBottom:14, flexWrap:'wrap'}},
+          h('div', null, h('div', {className:'form-lbl'}, 'Your budget'), h('div', {style:{fontSize:16, color:T.text}}, fmt.gp(recBudget)+'gp')),
+          h('div', null, h('div', {className:'form-lbl'}, 'Actually allocated'), h('div', {style:{fontSize:16, color:T.text}}, fmt.gp(recs.spent)+'gp')),
+          h('div', null, h('div', {className:'form-lbl'}, 'Expected net profit'), h('div', {style:{fontSize:16, color: recs.profit>=0?T.green:T.red}}, (recs.profit>=0?'+':'')+fmt.gp(recs.profit)+'gp')),
+          h('div', null, h('div', {className:'form-lbl'}, 'Expected ROI'), h('div', {style:{fontSize:16, color: recs.profit>=0?T.green:T.red}}, recs.spent ? ((recs.profit/recs.spent*100).toFixed(1)+'%') : '—')),
+          recBudget > recs.spent && h('div', null, h('div', {className:'form-lbl'}, 'Couldn\'t place (no item can absorb more)'), h('div', {style:{fontSize:16, color:T.textDim}}, fmt.gp(recBudget-recs.spent)+'gp')),
+        ),
+        h('table', {className:'ge-table'},
+          h('thead', null, h('tr', null,
+            h('th', {onClick:()=>toggleRecSort('name'), style:{cursor:'pointer'}}, 'Item'+recSortArrow('name')),
+            h('th', null, 'Trade Idea'),
+            h('th', {onClick:()=>toggleRecSort('qty'), style:{cursor:'pointer'}}, 'Qty'+recSortArrow('qty')),
+            h('th', {onClick:()=>toggleRecSort('spend'), style:{cursor:'pointer'}}, 'Spend'+recSortArrow('spend')),
+            h('th', {onClick:()=>toggleRecSort('profit'), style:{cursor:'pointer'}}, 'Net Profit'+recSortArrow('profit')),
+            h('th', {onClick:()=>toggleRecSort('netRoi'), style:{cursor:'pointer'}}, 'Net ROI'+recSortArrow('netRoi')),
+          )),
+          h('tbody', null, sortedAllocations.map(a => h('tr', {key:a.id},
+            h('td', null, a.name),
+            h('td', {style:{fontSize:11, color:T.textDim}},
+              a.trade.sameySequence
+                ? `Buy ~day ${a.trade.buyDay} → Sell ~day ${a.trade.sellDay}`
+                : `Sell ~day ${a.trade.sellDay} → Buy ~day ${a.trade.buyDay} (next cycle)`
+            ),
+            h('td', null, a.qty.toLocaleString()),
+            h('td', null, fmt.gp(a.spend)+'gp'),
+            h('td', {style:{color: a.profit>=0?T.gold:T.red}}, (a.profit>=0?'+':'')+fmt.gp(a.profit)+'gp'),
+            h('td', {style:{color: a.trade.netProfitPct>=0?T.green:T.red}}, (a.trade.netProfitPct>=0?'+':'')+a.trade.netProfitPct.toFixed(2)+'%'),
+          )))
+        ),
+      ),
+    ),
+
+    tier === 'debunked' && h('div', null,
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:14}},
+        'Popular DXP theories we actually tested — common misconceptions about what gets affected, and items people expect to move that just... don\'t. Curated from the full research pass, kept here so the wrong intuitions don\'t keep resurfacing.'
+      ),
+      DXP_DEBUNKED_THEORIES.map((d, i) => h('div', {
+        key:i,
+        style:{
+          border:`1px solid ${T.borderDim}`, borderRadius:6, padding:'12px 14px', marginBottom:10,
+        }
+      },
+        h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:6, flexWrap:'wrap', gap:6}},
+          h('div', {style:{fontWeight:'bold', color:T.text, fontSize:13}}, d.title),
+          h('div', {style:{fontSize:10, color:T.gold, fontStyle:'italic'}}, d.verdict),
+        ),
+        h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6}},
+          h('b', {style:{color:T.textDim}}, 'The belief: '), d.belief
+        ),
+        h('div', {style:{fontSize:11, color:T.text, lineHeight:1.5}},
+          h('b', {style:{color:T.text}}, 'What the data actually shows: '), d.reality
+        ),
+      ))
+    ),
+
+    loading && tier !== 'debunked' && tier !== 'recommendations' && h('div', {style:{color:T.textDim, fontSize:12, padding:'20px 0'}}, 'Computing DXP patterns from local + research history…'),
+    error && tier !== 'debunked' && tier !== 'recommendations' && h('div', {style:{color:T.red, fontSize:12, padding:'20px 0'}}, 'Failed to load Almanac data.'),
+
+    !loading && !error && tier !== 'debunked' && tier !== 'recommendations' && h('div', null,
+      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}}, `${rows.length} items in this view`),
+      rows.length === 0
+        ? h('div', {className:'empty-state'}, h('div', null, 'No items show a clear signal for this phase.'))
+        : h('table', {className:'ge-table'},
+            h('thead', null, h('tr', null,
+              h('th', {style:{width:20}}, null),
+              h('th', {onClick:()=>toggleSort('name'), style:{cursor:'pointer'}}, 'Item'+sortArrow('name')),
+              h('th', {onClick:()=>toggleSort('direction'), style:{cursor:'pointer'}}, 'Direction'+sortArrow('direction')),
+              h('th', {onClick:()=>toggleSort('confidence'), style:{cursor:'pointer'}}, 'Confidence'+sortArrow('confidence')),
+              h('th', {onClick:()=>toggleSort('medianPct'), style:{cursor:'pointer'}}, 'Median %'+sortArrow('medianPct')),
+              h('th', null, 'Trade Idea'),
+              h('th', {onClick:()=>toggleSort('profitPerItem'), style:{cursor:'pointer'}}, 'Profit/item'+sortArrow('profitPerItem')),
+              h('th', {onClick:()=>toggleSort('profitForLimit'), style:{cursor:'pointer'}, title:'Assumes an offer left in the whole buy window, refilling every 4 hours — not a single 4-hour fill'}, 'Profit (full window)'+sortArrow('profitForLimit')),
+              h('th', {onClick:()=>toggleSort('volRatio'), style:{cursor:'pointer'}}, 'Vol'+sortArrow('volRatio')),
+              h('th', {style:{width:24}}, null),
+            )),
+            h('tbody', null, rows.map(r => {
+              const t = r.trade;
+              const tradeLabel = !t ? '—'
+                : t.sameySequence
+                  ? `Buy ~day ${t.buyDay} → Sell ~day ${t.sellDay}`
+                  : `Sell ~day ${t.sellDay} → Buy ~day ${t.buyDay} (next cycle)`;
+              return [
+              h('tr', {key:r.id},
+                h('td', {
+                  style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
+                  onClick:()=>toggleDxpWatch(r.id),
+                }, dxpWatchlist.includes(r.id) ? '★' : '☆'),
+                h('td', {
+                  style:{cursor: onSelect ? 'pointer' : 'default', textDecoration: onSelect ? 'underline' : 'none', textDecorationColor:'transparent'},
+                  onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
+                  onMouseEnter: e => { if (onSelect) e.currentTarget.style.color = T.goldBright; },
+                  onMouseLeave: e => { if (onSelect) e.currentTarget.style.color = ''; },
+                  title: onSelect ? 'Open item details' : undefined,
+                }, r.name),
+                h('td', {style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop'),
+                h('td', null, `${r.score}/${r.total}`),
+                h('td', {style:{color: r.medianPct>=0 ? T.green : T.red}}, `${r.medianPct>=0?'+':''}${r.medianPct}%`),
+                h('td', {
+                  style:{fontSize:11, color:T.textDim, cursor:'pointer'},
+                  onClick:()=>setExpanded(expanded===r.id?null:r.id),
+                  title:'Show trade idea details',
+                }, tradeLabel),
+                h('td', {style:{color: t?.profitPerItem==null ? T.textDim : t.profitPerItem>=0 ? T.gold : T.red}}, t?.profitPerItem!=null ? (t.profitPerItem>=0?'+':'')+fmt.gp(t.profitPerItem)+'gp' : '—'),
+                h('td', {style:{color: t?.profitForLimit==null ? T.textDim : t.profitForLimit>=0 ? T.gold : T.red}}, t?.profitForLimit!=null ? (t.profitForLimit>=0?'+':'')+fmt.gp(t.profitForLimit)+'gp' : '—'),
+                h('td', {style:{color:T.textDim}}, r.volRatio!=null ? r.volRatio+'x' : '—'),
+                h('td', {
+                  style:{cursor:'pointer', color:T.textDim, textAlign:'center'},
+                  onClick:()=>setExpanded(expanded===r.id?null:r.id),
+                  title:'Show trade idea details',
+                }, expanded===r.id ? '▾' : '›'),
+              ),
+              expanded===r.id && h('tr', {key:r.id+'-detail'},
+                h('td', {colSpan:10, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}},
+                  t && h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`}},
+                    h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
+                      `Trade idea — based on ${t.nEvents} tracked cycles`
+                    ),
+                    h('div', {style:{fontSize:12, color:T.text, lineHeight:1.6}},
+                      t.preTroughOffset != null && t.preTroughOffset < -1 && h('span', null,
+                        `Starts dipping as early as day ${t.preTroughOffset} relative to the event start (typically announced ~2-3 weeks before that) — for items that move ahead of the event, this is roughly when to start buying, earlier than the in-event "Bottom" day below.`, h('br',null),
+                      ),
+                      `Bottom: day ${t.buyDay} (±${t.buyDayStd}d), ${t.buyPct>=0?'+':''}${t.buyPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.buyPrice)}gp.`, h('br',null),
+                      `Top: day ${t.sellDay} (±${t.sellDayStd}d), ${t.sellPct>=0?'+':''}${t.sellPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.sellPrice)}gp before tax, ~${fmt.gp(t.netSellPrice)}gp after 2% GE tax.`, h('br',null),
+                      `Net: ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item after tax.`, h('br',null),
+                      h('span', {style:{color:T.textDim, fontStyle:'italic'}},
+                        'Day 0 = the moment the event starts. Fractional days are sub-day precision — day 0.5 means about 12 hours in, day 2.5 means 2.5 days in, etc.'
+                      ), h('br',null),
+                      !t.sameySequence && h('span', {style:{color:T.textDim, fontStyle:'italic'}},
+                        'Top happens before bottom in this cycle — better suited to selling existing stock early, then buying the dip for next time.'
+                      ),
+                    )
+                  ),
+                  h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
+                    `Tracked DXP events — ${r.events.length} with data for this phase`
+                  ),
+                  h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
+                    r.events.map(ev => h('span', {
+                      key:ev.event_start,
+                      style:{
+                        fontSize:10, padding:'2px 8px', borderRadius:10,
+                        border:`1px solid ${ev.direction==='rise'?'rgba(76,175,80,0.4)':ev.direction==='drop'?'rgba(229,57,53,0.4)':T.borderDim}`,
+                        color: ev.direction==='rise'?T.green:ev.direction==='drop'?T.red:T.textDim,
+                      }
+                    }, `${ev.event_start} ${ev.pct>=0?'+':''}${ev.pct}%`))
+                  )
+                )
+              ),
+            ];}))
+          )
+    ),
+  );
+}
+
 function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands}) {
   const [s, setS] = useState(settings);
+  const [appVersion, setAppVersion] = useState('');
+  useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
+  const [pyHealth, setPyHealth] = useState(null);
+  const [pyChecking, setPyChecking] = useState(false);
+  const runPyHealthCheck = async () => {
+    setPyChecking(true);
+    const res = await window.genius?.getPythonHealth?.();
+    setPyHealth(res || null);
+    setPyChecking(false);
+  };
+  useEffect(() => { runPyHealthCheck(); }, []);
+  const devTapCount = useRef(0);
+  const devTapTimer = useRef(null);
+  const handleVersionTap = () => {
+    devTapCount.current += 1;
+    clearTimeout(devTapTimer.current);
+    devTapTimer.current = setTimeout(() => { devTapCount.current = 0; }, 2000);
+    if (devTapCount.current >= 7) {
+      devTapCount.current = 0;
+      const next = !s.devMode;
+      setS(x=>({...x, devMode:next}));
+      onChange({...s, devMode:next});
+      window.genius?.saveSettings({...s, devMode:next});
+      toast(next ? 'Developer mode enabled' : 'Developer mode disabled', 'success');
+    }
+  };
   const [shDraft, setShDraft] = useState('');
   const [shKey, setShKey]     = useState('');
   const [shFocused, setShFocused] = useState(false);
@@ -3706,7 +4462,53 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       toast('Webhook test sent!','success');
     } catch { toast('Webhook failed','error'); }
   };
-  return h('div',{style:{maxWidth:500}},
+  return h('div',null,
+    h('div',{style:{display:'flex', flexDirection:'column', alignItems:'center', marginBottom:24, paddingBottom:20, borderBottom:`1px solid ${T.border}`}},
+      h('img',{src:'../assets/logo-full.png', alt:'GEnius', style:{width:220, maxWidth:'100%'}}),
+      appVersion && h('div',{
+        style:{fontSize:11, color:T.textDim, marginTop:6, cursor:'default', userSelect:'none'},
+        onClick:handleVersionTap,
+      }, `Version ${appVersion}`),
+      s.devMode && h('div',{style:{fontSize:10, color:T.gold, marginTop:4, letterSpacing:'0.05em'}}, '⚙ DEVELOPER MODE'),
+      h('div',{style:{display:'flex', gap:10, marginTop:12}},
+        h('button',{
+          className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
+          onClick:()=>window.genius?.openExternal('https://discord.gg/WFbJt9cDpP'),
+        }, '💬 Discord'),
+      ),
+    ),
+    h('div',{style:{maxWidth:500}},
+    h('div',{style:{marginBottom:20, border:`1px solid ${pyHealth && !pyHealth.embeddedFound ? T.red : T.borderDim}`, borderRadius:6, padding:'12px 14px'}},
+      h('div',{style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}},
+        h('div',{className:'ge-section-head', style:{marginBottom:0}},'Troubleshooting'),
+        h('button',{className:'ge-btn', style:{fontSize:11, padding:'3px 10px'}, onClick:runPyHealthCheck, disabled:pyChecking},
+          pyChecking ? 'Checking…' : 'Run check'
+        ),
+      ),
+      pyHealth == null && h('div',{style:{fontSize:11,color:T.textDim}}, 'Checking Python runtime…'),
+      pyHealth && pyHealth.embeddedFound && h('div',{style:{fontSize:12,color:T.green}},
+        '✓ Embedded Python runtime found. Fetching should work normally.'
+      ),
+      pyHealth && pyHealth.embeddedFound && pyHealth.itemCount > 0 && pyHealth.itemCount < 500 && h('div',{style:{fontSize:11,color:T.gold,marginTop:6}},
+        `Only ${pyHealth.itemCount} items in local data — if this stays low after a few fetches, your antivirus may be quarantining files mid-fetch even though Python itself launched. See below.`
+      ),
+      pyHealth && !pyHealth.embeddedFound && h('div',{style:{fontSize:12,color:T.red,marginBottom:8}},
+        '✗ Embedded Python runtime not found. Fetching will fail or silently fall back to a system Python install (if you have one) instead of the one GEnius ships with.'
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:10,lineHeight:1.6}},
+        h('b',{style:{color:T.text}},'Known issue: '),
+        'AVG antivirus has a known false positive with GEnius\'s embedded Python runtime — it sometimes quarantines or silently deletes it during install. This isn\'t a sign that GEnius is unsafe, just an over-eager heuristic flag on bundled Python interpreters in general.',
+        h('div',{style:{marginTop:8}},
+          h('b',{style:{color:T.text}},'If Fetch Now fails or your item count stays low:'),
+        ),
+        h('ol',{style:{margin:'4px 0 0 18px', padding:0}},
+          h('li',null,'Open AVG and check Quarantine / Protection history for anything related to GEnius or "python.exe".'),
+          h('li',null,'Restore it if found, then add the GEnius install folder to AVG\'s exceptions list (Menu > Settings > Exceptions in AVG).'),
+          h('li',null,'If it\'s not in Quarantine either, reinstall GEnius — AVG may have deleted the files outright before they could be quarantined.'),
+          h('li',null,'Run the check above again after reinstalling to confirm the runtime is back.'),
+        ),
+      ),
+    ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Discord webhook'),
       h('label',{className:'form-lbl'},'Webhook URL'),
@@ -3739,6 +4541,18 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         h('option',{value:'dark'},'Dark (default)'),
         h('option',{value:'black'},'Black'),
       )
+    ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Item Thumbnails'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
+        h('input',{type:'checkbox',checked:s.showThumbnails!==false,onChange:e=>{
+          const v = e.target.checked;
+          setS(x=>({...x,showThumbnails:v}));
+          onChange({...s,showThumbnails:v});
+          window.genius?.saveSettings({...s,showThumbnails:v});
+        }}),
+        h('span',null,'Show item icons next to names in tables')
+      ),
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'UI Scale'),
@@ -3887,6 +4701,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
           );
         })
       )
+    )
     )
   );
 }
@@ -4084,7 +4899,16 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
           h(Th, {k:'afterTax',         label:'After Tax'}),
           h(Th, {k:'alch',             label:'Alch Value'}),
           h(Th, {k:'alchProfit',       label:'Manual Profit'}),
-          h(Th, {k:'alchemiserProfit', label:'Alchemiser Profit'}),
+          h('th', {
+            className:'sortable', style:{cursor:'pointer', userSelect:'none'},
+            onClick: () => setSort(s => ({key:'alchemiserProfit', dir: s.key==='alchemiserProfit' ? -s.dir : -1}))
+          },
+            'Alchemiser Profit' + (sort.key==='alchemiserProfit' ? (sort.dir>0 ? ' ↑' : ' ↓') : ''),
+            h('span', {
+              title:'The Alchemiser device cannot hold items worth more than 500,000gp. Items above that threshold can\'t be alchemised this way, regardless of profit.',
+              style:{marginLeft:5, color:T.textDim, cursor:'help', fontSize:11, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'},
+            }, '?')
+          ),
           h('th', null, '')
         )
       ),
@@ -4100,9 +4924,11 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
           h('td', {style:{color: it.alchProfit > 0 ? T.green : T.red}},
             (it.alchProfit > 0 ? '+' : '') + fmt.gp(it.alchProfit)+'gp'
           ),
-          h('td', {style:{color: it.alchemiserProfit > 0 ? T.green : T.red}},
-            (it.alchemiserProfit > 0 ? '+' : '') + fmt.gp(it.alchemiserProfit)+'gp'
-          ),
+          (it.high||it.low||0) > 500000
+            ? h('td', {style:{color:T.textDim}, title:'Over the Alchemiser\'s 500,000gp item value limit'}, 'N/A')
+            : h('td', {style:{color: it.alchemiserProfit > 0 ? T.green : T.red}},
+                (it.alchemiserProfit > 0 ? '+' : '') + fmt.gp(it.alchemiserProfit)+'gp'
+              ),
           h('td', null,
             h('button', {
               className:'star-btn',
@@ -5477,6 +6303,7 @@ function App() {
   const [lastUpdate, setLastUpdate] = useState(null);
   const {toasts, add:toast} = useToast();
   const theme = settings.theme || 'dark';
+  SHOW_THUMBNAILS = settings.showThumbnails !== false;
   const [detailPanelWidth, setDetailPanelWidth] = useState(settings.detailPanelWidth || 296);
   useEffect(() => { if (settings.detailPanelWidth) setDetailPanelWidth(settings.detailPanelWidth); }, [settings.detailPanelWidth]);
   const panelWidthRef = useRef(detailPanelWidth);
@@ -5506,14 +6333,22 @@ function App() {
   }, []);
 
   // Custom nav order — flatten NAV when user has custom order (no group separators)
+  const navBase = useMemo(() => {
+    if (!settings.devMode) return NAV;
+    // Hidden dev-only entry, inserted right below Dashboard — never shown unless devMode is on
+    const idx = NAV.findIndex(n => n.id === 'dashboard') + 1;
+    const withDev = [...NAV];
+    withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
+    return withDev;
+  }, [settings.devMode]);
   const navItems = useMemo(() => {
     const order = settings.navOrder;
-    if (!order || !order.length) return NAV;
-    const byId = Object.fromEntries(NAV.filter(n=>n.id).map(n=>[n.id,n]));
+    if (!order || !order.length) return navBase;
+    const byId = Object.fromEntries(navBase.filter(n=>n.id).map(n=>[n.id,n]));
     const known = order.map(id=>byId[id]).filter(Boolean);
-    const newOnes = NAV.filter(n=>n.id && !order.includes(n.id));
+    const newOnes = navBase.filter(n=>n.id && !order.includes(n.id));
     return [...known, ...newOnes]; // flat list, no groups
-  }, [settings.navOrder]);
+  }, [settings.navOrder, navBase]);
 
   useEffect(() => {
     if (!window.genius) { console.error('[GEnius] window.genius is not defined!'); return; }
@@ -5541,6 +6376,12 @@ function App() {
       setNotes(nt||{});
       setUserShorthands(sh||{});
 
+      const splash = document.getElementById('splash');
+      if (splash) {
+        splash.style.opacity = '0';
+        setTimeout(() => splash.remove(), 400);
+      }
+
       // Trigger history population if needed
       if (data.items && data.items.length) {
         window.genius?.getHistoryStatus().then(status => {
@@ -5555,7 +6396,10 @@ function App() {
           }
         });
       }
-    }).catch(e => console.error('[GEnius] Initial load error:', e));
+    }).catch(e => {
+      console.error('[GEnius] Initial load error:', e);
+      document.getElementById('splash')?.remove();
+    });
 
     window.genius.onHistoryProgress(d => {
       setHistoryPopup(prev => {
@@ -5685,7 +6529,7 @@ function App() {
   const stale = lastUpdate ? Math.floor((Date.now()-lastUpdate)/60000) : null;
   const statusType = !lastUpdate ? 'none' : stale < 20 ? 'live' : 'stale';
   const statusText = !lastUpdate ? 'No data' : stale < 1 ? 'Live' : `${stale}m ago`;
-  const showDetail = selected && !['news','alerts','settings'].includes(tab);
+  const showDetail = selected && !['alerts','settings'].includes(tab);
 
   const handleSelect = item => {
     if (selected && item && selected.id === item.id) { setSelected(null); return; }
@@ -5809,7 +6653,8 @@ function App() {
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id))
           }),
-          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}})
+          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}}),
+          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})
         ),
         showDetail&&h('div',{style:{position:'relative', display:'flex'}},
           h('div',{

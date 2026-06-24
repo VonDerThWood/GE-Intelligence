@@ -6,3 +6,6 @@ resources/
 __pycache__/
 *.pyc
 .claude/
+TODO.txt
+research/
+SESSION_LOG.md
