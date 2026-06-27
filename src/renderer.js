@@ -2432,7 +2432,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const {totalInvested, totalCurrent, unrealizedPL, unrealizedPct} = useMemo(() => {
     let inv = 0, cur = 0;
     for (const pos of openPositions) {
-      const it = items.find(i => i.name.toLowerCase() === pos.item_name.toLowerCase());
+      const it = items.find(i => i.name.toLowerCase() === (pos.item_name||'').toLowerCase());
       const price = it ? (it.high || it.low || 0) : 0;
       inv += pos.cost_basis * pos.quantity;
       cur += price * pos.quantity;
@@ -5823,7 +5823,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const taxStats   = portfolio?.tax_stats  || {};
 
   const enriched = useMemo(() => positions.map(pos => {
-    const item = items.find(it => it.name.toLowerCase() === pos.item_name.toLowerCase());
+    const item = items.find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
     const currentPrice = item ? (item.high || item.low || 0) : 0;
     const currentValue = currentPrice * pos.quantity;
     const costValue    = pos.cost_basis * pos.quantity;
@@ -6021,7 +6021,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             h('tr',{key:pos.id},
               h('td',{
                 style: onSelect ? {cursor:'pointer', color:T.gold} : null,
-                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===pos.item_name.toLowerCase()); if(it) onSelect(it); } : null,
+                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
               }, pos.item_name),
               h('td',null,pos.quantity.toLocaleString()),
               h('td',null,fmt.gp(pos.cost_basis)+'gp'),
