@@ -319,34 +319,47 @@ function mergeEntry(live, seed) {
   return merged;
 }
 
-function computeDxpData(historyData, itemLimits = null, itemNames = null, useSeed = true, events = null) {
+// Async + batched for the same reason get-signal-trend in main.js got the
+// same treatment tonight: this loop was cheap while history population
+// was stuck at ~20% coverage, and got dramatically more expensive (~6
+// real seconds, measured directly) now that it's genuinely complete
+// (7184 items, most with deep history). Yielding between batches keeps
+// the main process responsive while this runs instead of blocking it
+// for the whole computation.
+async function computeDxpData(historyData, itemLimits = null, itemNames = null, useSeed = true, events = null) {
   // historyData: {item_id_str: [{timestamp, price, volume}, ...]}
   if (events === null) events = EVENTS;
   itemLimits = itemLimits || {};
   itemNames = itemNames || {};
   const live = {};
-  for (const [itemId, points] of Object.entries(historyData)) {
-    if (!points || points.length < 20) continue;
-    const parsed = parsePoints(points);
-    const tally = classifyItem(points, parsed, events);
-    const timing = bestBuySellDays(points, parsed, events);
-    const hasSignal = PHASES.some(p => confidenceScore(tally, p));
-    if (!hasSignal && !timing) continue;
-    const phases = {};
-    for (const p of PHASES) {
-      phases[p] = {
-        rise: tally[p].rise, drop: tally[p].drop, flat: tally[p].flat,
-        total: tally[p].total, avg_pct: tally[p].avg_pct,
-        median_pct: tally[p].median_pct, avg_vol_ratio: tally[p].avg_vol_ratio,
-        events: tally[p].events,
+  const allItemIds = Object.keys(historyData);
+  const BATCH = 300;
+  for (let b = 0; b < allItemIds.length; b += BATCH) {
+    for (const itemId of allItemIds.slice(b, b + BATCH)) {
+      const points = historyData[itemId];
+      if (!points || points.length < 20) continue;
+      const parsed = parsePoints(points);
+      const tally = classifyItem(points, parsed, events);
+      const timing = bestBuySellDays(points, parsed, events);
+      const hasSignal = PHASES.some(p => confidenceScore(tally, p));
+      if (!hasSignal && !timing) continue;
+      const phases = {};
+      for (const p of PHASES) {
+        phases[p] = {
+          rise: tally[p].rise, drop: tally[p].drop, flat: tally[p].flat,
+          total: tally[p].total, avg_pct: tally[p].avg_pct,
+          median_pct: tally[p].median_pct, avg_vol_ratio: tally[p].avg_vol_ratio,
+          events: tally[p].events,
+        };
+      }
+      live[itemId] = {
+        name: itemNames[itemId] ?? itemId,
+        limit: itemLimits[itemId] ?? null,
+        phases,
+        timing,
       };
     }
-    live[itemId] = {
-      name: itemNames[itemId] ?? itemId,
-      limit: itemLimits[itemId] ?? null,
-      phases,
-      timing,
-    };
+    if (b + BATCH < allItemIds.length) await new Promise(res => setImmediate(res));
   }
 
   const meta = { event_count: events.length };
@@ -376,27 +389,43 @@ module.exports = {
 };
 
 if (require.main === module) {
-  const dataDir = process.argv[2];
-  if (!dataDir) {
-    console.error('Usage: node dxp_intelligence.js <data-dir>');
-    process.exit(1);
-  }
-  const history = JSON.parse(fs.readFileSync(path.join(dataDir, 'history.json'), 'utf8'));
-  const itemLimits = {}, itemNames = {};
-  const latestFile = path.join(dataDir, 'latest.json');
-  if (fs.existsSync(latestFile)) {
-    const latest = JSON.parse(fs.readFileSync(latestFile, 'utf8'));
-    for (const it of latest.items || []) {
-      if (it.id) {
-        itemLimits[String(it.id)] = it.limit ?? null;
-        itemNames[String(it.id)] = it.name;
+  (async () => {
+    const dataDir = process.argv[2];
+    if (!dataDir) {
+      console.error('Usage: node dxp_intelligence.js <data-dir>');
+      process.exit(1);
+    }
+    // History moved from one history.json to per-item files under
+    // data/history/<id>.json earlier tonight — read the new format,
+    // falling back to the old monolithic file if it's still around
+    // (e.g. a data dir that was never actually migrated).
+    const historyDir = path.join(dataDir, 'history');
+    const history = {};
+    if (fs.existsSync(historyDir)) {
+      for (const f of fs.readdirSync(historyDir)) {
+        if (!f.endsWith('.json')) continue;
+        history[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(historyDir, f), 'utf8'));
+      }
+    } else {
+      const legacyFile = path.join(dataDir, 'history.json');
+      if (fs.existsSync(legacyFile)) Object.assign(history, JSON.parse(fs.readFileSync(legacyFile, 'utf8')));
+    }
+    const itemLimits = {}, itemNames = {};
+    const latestFile = path.join(dataDir, 'latest.json');
+    if (fs.existsSync(latestFile)) {
+      const latest = JSON.parse(fs.readFileSync(latestFile, 'utf8'));
+      for (const it of latest.items || []) {
+        if (it.id) {
+          itemLimits[String(it.id)] = it.limit ?? null;
+          itemNames[String(it.id)] = it.name;
+        }
       }
     }
-  }
-  const events = loadEvents(dataDir);
-  const result = computeDxpData(history, itemLimits, itemNames, true, events);
-  const outFile = path.join(dataDir, 'dxp_intelligence.json');
-  fs.writeFileSync(outFile, JSON.stringify(result), 'utf8');
-  const itemCount = Object.keys(result).length - ('_meta' in result ? 1 : 0);
-  console.log(`[dxp_intelligence] ${itemCount} items with a usable signal, tracking ${events.length} DXP events, written to ${outFile}`);
+    const events = loadEvents(dataDir);
+    const result = await computeDxpData(history, itemLimits, itemNames, true, events);
+    const outFile = path.join(dataDir, 'dxp_intelligence.json');
+    fs.writeFileSync(outFile, JSON.stringify(result), 'utf8');
+    const itemCount = Object.keys(result).length - ('_meta' in result ? 1 : 0);
+    console.log(`[dxp_intelligence] ${itemCount} items with a usable signal, tracking ${events.length} DXP events, written to ${outFile}`);
+  })();
 }

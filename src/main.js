@@ -156,7 +156,7 @@ function runDxpIntelligence() {
         }
       }
       const events = loadEvents(dataDir);
-      const out = computeDxpData(historyData, itemLimits, itemNames, true, events);
+      const out = await computeDxpData(historyData, itemLimits, itemNames, true, events);
       fs.writeFileSync(path.join(dataDir, 'dxp_intelligence.json'), JSON.stringify(out), 'utf8');
       dxpIntelCache = { historyVersion, data: out };
       return out;
