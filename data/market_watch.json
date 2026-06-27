@@ -1,38 +1,38 @@
 [
   {
     "name": "Common Trade Index",
-    "value": 179.17,
-    "change": 0.71,
+    "value": 185,
+    "change": 0.92,
     "direction": "up"
   },
   {
     "name": "Rune Index",
-    "value": 333.61,
-    "change": -1.62,
+    "value": 329.84,
+    "change": -0.13,
     "direction": "down"
   },
   {
     "name": "Log Index",
-    "value": 2262.11,
-    "change": 0.0,
-    "direction": "up"
+    "value": 2164.35,
+    "change": -23.73,
+    "direction": "down"
   },
   {
     "name": "Food Index",
-    "value": 1078.99,
-    "change": 6.37,
+    "value": 1094.89,
+    "change": 7.2,
     "direction": "up"
   },
   {
     "name": "Metal Index",
-    "value": 372.51,
-    "change": -7.09,
+    "value": 374.81,
+    "change": -5.29,
     "direction": "down"
   },
   {
     "name": "Herb Index",
-    "value": 293.16,
-    "change": -0.09,
-    "direction": "down"
+    "value": 294.79,
+    "change": 2.42,
+    "direction": "up"
   }
 ]

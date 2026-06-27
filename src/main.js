@@ -1,25 +1,52 @@
 const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { execFile } = require('child_process');
 const Store = require('electron-store');
 
 const store = new Store();
 const isDev = process.argv.includes('--dev');
+
+// Persistent white-flash-on-launch fix: this is a GPU compositor swap-chain
+// issue (a literal white frame gets presented before the actual painted
+// frame, at the driver/hardware level) — happens independent of
+// backgroundColor/show:false/ready-to-show timing, and is more common with
+// custom title bar overlays like this app uses. Forcing software rendering
+// trades a little GPU-accelerated smoothness (negligible for a data-table
+// app like this) for eliminating the white frame at its source. Must be
+// called before app is ready.
+app.disableHardwareAcceleration();
+// Separate Windows-specific quirk, same symptom family: Chromium's "Native
+// Window Occlusion Tracking" (Windows 10 1903+) can miscalculate a
+// window's visibility state right at creation and produce a blank/
+// transparent/white frame independent of the GPU setting above. This is
+// the standard fix — disabling occlusion tracking outright. Trying this
+// alongside the hardware-acceleration fix rather than instead of it,
+// since that one already fixed the original (worse) white flashbang.
+app.commandLine.appendSwitch('disable-features', 'CalculateNativeWinOcclusion');
 
 let mainWindow = null;
 let tray = null;
 let schedulerInterval = null;
 let isQuitting = false;
 
+// GEnius never enforced single-instance — nothing stopped two full app
+// processes from running at once, each with its own independent
+// in-memory history-download queue, both racing to write the same
+// history.json on disk (confirmed for real: two windows open at once
+// showed wildly different download progress, e.g. one stuck on "top
+// 300" while the other was past 1800, because each was tracking its
+// OWN queue against a file the other was also writing to). This claims
+// the lock at launch; if a second instance starts, it quits immediately
+// and tells the first instance to focus its existing window instead.
+const gotSingleInstanceLock = app.requestSingleInstanceLock();
+if (!gotSingleInstanceLock) {
+  app.quit();
+}
+
 // ─── Paths (defined as lets, set after app ready) ─────────────────────────────
 const resourcesPath = isDev
   ? path.join(__dirname, '..')
   : process.resourcesPath;
-
-const pythonDir = isDev
-  ? path.join(__dirname, '..', 'python')
-  : path.join(process.resourcesPath, 'python');
 
 // dataDir and related paths must be set after app is ready (app.getPath requires it)
 let dataDir;
@@ -35,6 +62,19 @@ function createWindow() {
     minWidth: 960,
     minHeight: 600,
     backgroundColor: '#1a1209',
+    // Explicit, not just relying on the default — with hardware
+    // acceleration disabled (see app.disableHardwareAcceleration() below,
+    // the actual white-flash fix), the native window surface can render
+    // as transparent/see-through for a moment until the software-rendered
+    // frame actually paints, instead of immediately showing
+    // backgroundColor. transparent:false plus re-asserting the color
+    // below right after creation closes that gap.
+    transparent: false,
+    // Windows draws the titleBarOverlay strip via DWM, not Chromium — without
+    // this it can default to a light/white theme for the first frame or two
+    // before titleBarOverlay.color below actually takes effect, causing an
+    // inconsistent white flash independent of page-load timing.
+    darkTheme: true,
     icon: path.join(resourcesPath, 'assets', 'icon.ico'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
@@ -49,6 +89,10 @@ function createWindow() {
     },
     show: false
   });
+  // Re-assert immediately after creation, not just in the constructor —
+  // closes the gap where the window surface can briefly render as
+  // transparent before the page's first paint, with hardware acceleration off.
+  mainWindow.setBackgroundColor('#1a1209');
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.once('ready-to-show', () => { mainWindow.show(); });
@@ -80,62 +124,10 @@ function createTray() {
   tray.on('double-click', () => { mainWindow.show(); mainWindow.focus(); });
 }
 
-// ─── Python runner ────────────────────────────────────────────────────────────
-// Tracks how the last-resolved Python was found, so a failed fetch can tell
-// the user WHY (e.g. the embedded runtime is missing — almost always AVG
-// quarantining/deleting it during install, see Settings > Troubleshooting)
-// instead of just surfacing a raw ENOENT/spawn error.
-let lastPythonSource = 'embedded';
-
-function getEmbeddedPythonPath() {
-  const base = isDev
-    ? path.join(__dirname, '..')
-    : process.resourcesPath;
-  return path.join(base, 'python-embed', 'python.exe');
-}
-
-function getPythonExecutable() {
-  const embeddedPython = getEmbeddedPythonPath();
-  console.log('[Python] Checking embedded:', embeddedPython);
-
-  if (fs.existsSync(embeddedPython)) {
-    console.log('[Python] Using embedded Python');
-    lastPythonSource = 'embedded';
-    return embeddedPython;
-  }
-
-  console.log('[Python] Embedded not found, trying system Python');
-  lastPythonSource = 'embedded-missing';
-
-  // Fallback: find system Python, skip Microsoft Store stub
-  try {
-    const { execSync } = require('child_process');
-    const result = execSync('where python', { timeout: 3000 }).toString();
-    const paths = result.split('\n').map(p => p.trim()).filter(Boolean);
-    for (const p of paths) {
-      if (p && !p.includes('WindowsApps') && fs.existsSync(p)) {
-        console.log('[Python] Using system Python:', p);
-        lastPythonSource = 'system';
-        return p;
-      }
-    }
-  } catch {}
-
-  try {
-    const { execSync } = require('child_process');
-    const result = execSync('where py', { timeout: 3000 }).toString().trim().split('\n')[0].trim();
-    if (result && fs.existsSync(result)) {
-      console.log('[Python] Using py launcher:', result);
-      lastPythonSource = 'system';
-      return result;
-    }
-  } catch {}
-
-  console.log('[Python] Falling back to bare python command');
-  lastPythonSource = 'embedded-missing';
-  return 'python';
-}
-
+// Ported from dxp_intelligence.py to dxp_intelligence.js (see
+// SESSION_LOG.md, 2026-06-26) — verified field-for-field identical
+// against all 987 real tracked items before cutover. Runs in-process
+// instead of spawning Python.
 let dxpIntelCache = null;       // { historyMtimeMs, data }
 function runDxpIntelligence() {
   return new Promise((resolve, reject) => {
@@ -149,58 +141,55 @@ function runDxpIntelligence() {
       return;
     }
 
-    const python = getPythonExecutable();
-    const scriptPath = path.join(pythonDir, 'dxp_intelligence.py');
-    const args = [scriptPath, `--data-dir=${dataDir}`];
-
-    console.log('[DXP Intel] Running:', python, args.join(' '));
-
-    execFile(python, args, { env: process.env }, (error, stdout, stderr) => {
-      if (stderr) console.warn('[DXP Intel] stderr:', stderr.slice(0, 500));
-      if (error) {
-        console.error('[DXP Intel] Error:', error.message);
-        reject(error);
-        return;
+    try {
+      const { loadEvents, computeDxpData } = require('./backend-js/dxp_intelligence.js');
+      const history = JSON.parse(fs.readFileSync(path.join(dataDir, 'history.json'), 'utf8'));
+      const itemLimits = {}, itemNames = {};
+      const latestFile = path.join(dataDir, 'latest.json');
+      if (fs.existsSync(latestFile)) {
+        const latest = JSON.parse(fs.readFileSync(latestFile, 'utf8'));
+        for (const it of latest.items || []) {
+          if (it.id) {
+            itemLimits[String(it.id)] = it.limit ?? null;
+            itemNames[String(it.id)] = it.name;
+          }
+        }
       }
-      try {
-        const out = JSON.parse(fs.readFileSync(path.join(dataDir, 'dxp_intelligence.json'), 'utf8'));
-        dxpIntelCache = { historyMtimeMs, data: out };
-        resolve(out);
-      } catch (e) {
-        reject(e);
-      }
-    });
+      const events = loadEvents(dataDir);
+      const out = computeDxpData(history, itemLimits, itemNames, true, events);
+      fs.writeFileSync(path.join(dataDir, 'dxp_intelligence.json'), JSON.stringify(out), 'utf8');
+      dxpIntelCache = { historyMtimeMs, data: out };
+      resolve(out);
+    } catch (e) {
+      console.error('[DXP Intel] Error:', e.message);
+      reject(e);
+    }
   });
 }
 
+// Fetches prices/news/etc by running run.js's main() in-process. Kept the
+// historical name (was a Python child-process spawn before the JS port,
+// see SESSION_LOG.md 2026-06-26) since renaming would touch several call
+// sites for no functional benefit.
 function runPython(mode = 'prices') {
-  return new Promise((resolve, reject) => {
-    const python = getPythonExecutable();
-    const scriptPath = path.join(pythonDir, 'run.py');
+  return (async () => {
+    const { main: runJs } = require('./backend-js/run.js');
     const webhookUrl = store.get('discordWebhook', '');
-    const args = [scriptPath, `--mode=${mode}`, `--data-dir=${dataDir}`];
-    if (webhookUrl) args.push(`--webhook=${webhookUrl}`);
+    const argv = [`--mode=${mode}`, `--data-dir=${dataDir}`];
+    if (webhookUrl) argv.push(`--webhook=${webhookUrl}`);
 
-    console.log('[Python] Running:', python, args.join(' '));
+    console.log('[run.js] Running with args:', argv.join(' '));
 
-    execFile(python, args, { env: process.env }, (error, stdout, stderr) => {
-      if (stderr) console.warn('[Python] stderr:', stderr.slice(0, 500));
-      if (error) {
-        console.error('[Python] Error:', error.message);
-        const pythonMissing = lastPythonSource === 'embedded-missing';
-        const message = pythonMissing
-          ? `Embedded Python runtime not found. This is usually caused by antivirus (AVG especially) quarantining or deleting it during install — see Settings > Troubleshooting. (${error.message})`
-          : error.message;
-        notifyRenderer('fetch-error', { error: message, pythonMissing });
-        reject(error);
-      } else {
-        console.log('[Python] stdout:', stdout);
-        notifyRenderer('fetch-complete', { mode, timestamp: Date.now(), pythonOut: stdout });
-        if (mode === 'prices' || !mode) updateSnapshots();
-        resolve(stdout);
-      }
-    });
-  });
+    try {
+      await runJs(argv);
+      notifyRenderer('fetch-complete', { mode, timestamp: Date.now() });
+      if (mode === 'prices' || !mode) updateSnapshots();
+    } catch (error) {
+      console.error('[run.js] Error:', error.message);
+      notifyRenderer('fetch-error', { error: error.message });
+      throw error;
+    }
+  })();
 }
 
 function notifyRenderer(channel, data) {
@@ -469,20 +458,6 @@ ipcMain.handle('get-dxp-intelligence', async () => {
 ipcMain.handle('fetch-now', async (_, mode) => {
   try { await runPython(mode || 'prices'); return { success: true }; }
   catch (e) { return { success: false, error: e.message }; }
-});
-
-// Proactive check for the Settings > Troubleshooting section — lets the user
-// see the Python runtime is missing (almost always AVG quarantining it)
-// without having to run a fetch and watch it fail first.
-ipcMain.handle('get-python-health', () => {
-  const embeddedPython = getEmbeddedPythonPath();
-  const embeddedFound = fs.existsSync(embeddedPython);
-  let itemCount = 0;
-  try {
-    const parsed = JSON.parse(fs.readFileSync(dataFile, 'utf8'));
-    itemCount = parsed.items?.length || 0;
-  } catch {}
-  return { embeddedFound, embeddedPath: embeddedPython, itemCount };
 });
 
 ipcMain.handle('get-settings', () => ({
@@ -826,7 +801,11 @@ ipcMain.handle('test-notification', (_, { title, body }) => {
 ipcMain.handle('get-data-dir', () => dataDir);
 
 // ─── Category overrides editor ────────────────────────────────────────────────
-const overridesFile = path.join(pythonDir, 'category_overrides.json');
+// Points at the PERSONAL overrides file specifically, not the bulk/dev-
+// curated category_overrides.json — the in-app editor should only ever
+// touch Ben's own per-item edits, never the whole catalogue. catalogue.js
+// merges both files at category-assignment time (personal wins per item).
+const overridesFile = path.join(__dirname, 'backend-js', 'data', 'personal_overrides.json');
 
 ipcMain.handle('get-overrides', () => {
   try {
@@ -839,6 +818,11 @@ ipcMain.handle('get-overrides', () => {
 ipcMain.handle('save-overrides', (_, overrides) => {
   try {
     fs.writeFileSync(overridesFile, JSON.stringify(overrides, null, 2), 'utf8');
+    // catalogue.js loads OVERRIDES into memory once at module load and
+    // never re-reads the file on its own — without this, a saved edit
+    // sits correctly on disk but is invisible to every fetch for the
+    // rest of the app's run, looking exactly like "it didn't save."
+    require('./backend-js/catalogue.js').reloadOverrides();
     return { success: true };
   } catch (e) {
     return { success: false, error: e.message };
@@ -846,18 +830,106 @@ ipcMain.handle('save-overrides', (_, overrides) => {
 });
 
 // ─── Price history ────────────────────────────────────────────────────────────
-let historyFile;
-let historyData = {};        // { itemId: [{timestamp, price, volume}] }
+// Stored as one small file per item (data/history/<id>.json) instead of a
+// single monolithic history.json. The old single-file approach hit a real
+// wall for real: history.json grew to ~512MB (confirmed: ~10.1M genuine
+// price points across 3,435 items, not corruption) — right at V8's hard
+// string-length ceiling (~536MB), and EVERY save re-serialized the WHOLE
+// file regardless of how many items actually changed, which is also what
+// made the app briefly look like it had crashed (a multi-second synchronous
+// JSON.stringify attempt on a >500MB object, which then threw "Invalid
+// string length" anyway). Per-item files have no such ceiling — each is at
+// most a few hundred KB — and a save only ever touches the items that
+// actually changed (see dirtyHistoryIds below), not the entire dataset.
+let historyFile;     // OLD monolithic file path — kept only for one-time migration
+let historyDir;      // NEW per-item storage directory
+let historyData = {};        // { itemId: [{timestamp, price, volume}] } — in-memory, same shape as before
+let dirtyHistoryIds = new Set(); // ids changed since the last saveHistory() call
 let historyFetchQueue = [];  // item IDs waiting to be fetched
 let historyFetchActive = false;
 let historyFetchStop = false;
+// Persisted (not just in-memory) so the UI can tell "first 300 done,
+// now just continuing in the background" apart from "still on the
+// first 300" across restarts/interruptions, instead of re-deriving it
+// from a per-session counter that always restarted at 0 and looked
+// like progress had been lost (it hadn't — see SESSION_LOG.md,
+// 2026-06-26).
+let historyInitial300Done = store.get('historyInitial300Done', false);
 
-function loadHistory() {
-  try {
-    if (fs.existsSync(historyFile)) {
-      historyData = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+// Resolves once historyData is fully populated from disk. Anything that
+// needs complete history data (the population-resume check, mainly)
+// should await this instead of assuming loadHistory() already finished —
+// it no longer runs synchronously before the window even shows.
+let historyLoadDone;
+const historyLoadedPromise = new Promise(res => { historyLoadDone = res; });
+
+// Genuinely async — reads files in parallel batches via fs.promises
+// instead of a tight fs.readFileSync loop. With thousands of per-item
+// files (this exact migration is what produced them — see SESSION_LOG.md,
+// 2026-06-26), a synchronous loop blocks Node's single JS thread for the
+// entire load, which blocks ALL window painting and input the whole
+// time — confirmed for real via Windows Event Viewer: two genuine
+// AppHangTransient events for electron.exe, seconds apart, lining up
+// exactly with a relaunch right after the per-item migration. Async
+// reads release the thread during each file's disk wait, so the window
+// stays responsive throughout even though the total load time is similar.
+async function loadHistory() {
+  if (!fs.existsSync(historyDir)) fs.mkdirSync(historyDir, { recursive: true });
+
+  const existingFiles = fs.readdirSync(historyDir).filter(f => f.endsWith('.json'));
+  if (existingFiles.length > 0) {
+    // Already migrated — load per-item files directly, in batches so we
+    // don't fire thousands of concurrent file handles at once.
+    const BATCH = 200;
+    for (let i = 0; i < existingFiles.length; i += BATCH) {
+      const batch = existingFiles.slice(i, i + BATCH);
+      await Promise.all(batch.map(async f => {
+        const id = f.slice(0, -5);
+        try {
+          historyData[id] = JSON.parse(await fs.promises.readFile(path.join(historyDir, f), 'utf8'));
+        } catch (e) {
+          console.warn(`[history] Skipping unreadable per-item file ${f}:`, e.message);
+        }
+      }));
     }
-  } catch { historyData = {}; }
+    console.log(`[history] Loaded ${Object.keys(historyData).length} items from per-item storage.`);
+    historyLoadDone();
+    return;
+  }
+
+  // One-time migration from the old monolithic history.json, if present.
+  // Synchronous reads are fine here — this only ever runs once per
+  // install, on the specific run that migrates the old format, not on
+  // every single startup like the per-item load path above.
+  if (fs.existsSync(historyFile)) {
+    console.log('[history] Migrating from old monolithic history.json to per-item storage...');
+    try {
+      const old = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
+      let migrated = 0;
+      for (const [id, points] of Object.entries(old)) {
+        try {
+          atomicWrite(path.join(historyDir, `${id}.json`), JSON.stringify(points));
+          historyData[id] = points;
+          migrated++;
+        } catch (e) {
+          console.warn(`[history] Failed to migrate item ${id}:`, e.message);
+        }
+      }
+      // Keep the old file as a backup rather than deleting it outright —
+      // costs nothing to keep around and means the migration is reversible
+      // if something about the new format turns out to be wrong.
+      fs.renameSync(historyFile, historyFile + '.pre-migration-backup');
+      console.log(`[history] Migration complete: ${migrated} items moved to per-item storage. Old file kept as history.json.pre-migration-backup.`);
+    } catch (e) {
+      // Don't just silently vanish into an empty cache — back up whatever's
+      // there so a corrupt file is diagnosable later instead of a mystery.
+      console.error('[history] Failed to parse old history.json, resetting:', e.message);
+      try {
+        if (fs.existsSync(historyFile)) fs.copyFileSync(historyFile, historyFile + '.corrupt-' + Date.now());
+      } catch {}
+    }
+  }
+  historyLoadDone();
 }
 
 function atomicWrite(filePath, data) {
@@ -867,11 +939,24 @@ function atomicWrite(filePath, data) {
 }
 
 function saveHistory() {
-  try { atomicWrite(historyFile, JSON.stringify(historyData)); }
-  catch (e) { console.error('[history] Save failed:', e.message); }
+  // Only writes items actually touched since the last save — never the
+  // whole dataset. Each per-item file is small (at most a few hundred KB
+  // even for an item with 6000+ price points), so this can never hit the
+  // string-length ceiling that the old single-file approach eventually did.
+  if (dirtyHistoryIds.size === 0) return;
+  const toSave = [...dirtyHistoryIds];
+  dirtyHistoryIds.clear();
+  for (const id of toSave) {
+    try {
+      atomicWrite(path.join(historyDir, `${id}.json`), JSON.stringify(historyData[id]));
+    } catch (e) {
+      console.error(`[history] Save failed for item ${id}:`, e.message);
+      dirtyHistoryIds.add(id); // retry on next save
+    }
+  }
 }
 
-async function fetchHistoryForItem(itemId) {
+function fetchHistoryForItemOnce(itemId, timeoutMs) {
   return new Promise((resolve) => {
     const https = require('https');
     const url = `https://api.weirdgloop.org/exchange/history/rs/all?id=${itemId}`;
@@ -881,6 +966,11 @@ async function fetchHistoryForItem(itemId) {
       let data = '';
       res.on('data', c => data += c);
       res.on('end', () => {
+        if (res.statusCode && res.statusCode >= 400) {
+          console.warn(`[history] HTTP ${res.statusCode} fetching item ${itemId} (timeout ${timeoutMs}ms)`);
+          resolve(false);
+          return;
+        }
         try {
           const json = JSON.parse(data);
           const raw = json[String(itemId)] || null;
@@ -891,16 +981,35 @@ async function fetchHistoryForItem(itemId) {
               volume: p.volume || 0,
             })).filter(p => p.price);
             historyData[String(itemId)] = points;
+            dirtyHistoryIds.add(String(itemId));
             // Also update ath cache so timeseries fetch is free
             athCache[String(itemId)] = { data: points.map(p => ({timestamp:p.timestamp, high:p.price, low:p.price, volume:p.volume})) };
           }
           resolve(!!raw);
-        } catch { resolve(false); }
+        } catch (e) {
+          console.warn(`[history] Parse error for item ${itemId}:`, e.message);
+          resolve(false);
+        }
       });
     });
-    req.on('error', () => resolve(false));
-    req.setTimeout(10000, () => { req.destroy(); resolve(false); });
+    req.on('error', (e) => {
+      console.warn(`[history] Network error for item ${itemId}:`, e.message);
+      resolve(false);
+    });
+    req.setTimeout(timeoutMs, () => { req.destroy(); resolve(false); });
   });
+}
+
+// A slow connection can legitimately take longer than a single short
+// timeout to complete a REAL, successful fetch — a tester's chart looked
+// permanently "unavailable" on the first try but worked once given more
+// time on a manual retry, for items that genuinely have real data. The
+// original single 10s attempt with no retry made "slow" indistinguishable
+// from "doesn't exist." One retry with a longer timeout before actually
+// giving up.
+async function fetchHistoryForItem(itemId) {
+  if (await fetchHistoryForItemOnce(itemId, 12000)) return true;
+  return fetchHistoryForItemOnce(itemId, 20000);
 }
 
 async function runHistoryQueue(onProgress) {
@@ -915,6 +1024,10 @@ async function runHistoryQueue(onProgress) {
     if (historyData[String(id)]) { done++; continue; } // already have it
     await fetchHistoryForItem(id);
     done++;
+    if (!historyInitial300Done && Object.keys(historyData).length >= 300) {
+      historyInitial300Done = true;
+      store.set('historyInitial300Done', true);
+    }
     if (onProgress) onProgress(done, total);
     if (done % 20 === 0) saveHistory(); // save every 20 items
     await new Promise(r => setTimeout(r, 400)); // ~2.5/sec, well under limit
@@ -925,18 +1038,35 @@ async function runHistoryQueue(onProgress) {
   console.log(`[history] Queue complete. ${Object.keys(historyData).length} items stored.`);
 }
 
-ipcMain.handle('get-history-status', () => ({
-  stored: Object.keys(historyData).length,
-  queued: historyFetchQueue.length,
-  active: historyFetchActive,
-  isFirstRun: !fs.existsSync(historyFile) || Object.keys(historyData).length === 0,
-}));
+ipcMain.handle('get-history-status', async () => {
+  // historyData loads in the background now (see loadHistory) — without
+  // this, a status check made right at launch could catch it still
+  // mid-load and wrongly report 0 stored items / isFirstRun:true.
+  await historyLoadedPromise;
+  return {
+    stored: Object.keys(historyData).length,
+    queued: historyFetchQueue.length,
+    active: historyFetchActive,
+    isFirstRun: Object.keys(historyData).length === 0,
+    initial300Done: historyInitial300Done,
+  };
+});
+
+// Cheap full id list (a few thousand numbers) so the UI can show a
+// "history still loading" note for any specific item not yet covered,
+// without a per-item round trip.
+ipcMain.handle('get-history-populated-ids', () => Object.keys(historyData).map(Number));
 
 ipcMain.handle('get-item-history-local', (_, itemId) => {
   return historyData[String(itemId)] || null;
 });
 
-ipcMain.handle('start-history-population', (_, itemIds) => {
+ipcMain.handle('start-history-population', async (_, itemIds) => {
+  // Without this, calling this right at launch (before the background
+  // load finishes) could re-queue items that are actually already on
+  // disk, just not loaded into memory yet — wasted re-fetches, not
+  // dangerous, but worth avoiding.
+  await historyLoadedPromise;
   // itemIds = sorted by volume descending, top 300 first
   const newIds = itemIds.filter(id => !historyData[String(id)]);
   historyFetchQueue = [...new Set([...historyFetchQueue, ...newIds])];
@@ -947,7 +1077,8 @@ ipcMain.handle('start-history-population', (_, itemIds) => {
       done,
       total,
       stored: Object.keys(historyData).length,
-      queueRemaining: historyFetchQueue.length
+      queueRemaining: historyFetchQueue.length,
+      initial300Done: historyInitial300Done,
     });
   });
 
@@ -1190,15 +1321,19 @@ app.whenReady().then(() => {
   alertsFile    = path.join(dataDir, 'alerts.json');
   portfolioFile = path.join(dataDir, 'portfolio.json');
   historyFile   = path.join(dataDir, 'history.json');
+  historyDir    = path.join(dataDir, 'history');
   athCacheFile  = path.join(dataDir, 'ath_cache.json');
   snapshotFile  = path.join(dataDir, 'price_snapshots.json');
   loadAthCache();
   loadSnapshots();
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
-  loadHistory();
 
   createWindow();
   createTray();
+  // Window shows immediately; history loads in the background rather
+  // than blocking startup. Even with the async-batched reads above,
+  // there's no reason to make window creation wait on it.
+  loadHistory();
   startScheduler();
   setTimeout(() => runPython('prices'), 3000);
   setTimeout(() => checkDxpNotifications(), 5000);
@@ -1209,6 +1344,14 @@ app.whenReady().then(() => {
 
 app.on('window-all-closed', (e) => {
   if (process.platform !== 'darwin') e.preventDefault();
+});
+
+app.on('second-instance', () => {
+  if (mainWindow) {
+    if (mainWindow.isMinimized()) mainWindow.restore();
+    mainWindow.show();
+    mainWindow.focus();
+  }
 });
 
 app.on('activate', () => {

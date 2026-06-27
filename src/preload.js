@@ -8,13 +8,13 @@ contextBridge.exposeInMainWorld('genius', {
   quitApp: () => ipcRenderer.invoke('quit-app'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
   getDxpIntelligence: () => ipcRenderer.invoke('get-dxp-intelligence'),
-  getPythonHealth: () => ipcRenderer.invoke('get-python-health'),
 
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
   getItemHistory:        (id)   => ipcRenderer.invoke('get-item-history', id),
   getItemHistoryLocal:   (id)   => ipcRenderer.invoke('get-item-history-local', id),
   getHistoryStatus:      ()     => ipcRenderer.invoke('get-history-status'),
+  getHistoryPopulatedIds:()     => ipcRenderer.invoke('get-history-populated-ids'),
   getSignalTrend:        (limits) => ipcRenderer.invoke('get-signal-trend', limits),
   startHistoryPopulation:(ids)  => ipcRenderer.invoke('start-history-population', ids),
   stopHistoryPopulation: ()     => ipcRenderer.invoke('stop-history-population'),
