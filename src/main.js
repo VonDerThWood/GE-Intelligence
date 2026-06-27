@@ -1094,10 +1094,27 @@ ipcMain.handle('stop-history-population', () => {
   return { success: true };
 });
 
-// ─── Signal trend — recompute historical signals from history.json ──────────
+// ─── Signal trend — recompute historical signals from history data ──────────
 // Mirrors the thresholds in python/run.py compute_signals()
+// This used to be cheap because history population was stuck at ~20%
+// coverage for a long time (shallow data for most items) — now that it's
+// genuinely complete (7000+ items, many with years of points), the exact
+// same per-item sort/bucket/scan work got dramatically more expensive, and
+// this handler runs SYNCHRONOUSLY on every single DashboardTab mount
+// (every tab switch back to Dashboard re-triggers it). Confirmed for real:
+// a tester's Dashboard froze every time he revisited the tab. Fixed two
+// ways — cached against historyVersion (same pattern as the Almanac fix)
+// so repeat mounts with unchanged history are instant, and the actual
+// computation is now batched async so even a real cache-miss recompute
+// doesn't block the main thread for its full duration.
 const SIGNAL_TREND_DAYS = 7;
-ipcMain.handle('get-signal-trend', (_, itemLimits) => {
+let signalTrendCache = null; // { historyVersion, result }
+ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
+  if (signalTrendCache && signalTrendCache.historyVersion === historyVersion) {
+    return signalTrendCache.result;
+  }
+  await historyLoadedPromise;
+
   const limits = itemLimits || {};
   const toSec = ts => (ts && ts > 1e11 ? ts / 1000 : (ts || 0));
   const dayKey = sec => new Date(sec * 1000).toDateString();
@@ -1111,54 +1128,62 @@ ipcMain.handle('get-signal-trend', (_, itemLimits) => {
   for (const key of Object.keys(counts)) counts[key] = days.map(() => 0);
   const itemDays = {SURGE:{}, DUMP:{}, ACCUMULATION:{}, DISTRIBUTION:{}, FRENZY:{}, HIGH_VOL:{}, MANIPULATED:{}};
 
-  for (const itemId in historyData) {
-    const points = historyData[itemId];
-    if (!points || points.length < 8) continue;
-    // One point per day — keep latest per day, sorted ascending
-    const byDay = {};
-    for (const p of points) {
-      const sec = toSec(p.timestamp);
-      const dk = dayKey(sec);
-      if (!byDay[dk] || sec > toSec(byDay[dk].timestamp)) byDay[dk] = p;
-    }
-    const sorted = Object.values(byDay).sort((a,b) => toSec(a.timestamp) - toSec(b.timestamp));
-    if (sorted.length < 8) continue;
-
-    const vols = sorted.map(p => p.volume).filter(v => v != null).sort((a,b) => a-b);
-    if (!vols.length) continue;
-    const mid = Math.floor(vols.length / 2);
-    const avgVol = vols.length % 2 ? vols[mid] : (vols[mid-1] + vols[mid]) / 2;
-    if (!avgVol) continue;
-
-    for (let di = 0; di < days.length; di++) {
-      const dayStr = days[di];
-      const idx = sorted.findIndex(p => dayKey(toSec(p.timestamp)) === dayStr);
-      if (idx < 1) continue; // need a previous day to compute change
-      const cur = sorted[idx], prev = sorted[idx-1];
-      if (!cur.price || !prev.price) continue;
-      const chg = ((cur.price - prev.price) / prev.price) * 100;
-      const vol = cur.volume || 0;
-      const volRatio = avgVol ? vol / avgVol : 0;
-      const absChgGp = Math.abs(chg / 100 * cur.price);
-
-      const mark = (sig) => {
-        counts[sig][di]++;
-        if (!itemDays[sig][itemId] || itemDays[sig][itemId] < di) itemDays[sig][itemId] = di;
-      };
-
-      if (chg >= 5 && absChgGp >= 1000 && volRatio >= 1.2) mark('SURGE');
-      else if (chg <= -5 && absChgGp >= 1000 && volRatio >= 1.2) mark('DUMP');
-      else if (chg >= -3 && chg <= 3) {
-        if (volRatio >= 2.5) mark('DISTRIBUTION');
-        else if (volRatio >= 1.3) mark('ACCUMULATION');
+  const usedHistoryVersion = historyVersion;
+  const allIds = Object.keys(historyData);
+  const BATCH = 300;
+  for (let b = 0; b < allIds.length; b += BATCH) {
+    for (const itemId of allIds.slice(b, b + BATCH)) {
+      const points = historyData[itemId];
+      if (!points || points.length < 8) continue;
+      // One point per day — keep latest per day, sorted ascending
+      const byDay = {};
+      for (const p of points) {
+        const sec = toSec(p.timestamp);
+        const dk = dayKey(sec);
+        if (!byDay[dk] || sec > toSec(byDay[dk].timestamp)) byDay[dk] = p;
       }
-      if (vol >= 5000 && avgVol) {
-        if (volRatio >= 2.5) mark('FRENZY');
-        else if (volRatio >= 1.5) mark('HIGH_VOL');
+      const sorted = Object.values(byDay).sort((a,b) => toSec(a.timestamp) - toSec(b.timestamp));
+      if (sorted.length < 8) continue;
+
+      const vols = sorted.map(p => p.volume).filter(v => v != null).sort((a,b) => a-b);
+      if (!vols.length) continue;
+      const mid = Math.floor(vols.length / 2);
+      const avgVol = vols.length % 2 ? vols[mid] : (vols[mid-1] + vols[mid]) / 2;
+      if (!avgVol) continue;
+
+      for (let di = 0; di < days.length; di++) {
+        const dayStr = days[di];
+        const idx = sorted.findIndex(p => dayKey(toSec(p.timestamp)) === dayStr);
+        if (idx < 1) continue; // need a previous day to compute change
+        const cur = sorted[idx], prev = sorted[idx-1];
+        if (!cur.price || !prev.price) continue;
+        const chg = ((cur.price - prev.price) / prev.price) * 100;
+        const vol = cur.volume || 0;
+        const volRatio = avgVol ? vol / avgVol : 0;
+        const absChgGp = Math.abs(chg / 100 * cur.price);
+
+        const mark = (sig) => {
+          counts[sig][di]++;
+          if (!itemDays[sig][itemId] || itemDays[sig][itemId] < di) itemDays[sig][itemId] = di;
+        };
+
+        if (chg >= 5 && absChgGp >= 1000 && volRatio >= 1.2) mark('SURGE');
+        else if (chg <= -5 && absChgGp >= 1000 && volRatio >= 1.2) mark('DUMP');
+        else if (chg >= -3 && chg <= 3) {
+          if (volRatio >= 2.5) mark('DISTRIBUTION');
+          else if (volRatio >= 1.3) mark('ACCUMULATION');
+        }
+        if (vol >= 5000 && avgVol) {
+          if (volRatio >= 2.5) mark('FRENZY');
+          else if (volRatio >= 1.5) mark('HIGH_VOL');
+        }
+        const limit = limits[itemId] || 0;
+        if (volRatio >= 2.5 && Math.abs(chg) >= 8.0 && limit > 0 && limit <= 100) mark('MANIPULATED');
       }
-      const limit = limits[itemId] || 0;
-      if (volRatio >= 2.5 && Math.abs(chg) >= 8.0 && limit > 0 && limit <= 100) mark('MANIPULATED');
     }
+    // Yield to the event loop between batches so this can't block the
+    // main thread (and therefore window paint/input) for the whole run.
+    await new Promise(res => setImmediate(res));
   }
 
   const itemIds = {};
@@ -1166,7 +1191,9 @@ ipcMain.handle('get-signal-trend', (_, itemLimits) => {
     itemIds[sig] = Object.entries(itemDays[sig]).map(([id, lastDayIdx]) => ({id, lastDayIdx}));
   }
 
-  return { days, counts, itemIds };
+  const result = { days, counts, itemIds };
+  signalTrendCache = { historyVersion: usedHistoryVersion, result };
+  return result;
 });
 
 ipcMain.handle('get-item-history', async (_, itemId) => {

@@ -7284,8 +7284,6 @@ function App() {
   h('div',{className:'app', style:{width: logicalW, height: logicalH}},
     h('style',null,buildCSS()),
     theme==='black'&&h('style',null,buildBlackCss()),
-    h('link',{rel:'preconnect',href:'https://fonts.googleapis.com'}),
-    h('link',{href:'https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap',rel:'stylesheet'}),
 
     updateInfo && h('div', {style:{
       position:'fixed', bottom:16, right:16, zIndex:10000,
