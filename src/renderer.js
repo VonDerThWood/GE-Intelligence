@@ -7109,8 +7109,15 @@ function App() {
       // ids internally, so calling it with the full list here is safe.
       if (data.items && data.items.length) {
         window.genius?.getHistoryStatus().then(status => {
+          // Untradeable items (Invention components, combo potions —
+          // ~106 of them, added by untradeable.js) have an id but no
+          // real GE exchange history to ever fetch. Without excluding
+          // them, the queue can never reach 100% — it perpetually
+          // re-queues and re-fails the same ~100 ids on every single
+          // launch, which is exactly why the "Building history" popup
+          // kept reappearing stuck at the same not-quite-complete count.
           const sorted = [...data.items]
-            .filter(it => it.id)
+            .filter(it => it.id && !it.untradeable)
             .sort((a,b) => (b.volume||0) - (a.volume||0));
           const allIds = sorted.map(it => it.id);
           if (status.isFirstRun || status.stored < allIds.length) {
