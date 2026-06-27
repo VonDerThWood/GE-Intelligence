@@ -118,8 +118,23 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null) {
 
   const itemsOut = [];
   let itemCounter = 1;
+  let _processedSinceYield = 0;
 
   for (const [key, itemData] of Object.entries(raw)) {
+    // This whole pipeline now runs in-process inside Electron's main
+    // process instead of as a separate Python child process (tonight's
+    // full backend rewrite) — so unlike before, synchronous work here
+    // blocks window focus/repaint/input for as long as it takes.
+    // assignCategories alone measured ~2s across the real catalogue;
+    // yielding periodically keeps the app responsive during every
+    // price fetch (startup AND every scheduled refresh), not just
+    // this one once-per-launch call. Confirmed for real: a tester
+    // reported the window taking 2-3s to respond to alt-tab/focus
+    // specifically during the startup auto-fetch, every time since 1.8.
+    if (++_processedSinceYield >= 500) {
+      _processedSinceYield = 0;
+      await new Promise(res => setImmediate(res));
+    }
     if (!itemData) continue;
     if (JUNK_PATTERNS.some(p => key.includes(p))) continue;
 
