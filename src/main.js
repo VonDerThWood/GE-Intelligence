@@ -128,22 +128,22 @@ function createTray() {
 // SESSION_LOG.md, 2026-06-26) — verified field-for-field identical
 // against all 987 real tracked items before cutover. Runs in-process
 // instead of spawning Python.
-let dxpIntelCache = null;       // { historyMtimeMs, data }
+let dxpIntelCache = null;       // { historyVersion, data }
 function runDxpIntelligence() {
-  return new Promise((resolve, reject) => {
-    // Skip recomputation entirely if history.json hasn't changed since the
+  return (async () => {
+    // Skip recomputation entirely if history hasn't changed since the
     // last run — recomputing on every tab open was the main source of the
-    // "takes a while" delay, not just the per-item math.
-    let historyMtimeMs = 0;
-    try { historyMtimeMs = fs.statSync(path.join(dataDir, 'history.json')).mtimeMs; } catch {}
-    if (dxpIntelCache && dxpIntelCache.historyMtimeMs === historyMtimeMs) {
-      resolve(dxpIntelCache.data);
-      return;
+    // "takes a while" delay, not just the per-item math. Used to check
+    // history.json's mtime; history is now per-item files (no single
+    // file to stat), so historyVersion (bumped on every real history
+    // update) does the same job.
+    if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion) {
+      return dxpIntelCache.data;
     }
+    await historyLoadedPromise; // don't compute against a still-loading, partial dataset
 
     try {
       const { loadEvents, computeDxpData } = require('./backend-js/dxp_intelligence.js');
-      const history = JSON.parse(fs.readFileSync(path.join(dataDir, 'history.json'), 'utf8'));
       const itemLimits = {}, itemNames = {};
       const latestFile = path.join(dataDir, 'latest.json');
       if (fs.existsSync(latestFile)) {
@@ -156,15 +156,15 @@ function runDxpIntelligence() {
         }
       }
       const events = loadEvents(dataDir);
-      const out = computeDxpData(history, itemLimits, itemNames, true, events);
+      const out = computeDxpData(historyData, itemLimits, itemNames, true, events);
       fs.writeFileSync(path.join(dataDir, 'dxp_intelligence.json'), JSON.stringify(out), 'utf8');
-      dxpIntelCache = { historyMtimeMs, data: out };
-      resolve(out);
+      dxpIntelCache = { historyVersion, data: out };
+      return out;
     } catch (e) {
       console.error('[DXP Intel] Error:', e.message);
-      reject(e);
+      throw e;
     }
-  });
+  })();
 }
 
 // Fetches prices/news/etc by running run.js's main() in-process. Kept the
@@ -845,6 +845,9 @@ let historyFile;     // OLD monolithic file path — kept only for one-time migr
 let historyDir;      // NEW per-item storage directory
 let historyData = {};        // { itemId: [{timestamp, price, volume}] } — in-memory, same shape as before
 let dirtyHistoryIds = new Set(); // ids changed since the last saveHistory() call
+let historyVersion = 0; // bumped every time any item's history data changes — lets
+// runDxpIntelligence's cache check work without a single history.json file to
+// stat the mtime of (history is now per-item files, see below)
 let historyFetchQueue = [];  // item IDs waiting to be fetched
 let historyFetchActive = false;
 let historyFetchStop = false;
@@ -982,6 +985,7 @@ function fetchHistoryForItemOnce(itemId, timeoutMs) {
             })).filter(p => p.price);
             historyData[String(itemId)] = points;
             dirtyHistoryIds.add(String(itemId));
+            historyVersion++;
             // Also update ath cache so timeseries fetch is free
             athCache[String(itemId)] = { data: points.map(p => ({timestamp:p.timestamp, high:p.price, low:p.price, volume:p.volume})) };
           }
