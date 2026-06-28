@@ -333,7 +333,7 @@ async function computeDxpData(historyData, itemLimits = null, itemNames = null, 
   itemNames = itemNames || {};
   const live = {};
   const allItemIds = Object.keys(historyData);
-  const BATCH = 300;
+  const BATCH = 250;
   for (let b = 0; b < allItemIds.length; b += BATCH) {
     for (const itemId of allItemIds.slice(b, b + BATCH)) {
       const points = historyData[itemId];
@@ -359,7 +359,7 @@ async function computeDxpData(historyData, itemLimits = null, itemNames = null, 
         timing,
       };
     }
-    if (b + BATCH < allItemIds.length) await new Promise(res => setImmediate(res));
+    if (b + BATCH < allItemIds.length) await new Promise(res => setTimeout(res, 0));
   }
 
   const meta = { event_count: events.length };

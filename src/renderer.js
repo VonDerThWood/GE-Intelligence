@@ -3,7 +3,7 @@
    Inline React (UMD), no build step required
 ═══════════════════════════════════════════════════════════════ */
 const { createElement: h, useState, useEffect, useCallback, useRef, useMemo } = React;
-const { createRoot } = ReactDOM;
+const { createRoot, createPortal } = ReactDOM;
 
 let SHOW_THUMBNAILS = true;
 
@@ -333,7 +333,7 @@ function SignalBadge({signal, style: extraStyle}) {
       },
       style: {cursor: info ? 'pointer' : 'default'},
     }, signal),
-    pos && info && h('div', {
+    pos && info && createPortal(h('div', {
       style: {
         position:'fixed', zIndex:9999,
         left: Math.min(pos.x + 12, window.innerWidth - 230),
@@ -349,7 +349,7 @@ function SignalBadge({signal, style: extraStyle}) {
     },
       h('div', {style:{fontWeight:'bold', color:T.gold, marginBottom:4, letterSpacing:'0.5px'}}, signal),
       info
-    )
+    ), document.body)
   );
 }
 
@@ -1620,12 +1620,12 @@ function BigMacLine({price, bondGP}) {
     onMouseLeave: () => setPos(null),
   },
     '≈ ', macs,
-    pos && h('div', {style:{
+    pos && createPortal(h('div', {style:{
       position:'fixed', left:pos.x + 12, top:pos.y + 12, zIndex:9999,
       background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
       padding:'5px 8px', fontSize:11, color:T.textDim, maxWidth:180, lineHeight:1.5,
       pointerEvents:'none', boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
-    }}, `Based on live bond price (${fmt.gp(bondGP)}gp = $${BOND_USD} USD) and Big Mac index ($${BIGMAC_USD} USD)`)
+    }}, `Based on live bond price (${fmt.gp(bondGP)}gp = $${BOND_USD} USD) and Big Mac index ($${BIGMAC_USD} USD)`), document.body)
   );
 }
 
@@ -2153,7 +2153,7 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
   if (!items.length) return h('div',{className:'empty'},h('div',{className:'icon'},'◎'),h('p',null,'No items in this category yet.'));
   return h('div',{className:'ge-table-wrap', style:{position:'relative'}, ref:tableWrapRef, onClick: ctxMenu ? closeCtx : undefined},
     COL_ORDER.filter(k => k !== 'star').map(k => overlayHandle(k)),
-    ctxMenu && h('div', {
+    ctxMenu && createPortal(h('div', {
       style:{
         position:'fixed', zIndex:9999, left:ctxMenu.x, top:ctxMenu.y,
         background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:4,
@@ -2203,7 +2203,7 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
         onMouseEnter: e => e.currentTarget.style.background = T.panel,
         onMouseLeave: e => e.currentTarget.style.background = 'transparent',
       }, opt.label))
-    ),
+    ), document.body),
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
     h('div',{style:{display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderBottom:`1px solid ${T.border}`, fontSize:11, flexWrap:'wrap'}},
       h('span',{style:{color:T.textDim}}, `${sorted.length}${minPrice?` of ${items.length}`:''} items`),
@@ -2349,7 +2349,7 @@ function SectorCard({sector, onClick}) {
       h('span', {style:{fontSize:11, fontWeight:'bold', color:T.textBright}}, label),
     ),
     h('div', {style:{fontSize:10, color:heat.color}}, heat.label),
-    pos && h('div', {style:{
+    pos && createPortal(h('div', {style:{
       position:'fixed', left: Math.min(pos.x + 12, window.innerWidth - 260), zIndex:9999,
       top: pos.y + 16 + 120 > window.innerHeight ? pos.y - 120 : pos.y + 16,
       background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
@@ -2358,7 +2358,7 @@ function SectorCard({sector, onClick}) {
     }},
       h('div', {style:{color:T.textBright, fontWeight:'bold', marginBottom:4}}, `${emoji} ${label}`),
       tip
-    )
+    ), document.body)
   );
 }
 
@@ -2414,7 +2414,6 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     return counts;
   }, [tradeableItems]);
 
-  const totalWithChange = tradeableItems.filter(it => it.change_1d != null).length;
   const rising  = tradeableItems.filter(it => (it.change_1d||0) > 0).length;
   const falling = tradeableItems.filter(it => (it.change_1d||0) < 0).length;
 
@@ -2993,9 +2992,6 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
         h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
           h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright}}, tradeableItems.length.toLocaleString()),
           h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Items Tracked')),
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright}}, totalWithChange.toLocaleString()),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'With Price Data')),
         h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
           h('div', {style:{fontSize:18, fontWeight:'bold', color:T.green}}, rising.toLocaleString()),
           h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Rising Today')),
@@ -4195,9 +4191,21 @@ function computeRecommendationCandidates(data, priceById) {
   return out;
 }
 
+// Module-level cache, outside the component, so it survives DXPIntelTab
+// unmounting every time the user navigates away from the Almanac tab —
+// without this, leaving and re-entering Almanac re-fetched and re-ran every
+// derived computation (allRows, recommendations, etc.) from scratch on
+// every single visit, even though the backend's own historyVersion cache
+// meant the underlying data hadn't actually changed. Cleared naturally on
+// app restart since it's just an in-memory variable.
+let _dxpDataCache = null;
+let _dxpDataCacheTime = null; // when _dxpDataCache was last (re)fetched — shown in the UI so it's obvious the tab is showing session-cached data, not necessarily this exact moment's numbers
+
 function DXPIntelTab({items, onSelect}) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState(() => _dxpDataCache);
+  const [loading, setLoading] = useState(() => !_dxpDataCache);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState(() => _dxpDataCacheTime);
   const [error, setError] = useState(false);
   const [activePhase, setActivePhase] = useState('anticipation');
   const [sort, setSort] = useState({key:'confidence', dir:-1});
@@ -4215,14 +4223,35 @@ function DXPIntelTab({items, onSelect}) {
   const recSortArrow = key => recSort.key===key ? (recSort.dir>0?' ↑':' ↓') : '';
 
   useEffect(() => {
+    // Already have data cached from an earlier visit this session — skip
+    // the fetch entirely. Re-fetching every visit cost real work even with
+    // the backend's own historyVersion cache: the full result still has to
+    // cross IPC and get re-parsed, and every downstream useMemo (allRows,
+    // recommendations, etc.) re-derives from the new object reference,
+    // which is what actually caused the visible lag on re-entering the tab.
+    if (_dxpDataCache) return;
     setLoading(true); setError(false);
     window.genius?.getDxpIntelligence?.().then(d => {
-      setData(d || {});
+      _dxpDataCache = d || {};
+      _dxpDataCacheTime = Date.now();
+      setData(_dxpDataCache);
+      setLastUpdated(_dxpDataCacheTime);
       setLoading(false);
     }).catch(() => { setError(true); setLoading(false); });
     window.genius?.getDxpWatchlist?.().then(list => setDxpWatchlistState(list || []));
     window.genius?.getDxpNotificationSettings?.().then(s => s && setNotifSettings(s));
   }, []);
+
+  const refreshAlmanac = () => {
+    setRefreshing(true);
+    window.genius?.getDxpIntelligence?.().then(d => {
+      _dxpDataCache = d || {};
+      _dxpDataCacheTime = Date.now();
+      setData(_dxpDataCache);
+      setLastUpdated(_dxpDataCacheTime);
+      setRefreshing(false);
+    }).catch(() => setRefreshing(false));
+  };
 
   const toggleDxpWatch = id => {
     setDxpWatchlistState(prev => {
@@ -4409,20 +4438,25 @@ function DXPIntelTab({items, onSelect}) {
   // everywhere instead of being a main-table-only feature.
   const tradeDetailBlock = t => !t ? null : h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`}},
     h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
-      `Trade idea — based on ${t.nEvents} tracked cycles`
+      `Trading strategy — based on ${t.nEvents} past DXP cycles`
+    ),
+    h('div', {style:{fontSize:13, color:T.gold, fontWeight:600, marginBottom:8}},
+      t.sameySequence
+        ? `Buy day ${t.buyDay}, sell day ${t.sellDay}`
+        : `Sell day ${t.sellDay}, buy day ${t.buyDay} (next cycle)`
     ),
     h('div', {style:{fontSize:12, color:T.text, lineHeight:1.6}},
+      t.sameySequence
+        ? h('span', null, `Buy first, sell later. `)
+        : h('span', null, `Sell first (if you already own some), buy back later at the lower price for next time. `),
       t.preTroughOffset != null && t.preTroughOffset < -1 && h('span', null,
-        `Starts dipping as early as day ${t.preTroughOffset} relative to the event start (typically announced ~2-3 weeks before that) — for items that move ahead of the event, this is roughly when to start buying, earlier than the in-event "Bottom" day below.`, h('br',null),
+        `This one starts getting cheaper before the event is even announced — around ${Math.abs(t.preTroughOffset)} days before it starts. If you want the absolute best price, that's actually a better time to buy than the dip described below.`, h('br',null), h('br',null),
       ),
-      `Bottom: day ${t.buyDay} (±${t.buyDayStd}d), ${t.buyPct>=0?'+':''}${t.buyPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.buyPrice)}gp.`, h('br',null),
-      `Top: day ${t.sellDay} (±${t.sellDayStd}d), ${t.sellPct>=0?'+':''}${t.sellPct.toFixed(2)}% vs baseline, ~${fmt.gp(t.sellPrice)}gp before tax, ~${fmt.gp(t.netSellPrice)}gp after 2% GE tax.`, h('br',null),
-      `Net: ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item after tax.`, h('br',null),
+      `Cheapest point: around day ${t.buyDay} of the event (give or take ${t.buyDayStd} days) — typically about ${Math.abs(t.buyPct).toFixed(1)}% ${t.buyPct>=0?'above':'below'} its normal price, roughly ${fmt.gp(t.buyPrice)}gp.`, h('br',null),
+      `Priciest point: around day ${t.sellDay} (give or take ${t.sellDayStd} days) — typically about ${Math.abs(t.sellPct).toFixed(1)}% ${t.sellPct>=0?'above':'below'} its normal price, roughly ${fmt.gp(t.sellPrice)}gp before tax (${fmt.gp(t.netSellPrice)}gp after the 2% GE sell tax).`, h('br',null),
+      `Buying at the cheap point and selling at the expensive point has historically netted about ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item, after tax.`, h('br',null),
       h('span', {style:{color:T.textDim, fontStyle:'italic'}},
-        'Day 0 = the moment the event starts. Fractional days are sub-day precision — day 0.5 means about 12 hours in, day 2.5 means 2.5 days in, etc.'
-      ), h('br',null),
-      !t.sameySequence && h('span', {style:{color:T.textDim, fontStyle:'italic'}},
-        'Top happens before bottom in this cycle — better suited to selling existing stock early, then buying the dip for next time.'
+        '"Day 0" is the moment the event starts — negative days are before it starts, and fractional days are partial days (day 2.5 ≈ 2.5 days in).'
       ),
     )
   );
@@ -4457,6 +4491,21 @@ function DXPIntelTab({items, onSelect}) {
     ),
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
       `Hidden developer build. Backed by ${itemCount || '700+'} items across ${eventCount ?? '10+'} historical DXP events. Estimates only — GE prices lag real trading activity during DXP.`
+    ),
+    h('div', {style:{display:'flex', alignItems:'center', gap:10, fontSize:11, color:T.textDim, marginBottom:14, padding:'6px 10px', border:`1px solid ${T.borderDim}`, borderRadius:6}},
+      h('span', null,
+        // Loads once on the first visit each session, then stays as-is —
+        // re-entering the tab won't reload or recompute anything (see the
+        // _dxpDataCache comment above). Background price/history fetches
+        // every 15 min won't be reflected here until you hit Refresh or
+        // restart the app — fine for a session, but if GEnius is left open
+        // for days the numbers here can go stale without one of those.
+        lastUpdated ? `Loaded ${new Date(lastUpdated).toLocaleString()} — stays cached until you refresh or restart GEnius.` : 'Not loaded yet.'
+      ),
+      h('button', {
+        className:'ge-btn', style:{fontSize:11, padding:'3px 10px', marginLeft:'auto'},
+        onClick:refreshAlmanac, disabled:refreshing,
+      }, refreshing ? 'Refreshing…' : '↻ Refresh'),
     ),
 
     h('div', {style:{border:`1px solid ${T.borderDim}`, borderRadius:6, padding:'10px 14px', marginBottom:14}},
@@ -4622,7 +4671,7 @@ function DXPIntelTab({items, onSelect}) {
           h('thead', null, h('tr', null,
             h('th', {style:{width:20}}, null),
             h('th', {onClick:()=>toggleRecSort('name'), style:{cursor:'pointer'}}, 'Item'+recSortArrow('name')),
-            h('th', null, 'Trade Idea'),
+            h('th', null, 'Trading Strategy'),
             h('th', {onClick:()=>toggleRecSort('netRoi'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax'}, 'Net ROI'+recSortArrow('netRoi')),
             h('th', {onClick:()=>toggleRecSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'+recSortArrow('profitPerItem')),
             h('th', {onClick:()=>toggleRecSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'+recSortArrow('profitForLimit')),
@@ -4640,7 +4689,7 @@ function DXPIntelTab({items, onSelect}) {
               h('td', {
                 style:{fontSize:11, color:T.textDim, cursor:'pointer'},
                 onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
-                title:'Show trade idea details',
+                title:'Show trading strategy details',
               },
                 r.trade.sameySequence
                   ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
@@ -4664,7 +4713,7 @@ function DXPIntelTab({items, onSelect}) {
             h('thead', null, h('tr', null,
               h('th', {style:{width:20}}, null),
               h('th', null, 'Item'),
-              h('th', null, 'Trade Idea'),
+              h('th', null, 'Trading Strategy'),
               h('th', {title:'Net of the 2% GE sell tax'}, 'Net ROI'),
               h('th', {title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'),
               h('th', {title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'),
@@ -4682,7 +4731,7 @@ function DXPIntelTab({items, onSelect}) {
                 h('td', {
                   style:{fontSize:11, color:T.textDim, cursor:'pointer'},
                   onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
-                  title:'Show trade idea details',
+                  title:'Show trading strategy details',
                 },
                   r.trade.sameySequence
                     ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
@@ -4740,7 +4789,7 @@ function DXPIntelTab({items, onSelect}) {
               h('th', {onClick:()=>toggleSort('direction'), style:{cursor:'pointer'}}, 'Direction'+sortArrow('direction')),
               h('th', {onClick:()=>toggleSort('confidence'), style:{cursor:'pointer'}}, 'Confidence'+sortArrow('confidence')),
               h('th', {onClick:()=>toggleSort('medianPct'), style:{cursor:'pointer'}}, 'Median %'+sortArrow('medianPct')),
-              h('th', null, 'Trade Idea'),
+              h('th', null, 'Trading Strategy'),
               h('th', {onClick:()=>toggleSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'+sortArrow('profitPerItem')),
               h('th', {onClick:()=>toggleSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'+sortArrow('profitForLimit')),
               h('th', {onClick:()=>toggleSort('volRatio'), style:{cursor:'pointer'}}, 'Vol'+sortArrow('volRatio')),
@@ -4779,7 +4828,7 @@ function DXPIntelTab({items, onSelect}) {
                 h('td', {
                   style:{fontSize:11, color:T.textDim, cursor:'pointer'},
                   onClick:()=>setExpanded(expanded===r.id?null:r.id),
-                  title:'Show trade idea details',
+                  title:'Show trading strategy details',
                 }, tradeLabel),
                 h('td', {style:{color: t?.profitPerItem==null ? T.textDim : t.profitPerItem>=0 ? T.gold : T.red}}, t?.profitPerItem!=null ? (t.profitPerItem>=0?'+':'')+fmt.gp(t.profitPerItem)+'gp' : '—'),
                 h('td', {style:{color: t?.profitForLimit==null ? T.textDim : t.profitForLimit>=0 ? T.gold : T.red}}, t?.profitForLimit!=null ? (t.profitForLimit>=0?'+':'')+fmt.gp(t.profitForLimit)+'gp' : '—'),
@@ -4787,7 +4836,7 @@ function DXPIntelTab({items, onSelect}) {
                 h('td', {
                   style:{cursor:'pointer', color:T.textDim, textAlign:'center'},
                   onClick:()=>setExpanded(expanded===r.id?null:r.id),
-                  title:'Show trade idea details',
+                  title:'Show trading strategy details',
                 }, expanded===r.id ? '▾' : '›'),
               ),
               expanded===r.id && h('tr', {key:r.id+'-detail'},
@@ -4966,6 +5015,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     return withDev;
   }, [s.devMode]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [hiddenItemsOpen, setHiddenItemsOpen] = useState(false);
   return h('div',null,
     h('div',{style:{display:'flex', flexDirection:'column', alignItems:'center', marginBottom:24, paddingBottom:20, borderBottom:`1px solid ${T.border}`}},
       h('img',{src:'../assets/logo-full.png', alt:'GEnius', style:{width:220, maxWidth:'100%'}}),
@@ -5210,19 +5260,26 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     ),
 
     hiddenItems && hiddenItems.length > 0 && h('div',{style:{marginBottom:20}},
-      h('div',{className:'ge-section-head'},'Hidden Items'),
-      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
+      h('div',{
+        style:{display:'flex', alignItems:'center', gap:6, cursor:'pointer', userSelect:'none'},
+        onClick:()=>setHiddenItemsOpen(o=>!o),
+      },
+        h('span',{style:{fontSize:11, color:T.textDim, transition:'transform 0.15s', transform: hiddenItemsOpen ? 'rotate(90deg)' : 'rotate(0deg)', display:'inline-block'}}, '▸'),
+        h('div',{className:'ge-section-head', style:{marginBottom:0, borderBottom:'none', padding:0}},'Hidden Items'),
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim,margin:'4px 0 0 19px'}},
         `${hiddenItems.length} item${hiddenItems.length!==1?'s':''} hidden from all tabs.`
       ),
-      h('div',{style:{display:'flex',flexDirection:'column',gap:4}},
-        hiddenItems.map(id => {
-          const item = items?.find(it => it.id === id);
-          const name = item?.name || `Item #${id}`;
-          return h('div',{key:id, style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',background:'rgba(0,0,0,0.2)',borderRadius:3,fontSize:12}},
-            h('span',{style:{color:T.text}}, name),
-            h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:10},onClick:()=>onUnhide&&onUnhide(id)},'Unhide')
-          );
-        })
+      hiddenItemsOpen && h('div',{style:{display:'flex',flexDirection:'column',gap:4,marginTop:8}},
+        hiddenItems
+          .map(id => ({id, name: items?.find(it => it.id === id)?.name || `Item #${id}`}))
+          .sort((a,b) => a.name.localeCompare(b.name))
+          .map(({id,name}) =>
+            h('div',{key:id, style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',background:'rgba(0,0,0,0.2)',borderRadius:3,fontSize:12}},
+              h('span',{style:{color:T.text}}, name),
+              h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:10},onClick:()=>onUnhide&&onUnhide(id)},'Unhide')
+            )
+          )
       )
     )
     )
@@ -5940,13 +5997,35 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   // currently dominating Recommendations might be the SAME category
   // that's already overweight here, which wouldn't help diversify at all.
   const UNDEREXPOSED_CATEGORY_PCT = 15;
+  // High-tier combat gear (BIS-tier weapons/armour) tends to be extremely
+  // volatile and trend gradually downward over time as supply builds up —
+  // a real, repeating pattern, but the opposite of "stable thing to add to
+  // a diversified portfolio." Even after the confidence-floor fix below,
+  // Omni guard (necromancy, ~164M gp) still squeaked past at exactly the
+  // 70% bar — Ben: "we should avoid suggesting high tier combat items,
+  // they're generally extremely volatile and gradually decline over time."
+  // Gating combat-style gear above a price floor specifically (rather than
+  // banning the categories outright) keeps cheap/stable melee-etc. items
+  // suggestible while excluding the expensive BIS-tier gear this is
+  // actually about.
+  const COMBAT_GEAR_CATEGORIES = new Set(['melee', 'ranged', 'magic', 'necromancy', 'hybrid']);
+  const HIGH_TIER_COMBAT_PRICE_GP = 10_000_000;
   const diversificationSuggestions = useMemo(() => {
     if (!devMode || !dxpData) return [];
     const overweightCategories = new Set(
       categoryAllocations.filter(c => c.pct >= UNDEREXPOSED_CATEGORY_PCT && c.category !== 'rares').map(c => c.category)
     );
+    // Same "Confirmed" confidence bar as the main Almanac table (Ben caught
+    // this: Elite Dracolich hauberk got suggested with only a bare 50%
+    // directional majority — below the 70% bar that would normally tag it
+    // Speculative — purely because its astronomical price x buy-limit made
+    // its raw gp payout huge despite the weak signal. Ranking by gp payout
+    // alone, with no confidence floor, let weak-but-expensive items crowd
+    // out strong-but-cheap ones here specifically (the main Recommendations
+    // tab already guards against this for the "safe" risk tolerance).
     const candidates = computeRecommendationCandidates(dxpData, priceById)
-      .filter(r => !r.negligible && !overweightCategories.has(r.category))
+      .filter(r => !r.negligible && r.bestRatio >= ALMANAC_CONFIDENCE_THRESHOLD && !overweightCategories.has(r.category))
+      .filter(r => !(COMBAT_GEAR_CATEGORIES.has(r.category) && r.price >= HIGH_TIER_COMBAT_PRICE_GP))
       .sort((a, b) => (b.trade.profitForLimit ?? -Infinity) - (a.trade.profitForLimit ?? -Infinity));
     // Best one per underexposed category, not just the top N overall —
     // otherwise this could still surface 5 picks from a single category.
@@ -6222,7 +6301,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     ),
 
     // Closed position context menu
-    ctxMenu && h('div', {
+    ctxMenu && createPortal(h('div', {
       style:{position:'fixed', inset:0, zIndex:800},
       onClick: () => setCtxMenu(null),
       onContextMenu: e => { e.preventDefault(); setCtxMenu(null); },
@@ -6249,7 +6328,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
           onMouseLeave: e => e.currentTarget.style.background = 'transparent',
         }, '🗑 Delete position'),
       )
-    ),
+    ), document.body),
 
     // Modals
     showModal && h(PositionModal, {items, position:editPos, onClose:()=>{setShowModal(false);setEditPos(null);}, onSave:handleSave}),

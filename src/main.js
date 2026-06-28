@@ -129,17 +129,20 @@ function createTray() {
 // against all 987 real tracked items before cutover. Runs in-process
 // instead of spawning Python.
 let dxpIntelCache = null;       // { historyVersion, data }
+let dxpIntelInFlight = null;    // in-flight Promise — rapid tab-switching (Almanac, away, back) can call this again before the first run finishes, stacking concurrent full-catalogue computations on one thread
 function runDxpIntelligence() {
-  return (async () => {
-    // Skip recomputation entirely if history hasn't changed since the
-    // last run — recomputing on every tab open was the main source of the
-    // "takes a while" delay, not just the per-item math. Used to check
-    // history.json's mtime; history is now per-item files (no single
-    // file to stat), so historyVersion (bumped on every real history
-    // update) does the same job.
-    if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion) {
-      return dxpIntelCache.data;
-    }
+  // Skip recomputation entirely if history hasn't changed since the
+  // last run — recomputing on every tab open was the main source of the
+  // "takes a while" delay, not just the per-item math. Used to check
+  // history.json's mtime; history is now per-item files (no single
+  // file to stat), so historyVersion (bumped on every real history
+  // update) does the same job.
+  if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion) {
+    return Promise.resolve(dxpIntelCache.data);
+  }
+  if (dxpIntelInFlight) return dxpIntelInFlight;
+
+  dxpIntelInFlight = (async () => {
     await historyLoadedPromise; // don't compute against a still-loading, partial dataset
 
     try {
@@ -165,6 +168,8 @@ function runDxpIntelligence() {
       throw e;
     }
   })();
+  dxpIntelInFlight.finally(() => { dxpIntelInFlight = null; });
+  return dxpIntelInFlight;
 }
 
 // Fetches prices/news/etc by running run.js's main() in-process. Kept the
@@ -181,7 +186,8 @@ function runPython(mode = 'prices') {
     console.log('[run.js] Running with args:', argv.join(' '));
 
     try {
-      await runJs(argv);
+      await historyLoadedPromise; // don't pass a still-loading, partial historyData
+      await runJs(argv, historyData);
       notifyRenderer('fetch-complete', { mode, timestamp: Date.now() });
       if (mode === 'prices' || !mode) updateSnapshots();
     } catch (error) {
@@ -716,6 +722,25 @@ ipcMain.handle('sell-position', (_, { id, sell_price, quantity }) => {
 // Cache for item price history and wiki stats
 const itemHistoryCache = new Map();
 const itemStatsCache = new Map();
+let itemStatsFile;
+
+// Wiki stats only get fetched lazily, one item at a time as the user looks
+// at it (a few hundred items at most over a session, not the full 7000+
+// catalogue) — persisting this small file is nothing like the per-item
+// history cost, so it's safe to read on startup and write-through on
+// every new entry without affecting launch time.
+function loadItemStatsCache() {
+  try {
+    if (fs.existsSync(itemStatsFile)) {
+      const saved = JSON.parse(fs.readFileSync(itemStatsFile, 'utf8'));
+      for (const [name, stats] of Object.entries(saved)) itemStatsCache.set(name, stats);
+    }
+  } catch {}
+}
+
+function saveItemStatsCache() {
+  try { atomicWrite(itemStatsFile, JSON.stringify(Object.fromEntries(itemStatsCache))); } catch {}
+}
 
 
 function parseItemStats(wikitext) {
@@ -779,6 +804,7 @@ ipcMain.handle('get-item-stats', async (_, itemName) => {
     });
 
     itemStatsCache.set(itemName, result);
+    saveItemStatsCache();
     return result;
   } catch { return null; }
 });
@@ -1109,20 +1135,42 @@ ipcMain.handle('stop-history-population', () => {
 // doesn't block the main thread for its full duration.
 const SIGNAL_TREND_DAYS = 7;
 let signalTrendCache = null; // { historyVersion, result }
+let signalTrendInFlight = null; // in-flight Promise, so concurrent callers (e.g. Dashboard mount + re-render) share one computation instead of duplicating it
 ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
   if (signalTrendCache && signalTrendCache.historyVersion === historyVersion) {
     return signalTrendCache.result;
   }
+  // DashboardTab's useEffect re-fires on every new `items` reference (i.e.
+  // every successful fetch), which could trigger a second concurrent call
+  // before the first finishes — confirmed via [TIMING] logs showing two
+  // "called" entries back-to-back at startup. Sharing the in-flight promise
+  // means the second caller waits for the first's result instead of paying
+  // for a full duplicate computation on the same single thread.
+  if (signalTrendInFlight) {
+    return signalTrendInFlight;
+  }
+  signalTrendInFlight = computeSignalTrend(itemLimits).finally(() => { signalTrendInFlight = null; });
+  return signalTrendInFlight;
+});
+
+async function computeSignalTrend(itemLimits) {
   await historyLoadedPromise;
 
   const limits = itemLimits || {};
   const toSec = ts => (ts && ts > 1e11 ? ts / 1000 : (ts || 0));
-  const dayKey = sec => new Date(sec * 1000).toDateString();
+  // Cheap integer day bucket for the hot per-point loop below — measured
+  // directly: calling `new Date(...).toDateString()` per point (up to
+  // ~6600 points/item x 7184 items) took ~49s in isolation. Date string
+  // formatting dominates; swapping to integer division removed that cost
+  // (down to ~16s, confirmed via direct benchmark against real history data).
+  const dayBucket = sec => Math.floor(sec / 86400);
   const days = [];
+  const dayBuckets = [];
   const now = new Date();
   for (let i = SIGNAL_TREND_DAYS - 1; i >= 0; i--) {
     const d = new Date(now); d.setDate(now.getDate() - i);
     days.push(d.toDateString());
+    dayBuckets.push(dayBucket(d.getTime() / 1000));
   }
   const counts = {SURGE:[], DUMP:[], ACCUMULATION:[], DISTRIBUTION:[], FRENZY:[], HIGH_VOL:[], MANIPULATED:[]};
   for (const key of Object.keys(counts)) counts[key] = days.map(() => 0);
@@ -1130,7 +1178,7 @@ ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
 
   const usedHistoryVersion = historyVersion;
   const allIds = Object.keys(historyData);
-  const BATCH = 300;
+  const BATCH = 40;
   for (let b = 0; b < allIds.length; b += BATCH) {
     for (const itemId of allIds.slice(b, b + BATCH)) {
       const points = historyData[itemId];
@@ -1139,7 +1187,7 @@ ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
       const byDay = {};
       for (const p of points) {
         const sec = toSec(p.timestamp);
-        const dk = dayKey(sec);
+        const dk = dayBucket(sec);
         if (!byDay[dk] || sec > toSec(byDay[dk].timestamp)) byDay[dk] = p;
       }
       const sorted = Object.values(byDay).sort((a,b) => toSec(a.timestamp) - toSec(b.timestamp));
@@ -1151,10 +1199,18 @@ ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
       const avgVol = vols.length % 2 ? vols[mid] : (vols[mid-1] + vols[mid]) / 2;
       if (!avgVol) continue;
 
+      // sorted can hold thousands of unique days for items with years of
+      // history — findIndex per requested day (x SIGNAL_TREND_DAYS) turned
+      // this into an O(n * days) scan per item. A single O(n) pass to build
+      // a dayKey -> index map fixes that; confirmed via [TIMING] brackets
+      // that this loop (plus a redundant concurrent duplicate call from the
+      // Dashboard) was the dominant cost behind the real startup freeze.
+      const idxByDay = {};
+      for (let i = 0; i < sorted.length; i++) idxByDay[dayBucket(toSec(sorted[i].timestamp))] = i;
+
       for (let di = 0; di < days.length; di++) {
-        const dayStr = days[di];
-        const idx = sorted.findIndex(p => dayKey(toSec(p.timestamp)) === dayStr);
-        if (idx < 1) continue; // need a previous day to compute change
+        const idx = idxByDay[dayBuckets[di]];
+        if (idx === undefined || idx < 1) continue; // need a previous day to compute change
         const cur = sorted[idx], prev = sorted[idx-1];
         if (!cur.price || !prev.price) continue;
         const chg = ((cur.price - prev.price) / prev.price) * 100;
@@ -1183,7 +1239,7 @@ ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
     }
     // Yield to the event loop between batches so this can't block the
     // main thread (and therefore window paint/input) for the whole run.
-    await new Promise(res => setImmediate(res));
+    await new Promise(res => setTimeout(res, 0));
   }
 
   const itemIds = {};
@@ -1194,7 +1250,7 @@ ipcMain.handle('get-signal-trend', async (_, itemLimits) => {
   const result = { days, counts, itemIds };
   signalTrendCache = { historyVersion: usedHistoryVersion, result };
   return result;
-});
+}
 
 ipcMain.handle('get-item-history', async (_, itemId) => {
   if (itemHistoryCache.has(itemId)) return itemHistoryCache.get(itemId);
@@ -1355,8 +1411,10 @@ app.whenReady().then(() => {
   historyDir    = path.join(dataDir, 'history');
   athCacheFile  = path.join(dataDir, 'ath_cache.json');
   snapshotFile  = path.join(dataDir, 'price_snapshots.json');
+  itemStatsFile = path.join(dataDir, 'item_stats.json');
   loadAthCache();
   loadSnapshots();
+  loadItemStatsCache();
   if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 
   createWindow();

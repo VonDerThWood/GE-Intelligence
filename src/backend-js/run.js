@@ -46,35 +46,85 @@ function _toSec(ts) {
   return ts && ts > 1e11 ? ts / 1000 : (ts || 0);
 }
 
-async function fetchPrices(dataDir, webhookUrl = null, existingItems = null) {
+async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, historyDataOverride = null) {
   const HEADERS = { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' };
   const DUMP_URL = 'https://chisel.weirdgloop.org/gazproj/gazbot/rs_dump.json';
 
-  // Load history.json for real volume averages AND previous day prices
+  // Real volume averages AND previous-day prices, used for change_1d and
+  // avgVolume below. historyDataOverride is the already-loaded in-memory
+  // historyData from main.js (passed in by runPython) — using it directly
+  // avoids a second read AND avoids a real bug that was here: this used
+  // to always read the OLD monolithic history.json, which the per-item
+  // storage migration renamed away earlier tonight. Since that file no
+  // longer existed, historyVolAvg/historyPrevPrice were SILENTLY EMPTY on
+  // every fetch since — meaning change_1d only ever populated from the
+  // live dump's own "last" field (245/7182 items, not the ~thousands
+  // expected), and avgVolume fell back to rough EMA estimates for nearly
+  // the whole catalogue instead of real history. Confirmed for real via
+  // a tester noticing the suspiciously low "with price data" count.
   const historyVolAvg = {};
   const historyPrevPrice = {};
-  const historyFile = path.join(dataDir, 'history.json');
-  if (fs.existsSync(historyFile)) {
+  let history = historyDataOverride;
+  if (!history) {
+    // No override (e.g. standalone CLI use) — fall back to reading the
+    // per-item storage directory directly.
+    history = {};
+    const historyDir = path.join(dataDir, 'history');
+    if (fs.existsSync(historyDir)) {
+      for (const f of fs.readdirSync(historyDir)) {
+        if (!f.endsWith('.json')) continue;
+        try { history[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(historyDir, f), 'utf8')); }
+        catch {}
+      }
+    }
+  }
+  if (history && Object.keys(history).length) {
     try {
-      const history = JSON.parse(fs.readFileSync(historyFile, 'utf8'));
-      for (const [itemId, points] of Object.entries(history)) {
+      // Measured directly: this loop alone took ~2.5s uninterrupted
+      // against the real, fully-populated dataset (7184 items) — a
+      // second blocking loop in this same function that got missed
+      // when the per-item-processing loop further down was batched
+      // earlier tonight. Per-item sort + median-of-volumes work adds
+      // up the same way assignCategories did. Same fix: yield every
+      // 500 items so this can't freeze the window either.
+      const historyIds = Object.keys(history);
+      let _processedSinceYield = 0;
+      for (const itemId of historyIds) {
+        const points = history[itemId];
+        if (++_processedSinceYield >= 250) {
+          _processedSinceYield = 0;
+          await new Promise(res => setTimeout(res, 0));
+        }
         if (!points || points.length < 2) continue;
-        const sortedPts = [...points].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+        // Items can carry years of all-time history (avg ~3600 points,
+        // up to 6600+) — sorting the full array twice per item (as this
+        // loop used to) is what actually caused the multi-second freezes:
+        // confirmed via [TIMING] brackets showing this loop alone took
+        // ~58s across 7184 items. Single O(n) pass finds the two most
+        // recent points (for prevPrice) and the last-90-days subset (for
+        // the volume median) without ever sorting the full array — only
+        // the much smaller recent subset gets sorted.
+        let latest = null, secondLatest = null;
         const cutoff90d = Date.now() / 1000 - 90 * 86400;
-        const recentPts = sortedPts.filter(p => _toSec(p.timestamp || 0) >= cutoff90d);
-        const ptsForVol = recentPts.length >= 7 ? recentPts : sortedPts;
+        const recentPts = [];
+        for (const p of points) {
+          const ts = p.timestamp || 0;
+          if (!latest || ts > (latest.timestamp || 0)) { secondLatest = latest; latest = p; }
+          else if (!secondLatest || ts > (secondLatest.timestamp || 0)) { secondLatest = p; }
+          if (_toSec(ts) >= cutoff90d) recentPts.push(p);
+        }
+        const ptsForVol = recentPts.length >= 7 ? recentPts : points;
         const vols = ptsForVol.map(p => p.volume).filter(v => v !== null && v !== undefined).sort((a, b) => a - b);
         if (vols.length) {
           const mid = Math.floor(vols.length / 2);
           const medianVol = vols.length % 2 ? vols[mid] : Math.floor((vols[mid - 1] + vols[mid]) / 2);
           historyVolAvg[String(itemId)] = medianVol;
         }
-        const prev = sortedPts[sortedPts.length - 2];
-        if (prev && prev.price) historyPrevPrice[String(itemId)] = prev.price;
+        if (secondLatest && secondLatest.price) historyPrevPrice[String(itemId)] = secondLatest.price;
       }
       console.log(`[prices] Loaded history for ${Object.keys(historyVolAvg).length} items (vol) / ${Object.keys(historyPrevPrice).length} items (price)`);
     } catch (e) {
-      console.log(`[prices] Could not load history.json: ${e.message}`);
+      console.log(`[prices] Could not process history data: ${e.message}`);
     }
   }
 
@@ -131,9 +181,9 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null) {
     // this one once-per-launch call. Confirmed for real: a tester
     // reported the window taking 2-3s to respond to alt-tab/focus
     // specifically during the startup auto-fetch, every time since 1.8.
-    if (++_processedSinceYield >= 500) {
+    if (++_processedSinceYield >= 250) {
       _processedSinceYield = 0;
-      await new Promise(res => setImmediate(res));
+      await new Promise(res => setTimeout(res, 0));
     }
     if (!itemData) continue;
     if (JUNK_PATTERNS.some(p => key.includes(p))) continue;
@@ -518,7 +568,7 @@ function _pyTitle(s) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-async function main(argv = process.argv.slice(2)) {
+async function main(argv = process.argv.slice(2), historyDataOverride = null) {
   const args = parseArgs(argv);
   const dataDir = getDataDir(args.dataDir);
   const outFile = path.join(dataDir, 'latest.json');
@@ -536,7 +586,7 @@ async function main(argv = process.argv.slice(2)) {
 
   if (args.mode === 'full' || args.mode === 'prices') {
     const existingItems = existing.items || [];
-    const fetched = await fetchPrices(dataDir, args.webhook, existingItems);
+    const fetched = await fetchPrices(dataDir, args.webhook, existingItems, historyDataOverride);
     if (fetched.length === 0 && existingItems.length > 0) {
       console.log(`[run] fetchPrices returned 0 items but ${existingItems.length} existing items are on disk — keeping the existing data instead of overwriting it with an empty result.`);
       items = existingItems;

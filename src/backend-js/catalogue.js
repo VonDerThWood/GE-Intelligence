@@ -553,7 +553,7 @@ const _TT_SUFFIXES = ["(g)", "(t)", "(h1)", "(h2)", "(h3)", "(h4)", "(h5)"];
 const _OVERRIDE_PATTERNS = ["animation override", " override", "override token", "animation token", " token", " emote", "overhead"];
 const _OVERRIDE_EXCEPTIONS = new Set(["mimic kill token"]);
 
-function _applyExclusive(cats, nameLower = "") {
+function _applyExclusive(cats, nameLower = "", skipLowTierHeuristic = false) {
   // Apply exclusivity rules to a category list:
   // - If the highest-priority category is exclusive, return only it.
   // - If low_tier is present (or name matches a low-tier prefix), strip base combat categories.
@@ -569,7 +569,16 @@ function _applyExclusive(cats, nameLower = "") {
     const g = tierMatch[1] !== undefined ? tierMatch[1] : tierMatch[2];
     tierIsLow = g !== undefined && parseInt(g, 10) <= 69;
   }
-  const hasLowTier = catsSet.has("low_tier") || (
+  // Manual overrides (exact-name entries in category_overrides.json /
+  // personal_overrides.json) are an explicit, deliberate choice — e.g.
+  // "Dragon Rider Lance" is t85 melee gear despite starting with "dragon "
+  // (a prefix this heuristic uses to catch ordinary tier-60 dragon
+  // weapons). Re-running the name-prefix/tier heuristic on top of an
+  // explicit override silently stripped "melee" back out and replaced it
+  // with low_tier even though the user had just set it. Skip the
+  // prefix/tier inference for the override path; still honor an explicit
+  // "low_tier" entry if the override itself included one.
+  const hasLowTier = catsSet.has("low_tier") || (!skipLowTierHeuristic &&
     cats.some(c => _LOW_TIER_STRIP.has(c)) && (
       (checkName && _LOW_TIER_PREFIXES.some(p => checkName.startsWith(p))) || tierIsLow
     )
@@ -596,7 +605,7 @@ function assignCategories(name) {
   //    "rune platebody (g)" with explicit secondary categories aren't short-
   //    circuited by the TT-suffix pre-check below.
   if (nameLower in OVERRIDES) {
-    return _applyExclusive([...OVERRIDES[nameLower]], nameLower);
+    return _applyExclusive([...OVERRIDES[nameLower]], nameLower, true);
   }
 
   // 0a. TT suffix patterns — prevents base-item partial matches
@@ -626,7 +635,7 @@ function assignCategories(name) {
   // 2. Partial match overrides (meaningful substrings 5+ chars)
   for (const [overrideKey, cats] of Object.entries(OVERRIDES)) {
     if (overrideKey.length >= 5 && nameLower.includes(overrideKey)) {
-      return _applyExclusive([...cats], nameLower);
+      return _applyExclusive([...cats], nameLower, true);
     }
   }
 
