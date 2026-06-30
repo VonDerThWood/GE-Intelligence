@@ -9,11 +9,7 @@
  * original too — ported as-is, not "fixed," since this is a faithful port.
  */
 
-const fs = require('fs');
-const path = require('path');
-
 const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)' };
-const _DIR = __dirname;
 
 // ─── Update type → affected categories ──────────────────────────────────────
 
@@ -45,7 +41,7 @@ const UPDATE_RULES = [
     'Slayer Update',
     ['boss', 'melee', 'ranged', 'magic', 'supplies', 'herblore']],
 
-  [['farming', 'seed', 'harvest', 'patch'],
+  [['farming', 'seed', 'harvest', 'farming patch'],
     'Farming Update',
     ['farming', 'mining', 'supplies']],
 
@@ -140,18 +136,14 @@ let _ITEM_INDEX = null;
 
 function _getIndex(items = null) {
   if (_ITEM_INDEX !== null) return _ITEM_INDEX;
-  let names;
-  if (items && items.length) {
-    names = items.filter(it => it.name).map(it => it.name);
-  } else {
-    try {
-      const cache = path.join(_DIR, '..', '..', 'data', 'latest.json');
-      const data = JSON.parse(fs.readFileSync(cache, 'utf8'));
-      names = (data.items || []).filter(it => it.name).map(it => it.name);
-    } catch {
-      return [];
-    }
-  }
+  // Real operation always has items by the time mentions get detected
+  // (run.js only calls into here after a successful price fetch) — the
+  // no-items case is just the bare CLI/test invocation at the bottom of
+  // this file, where returning no mentions is a fine degenerate result,
+  // not worth a fs fallback (which would've needed a synchronous read
+  // with no portable async equivalent in the hot detectMentions() loop).
+  if (!items || !items.length) return [];
+  const names = items.filter(it => it.name).map(it => it.name);
   _ITEM_INDEX = names.map(n => n.toLowerCase()).sort((a, b) => b.length - a.length);
   return _ITEM_INDEX;
 }
