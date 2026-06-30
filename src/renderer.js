@@ -4044,7 +4044,7 @@ const APP_NEWS = [
       'Portfolio Analytics — investor tiers from 10M to 100B, milestone badges (biggest win/loss, win streaks, trade count), allocation breakdowns by item and category, and a concentration warning if you\'re overexposed to one item or category (rares are exempt — that\'s just what owning a rare looks like).',
       'Advanced Alerts — alerts can now trigger on a signal (SURGE, DUMP, ACCUMULATION, DISTRIBUTION, FRENZY, HIGH_VOL) or on an item becoming alch-profitable, not just a price or % threshold.',
       'Price Since Post — RS3 news articles now track how mentioned items\' prices moved since the article was posted, so you can see what the market actually did in response.',
-      'Invention tab now has a Machines pill with profit calculators for the Plank Maker, Hide Tanner, and Partial Potion Producer — live input/output prices, real machine charge costs, profit per item.',
+      'Invention tab now has a Machines pill with profit calculators for the Plank Maker, Hide Tanner, and Partial Potion Producer — every log/hide/herb tier covered, sortable and resizable columns, live prices, real machine charge costs, profit/item, ROI%, and hourly/daily projections.',
       'Fixed several real freezes and lag sources: a 30-second main-thread block on every Dashboard visit, history loading blocking window creation on launch, history population getting stuck at 99%, and slow alt-tab/focus during price fetches.',
       'Fixed a crash in Portfolio when a position was missing its item name.',
     ]
