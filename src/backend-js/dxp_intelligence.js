@@ -10,8 +10,8 @@
  * to Python's naive-UTC datetime arithmetic for this module's purposes.
  */
 
-const fs = require('fs');
 const path = require('path');
+const storage = require('./storage.js');
 const { pyRound, pySum } = require('./_pyround.js');
 
 const MS_PER_DAY = 86400000;
@@ -32,32 +32,29 @@ const EVENTS = [
   ["2023-06-29", "2023-07-28", "2023-08-07"],
 ];
 
-function _loadEventList(filePath) {
-  if (!fs.existsSync(filePath)) return [];
-  try {
-    const raw = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    return raw.map(e => [...e]);
-  } catch {
-    return [];
-  }
-}
+// Bundled dev-curated event list — read-only at runtime, only ever edited
+// directly in the project. require()'ing a .json file just parses it with
+// no fs access at the call site, so this works identically whether bundled
+// for desktop (Node) or a future mobile build (a bundler inlines it at
+// build time) — same approach as catalogue.js's bulk overrides file.
+const BUNDLED_EVENTS = require('./data/dxp_events.json').map(e => [...e]);
 
-function loadEvents(dataDir = null) {
-  // Merges the bundled dev-curated event list (data/dxp_events.json)
-  // with the user's local copy (dataDir/dxp_events.json), unions them
-  // (dedup by the exact announced/start/end triple), and persists the
-  // merged result back to the local copy.
-  const bundled = _loadEventList(path.join(__dirname, 'data', 'dxp_events.json'));
+async function loadEvents(dataDir = null) {
+  // Merges the bundled event list above with the user's local copy
+  // (dataDir/dxp_events.json — this one DOES change at runtime, e.g. when
+  // a new event gets manually confirmed), unions them (dedup by the exact
+  // announced/start/end triple), and persists the merged result back to
+  // the local copy.
   const localPath = dataDir ? path.join(dataDir, 'dxp_events.json') : null;
-  const local = localPath ? _loadEventList(localPath) : [];
+  const local = localPath ? await storage.readJSON(localPath, []) : [];
 
   const seen = new Map();
-  for (const e of [...bundled, ...local]) seen.set(JSON.stringify(e), e);
+  for (const e of [...BUNDLED_EVENTS, ...local]) seen.set(JSON.stringify(e), e);
   let merged = [...seen.values()].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0));
   if (!merged.length) merged = EVENTS.map(e => [...e]);
 
   if (localPath) {
-    try { fs.writeFileSync(localPath, JSON.stringify(merged, null, 2), 'utf8'); } catch {}
+    try { await storage.writeJSON(localPath, merged, { pretty: true }); } catch {}
   }
   return merged;
 }
@@ -287,15 +284,12 @@ function confidenceScore(tally, phase) {
   return null;
 }
 
+// Baked-in research seed — bundled and read-only, same require()-not-fs
+// approach as BUNDLED_EVENTS above.
+const SEED_DATA = require('./data/dxp_seed.json');
+
 function loadSeed() {
-  // Loads the baked-in research seed (data/dxp_seed.json).
-  const seedPath = path.join(__dirname, 'data', 'dxp_seed.json');
-  if (!fs.existsSync(seedPath)) return {};
-  try {
-    return JSON.parse(fs.readFileSync(seedPath, 'utf8'));
-  } catch {
-    return {};
-  }
+  return SEED_DATA;
 }
 
 function mergeEntry(live, seed) {
@@ -333,7 +327,19 @@ async function computeDxpData(historyData, itemLimits = null, itemNames = null, 
   itemNames = itemNames || {};
   const live = {};
   const allItemIds = Object.keys(historyData);
-  const BATCH = 250;
+  // Confirmed for real on a Pixel 8 Pro (2026-06-29): this whole computation
+  // took 146.7s on-device vs 7.8s on a desktop dev machine — a ~19x gap, not
+  // explained by yielding alone, but the OLD batch size of 250 meant each
+  // fully-synchronous chunk between yields took 5+ seconds on that hardware.
+  // Even though this runs in the background (not blocking the caller, see
+  // api.js's getDxpIntelligence disk-serve-then-refresh), a single JS thread
+  // also drives the UI in this hybrid-webview app, so a 5-second unyielded
+  // chunk reads as the whole app freezing/janking, not just "a background
+  // task is busy." A much smaller batch yields far more often, keeping any
+  // single synchronous chunk well under what's perceptible as a freeze,
+  // at the cost of more total yields (negligible — setTimeout(0) overhead
+  // is microseconds, irrelevant next to a 90-150s total runtime).
+  const BATCH = 25;
   for (let b = 0; b < allItemIds.length; b += BATCH) {
     for (const itemId of allItemIds.slice(b, b + BATCH)) {
       const points = historyData[itemId];
@@ -400,31 +406,24 @@ if (require.main === module) {
     // falling back to the old monolithic file if it's still around
     // (e.g. a data dir that was never actually migrated).
     const historyDir = path.join(dataDir, 'history');
-    const history = {};
-    if (fs.existsSync(historyDir)) {
-      for (const f of fs.readdirSync(historyDir)) {
-        if (!f.endsWith('.json')) continue;
-        history[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(historyDir, f), 'utf8'));
-      }
-    } else {
+    let history = await storage.loadDirBatched(historyDir);
+    if (Object.keys(history).length === 0) {
       const legacyFile = path.join(dataDir, 'history.json');
-      if (fs.existsSync(legacyFile)) Object.assign(history, JSON.parse(fs.readFileSync(legacyFile, 'utf8')));
+      history = await storage.readJSON(legacyFile, {});
     }
     const itemLimits = {}, itemNames = {};
     const latestFile = path.join(dataDir, 'latest.json');
-    if (fs.existsSync(latestFile)) {
-      const latest = JSON.parse(fs.readFileSync(latestFile, 'utf8'));
-      for (const it of latest.items || []) {
-        if (it.id) {
-          itemLimits[String(it.id)] = it.limit ?? null;
-          itemNames[String(it.id)] = it.name;
-        }
+    const latest = await storage.readJSON(latestFile, { items: [] });
+    for (const it of latest.items || []) {
+      if (it.id) {
+        itemLimits[String(it.id)] = it.limit ?? null;
+        itemNames[String(it.id)] = it.name;
       }
     }
-    const events = loadEvents(dataDir);
+    const events = await loadEvents(dataDir);
     const result = await computeDxpData(history, itemLimits, itemNames, true, events);
     const outFile = path.join(dataDir, 'dxp_intelligence.json');
-    fs.writeFileSync(outFile, JSON.stringify(result), 'utf8');
+    await storage.writeJSON(outFile, result);
     const itemCount = Object.keys(result).length - ('_meta' in result ? 1 : 0);
     console.log(`[dxp_intelligence] ${itemCount} items with a usable signal, tracking ${events.length} DXP events, written to ${outFile}`);
   })();

@@ -7,7 +7,8 @@ contextBridge.exposeInMainWorld('genius', {
   getDataDir: () => ipcRenderer.invoke('get-data-dir'),
   quitApp: () => ipcRenderer.invoke('quit-app'),
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
-  getDxpIntelligence: () => ipcRenderer.invoke('get-dxp-intelligence'),
+  getDxpIntelligence: (opts) => ipcRenderer.invoke('get-dxp-intelligence', opts),
+  getDxpEvents: () => ipcRenderer.invoke('get-dxp-events'),
 
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
@@ -56,6 +57,7 @@ contextBridge.exposeInMainWorld('genius', {
   savePosition:    (pos) => ipcRenderer.invoke('save-position', pos),
   deletePosition:  (id)  => ipcRenderer.invoke('delete-position', id),
   sellPosition:    (opts)=> ipcRenderer.invoke('sell-position', opts),
+  reopenPosition:  (id)  => ipcRenderer.invoke('reopen-position', id),
 
   // Full timeseries (ATH/ATL + date lookup)
   getItemTimeseries: (id) => ipcRenderer.invoke('get-item-timeseries', id),

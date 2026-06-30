@@ -82,8 +82,24 @@ body {
 ::-webkit-scrollbar-track { background: ${T.panel}; }
 ::-webkit-scrollbar-thumb { background: ${T.border}; border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: ${T.gold}; }
-.app { display: flex; height: 100vh; }
-.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+/* env(safe-area-inset-*) resolves to 0 on platforms with no concept of a
+   notch/status-bar/gesture-nav overlap (desktop Electron included), so this
+   is safe to apply unconditionally rather than gating it behind a mobile
+   check — it only does anything on a real device. Confirmed for real on
+   Android: without this, the search bar and anything else near the top of
+   the window sits underneath the status bar and can't be tapped at all,
+   and the bottom of the screen is obscured by the gesture nav bar the same
+   way. Needs viewport-fit=cover in the HTML's meta viewport tag (set in
+   mobile/build.js's index.html) for env() to report real non-zero values
+   on Android/iOS at all instead of silently resolving to 0 everywhere. */
+.app {
+  display: flex; height: 100vh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+}
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
 .ge-header {
   background: linear-gradient(180deg, #3d2c0f 0%, #2b1e0a 100%);
   border-bottom: 2px solid ${T.border}; padding: 0 16px; height: 44px;
@@ -95,6 +111,11 @@ body {
 }
 .ge-logo { font-family: 'Cinzel', serif; font-size: 18px; font-weight: 700; color: ${T.goldBright}; letter-spacing: 3px; text-shadow: 0 1px 3px rgba(0,0,0,0.8), 0 0 12px rgba(255,215,0,0.3); flex-shrink: 0; }
 .ge-logo span { color: ${T.copper}; }
+/* Hidden on desktop (the sidebar is always visible there, nothing to
+   toggle) — shown only under the narrow-screen media query below. */
+.sidebar-toggle { display: none; background: none; border: none; color: ${T.text}; font-size: 18px; cursor: pointer; padding: 2px 8px; flex-shrink: 0; }
+.sidebar-backdrop { display: none; }
+.fetch-icon { display: none; font-size: 15px; }
 .sidebar {
   width: 172px; min-width: 172px; background: ${T.panel}; border-right: 2px solid ${T.border};
   display: flex; flex-direction: column; overflow-y: auto; overflow-x: hidden; padding: 8px 0 16px;
@@ -261,6 +282,63 @@ select.ge-input option { background: ${T.panel}; }
 .pct-up   { color: ${T.green}; }
 .pct-down { color: ${T.red}; }
 .pct-flat { color: ${T.textDim}; }
+
+/* Narrow/mobile layout — desktop's window has a hard 960px minWidth (set
+   in main.js's BrowserWindow options), so this can never accidentally
+   trigger there; it's only ever real on a phone-sized viewport. Turns the
+   permanently-visible 172px sidebar column into a slide-in overlay drawer
+   instead, toggled by .sidebar-toggle in the header, so the actual content
+   area gets the full screen width on a phone instead of losing a chunk of
+   it permanently to nav. */
+@media (max-width: 700px) {
+  .sidebar-toggle { display: inline-flex; align-items: center; }
+  /* The header (hamburger + logo + search + status + Fetch Now + quit)
+     has nowhere near enough room on a ~360-400 CSS-px-wide phone screen
+     for all of that — confirmed for real: the search input was getting
+     squeezed down to near-zero width, technically still focusable (the
+     keyboard would pop up) but with no visible room to actually see what
+     was typed or render results in. Drop the least essential pieces and
+     let the search bar actually have the room it needs. */
+  .ge-status, .ge-header-divider { display: none; }
+  .ge-header-quit { display: none; } /* "quit app" isn't really a mobile concept — Android handles backgrounding itself */
+  .ge-header-fetch .fetch-text { display: none; }
+  .ge-header-fetch .fetch-icon { display: inline; }
+  .ge-header-fetch { padding: 4px 8px !important; }
+  .ge-logo { font-size: 14px !important; letter-spacing: 1px !important; }
+  .ge-search-wrap { max-width: none; }
+  /* The dropdown's width follows .ge-search-wrap's own width, which is now
+     most of the header — fine on desktop's wide header, but on mobile this
+     positions it correctly under the now much-wider-relatively search box
+     without any extra rule needed; just confirming nothing else clips it. */
+  .ge-search-results { max-height: 50vh; }
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 200;
+    transform: translateX(-100%);
+    transition: transform 0.2s ease;
+    box-shadow: 4px 0 24px rgba(0,0,0,0.6);
+    padding-top: calc(8px + env(safe-area-inset-top));
+    padding-bottom: calc(16px + env(safe-area-inset-bottom));
+  }
+  .sidebar.open { transform: translateX(0); }
+  .sidebar-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 150;
+    background: rgba(0,0,0,0.5);
+  }
+  /* The item detail panel is normally a fixed-width side column next to
+     the active tab's content (resizable via .panel-resize-handle) — on a
+     phone-width screen that leaves barely any room for either side, so it
+     becomes a full-screen overlay instead, the same idea as the sidebar
+     drawer above. !important is needed here specifically because the
+     component sets its width via an inline style (panelWidth), which
+     otherwise always wins over a plain class rule regardless of media query. */
+  .detail-panel {
+    position: fixed !important; inset: 0; z-index: 250;
+    width: 100% !important; min-width: 0 !important; max-width: none !important;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+  .panel-resize-handle { display: none; }
+}
 `; }
 
 
@@ -596,7 +674,7 @@ function ImageModal({name, fallbackUrl, onClose}) {
   );
 }
 
-function ChartModal({item, onClose, dateFormat, populatedHistoryIds}) {
+function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOverlay}) {
   const [range, setRange] = useState(30);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -616,6 +694,12 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds}) {
   const [zoomTo, setZoomTo] = useState('');
   const [zoomWindow, setZoomWindow] = useState(null); // [startIdx, endIdx] into timeseries
   const zoomCenterRef = React.useRef(0.5); // 0-1 fraction of chart where cursor is
+  const pinchRef = React.useRef(null); // last two-finger distance, for pinch-to-zoom on touch devices
+  const [dxpEvents, setDxpEvents] = useState([]);
+  useEffect(() => {
+    if (!showDxpOverlay) return;
+    window.genius?.getDxpEvents?.().then(evts => setDxpEvents(evts || [])).catch(() => {});
+  }, [showDxpOverlay]);
 
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose(); };
@@ -1063,7 +1147,73 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds}) {
               e.preventDefault();
               doZoom(e.deltaY < 0 ? 'in' : 'out');
             },
+            // Touch equivalents — one finger drags the crosshair the same
+            // way the mouse does, two fingers pinch to zoom (reusing the
+            // exact same stepped doZoom() the mouse wheel and arrow keys
+            // already use, just triggered by a distance-delta threshold
+            // instead of a single wheel tick, so it still feels roughly
+            // continuous instead of jumping in 15% steps on every touchmove).
+            onTouchStart: e => {
+              if (e.touches.length === 2) {
+                const [a, b] = e.touches;
+                pinchRef.current = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+              } else if (e.touches.length === 1) {
+                pinchRef.current = null;
+              }
+            },
+            onTouchMove: e => {
+              if (e.touches.length === 2 && chartView === 'alltime') {
+                e.preventDefault();
+                const [a, b] = e.touches;
+                const rect = e.currentTarget.getBoundingClientRect();
+                const midX = (a.clientX + b.clientX) / 2;
+                const svgX = (midX - rect.left) / rect.width * W;
+                zoomCenterRef.current = Math.max(0, Math.min(1, (svgX - YLAB - PAD) / (CW - PAD * 2)));
+                const dist = Math.hypot(b.clientX - a.clientX, b.clientY - a.clientY);
+                const prev = pinchRef.current;
+                if (prev != null && Math.abs(dist - prev) > 12) {
+                  doZoom(dist > prev ? 'in' : 'out');
+                  pinchRef.current = dist;
+                } else if (prev == null) {
+                  pinchRef.current = dist;
+                }
+              } else if (e.touches.length === 1) {
+                const rect = e.currentTarget.getBoundingClientRect();
+                const svgX = (e.touches[0].clientX - rect.left) / rect.width * W;
+                const relX = svgX - YLAB - PAD;
+                const chartW = CW - PAD * 2;
+                const idx = Math.round(relX / (chartW / Math.max(activePoints.length-1,1)));
+                setHoverIdx(Math.max(0, Math.min(activePoints.length-1, idx)));
+                setHoverType('price');
+              }
+            },
+            onTouchEnd: e => {
+              if (e.touches.length < 2) pinchRef.current = null;
+            },
           },
+            // DXP event window overlays — rendered first so candles/line sit on top
+            showDxpOverlay && dxpEvents.length > 0 && activePoints.length > 1 && (() => {
+              const tsOf = p => p.timestamp < 1e12 ? p.timestamp * 1000 : p.timestamp;
+              const firstTs = tsOf(activePoints[0]);
+              const lastTs  = tsOf(activePoints[activePoints.length - 1]);
+              return dxpEvents.map(([, startIso, endIso], ei) => {
+                const evStart = new Date(startIso).getTime();
+                const evEnd   = new Date(endIso).getTime();
+                if (evEnd < firstTs || evStart > lastTs) return null;
+                // Find leftmost and rightmost index within the event window
+                let lo = activePoints.length - 1, hi = 0;
+                for (let i = 0; i < activePoints.length; i++) {
+                  const t = tsOf(activePoints[i]);
+                  if (t >= evStart && t <= evEnd) { lo = Math.min(lo, i); hi = Math.max(hi, i); }
+                }
+                if (lo > hi) return null;
+                const x1 = px(lo), x2 = px(hi);
+                return h('rect', {
+                  key: ei, x: x1, y: PAD, width: Math.max(2, x2 - x1), height: PH - PAD * 2,
+                  fill: 'rgba(201,168,76,0.12)', stroke: 'rgba(201,168,76,0.3)', strokeWidth: 1,
+                });
+              });
+            })(),
             // Y-axis labels on left
             gridLevels.map((g, i) =>
               h('text', {key:i, x:YLAB-4, y:g.y+3, fontSize:9, fill:T.textDim, textAnchor:'end'},
@@ -1451,6 +1601,12 @@ function useSearch(items, userShorthands = {}) {
 function GESearchBar({items, onSelect, userShorthands}) {
   const s = useSearch(items, userShorthands);
   const showDrop = s.focused && s.results.length > 0;
+  // "Press S or /" is a real, useful hint with a physical keyboard
+  // attached (desktop) — meaningless on a touchscreen, where there's
+  // nothing to press but the input itself. matchMedia mirrors the same
+  // ~700px breakpoint the mobile-drawer CSS already uses elsewhere.
+  const isNarrow = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 700px)').matches;
+  const searchPlaceholder = isNarrow ? 'Tap to search' : 'Search any item — or press S or / to focus here';
   const pickRandom = () => {
     const seen = new Set();
     const BORING_ONLY = new Set(['misc', 'low_tier', 'materials']);
@@ -1470,7 +1626,7 @@ function GESearchBar({items, onSelect, userShorthands}) {
   return h('div', {className:'ge-search-wrap'},
     h('input', {
       className:'ge-search-input',
-      placeholder:'Search any item — or press S or / to focus here',
+      placeholder:searchPlaceholder,
       value:s.query, ref:s.ref,
       onChange:e=>s.setQuery(e.target.value),
       onFocus:()=>s.setFocused(true),
@@ -1694,8 +1850,9 @@ function FlipCalculator({item, onAddToPortfolio}) {
   );
 }
 
-function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds}) {
+function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode}) {
   const [chartOpen, setChartOpen]     = useState(false);
+  const [chartDxpMode, setChartDxpMode] = useState(false);
   const [imageOpen, setImageOpen]     = useState(false);
   const [wikiStats, setWikiStats]     = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -1704,6 +1861,21 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const [draftCats, setDraftCats]     = useState([]);
   const [savingCats, setSavingCats]   = useState(false);
   const [noteText, setNoteText]       = useState('');
+  // Discord feedback (RWBY Rose, 2026-06-28): list views should keep the
+  // abbreviated "1.0K gp" style (scanning a table of dozens of rows), but
+  // the single-item detail panel benefits from the exact figure — small
+  // enough numbers that "1.0K" hides whether something is 950 or 1,049gp,
+  // which matters when deciding whether a trade is actually worth it.
+  // Toggle rather than a hard switch, since both views have a real use.
+  const [fullPrice, setFullPrice] = useState(() => {
+    try { return localStorage.getItem('genius_detail_full_price') === '1'; } catch { return false; }
+  });
+  const toggleFullPrice = () => setFullPrice(v => {
+    const next = !v;
+    try { localStorage.setItem('genius_detail_full_price', next ? '1' : '0'); } catch {}
+    return next;
+  });
+  const gpFmt = n => (n == null ? '—' : fullPrice ? n.toLocaleString() : fmt.gp(n));
 
   useEffect(() => {
     if (!item) return;
@@ -1712,6 +1884,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     setEditingCats(false);
     setDraftCats(item.categories || []);
     setNoteText((notes && notes[item.id]) || '');
+    setChartDxpMode(false);
     window.genius?.getItemStats(item.name).then(stats => {
       setWikiStats(stats);
       setStatsLoading(false);
@@ -1764,7 +1937,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   };
 
   return h('div', {className:'detail-panel', style: panelWidth ? {width:panelWidth, minWidth:260} : undefined},
-    chartOpen && h(ChartModal, {item, onClose:()=>setChartOpen(false), dateFormat, populatedHistoryIds}),
+    chartOpen && h(ChartModal, {item, onClose:()=>{setChartOpen(false);setChartDxpMode(false);}, dateFormat, populatedHistoryIds, showDxpOverlay:chartDxpMode}),
     imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
       h('div', {className:'row-between', style:{marginBottom:6}},
@@ -1827,7 +2000,14 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           onClick:saveCats,disabled:savingCats},
           savingCats ? 'Saving…' : 'Save — takes effect on next Fetch Now')
       ),
-      h('div', {className:'detail-price'}, fmt.gp(item.high||item.low)+' gp'),
+      h('div', {className:'row', style:{alignItems:'baseline', gap:8}},
+        h('div', {className:'detail-price'}, gpFmt(item.high||item.low)+' gp'),
+        h('button', {
+          className:'ge-btn', style:{fontSize:10, padding:'1px 7px'},
+          title: fullPrice ? 'Showing exact gp — click for rounded' : 'Showing rounded gp — click for exact',
+          onClick: toggleFullPrice,
+        }, fullPrice ? 'Rounded Price' : 'Exact Price')
+      ),
         item.untradeable
           ? h('div', {style:{marginTop:4}},
               h('span', {style:{fontSize:11, padding:'2px 7px', borderRadius:3, background:'rgba(255,180,0,0.15)', color:T.gold, border:`1px solid ${T.gold}`, fontWeight:600, letterSpacing:'0.04em'}}, 'UNTRADEABLE'),
@@ -1836,7 +2016,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           : item.change_1d != null && h('div', {className:pctClass(item.change_1d), style:{fontSize:12,marginTop:2}},
               fmt.pct(item.change_1d),
               item.high && h('span', {style:{fontSize:11, marginLeft:6, opacity:0.85}},
-                '(' + (item.change_1d > 0 ? '+' : '') + fmt.gp(Math.round(item.high - (item.high / (1 + item.change_1d / 100)))) + 'gp)'
+                '(' + (item.change_1d > 0 ? '+' : '') + gpFmt(Math.round(item.high - (item.high / (1 + item.change_1d / 100)))) + 'gp)'
               )
             )
     ),
@@ -1845,26 +2025,37 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         h(SparklineSVG, {data:sparkHistory.length ? sparkHistory : [item.high||0, item.high||0], color:sparkColor, w:260, ht:52, showLabels:sparkHistory.length > 0}),
         h('span', {className:'sparkline-expand-hint'}, 'click to expand')
       ),
+      devMode && !item.untradeable && h('div', {style:{display:'flex', gap:6, marginTop:4, marginBottom:2}},
+        h('button', {
+          onClick: () => { setChartDxpMode(true); setChartOpen(true); },
+          title: 'View price chart with DXP event windows overlaid',
+          style: {
+            padding:'2px 10px', fontSize:11, cursor:'pointer', borderRadius:3,
+            background: 'rgba(201,168,76,0.12)', border:`1px solid ${T.gold}`,
+            color: T.gold, letterSpacing:'0.04em',
+          },
+        }, 'DXP')
+      ),
       item.untradeable
         ? [
-            ['Production cost', fmt.gp(item.high || item.low)+' gp'],
+            ['Production cost', gpFmt(item.high || item.low)+' gp'],
             item.rarity && ['Rarity', item.rarity[0].toUpperCase() + item.rarity.slice(1)],
           ].filter(Boolean).map(([l,v]) => h('div',{className:'stat-row',key:l},
             h('span',{className:'stat-lbl'},l),
             h('span',{className:'stat-val'},v)
           ))
         : [
-            ['Price',         fmt.gp(item.high || item.low)+' gp'],
-            ['After 2% tax', item.low ? fmt.gp(applyTax(item.low))+' gp' : '—'],
+            ['Price',         gpFmt(item.high || item.low)+' gp'],
+            ['After 2% tax', item.low ? gpFmt(applyTax(item.low))+' gp' : '—'],
             ['Daily Change',  (() => {
               const price = item.high || item.low;
               const chg = item.change_1d;
               if (!price || chg == null) return '—';
               const prevPrice = price / (1 + chg / 100);
               const diff = Math.round(price - prevPrice);
-              return h('span', {className: pctClass(diff)}, (diff > 0 ? '+' : '') + fmt.gp(diff) + ' gp');
+              return h('span', {className: pctClass(diff)}, (diff > 0 ? '+' : '') + gpFmt(diff) + ' gp');
             })()],
-            ['High alch',    item.alch ? fmt.gp(item.alch)+' gp' : '—'],
+            ['High alch',    item.alch ? gpFmt(item.alch)+' gp' : '—'],
             ['GE Limit',     item.limit ? item.limit.toLocaleString() : '—'],
           ].map(([l,v]) => h('div',{className:'stat-row',key:l},
             h('span',{className:'stat-lbl'},l),
@@ -2014,6 +2205,111 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   );
 }
 
+// Shared drag-to-resize column logic — ItemTable and the Alch signal table
+// both had their own hand-rolled copy of this exact same ~50-line block
+// (separately keyed localStorage, same math) before the Almanac needed it
+// a third time. Same mechanics as both originals: widths live in a <colgroup>
+// (not on individual <th>/<td> — letting the table itself size naturally
+// while the colgroup pins each column), and resize handles are absolutely-
+// positioned overlay spans (not on the <th> borders) so the divider is
+// grabbable at any row, not just the header. defaultWidths' key order IS
+// the column order — must match the table's actual <th>/<col> order, same
+// as the COL_ORDER arrays the original two tables kept manually in sync.
+function useResizableColumns(storageKey, defaultWidths) {
+  const colOrder = Object.keys(defaultWidths);
+  const load = () => {
+    try { return {...defaultWidths, ...JSON.parse(localStorage.getItem(storageKey)||'{}')}; }
+    catch { return {...defaultWidths}; }
+  };
+  const [colWidths, setColWidths] = useState(load);
+  const colWidthsRef = useRef(colWidths);
+  // A plain useRef for the wrap div doesn't trigger anything when the node
+  // actually mounts — confirmed for real this was the Almanac resize bug:
+  // the measurement effect below only ran once (dep [colWidths], which
+  // never changes on its own) and on the Almanac specifically, that one run
+  // could land before the table's real rows/thead existed, leaving every
+  // handle's measured position empty forever after — all 9 handles stacked
+  // at the same fallback (-4) position, functionally unusable (the cursor
+  // still showed col-resize since SOME handle was technically there, but
+  // dragging any of them did nothing visible). A callback ref forces a
+  // state update — and thus a re-run of the effect below — at the exact
+  // moment the DOM node mounts, which a plain ref can't do.
+  const [wrapNode, setWrapNode] = useState(null);
+  const tableWrapRef = useCallback(node => setWrapNode(node), []);
+  const [handleLefts, setHandleLefts] = useState({});
+
+  const startColResize = (key) => e => {
+    e.preventDefault();
+    e.stopPropagation();
+    const table = e.currentTarget.closest('.ge-table-wrap')?.querySelector('table');
+    const startW = colWidthsRef.current[key] || 110;
+    const logicalTotal = Object.values(colWidthsRef.current).reduce((a,b) => a + (b||0), 0);
+    const scaleFactor = table && logicalTotal ? (table.getBoundingClientRect().width / logicalTotal) : 1;
+    const startX = e.clientX;
+    const onMove = me => {
+      const deltaReal = me.clientX - startX;
+      const deltaLogical = scaleFactor ? deltaReal / scaleFactor : deltaReal;
+      const w = Math.max(50, Math.round(startW + deltaLogical));
+      colWidthsRef.current = {...colWidthsRef.current, [key]: w};
+      setColWidths(colWidthsRef.current);
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      try { localStorage.setItem(storageKey, JSON.stringify(colWidthsRef.current)); } catch {}
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  };
+
+  useEffect(() => {
+    if (!wrapNode) return;
+    let raf = null;
+    const measure = () => {
+      const ths = wrapNode.querySelectorAll('thead th');
+      const wrapRect = wrapNode.getBoundingClientRect();
+      const lefts = {};
+      colOrder.slice(0, -1).forEach((k, i) => {
+        const th = ths[i];
+        if (th) lefts[k] = th.getBoundingClientRect().right - wrapRect.left + wrapNode.scrollLeft;
+      });
+      setHandleLefts(lefts);
+    };
+    const scheduleMeasure = () => {
+      if (raf) return;
+      raf = requestAnimationFrame(() => { raf = null; measure(); });
+    };
+    measure();
+    // Also re-measure on ANY DOM change inside the table (rows arriving
+    // after an async data load, tier switches swapping which rows render,
+    // column header text changing) — not just window resizes. This is what
+    // actually closes the bug: the FIRST measure() can land before the real
+    // <thead>/<tr> exist, and nothing was forcing a second attempt before.
+    const mo = new MutationObserver(scheduleMeasure);
+    mo.observe(wrapNode, { childList: true, subtree: true });
+    window.addEventListener('resize', scheduleMeasure);
+    return () => {
+      mo.disconnect();
+      window.removeEventListener('resize', scheduleMeasure);
+      if (raf) cancelAnimationFrame(raf);
+    };
+    // eslint-disable-next-line
+  }, [colWidths, wrapNode]);
+
+  const overlayHandle = key => h('span', {
+    key,
+    onMouseDown: startColResize(key),
+    className: 'col-resize-handle',
+    style:{
+      position:'absolute', top:0, bottom:0,
+      left: (handleLefts[key] || 0) - 4,
+      width:8, cursor:'col-resize', zIndex:10,
+    },
+  });
+
+  return { colWidths, tableWrapRef, overlayHandle, colOrder };
+}
+
 /* ─── Item table ─────────────────────────────────────────────── */
 const DEFAULT_COL_WIDTHS = {name:340, high:110, change_1d:110, volume:140, signals:160, star:30};
 function loadColWidths() {
@@ -2021,7 +2317,15 @@ function loadColWidths() {
   catch { return {...DEFAULT_COL_WIDTHS}; }
 }
 
-function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, showSignals}) {
+function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals}) {
+  // watchlist/onToggleWatch are read unconditionally below (star column
+  // renders for every row, no matter the call site) — Opportunities'
+  // signal-filtered table called this without passing either, so
+  // watchlist.includes(...) threw on the very first row and crashed the
+  // whole render with no error boundary to catch it (reported as "blank
+  // page with no way to get back"). Defaulting here means a call site
+  // that forgets these props degrades to an inert star instead of a
+  // crash, regardless of which tab calls it next.
   const [sort, setSort] = useState({key:'name',dir:1});
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, item}
   const [colWidths, setColWidths] = useState(loadColWidths);
@@ -2100,10 +2404,14 @@ function ItemTable({items, selected, onSelect, watchlist, onToggleWatch, onToggl
   const clearMulti = () => setMultiSelect(new Set());
 
   useEffect(() => {
-    const onKey = e => { if (e.key === 'Escape') clearMulti(); };
+    // preventDefault() here (even though Escape has no real default browser
+    // action to prevent) is what lets the Android back-button handler in
+    // bridge.js tell whether this consumed the back press, via its
+    // dispatchEvent() return value — see that file's comment.
+    const onKey = e => { if (e.key === 'Escape' && multiSelect.size) { e.preventDefault(); clearMulti(); } };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  }, [multiSelect]);
 
   const [minPrice, setMinPrice] = useState(0);
   const [customVal, setCustomVal] = useState('');
@@ -2474,6 +2782,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   // Mood of the Market
   const mood = useMemo(() => getMarketWeather(tradeableItems), [tradeableItems]);
   const [showWeatherLegend, setShowWeatherLegend] = useState(false);
+  const [showHeatmapLegend, setShowHeatmapLegend] = useState(false);
+  const [heatmapLegendPos, setHeatmapLegendPos] = useState(null);
 
   // Hall of Shame
   const hallOfShame = useMemo(() => {
@@ -2919,8 +3229,60 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     })(),
 
     // ── Sector Heat Map ──────────────────────────────────────────
-    h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Sector Heat Map'),
+    h('div', {style:{...sectionStyle, position:'relative'}},
+      h('div', {style:{display:'flex', alignItems:'center', gap:5}},
+        h('div', {style:headingStyle}, 'Sector Heat Map'),
+        h('span', {
+          onClick: e => {
+            e.stopPropagation();
+            // Anchored popup near a heading that can sit anywhere on a
+            // scrollable page — a plain position:absolute (downward-only)
+            // got clipped by the viewport bottom when this section was
+            // near the top of a tall page. Measuring the icon's real
+            // screen position and flipping the popup above it when there
+            // isn't ~340px of room below fixes that, same idea as the
+            // SectorCard hover tooltip's viewport-aware placement above.
+            const POPUP_HEIGHT = 340;
+            if (!showHeatmapLegend) {
+              const r = e.currentTarget.getBoundingClientRect();
+              const openUpward = r.bottom + POPUP_HEIGHT > window.innerHeight;
+              setHeatmapLegendPos({
+                left: r.left,
+                top: openUpward ? Math.max(8, r.top - POPUP_HEIGHT) : r.bottom + 6,
+              });
+            }
+            setShowHeatmapLegend(s => !s);
+          },
+          title:'What does this heat map show?',
+          style:{cursor:'pointer', fontSize:10, color:T.textDim, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:13, height:13, display:'inline-flex', alignItems:'center', justifyContent:'center'},
+        }, '?'),
+      ),
+      showHeatmapLegend && heatmapLegendPos && createPortal(h('div', {
+        onClick: e => e.stopPropagation(),
+        style:{
+          position:'fixed', left:heatmapLegendPos.left, top:heatmapLegendPos.top, zIndex:9999, width:340,
+          background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:6,
+          boxShadow:'0 4px 16px rgba(0,0,0,0.6)', padding:'10px 12px',
+        },
+      },
+        h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8}},
+          h('div', {style:{fontSize:11, color:T.gold, textTransform:'uppercase', letterSpacing:'0.06em'}}, 'Sector Heat Map'),
+          h('span', {onClick:()=>setShowHeatmapLegend(false), style:{cursor:'pointer', color:T.textDim, fontSize:13}}, '✕'),
+        ),
+        h('div', {style:{fontSize:11, color:T.textDim, lineHeight:1.6, marginBottom:8}},
+          'Each tile is a category of items (Melee, Magic, Herblore, etc.) colored by how much is happening in it right now — price momentum, opportunity scores, and active signals (Surge, Dump, Frenzy) across every item in that category. Click a tile to see exactly which items in it currently have an active signal.'
+        ),
+        [
+          {c:'#ff6b35', l:'🔥 Hot — score 72+, the most active sector right now'},
+          {c:'#ffd700', l:'🟡 Warm — score 55-71'},
+          {c:T.green,   l:'🟢 Active — score 40-54'},
+          {c:T.textDim, l:'⬜ Quiet — score 25-39'},
+          {c:T.red,     l:'🔴 Cold — score under 25, barely moving'},
+        ].map(t => h('div', {key:t.l, style:{display:'flex', gap:6, alignItems:'center', fontSize:11, color:T.textDim, padding:'2px 0'}},
+          h('span', {style:{width:8, height:8, borderRadius:'50%', background:t.c, flexShrink:0}}),
+          t.l
+        )),
+      ), document.body),
       h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
         sectorHeat.map(sector => h(SectorCard, {key:sector.label, sector, onClick:()=>setActiveSector(sector)}))
       )
@@ -3377,20 +3739,129 @@ function RecipePane({allItems}) {
   );
 }
 
-function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel}) {
+function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel, showMachines, allItems}) {
   const [view, setView] = useState('items');
   const tradeableItems    = useMemo(() => (items||[]).filter(it => !it.untradeable), [items]);
   const untradeableItems  = useMemo(() => (items||[]).filter(it =>  it.untradeable), [items]);
   const displayItems = view === 'items' ? tradeableItems : untradeableItems;
   return h('div', null,
     description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
-    untradeableItems.length > 0 && h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
+    (untradeableItems.length > 0 || showMachines) && h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
       h('button', {className: view==='items' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('items')},
         `Items (${tradeableItems.length})`),
-      h('button', {className: view==='split' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('split')},
-        `${splitLabel} (${untradeableItems.length})`)
+      untradeableItems.length > 0 && h('button', {className: view==='split' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('split')},
+        `${splitLabel} (${untradeableItems.length})`),
+      showMachines && h('button', {className: view==='machines' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('machines')},
+        'Machines')
     ),
-    h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+    view === 'machines' ? h(MachineCalculators, {items: allItems || items, onSelect}) : h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+  );
+}
+
+// ─── Invention machine profit calculators ──────────────────────────────────
+// Real conversion rates + machine-charge costs pulled from the RS Wiki
+// (runescape.wiki/w/Plank_maker_(machine), Automatic_hide_tanner,
+// Partial_potion_producer — checked 2026-06-29). All three machines convert
+// raw material -> processed material 1:1 (no chance of failure), so profit
+// per item is just outputPrice - inputPrice - extraInputCost - chargeCost.
+// A divine charge costs 72,099gp for 3,000 machine charge -> 24.03gp/charge;
+// that's the cheapest charge source and what these numbers assume.
+const GP_PER_MACHINE_CHARGE = 24.03;
+const INVENTION_MACHINES = [
+  {
+    id: 'plank', label: 'Plank Maker', chargePerItem: 17.3,
+    note: 'Standard plank maker, 99 Invention. The high-capacity version (117 Invention) runs ~15 charge/item instead — slightly cheaper per plank, same profit logic.',
+    conversions: [
+      { input: 'Logs', output: 'Plank' },
+      { input: 'Oak logs', output: 'Oak plank' },
+      { input: 'Teak logs', output: 'Teak plank' },
+      { input: 'Mahogany logs', output: 'Mahogany plank' },
+    ],
+  },
+  {
+    id: 'tanner', label: 'Hide Tanner', chargePerItem: 5,
+    note: 'Automatic hide tanner. Skips the normal coin/rune tanning cost entirely — straight hide-to-leather conversion.',
+    conversions: [
+      { input: 'Cowhide', output: 'Leather' },
+      { input: 'Green dragonhide', output: "Green d'hide" },
+      { input: 'Blue dragonhide', output: "Blue d'hide" },
+      { input: 'Red dragonhide', output: "Red d'hide" },
+      { input: 'Black dragonhide', output: "Black d'hide" },
+    ],
+  },
+  {
+    id: 'potion', label: 'Partial Potion Producer', chargePerItem: 5.8,
+    extraInput: 'Vial of water',
+    note: 'Each herb also needs a Vial of water — factored into the cost below. The DX upgrade runs ~5.3 charge/item instead, marginally cheaper.',
+    conversions: [
+      { input: 'Guam leaf', output: 'Guam potion (unf)' },
+      { input: 'Marrentill', output: 'Marrentill potion (unf)' },
+      { input: 'Tarromin', output: 'Tarromin potion (unf)' },
+      { input: 'Harralander', output: 'Harralander potion (unf)' },
+      { input: 'Ranarr weed', output: 'Ranarr potion (unf)' },
+      { input: 'Toadflax', output: 'Toadflax potion (unf)' },
+      { input: 'Irit leaf', output: 'Irit potion (unf)' },
+      { input: 'Avantoe', output: 'Avantoe potion (unf)' },
+      { input: 'Kwuarm', output: 'Kwuarm potion (unf)' },
+      { input: 'Cadantine', output: 'Cadantine potion (unf)' },
+      { input: 'Lantadyme', output: 'Lantadyme potion (unf)' },
+      { input: 'Dwarf weed', output: 'Dwarf weed potion (unf)' },
+      { input: 'Snapdragon', output: 'Snapdragon potion (unf)' },
+      { input: 'Torstol', output: 'Torstol potion (unf)' },
+    ],
+  },
+];
+
+function MachineCalculators({items, onSelect}) {
+  const [active, setActive] = useState(INVENTION_MACHINES[0].id);
+  const byName = useMemo(() => {
+    const m = {};
+    (items||[]).forEach(it => { if (it.name) m[it.name.toLowerCase()] = it; });
+    return m;
+  }, [items]);
+  const machine = INVENTION_MACHINES.find(m => m.id === active);
+  const chargeCost = machine.chargePerItem * GP_PER_MACHINE_CHARGE;
+  const extraCost = machine.extraInput ? (byName[machine.extraInput.toLowerCase()]?.high || byName[machine.extraInput.toLowerCase()]?.low || 0) : 0;
+
+  const rows = machine.conversions.map(c => {
+    const inItem = byName[c.input.toLowerCase()];
+    const outItem = byName[c.output.toLowerCase()];
+    const inPrice = inItem ? (inItem.high || inItem.low || 0) : null;
+    const outPrice = outItem ? (outItem.high || outItem.low || 0) : null;
+    const profit = (inPrice != null && outPrice != null) ? outPrice - inPrice - extraCost - chargeCost : null;
+    return {...c, inItem, outItem, inPrice, outPrice, profit};
+  }).sort((a,b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity));
+
+  return h('div', {style:{padding:'12px 14px'}},
+    h('div', {style:{display:'flex', gap:6, marginBottom:10, flexWrap:'wrap'}},
+      INVENTION_MACHINES.map(m => h('button', {
+        key:m.id, onClick:()=>setActive(m.id),
+        className: active===m.id ? 'ge-btn gold' : 'ge-btn',
+      }, m.label))
+    ),
+    h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:4, lineHeight:1.5}}, machine.note),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10}},
+      `Machine charge cost: ${machine.chargePerItem} charge/item (${fmt.gp(Math.round(chargeCost))}gp/item, divine charges at ${GP_PER_MACHINE_CHARGE}gp/charge)`,
+      machine.extraInput && ` · plus 1 ${machine.extraInput} (${fmt.gp(extraCost)}gp) per item`
+    ),
+    h('table', {className:'ge-table'},
+      h('thead', null, h('tr', null,
+        h('th', null, 'Input'), h('th', null, 'Output'),
+        h('th', null, 'Input price'), h('th', null, 'Output price'),
+        h('th', null, 'Profit/item')
+      )),
+      h('tbody', null, rows.map(r => h('tr', {
+          key:r.input, style:{cursor: r.inItem ? 'pointer' : 'default'},
+          onClick: () => r.inItem && onSelect && onSelect(r.inItem),
+        },
+        h('td', null, r.input),
+        h('td', null, r.output),
+        h('td', null, r.inPrice != null ? fmt.gp(r.inPrice)+'gp' : '—'),
+        h('td', null, r.outPrice != null ? fmt.gp(r.outPrice)+'gp' : '—'),
+        h('td', {style:{color: r.profit == null ? T.textDim : r.profit > 0 ? T.green : T.red, fontWeight:'bold'}},
+          r.profit != null ? (r.profit>0?'+':'')+fmt.gp(Math.round(r.profit))+'gp' : '—')
+      )))
+    )
   );
 }
 
@@ -3496,10 +3967,18 @@ const APP_NEWS = [
     version: 'Coming Soon',
     items: [
       'GEnius Almanac — track items that historically spike around seasonal events like DXP weekends; early buy signals ahead of the rush',
-      'Portfolio Analytics — profit by category, value over time, win rate, hold time distribution, and best possible sale price within your hold window',
-      'Advanced Alerts — signal-based triggers (e.g. alert when SURGE fires on a watchlist item), not just price thresholds',
-      'Price Since Post — track how item prices move after RS3 news articles; see what the market actually reacted to',
-      'Reopen Position — undo a sale on a closed position and put it back into open positions',
+      'GEnius Mobile — a real Android app, same no-accounts/no-servers approach as desktop, fetching live prices and tracking everything locally on your device',
+    ]
+  },
+  {
+    version: 'v1.8.3',
+    items: [
+      'Portfolio Analytics — investor tiers from 10M to 100B, milestone badges (biggest win/loss, win streaks, trade count), allocation breakdowns by item and category, and a concentration warning if you\'re overexposed to one item or category (rares are exempt — that\'s just what owning a rare looks like).',
+      'Advanced Alerts — alerts can now trigger on a signal (SURGE, DUMP, ACCUMULATION, DISTRIBUTION, FRENZY, HIGH_VOL) or on an item becoming alch-profitable, not just a price or % threshold.',
+      'Price Since Post — RS3 news articles now track how mentioned items\' prices moved since the article was posted, so you can see what the market actually did in response.',
+      'Invention tab now has a Machines pill with profit calculators for the Plank Maker, Hide Tanner, and Partial Potion Producer — live input/output prices, real machine charge costs, profit per item.',
+      'Fixed several real freezes and lag sources: a 30-second main-thread block on every Dashboard visit, history loading blocking window creation on launch, history population getting stuck at 99%, and slow alt-tab/focus during price fetches.',
+      'Fixed a crash in Portfolio when a position was missing its item name.',
     ]
   },
   {
@@ -4222,6 +4701,17 @@ function DXPIntelTab({items, onSelect}) {
   const toggleRecSort = key => setRecSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
   const recSortArrow = key => recSort.key===key ? (recSort.dir>0?' ↑':' ↓') : '';
 
+  // Resizable columns, same drag-handle mechanism as the main Market table
+  // and the Alch signal table — the Almanac just never got it wired up.
+  // Two separate tables (main tier table vs. Recommendations) get their own
+  // independent widths since their columns don't correspond 1:1; Honorable
+  // Mentions reuses the Recommendations widths rather than getting its own
+  // handles, since it's the same columns directly below the same table.
+  const mainCols = useResizableColumns('genius_almanac_main_col_widths',
+    {star:30, name:260, direction:110, confidence:110, medianPct:100, strategy:220, profitPerItem:160, profitForLimit:190, volRatio:80, expand:30});
+  const recCols = useResizableColumns('genius_almanac_rec_col_widths',
+    {star:30, name:220, strategy:220, netRoi:100, profitPerItem:160, profitForLimit:190});
+
   useEffect(() => {
     // Already have data cached from an earlier visit this session — skip
     // the fetch entirely. Re-fetching every visit cost real work even with
@@ -4244,7 +4734,7 @@ function DXPIntelTab({items, onSelect}) {
 
   const refreshAlmanac = () => {
     setRefreshing(true);
-    window.genius?.getDxpIntelligence?.().then(d => {
+    window.genius?.getDxpIntelligence?.({ forceFresh: true }).then(d => {
       _dxpDataCache = d || {};
       _dxpDataCacheTime = Date.now();
       setData(_dxpDataCache);
@@ -4490,7 +4980,17 @@ function DXPIntelTab({items, onSelect}) {
       'The market has seasons too. This is their almanac.'
     ),
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
-      `Hidden developer build. Backed by ${itemCount || '700+'} items across ${eventCount ?? '10+'} historical DXP events. Estimates only — GE prices lag real trading activity during DXP.`
+      // itemCount is a real measured count (every item with enough local
+      // price history to get a timing computation, not a hardcoded guess —
+      // confirmed for real 2026-06-29 it legitimately runs to several
+      // thousand once history is well-populated, which read as an inflated
+      // claim until checked against the actual computed file). The old
+      // '700+'/'10+' fallbacks only showed because this line rendered before
+      // data had loaded, not because that was ever a real measurement —
+      // 'Loading…' says that honestly instead of guessing a number.
+      itemCount
+        ? `Hidden developer build. Scanned ${itemCount.toLocaleString()} items with available price history, across ${eventCount ?? '11'} historical DXP events. Estimates only — GE prices lag real trading activity during DXP.`
+        : 'Hidden developer build. Loading…'
     ),
     h('div', {style:{display:'flex', alignItems:'center', gap:10, fontSize:11, color:T.textDim, marginBottom:14, padding:'6px 10px', border:`1px solid ${T.borderDim}`, borderRadius:6}},
       h('span', null,
@@ -4667,9 +5167,18 @@ function DXPIntelTab({items, onSelect}) {
       ),
       recs.picks.length === 0 && h('div', {className:'empty-state'}, h('div', null, 'No items currently qualify for this risk tolerance — try Risky, or check back after the next fetch.')),
       recs.picks.length > 0 && h('div', null,
-        h('table', {className:'ge-table'},
+        h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:recCols.tableWrapRef},
+        h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+          h('colgroup', null,
+            h('col', {style:{width:recCols.colWidths.star}}),
+            h('col', {style:{width:recCols.colWidths.name}}),
+            h('col', {style:{width:recCols.colWidths.strategy}}),
+            h('col', {style:{width:recCols.colWidths.netRoi}}),
+            h('col', {style:{width:recCols.colWidths.profitPerItem}}),
+            h('col', {style:{width:recCols.colWidths.profitForLimit}}),
+          ),
           h('thead', null, h('tr', null,
-            h('th', {style:{width:20}}, null),
+            h('th', null, null),
             h('th', {onClick:()=>toggleRecSort('name'), style:{cursor:'pointer'}}, 'Item'+recSortArrow('name')),
             h('th', null, 'Trading Strategy'),
             h('th', {onClick:()=>toggleRecSort('netRoi'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax'}, 'Net ROI'+recSortArrow('netRoi')),
@@ -4704,12 +5213,22 @@ function DXPIntelTab({items, onSelect}) {
             ),
           ]))
         ),
+        recCols.colOrder.slice(0,-1).map(k => recCols.overlayHandle(k)),
+        ),
         recs.honorableMentions.length > 0 && h('div', {style:{marginTop:18}},
           h('div', {className:'form-lbl', style:{marginBottom:6}}, 'Honorable mentions'),
           h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8}},
             `Next best plays just outside your ${recSlots} slot${recSlots===1?'':'s'} — worth swapping in if one frees up.`
           ),
-          h('table', {className:'ge-table'},
+          h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+            h('colgroup', null,
+              h('col', {style:{width:recCols.colWidths.star}}),
+              h('col', {style:{width:recCols.colWidths.name}}),
+              h('col', {style:{width:recCols.colWidths.strategy}}),
+              h('col', {style:{width:recCols.colWidths.netRoi}}),
+              h('col', {style:{width:recCols.colWidths.profitPerItem}}),
+              h('col', {style:{width:recCols.colWidths.profitForLimit}}),
+            ),
             h('thead', null, h('tr', null,
               h('th', {style:{width:20}}, null),
               h('th', null, 'Item'),
@@ -4782,9 +5301,22 @@ function DXPIntelTab({items, onSelect}) {
       ),
       rows.length === 0
         ? h('div', {className:'empty-state'}, h('div', null, 'No items show a clear signal for this phase.'))
-        : h('table', {className:'ge-table'},
+        : h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:mainCols.tableWrapRef},
+          h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+            h('colgroup', null,
+              h('col', {style:{width:mainCols.colWidths.star}}),
+              h('col', {style:{width:mainCols.colWidths.name}}),
+              h('col', {style:{width:mainCols.colWidths.direction}}),
+              h('col', {style:{width:mainCols.colWidths.confidence}}),
+              h('col', {style:{width:mainCols.colWidths.medianPct}}),
+              h('col', {style:{width:mainCols.colWidths.strategy}}),
+              h('col', {style:{width:mainCols.colWidths.profitPerItem}}),
+              h('col', {style:{width:mainCols.colWidths.profitForLimit}}),
+              h('col', {style:{width:mainCols.colWidths.volRatio}}),
+              h('col', {style:{width:mainCols.colWidths.expand}}),
+            ),
             h('thead', null, h('tr', null,
-              h('th', {style:{width:20}}, null),
+              h('th', null, null),
               h('th', {onClick:()=>toggleSort('name'), style:{cursor:'pointer'}}, 'Item'+sortArrow('name')),
               h('th', {onClick:()=>toggleSort('direction'), style:{cursor:'pointer'}}, 'Direction'+sortArrow('direction')),
               h('th', {onClick:()=>toggleSort('confidence'), style:{cursor:'pointer'}}, 'Confidence'+sortArrow('confidence')),
@@ -4793,7 +5325,7 @@ function DXPIntelTab({items, onSelect}) {
               h('th', {onClick:()=>toggleSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'+sortArrow('profitPerItem')),
               h('th', {onClick:()=>toggleSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'+sortArrow('profitForLimit')),
               h('th', {onClick:()=>toggleSort('volRatio'), style:{cursor:'pointer'}}, 'Vol'+sortArrow('volRatio')),
-              h('th', {style:{width:24}}, null),
+              h('th', null, null),
             )),
             h('tbody', null, rows.map(r => {
               const t = r.trade;
@@ -4861,6 +5393,8 @@ function DXPIntelTab({items, onSelect}) {
                 )
               ),
             ];}))
+          ),
+          mainCols.colOrder.slice(0,-1).map(k => mainCols.overlayHandle(k)),
           )
     ),
   );
@@ -5196,7 +5730,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
           const res = await window.genius?.exportData();
           if (res?.canceled) return;
           if (res?.error) toast('Export failed: '+res.error,'error');
-          else toast('Data exported successfully','success');
+          else toast(res?.savedTo ? `Saved to ${res.savedTo}` : 'Data exported successfully','success');
         }},'⬆ Export Backup'),
         h('button',{className:'ge-btn',onClick:async()=>{
           const res = await window.genius?.importData();
@@ -5392,8 +5926,8 @@ function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, thre
 }
 
 /* ─── Alch tab ────────────────────────────────────────────────── */
-const ALCH_DEFAULT_COL_WIDTHS = {name:280, high:110, afterTax:110, alch:110, alchProfit:140, alchemiserProfit:170, star:30};
-const ALCH_COL_ORDER = ['name', 'high', 'afterTax', 'alch', 'alchProfit', 'alchemiserProfit', 'star'];
+const ALCH_DEFAULT_COL_WIDTHS = {name:280, high:110, limit:90, afterTax:110, alch:110, alchProfit:140, alchemiserProfit:170, star:30};
+const ALCH_COL_ORDER = ['name', 'high', 'limit', 'afterTax', 'alch', 'alchProfit', 'alchemiserProfit', 'star'];
 function loadAlchColWidths() {
   try { return {...ALCH_DEFAULT_COL_WIDTHS, ...JSON.parse(localStorage.getItem('genius_alch_col_widths')||'{}')}; }
   catch { return {...ALCH_DEFAULT_COL_WIDTHS}; }
@@ -5526,6 +6060,7 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
       h('colgroup', null,
         h('col', {style:{width:colWidths.name}}),
         h('col', {style:{width:colWidths.high}}),
+        h('col', {style:{width:colWidths.limit}}),
         h('col', {style:{width:colWidths.afterTax}}),
         h('col', {style:{width:colWidths.alch}}),
         h('col', {style:{width:colWidths.alchProfit}}),
@@ -5536,6 +6071,7 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
         h('tr', null,
           h(Th, {k:'name',             label:'Item'}),
           h(Th, {k:'high',             label:'GE Price'}),
+          h(Th, {k:'limit',            label:'Buy Limit'}),
           h(Th, {k:'afterTax',         label:'After Tax'}),
           h(Th, {k:'alch',             label:'Alch Value'}),
           h(Th, {k:'alchProfit',       label:'Manual Profit'}),
@@ -5559,6 +6095,7 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
         },
           h('td', null, it.name),
           h('td', null, fmt.gp(it.high||it.low)+'gp'),
+          h('td', {style:{color:T.textDim}}, it.limit ? fmt.gp(it.limit) : '—'),
           h('td', {style:{color:T.textDim}}, fmt.gp(it.afterTax)+'gp'),
           h('td', {style:{color:'#ce93d8'}}, fmt.gp(it.alch)+'gp'),
           h('td', {style:{color: it.alchProfit > 0 ? T.green : T.red}},
@@ -5857,7 +6394,7 @@ function SellModal({position, onSell, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onSelect, toast, devMode}) {
+function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onReopenPosition, onSelect, toast, devMode}) {
   // Diversification suggestions — dev-mode only, since these pull real
   // picks from the Almanac's trade-idea engine, which itself stays hidden
   // until Ben says it's ready to go public. Fetches its own copy of the
@@ -6319,6 +6856,17 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
         ),
         h('div', {
           onClick: async () => {
+            const res = await onReopenPosition(ctxMenu.pos.id);
+            setCtxMenu(null);
+            if (res?.success) toast('Position reopened', 'success');
+            else toast('Could not reopen position', 'error');
+          },
+          style:{padding:'8px 12px', fontSize:12, color:T.text, cursor:'pointer', display:'flex', alignItems:'center', gap:6},
+          onMouseEnter: e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)',
+          onMouseLeave: e => e.currentTarget.style.background = 'transparent',
+        }, '↩ Reopen position'),
+        h('div', {
+          onClick: async () => {
             await onDeletePosition(ctxMenu.pos.id);
             setCtxMenu(null);
             toast('Position removed', 'success');
@@ -6734,7 +7282,7 @@ function ScoreTable({rows, selected, onSelect}) {
   );
 }
 
-function OpportunitiesTab({items, selected, onSelect, description}) {
+function OpportunitiesTab({items, selected, onSelect, description, watchlist, onToggleWatch, onToggleHide, onAddCompare}) {
   const [signalFilter, setSignalFilter] = useState(null);
 
   const withSignal = useCallback((sig) =>
@@ -6850,7 +7398,7 @@ function OpportunitiesTab({items, selected, onSelect, description}) {
       ),
       h(ItemTable, {
         items: ({SURGE:surge,DUMP:dump,ACCUMULATION:accum,DISTRIBUTION:distrib,FRENZY:frenzy,ALCH:alchItems})[signalFilter] || [],
-        selected, onSelect,
+        selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare,
         showSignals: true
       })
     ),
@@ -7070,6 +7618,11 @@ const NAV = [
 /* ─── App ─────────────────────────────────────────────────────── */
 function App() {
   const [tab, setTab] = useState('dashboard');
+  // Sidebar starts closed — only actually matters on a narrow/mobile
+  // screen (the CSS media query that turns .sidebar into an overlay drawer
+  // only applies under ~700px; on desktop .sidebar ignores this entirely
+  // and stays permanently visible regardless of this state).
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [items, setItems] = useState([]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
@@ -7262,18 +7815,66 @@ function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Backspace closes the item detail panel (when no text field is focused)
+  // Backspace closes the item detail panel (when no text field is focused),
+  // or the sidebar drawer if that's open instead. This is also what the
+  // Android hardware/gesture back button drives on mobile (see
+  // mobile/bridge-src/bridge.js) — it dispatches this exact same
+  // synthetic keydown rather than having its own separate back-stack
+  // logic, so anything that responds to desktop's Backspace key
+  // automatically gets real Android back-button support for free, with
+  // no risk of the two ever drifting out of sync.
   useEffect(() => {
     const onKey = e => {
       if (e.key !== 'Backspace') return;
       const tag = document.activeElement?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if (document.activeElement?.isContentEditable) return;
-      if (selected) { e.preventDefault(); setSelected(null); }
+      if (sidebarOpen) { e.preventDefault(); setSidebarOpen(false); }
+      else if (selected) { e.preventDefault(); setSelected(null); }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selected]);
+  }, [selected, sidebarOpen]);
+
+  // Swipe in from the left edge to open the sidebar drawer — standard
+  // mobile nav-drawer convention, alongside the hamburger button. Only
+  // matters at the same narrow width where .sidebar actually becomes an
+  // overlay drawer at all (see the @media (max-width: 700px) block in
+  // buildCSS) — on desktop's much wider window this just never triggers,
+  // since the start-x check below requires a touch within ~24px of the
+  // left edge AND a narrow viewport.
+  useEffect(() => {
+    let startX = null, startY = null, tracking = false;
+    const EDGE_PX = 24, OPEN_THRESHOLD_PX = 60;
+    const onTouchStart = e => {
+      if (sidebarOpen || window.innerWidth > 700 || e.touches.length !== 1) { tracking = false; return; }
+      const t = e.touches[0];
+      if (t.clientX > EDGE_PX) { tracking = false; return; }
+      startX = t.clientX; startY = t.clientY; tracking = true;
+    };
+    const onTouchMove = e => {
+      if (!tracking) return;
+      const t = e.touches[0];
+      const dx = t.clientX - startX, dy = t.clientY - startY;
+      // Require the swipe to be clearly more horizontal than vertical —
+      // without this, a normal vertical scroll starting near the left
+      // edge (e.g. scrolling a sidebar-adjacent list) would also crack
+      // the drawer open by accident.
+      if (Math.abs(dx) > OPEN_THRESHOLD_PX && Math.abs(dx) > Math.abs(dy) * 1.5) {
+        setSidebarOpen(true);
+        tracking = false;
+      }
+    };
+    const onTouchEnd = () => { tracking = false; };
+    window.addEventListener('touchstart', onTouchStart, { passive: true });
+    window.addEventListener('touchmove', onTouchMove, { passive: true });
+    window.addEventListener('touchend', onTouchEnd, { passive: true });
+    return () => {
+      window.removeEventListener('touchstart', onTouchStart);
+      window.removeEventListener('touchmove', onTouchMove);
+      window.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [sidebarOpen]);
 
   const toggleWatch = useCallback(async id => {
     const nw = watchlist.includes(id) ? watchlist.filter(x=>x!==id) : [...watchlist,id];
@@ -7398,7 +7999,13 @@ function App() {
       )
     ),
 
-    h('nav',{className:'sidebar'},
+    // Backdrop — only rendered while the drawer is open, so it can't
+    // intercept clicks (or just sit there invisibly) the rest of the time.
+    // Only ever visible at all under the mobile media query (.sidebar-backdrop
+    // is display:none by default, see buildCSS).
+    sidebarOpen && h('div',{className:'sidebar-backdrop',onClick:()=>setSidebarOpen(false)}),
+
+    h('nav',{className:'sidebar'+(sidebarOpen?' open':'')},
       h('div',{style:{padding:'12px 12px 8px',borderBottom:`2px solid ${T.border}`,marginBottom:4}},
         h('div',{style:{fontFamily:'Cinzel,serif',fontSize:18,fontWeight:700,color:T.goldBright,letterSpacing:3,textShadow:`0 0 10px rgba(255,215,0,0.3)`}},'GE',h('span',{style:{color:T.copper}},'nius')),
         h('div',{style:{fontSize:9,color:T.textDim,letterSpacing:2,textTransform:'uppercase',marginTop:1}},'Market Intelligence')
@@ -7409,7 +8016,7 @@ function App() {
           : h('button',{
               key:entry.id,
               className:'nav-btn'+(tab===entry.id?' active':''),
-              onClick:()=>{setTab(entry.id);setSelected(null);}
+              onClick:()=>{setTab(entry.id);setSelected(null);setSidebarOpen(false);}
             },
             h('span',{className:'nav-icon'},entry.icon),
             entry.label
@@ -7419,20 +8026,29 @@ function App() {
 
     h('div',{className:'main'},
       h('div',{className:'ge-header'},
+        h('button',{
+          className:'sidebar-toggle', title:'Menu',
+          onClick:()=>setSidebarOpen(v=>!v),
+        }, '☰'),
         h('span',{className:'ge-logo'},'GE',h('span',null,'nius')),
-        h('div',{style:{width:2,height:20,background:T.borderDim,flexShrink:0}}),
+        h('div',{className:'ge-header-divider', style:{width:2,height:20,background:T.borderDim,flexShrink:0}}),
         h(GESearchBar,{items,onSelect:handleSearchSelect,userShorthands}),
         h('div',{className:'ge-status'},h('div',{className:`status-dot ${statusType}`}),statusText),
         h('button',{
-          className:'ge-btn gold',disabled:fetching,onClick:handleFetch,
+          className:'ge-btn gold ge-header-fetch',disabled:fetching,onClick:handleFetch,
           style:{display:'flex',alignItems:'center',gap:6,flexShrink:0}
         },
           fetching&&h('span',{className:'spinner'}),
-          fetching?'Fetching...':'Fetch Now'
+          // Two labels, one hidden by CSS depending on screen width (see
+          // the mobile media query) — narrow header has no room to spell
+          // out "Fetch Now"/"Fetching..." next to the hamburger, logo, and
+          // search bar all competing for the same ~360px of space.
+          h('span',{className:'fetch-text'}, fetching?'Fetching...':'Fetch Now'),
+          h('span',{className:'fetch-icon'}, fetching?'':'⟳'),
         ),
-        h('div',{style:{width:1,height:20,background:T.borderDim,flexShrink:0,margin:'0 2px'}}),
+        h('div',{className:'ge-header-divider', style:{width:1,height:20,background:T.borderDim,flexShrink:0,margin:'0 2px'}}),
         h('button',{
-          className:'ge-btn danger', title:'Quit GEnius',
+          className:'ge-btn danger ge-header-quit', title:'Quit GEnius',
           style:{padding:'4px 8px', flexShrink:0},
           onClick:()=>{ if (window.confirm('Quit GEnius? Background price fetching will stop.')) window.genius?.quitApp(); }
         }, '⏻')
@@ -7442,7 +8058,7 @@ function App() {
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
-          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components'}),
+          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
           ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','artisan','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
             h(ItemTable,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
@@ -7465,11 +8081,12 @@ function App() {
             },
             onDeletePosition: async id => { await window.genius?.deletePosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
             onSellPosition: async opts => { const r = await window.genius?.sellPosition(opts); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
+            onReopenPosition: async id => { const r = await window.genius?.reopenPosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
             onSelect: handleSelect,
             devMode: settings.devMode,
           }),
           tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
-          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.opportunities}),
+          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities}),
           tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,
@@ -7485,11 +8102,12 @@ function App() {
         ),
         showDetail&&h('div',{style:{position:'relative', display:'flex'}},
           h('div',{
+            className:'panel-resize-handle',
             onMouseDown:startPanelResize,
             style:{width:5, cursor:'col-resize', flexShrink:0, background:'transparent'},
             title:'Drag to resize',
           }),
-          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds}),
+          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode}),
         ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})
       )

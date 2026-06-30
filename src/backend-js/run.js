@@ -14,10 +14,10 @@
  * before trusting this over it.
  */
 
-const fs = require('fs');
 const path = require('path');
 const { pyRound } = require('./_pyround.js');
 const { assignCategories } = require('./catalogue.js');
+const storage = require('./storage.js');
 
 const SCRIPT_DIR = __dirname;
 
@@ -31,9 +31,14 @@ function parseArgs(argv) {
   return args;
 }
 
-function getDataDir(override = null) {
-  const d = override ? path.resolve(override) : path.join(SCRIPT_DIR, '..', '..', 'data');
-  fs.mkdirSync(d, { recursive: true });
+async function getDataDir(override = null) {
+  // path.resolve() needs process.cwd() under the hood (real even via
+  // path-browserify's polyfill, which still calls real process.cwd() —
+  // doesn't exist in a webview at all) — every real caller already passes
+  // an absolute (desktop) or already-correct logical (mobile) path here,
+  // so there's nothing to resolve relative to anyway.
+  const d = override || path.join(SCRIPT_DIR, '..', '..', 'data');
+  await storage.ensureDir(d);
   return d;
 }
 
@@ -68,15 +73,8 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   if (!history) {
     // No override (e.g. standalone CLI use) — fall back to reading the
     // per-item storage directory directly.
-    history = {};
     const historyDir = path.join(dataDir, 'history');
-    if (fs.existsSync(historyDir)) {
-      for (const f of fs.readdirSync(historyDir)) {
-        if (!f.endsWith('.json')) continue;
-        try { history[f.slice(0, -5)] = JSON.parse(fs.readFileSync(path.join(historyDir, f), 'utf8')); }
-        catch {}
-      }
-    }
+    history = await storage.loadDirBatched(historyDir);
   }
   if (history && Object.keys(history).length) {
     try {
@@ -89,9 +87,17 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       // 500 items so this can't freeze the window either.
       const historyIds = Object.keys(history);
       let _processedSinceYield = 0;
+      // Confirmed for real on a Pixel 8 Pro (2026-06-29, same investigation
+      // as the DXP Almanac slowdown): a 250-item batch between yields can be
+      // 5+ seconds of fully synchronous work on real hardware, not the
+      // brief blip it looked like on a desktop dev machine — and that's
+      // long enough to read as the whole app freezing during startup,
+      // since this runs on the same single thread that drives the UI.
+      // Smaller batch, same total work, much less perceptible per-chunk.
+      const YIELD_BATCH = 25;
       for (const itemId of historyIds) {
         const points = history[itemId];
-        if (++_processedSinceYield >= 250) {
+        if (++_processedSinceYield >= YIELD_BATCH) {
           _processedSinceYield = 0;
           await new Promise(res => setTimeout(res, 0));
         }
@@ -169,6 +175,12 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   const itemsOut = [];
   let itemCounter = 1;
   let _processedSinceYield = 0;
+  // Confirmed for real on a Pixel 8 Pro (2026-06-29): 250 items between
+  // yields can mean 5+ seconds of fully synchronous work on real hardware —
+  // see the matching comment in dxp_intelligence.js's computeDxpData, found
+  // via the same investigation. A much smaller batch keeps any single
+  // unyielded chunk well under what reads as "the app just froze."
+  const YIELD_BATCH = 25;
 
   for (const [key, itemData] of Object.entries(raw)) {
     // This whole pipeline now runs in-process inside Electron's main
@@ -181,7 +193,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
     // this one once-per-launch call. Confirmed for real: a tester
     // reported the window taking 2-3s to respond to alt-tab/focus
     // specifically during the startup auto-fetch, every time since 1.8.
-    if (++_processedSinceYield >= 250) {
+    if (++_processedSinceYield >= YIELD_BATCH) {
       _processedSinceYield = 0;
       await new Promise(res => setTimeout(res, 0));
     }
@@ -393,13 +405,8 @@ function runSignals(items) {
 // ── Alert checker ─────────────────────────────────────────────────────────────
 async function checkAlerts(items, dataDir, webhookUrl) {
   const alertsFile = path.join(dataDir, 'alerts.json');
-  if (!fs.existsSync(alertsFile)) return;
-  let alerts;
-  try {
-    alerts = JSON.parse(fs.readFileSync(alertsFile, 'utf8'));
-  } catch {
-    return;
-  }
+  const alerts = await storage.readJSON(alertsFile, null);
+  if (!alerts) return;
 
   const priceMap = {};
   for (const it of items) priceMap[it.name.toLowerCase()] = it;
@@ -496,15 +503,10 @@ async function fetchNewsData(items = null) {
   }
 }
 
-function updateNewsSnapshots(news, items, dataDir) {
+async function updateNewsSnapshots(news, items, dataDir) {
   // Snapshot prices for article items on first fetch; annotate price_since on subsequent fetches.
   const snapFile = path.join(dataDir, 'news_snapshots.json');
-  let snapshots = {};
-  try {
-    if (fs.existsSync(snapFile)) snapshots = JSON.parse(fs.readFileSync(snapFile, 'utf8'));
-  } catch {
-    snapshots = {};
-  }
+  const snapshots = await storage.readJSON(snapFile, {});
 
   const priceMap = {};
   for (const it of items) {
@@ -554,7 +556,7 @@ function updateNewsSnapshots(news, items, dataDir) {
   }
 
   try {
-    fs.writeFileSync(snapFile, JSON.stringify(snapshots, null, 2), 'utf8');
+    await storage.writeJSON(snapFile, snapshots, { pretty: true });
   } catch (e) {
     console.log(`[news] Snapshot save error: ${e.message}`);
   }
@@ -568,17 +570,20 @@ function _pyTitle(s) {
 }
 
 // ── Main ──────────────────────────────────────────────────────────────────────
-async function main(argv = process.argv.slice(2), historyDataOverride = null) {
+// `process` doesn't exist in a browser/webview at all — the CLI-only
+// default (process.argv.slice(2)) is meaningless there anyway, since the
+// mobile bridge always passes argv explicitly. require.main === module
+// below also only matters for the desktop CLI invocation; esbuild's
+// require() shim resolves require.main to undefined for a bundled module,
+// so that block already safely never runs on mobile.
+async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(2) : []), historyDataOverride = null) {
   const args = parseArgs(argv);
-  const dataDir = getDataDir(args.dataDir);
+  const dataDir = await getDataDir(args.dataDir);
   const outFile = path.join(dataDir, 'latest.json');
 
   console.log(`[run] Mode: ${args.mode} | Data dir: ${dataDir}`);
 
-  let existing = {};
-  if (fs.existsSync(outFile)) {
-    try { existing = JSON.parse(fs.readFileSync(outFile, 'utf8')); } catch {}
-  }
+  const existing = await storage.readJSON(outFile, {});
 
   let items = existing.items || [];
   let news = existing.news || [];
@@ -598,7 +603,7 @@ async function main(argv = process.argv.slice(2), historyDataOverride = null) {
 
   if (args.mode === 'full' || args.mode === 'news') {
     news = await fetchNewsData(items.length ? items : null);
-    if (items.length) updateNewsSnapshots(news, items, dataDir);
+    if (items.length) await updateNewsSnapshots(news, items, dataDir);
   }
 
   // Append untradeable items (Invention components + combo potions).
@@ -639,7 +644,7 @@ async function main(argv = process.argv.slice(2), historyDataOverride = null) {
     updated_at: new Date().toISOString(),
   };
 
-  fs.writeFileSync(outFile, JSON.stringify(output, null, 2), 'utf8');
+  await storage.writeJSON(outFile, output, { pretty: true });
   console.log(`[run] Saved ${items.length} items + ${news.length} news -> ${outFile}`);
 }
 
