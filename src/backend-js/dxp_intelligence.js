@@ -39,17 +39,102 @@ const EVENTS = [
 // build time) — same approach as catalogue.js's bulk overrides file.
 const BUNDLED_EVENTS = require('./data/dxp_events.json').map(e => [...e]);
 
+// ─── RS Wiki auto-fetch ───────────────────────────────────────────────────────
+
+const WIKI_DXP_URL = 'https://runescape.wiki/api.php?action=parse&page=Double+XP&prop=wikitext&format=json&origin=*';
+const WIKI_REFRESH_MS = 7 * 24 * 3600000; // refresh at most once per week
+const WIKI_CACHE_FILE = 'dxp_events_wiki.json';
+
+const WIKI_MONTHS = {
+  january:1, february:2, march:3, april:4, may:5, june:6,
+  july:7, august:8, september:9, october:10, november:11, december:12
+};
+
+function _parseWikiDate(cell) {
+  // Parses "| [[D Month]] [[YYYY]]" or "| [[D Month]] [[YYYY]] (HH:MM)"
+  const m = cell.match(/\[\[(\d{1,2})\s+([A-Za-z]+)\]\]\s*\[\[(\d{4})\]\]/);
+  if (!m) return null;
+  const month = WIKI_MONTHS[m[2].toLowerCase()];
+  if (!month) return null;
+  const y = m[3], mo = String(month).padStart(2, '0'), d = String(m[1]).padStart(2, '0');
+  return `${y}-${mo}-${d}`;
+}
+
+function _parseWikiDxpTable(wikitext) {
+  const lines = wikitext.split('\n');
+  const events = [];
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim() !== '|-') continue;
+    i++;
+    if (i >= lines.length || !lines[i].startsWith('| ')) continue; // year header or end
+    // Collect first 3 cells (announced, start, end) — notes cell ignored
+    const cells = [];
+    for (let j = i; j < lines.length && lines[j].startsWith('| ') && cells.length < 3; j++) {
+      cells.push(lines[j]);
+    }
+    if (cells.length < 3) continue;
+    const announced = _parseWikiDate(cells[0]);
+    const start     = _parseWikiDate(cells[1]);
+    const end       = _parseWikiDate(cells[2]);
+    if (announced && start && end) events.push([announced, start, end]);
+  }
+  return events;
+}
+
+// Per-session in-memory cache so repeated loadEvents() calls don't re-fetch.
+let _wikiEventsCache = null;
+
+async function _fetchWikiDxpEvents(dataDir) {
+  if (_wikiEventsCache !== null) return _wikiEventsCache;
+  if (!dataDir) return (_wikiEventsCache = []);
+
+  const cachePath = path.join(dataDir, WIKI_CACHE_FILE);
+  const disk = await storage.readJSON(cachePath, null);
+
+  // Return disk cache if still fresh — but still kick off a background
+  // refresh so the NEXT session gets updated data.
+  if (disk?.fetchedAt && Date.now() - disk.fetchedAt < WIKI_REFRESH_MS) {
+    _wikiEventsCache = disk.events || [];
+    return _wikiEventsCache;
+  }
+
+  try {
+    const res = await fetch(WIKI_DXP_URL, {
+      headers: { 'User-Agent': 'GEnius-app/1.8 (RS3 GE tracker; contact: letterslive@gmail.com)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const wikitext = json?.parse?.wikitext?.['*'] || '';
+    const events = _parseWikiDxpTable(wikitext);
+    if (events.length >= 10) { // sanity check — the real table has 35+ rows
+      await storage.writeJSON(cachePath, { fetchedAt: Date.now(), events }, { pretty: true });
+      _wikiEventsCache = events;
+    } else {
+      _wikiEventsCache = disk?.events || [];
+    }
+  } catch {
+    _wikiEventsCache = disk?.events || [];
+  }
+  return _wikiEventsCache;
+}
+
+// ─── Event loader ─────────────────────────────────────────────────────────────
+
 async function loadEvents(dataDir = null) {
-  // Merges the bundled event list above with the user's local copy
-  // (dataDir/dxp_events.json — this one DOES change at runtime, e.g. when
-  // a new event gets manually confirmed), unions them (dedup by the exact
-  // announced/start/end triple), and persists the merged result back to
-  // the local copy.
+  // Merges three sources: bundled dev-curated list, user's local overrides,
+  // and live RS Wiki data (fetched at most once per week, cached on disk).
+  // All three are deduped by the exact [announced, start, end] triple so
+  // there's no double-counting when the wiki confirms an event we already
+  // have bundled.
   const localPath = dataDir ? path.join(dataDir, 'dxp_events.json') : null;
-  const local = localPath ? await storage.readJSON(localPath, []) : [];
+  const [local, wiki] = await Promise.all([
+    localPath ? storage.readJSON(localPath, []) : Promise.resolve([]),
+    _fetchWikiDxpEvents(dataDir),
+  ]);
 
   const seen = new Map();
-  for (const e of [...BUNDLED_EVENTS, ...local]) seen.set(JSON.stringify(e), e);
+  for (const e of [...BUNDLED_EVENTS, ...local, ...wiki]) seen.set(JSON.stringify(e), e);
   let merged = [...seen.values()].sort((a, b) => (a[1] < b[1] ? 1 : a[1] > b[1] ? -1 : 0));
   if (!merged.length) merged = EVENTS.map(e => [...e]);
 
