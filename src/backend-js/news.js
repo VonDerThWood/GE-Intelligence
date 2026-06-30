@@ -228,7 +228,7 @@ async function fetchRs3News(limit = 20, allItems = null) {
       } catch {
         date = date.slice(0, 10);
       }
-      const [updateType, cats] = detectUpdateType(title, desc);
+      const [updateType, cats] = detectUpdateType(title);
       results.push({
         source: 'RS3 News',
         title,
