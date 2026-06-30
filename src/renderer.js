@@ -5468,6 +5468,233 @@ function DXPIntelTab({items, onSelect}) {
   );
 }
 
+/* ─── GEnius Almanac — Seasonal Events (dev-mode only, alongside DXP) ──────── */
+
+// All data distilled from research/halloween_findings.md, christmas_findings.md,
+// summer_findings.md, easter_findings.md. Each % is a median across the n= years.
+// strategy: what to actually do. phase: when the price move happens.
+const SEASONAL_EVENTS = [
+  {
+    id: 'christmas',
+    name: 'Christmas Village',
+    emoji: '🎄',
+    // Ran Dec 1–5 ish to Jan 5 ish across 2023/2024/2025
+    typicalWindow: 'Early December → Early January',
+    nextExpected: 'December 2026',
+    n: 3,
+    confidence: 'high',
+    unconfirmed2026: false,
+    items: [
+      { name: 'Bucket of milk',        phase: 'During event',  dir: 'drop', pct: -75, recoveryPct: +60, note: 'Cleanest crash+recovery in all seasonal research. 3/3 years.' },
+      { name: 'Egg',                   phase: 'During event',  dir: 'drop', pct: -58, recoveryPct: +23, note: '3/3 years direction agreement.' },
+      { name: 'Orange',                phase: 'During event',  dir: 'drop', pct: -57, recoveryPct: +27, note: '3/3 years direction agreement.' },
+      { name: 'Aurora dye',            phase: 'During event',  dir: 'drop', pct: -44, recoveryPct: +13, note: 'Strongest dye signal in all research. 3/3 years round-trip.' },
+      { name: 'Scrimshaw of sacrifice',phase: 'During event',  dir: 'drop', pct: -20, recoveryPct: +24, note: 'Clean round-trip. 3/3 years.' },
+    ],
+  },
+  {
+    id: 'halloween',
+    name: 'Harvest Hollow',
+    emoji: '🎃',
+    typicalWindow: 'Mid-October → Early November',
+    nextExpected: 'October 2026',
+    n: 2,
+    confidence: 'medium',
+    unconfirmed2026: false,
+    items: [
+      { name: 'Soul dye',              phase: 'During event',  dir: 'drop', pct: -58, recoveryPct: null, note: 'n=1 effective — only ran with Forgotten Belongings in 2025. Treat as illustrative, not confirmed.' },
+      { name: 'Ensouled pumpkin mask', phase: 'During event',  dir: 'drop', pct: -35, recoveryPct: null, note: '2/2 years. No consistent recovery — event items tend to stay down.' },
+      { name: 'Uncut moonstone',       phase: 'During event',  dir: 'drop', pct: -26, recoveryPct: +8,   note: 'Best round-trip candidate. 2/2 years. Small recovery after event.' },
+      { name: 'Regular ghostly ink',   phase: 'During event',  dir: 'drop', pct: -8,  recoveryPct: +13,  note: '2/2 years. Small drop during, slight recovery after.' },
+    ],
+  },
+  {
+    id: 'summer',
+    name: 'Beach Event / Sandy Caskets',
+    emoji: '🏖️',
+    typicalWindow: 'Late June → Late July',
+    nextExpected: 'June–July 2026',
+    n: 3,
+    confidence: 'high',
+    unconfirmed2026: true,
+    items: [
+      { name: 'Willow composite bow',  phase: 'During event',  dir: 'drop', pct: -28, recoveryPct: +24, note: 'Leading indicator for the whole Fortunate-component cluster. Reprices first. 3/3 years.' },
+      { name: 'Saradomin mitre',       phase: 'During event',  dir: 'drop', pct: -14, recoveryPct: null, note: 'Part of heraldic gear cluster. Reprices slower than Willow bow. 3/3 years.' },
+      { name: 'Armadyl mitre',         phase: 'During event',  dir: 'drop', pct: -13, recoveryPct: null, note: 'Same cluster. 3/3 years.' },
+      { name: 'Saradomin stole',       phase: 'During event',  dir: 'drop', pct: -12, recoveryPct: null, note: 'Same cluster. 3/3 years.' },
+      { name: 'Saradomin crozier',     phase: 'During event',  dir: 'drop', pct: -11, recoveryPct: null, note: 'Same cluster. 3/3 years.' },
+    ],
+  },
+  {
+    id: 'easter',
+    name: 'Easter Event',
+    emoji: '🐣',
+    typicalWindow: 'Late March → Mid-April',
+    nextExpected: 'March–April 2027',
+    n: 3,
+    confidence: 'insufficient',
+    unconfirmed2026: false,
+    items: [],
+    noDataNote: 'Three years of data (2024, 2025, 2026), no consistent market signals found. The only weak signal is Fellstalk seed (+8–13% during the event, 3/3 years) but the magnitude is too small and the item too niche to be actionable. No trading opportunities identified.',
+  },
+];
+
+// Rough "days until next expected event" — month/day anchors, good enough
+// for a "coming up soon" indicator. No attempt at exact annual date prediction.
+function _daysUntilNextEvent(event, now = new Date()) {
+  const anchors = {
+    christmas: { month: 12, day: 1 },
+    halloween: { month: 10, day: 14 },
+    summer:    { month: 6,  day: 24 },
+    easter:    { month: 3,  day: 28 },
+  };
+  const a = anchors[event.id];
+  if (!a) return null;
+  let target = new Date(now.getFullYear(), a.month - 1, a.day);
+  if (target <= now) target = new Date(now.getFullYear() + 1, a.month - 1, a.day);
+  return Math.round((target - now) / 86400000);
+}
+
+function SeasonalEventsTab({items: allItems, onSelect}) {
+  const [activeEvent, setActiveEvent] = useState('christmas');
+  const event = SEASONAL_EVENTS.find(e => e.id === activeEvent);
+  const now = new Date();
+
+  const confidenceLabel = {high: 'High', medium: 'Medium', insufficient: 'Insufficient data'};
+  const confidenceColor = {high: T.green, medium: T.gold, insufficient: T.textDim};
+  const dirArrow = dir => dir === 'rise' ? '▲' : '▼';
+  const dirColor = dir => dir === 'rise' ? T.green : T.red;
+
+  return h('div', {style: {padding: '16px 20px', maxWidth: 900}},
+    h('div', {style: {display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4}},
+      h('span', {style: {fontSize: 16}}, '🗓️'),
+      h('div', {className: 'ge-section-head', style: {marginBottom: 0}}, 'GEnius Almanac — Seasonal Events'),
+    ),
+    h('div', {style: {fontSize: 12, color: T.gold, fontStyle: 'italic', marginBottom: 14}},
+      'Holiday and seasonal events that move the market. Data from historical price research.'
+    ),
+
+    // Event type selector
+    h('div', {style: {display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap'}},
+      SEASONAL_EVENTS.map(ev => {
+        const days = _daysUntilNextEvent(ev, now);
+        const isSoon = days != null && days <= 60;
+        const c = ev.confidence === 'high' ? T.green : ev.confidence === 'medium' ? T.gold : T.textDim;
+        return h('button', {
+          key: ev.id,
+          onClick: () => setActiveEvent(ev.id),
+          style: {
+            padding: '6px 14px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+            border: `1px solid ${activeEvent === ev.id ? c : T.borderDim}`,
+            background: activeEvent === ev.id ? `rgba(${ev.confidence === 'high' ? '76,175,80' : ev.confidence === 'medium' ? '201,168,76' : '100,100,100'},0.15)` : 'transparent',
+            color: activeEvent === ev.id ? c : T.textDim,
+          }
+        }, `${ev.emoji} ${ev.name}${isSoon ? ' ⚡' : ''}`);
+      })
+    ),
+
+    event && h('div', null,
+
+      // 2026 unconfirmed warning
+      event.unconfirmed2026 && h('div', {style: {
+        background: 'rgba(229,57,53,0.1)', border: `1px solid rgba(229,57,53,0.4)`,
+        borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 12,
+      }},
+        h('div', {style: {fontWeight: 'bold', color: T.red, marginBottom: 4}}, '⚠ 2026 Status Unconfirmed'),
+        'The Beach Event / Sandy Caskets has not been officially announced for 2026. The last three years (2023–2025) ran late June through late July, but Jagex has not confirmed this year\'s event. Data below reflects historical patterns only — verify the event is actually running before acting on any of this.',
+      ),
+
+      // Event overview card
+      h('div', {style: {border: `1px solid ${T.borderDim}`, borderRadius: 6, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 24, flexWrap: 'wrap'}},
+        h('div', null,
+          h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Typical window'),
+          h('div', {style: {fontSize: 13, color: T.text}}, event.typicalWindow),
+        ),
+        h('div', null,
+          h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Next expected'),
+          h('div', {style: {fontSize: 13, color: event.unconfirmed2026 ? T.red : T.text}},
+            event.nextExpected,
+            event.unconfirmed2026 && h('span', {style: {fontSize: 10, color: T.red, marginLeft: 6}}, '(unconfirmed)')
+          ),
+        ),
+        h('div', null,
+          h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Data confidence'),
+          h('div', {style: {fontSize: 13, color: confidenceColor[event.confidence]}},
+            `${confidenceLabel[event.confidence]} (n=${event.n} years)`
+          ),
+        ),
+        (() => {
+          const days = _daysUntilNextEvent(event, now);
+          return days != null && h('div', null,
+            h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Days until expected'),
+            h('div', {style: {fontSize: 13, color: days <= 30 ? T.red : days <= 60 ? T.gold : T.text}},
+              `~${days} days`
+            ),
+          );
+        })(),
+      ),
+
+      // No data / insufficient
+      event.confidence === 'insufficient' && h('div', {style: {
+        border: `1px solid ${T.borderDim}`, borderRadius: 6, padding: '14px 16px',
+        color: T.textDim, fontSize: 12,
+      }},
+        h('div', {style: {fontWeight: 'bold', color: T.text, marginBottom: 8}}, '📊 Research result: no actionable signals'),
+        event.noDataNote,
+      ),
+
+      // Items table
+      event.confidence !== 'insufficient' && event.items.length > 0 && h('div', null,
+        h('div', {style: {fontSize: 11, color: T.textDim, fontStyle: 'italic', marginBottom: 10}},
+          event.id === 'christmas' && 'These items crash reliably when the Christmas event floods the market with holiday-exclusive supplies. The round-trip play: buy near the bottom during the event, sell after it ends.',
+          event.id === 'halloween' && 'These items crash when Halloween supplies flood the GE. n=2 — treat as early data, not a proven cycle.',
+          event.id === 'summer' && 'Sandy Casket loot (requiring heraldic gear and composite bows as Fortunate-component sources) floods the GE during the event. Willow composite bow reprices first and fastest — if it\'s down 25%+, assume the whole cluster is experiencing the same effect even if their prices haven\'t caught up yet.',
+        ),
+        // Table header
+        h('div', {style: {display: 'grid', gridTemplateColumns: '1fr 120px 90px 90px 1fr', gap: '0 12px', padding: '6px 10px', fontSize: 10, color: T.textDim, borderBottom: `1px solid ${T.borderDim}`, marginBottom: 4}},
+          h('div', null, 'ITEM'),
+          h('div', null, 'PHASE'),
+          h('div', null, 'EFFECT'),
+          h('div', null, 'RECOVERY'),
+          h('div', null, 'NOTES'),
+        ),
+        event.items.map((item, i) => {
+          const itemData = allItems?.find(it => it.name?.toLowerCase() === item.name.toLowerCase());
+          return h('div', {
+            key: item.name,
+            style: {
+              display: 'grid', gridTemplateColumns: '1fr 120px 90px 90px 1fr',
+              gap: '0 12px', padding: '8px 10px', fontSize: 12,
+              background: i % 2 === 0 ? T.panel2 : 'transparent',
+              borderRadius: 4, alignItems: 'start',
+            }
+          },
+            h('div', {
+              style: {color: itemData ? T.goldBright : T.text, cursor: itemData ? 'pointer' : 'default', textDecoration: itemData ? 'underline' : 'none'},
+              onClick: itemData && onSelect ? () => onSelect(itemData) : undefined,
+            }, item.name),
+            h('div', {style: {color: T.textDim}}, item.phase),
+            h('div', {style: {color: dirColor(item.dir), fontWeight: 'bold'}},
+              `${dirArrow(item.dir)} ${Math.abs(item.pct)}%`
+            ),
+            h('div', null,
+              item.recoveryPct != null
+                ? h('span', {style: {color: T.green}}, `+${item.recoveryPct}%`)
+                : h('span', {style: {color: T.textDim}}, '—')
+            ),
+            h('div', {style: {fontSize: 11, color: T.textDim}}, item.note),
+          );
+        })
+      ),
+
+      // n=2 caveat for Halloween
+      event.id === 'halloween' && h('div', {style: {marginTop: 14, fontSize: 11, color: T.textDim, fontStyle: 'italic', borderTop: `1px solid ${T.borderDim}`, paddingTop: 10}},
+        'Halloween data covers 2024 and 2025 only. Two years is enough to see a pattern, not enough to call it reliable. The 2025 event introduced Death\'s Forgotten Belongings (a major new item sink) which is unlikely to repeat in the same form — treat 2025-heavy signals (Soul dye especially) as illustrative until more data accumulates.'
+      ),
+    ),
+  );
+}
+
 function AboutTab() {
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
@@ -5614,6 +5841,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     const idx = base.findIndex(n => n.id === 'dashboard') + 1;
     const withDev = [...base];
     withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
+    withDev.splice(idx + 1, 0, {id:'seasonal_intel', label:'Seasonal Events', icon:'🗓️'});
     return withDev;
   }, [s.devMode]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -7648,6 +7876,8 @@ const TAB_DESCRIPTIONS = {
   alerts:         'Because checking prices every five minutes is exhausting.',
   news:           'The new updates: Congratulations, or condolences. Whichever applies.',
   about:          'What this thing is, and what that symbol next to its name means.',
+  dxp_intel:      'GEnius Almanac — historical DXP price signals with confidence scores and trade timing.',
+  seasonal_intel: 'Seasonal Events — Christmas, Halloween, Summer, and Easter market patterns from historical research.',
 };
 
 /* ─── Nav config ─────────────────────────────────────────────── */
@@ -7763,6 +7993,7 @@ function App() {
     const idx = NAV.findIndex(n => n.id === 'dashboard') + 1;
     const withDev = [...NAV];
     withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
+    withDev.splice(idx + 1, 0, {id:'seasonal_intel', label:'Seasonal Events', icon:'🗓️'});
     return withDev;
   }, [settings.devMode]);
   const navItems = useMemo(() => {
@@ -8177,7 +8408,8 @@ function App() {
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}}),
           tab==='about'&&h(AboutTab),
-          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})
+          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect}),
+          tab==='seasonal_intel'&&h(SeasonalEventsTab,{items,onSelect:handleSelect})
         ),
         showDetail&&h('div',{style:{position:'relative', display:'flex'}},
           h('div',{
