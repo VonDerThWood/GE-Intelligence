@@ -4749,6 +4749,7 @@ let _dxpDataCache = null;
 let _dxpDataCacheTime = null; // when _dxpDataCache was last (re)fetched — shown in the UI so it's obvious the tab is showing session-cached data, not necessarily this exact moment's numbers
 
 function DXPIntelTab({items, onSelect}) {
+  const [activeView, setActiveView] = useState('dxp'); // 'dxp' | 'seasonal'
   const [data, setData] = useState(() => _dxpDataCache);
   const [loading, setLoading] = useState(() => !_dxpDataCache);
   const [refreshing, setRefreshing] = useState(false);
@@ -5042,11 +5043,28 @@ function DXPIntelTab({items, onSelect}) {
   return h('div', {style:{padding:'16px 20px', maxWidth:900}},
     h('div', {style:{display:'flex', alignItems:'center', gap:8, marginBottom:4}},
       h('span', {style:{fontSize:16}}, '📅'),
-      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac — DXP Edition'),
+      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac'),
     ),
-    h('div', {style:{fontSize:12, color:T.gold, fontStyle:'italic', marginBottom:6}},
+    h('div', {style:{fontSize:12, color:T.gold, fontStyle:'italic', marginBottom:10}},
       'The market has seasons too. This is their almanac.'
     ),
+    h('div', {style:{display:'flex', gap:6, marginBottom:16}},
+      [
+        {id:'dxp',      label:'📅 DXP Weekend'},
+        {id:'seasonal', label:'🗓️ Seasonal Events'},
+      ].map(v => h('button', {
+        key: v.id,
+        onClick: () => setActiveView(v.id),
+        style: {
+          padding:'6px 16px', fontSize:12, borderRadius:4, cursor:'pointer',
+          border:`1px solid ${activeView===v.id ? T.gold : T.borderDim}`,
+          background: activeView===v.id ? 'rgba(201,168,76,0.15)' : 'transparent',
+          color: activeView===v.id ? T.goldBright : T.textDim,
+        },
+      }, v.label))
+    ),
+    activeView === 'seasonal' && h(SeasonalEventsTab, {items, onSelect}),
+    activeView === 'dxp' && h('div', null,
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
       // itemCount is a real measured count (every item with enough local
       // price history to get a timing computation, not a hardcoded guess —
@@ -5464,11 +5482,12 @@ function DXPIntelTab({items, onSelect}) {
           ),
           mainCols.colOrder.slice(0,-1).map(k => mainCols.overlayHandle(k)),
           )
+    ), // end dxp view wrapper div
     ),
   );
 }
 
-/* ─── GEnius Almanac — Seasonal Events (dev-mode only, alongside DXP) ──────── */
+/* ─── GEnius Almanac — Seasonal Events ──────────────────────────────────────── */
 
 // All data distilled from research/halloween_findings.md, christmas_findings.md,
 // summer_findings.md, easter_findings.md. Each % is a median across the n= years.
@@ -5565,12 +5584,8 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
   const dirArrow = dir => dir === 'rise' ? '▲' : '▼';
   const dirColor = dir => dir === 'rise' ? T.green : T.red;
 
-  return h('div', {style: {padding: '16px 20px', maxWidth: 900}},
-    h('div', {style: {display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4}},
-      h('span', {style: {fontSize: 16}}, '🗓️'),
-      h('div', {className: 'ge-section-head', style: {marginBottom: 0}}, 'GEnius Almanac — Seasonal Events'),
-    ),
-    h('div', {style: {fontSize: 12, color: T.gold, fontStyle: 'italic', marginBottom: 14}},
+  return h('div', null,
+    h('div', {style: {fontSize: 11, color: T.textDim, fontStyle: 'italic', marginBottom: 12}},
       'Holiday and seasonal events that move the market. Data from historical price research.'
     ),
 
@@ -5841,7 +5856,6 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     const idx = base.findIndex(n => n.id === 'dashboard') + 1;
     const withDev = [...base];
     withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
-    withDev.splice(idx + 1, 0, {id:'seasonal_intel', label:'Seasonal Events', icon:'🗓️'});
     return withDev;
   }, [s.devMode]);
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -7993,7 +8007,6 @@ function App() {
     const idx = NAV.findIndex(n => n.id === 'dashboard') + 1;
     const withDev = [...NAV];
     withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
-    withDev.splice(idx + 1, 0, {id:'seasonal_intel', label:'Seasonal Events', icon:'🗓️'});
     return withDev;
   }, [settings.devMode]);
   const navItems = useMemo(() => {
@@ -8408,8 +8421,7 @@ function App() {
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}}),
           tab==='about'&&h(AboutTab),
-          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect}),
-          tab==='seasonal_intel'&&h(SeasonalEventsTab,{items,onSelect:handleSelect})
+          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})
         ),
         showDetail&&h('div',{style:{position:'relative', display:'flex'}},
           h('div',{
