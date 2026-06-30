@@ -969,24 +969,26 @@ async function createGeniusApi({ dataDir, store }) {
     return out;
   }
 
-  // Fires at most once per calendar day, checking each watchlist item for
-  // either a same-day move past `dailyThresholdPct` or a 7-day drift past
+  // Fires at most once per `intervalHours` (defaults to 24 — once a day,
+  // the original behavior), checking each watchlist item for either a
+  // same-day move past `dailyThresholdPct` or a 7-day drift past
   // `trendThresholdPct` (kept as a separate, slightly higher bar by default
   // since a sustained week-long move is a different signal than a single-day
   // spike). Returns null if nothing on the watchlist crossed either bar,
-  // rather than a digest notification firing daily regardless of whether
-  // anything happened.
+  // rather than a digest notification firing every interval regardless of
+  // whether anything happened.
   async function getWatchlistDigest() {
     const settings = store.get('watchlistNotificationSettings', {
-      enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
+      enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7, intervalHours: 24,
     });
     if (!settings.enabled) return null;
 
     const watchlist = store.get('watchlist', []);
     if (!watchlist.length) return null;
 
-    const todayStr = new Date().toISOString().slice(0, 10);
-    if (store.get('watchlistDigestLastSent', null) === todayStr) return null;
+    const intervalMs = (settings.intervalHours || 24) * 3600000;
+    const lastSentAt = store.get('watchlistDigestLastSentAt', 0);
+    if (Date.now() - lastSentAt < intervalMs) return null;
 
     const itemsById = Object.fromEntries(
       ((await getData()).items || []).map(i => [String(i.id), i])
@@ -1018,7 +1020,7 @@ async function createGeniusApi({ dataDir, store }) {
     });
     if (movers.length > top.length) lines.push(`+${movers.length - top.length} more`);
 
-    store.set('watchlistDigestLastSent', todayStr);
+    store.set('watchlistDigestLastSentAt', Date.now());
     return {
       title: `Watchlist — ${movers.length} item${movers.length === 1 ? '' : 's'} moving`,
       body: lines.join('\n'),

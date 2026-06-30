@@ -3578,7 +3578,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
         }
       }, v === 'normal' ? 'Normal' : 'DXP')),
       h('span', {
-        title:'These are two separate lists, not one merged watchlist. The main (Normal) watchlist drives the daily-digest notification; the DXP list is pinned inside the Almanac and drives its own buy/sell/announce alerts. Kept separate so watching dozens of items broadly doesn\'t force all of them into DXP-specific alerts.',
+        title:'These are two separate lists, not one merged watchlist. The main (Normal) watchlist drives the digest notification; the DXP list is pinned inside the Almanac and drives its own buy/sell/announce alerts. Kept separate so watching dozens of items broadly doesn\'t force all of them into DXP-specific alerts.',
         style:{cursor:'help', fontSize:11, color:T.textDim, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center'},
       }, '?'),
     ),
@@ -5536,7 +5536,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
-  const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7});
+  const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7, intervalHours:24});
   useEffect(() => { window.genius?.getWatchlistNotificationSettings?.().then(w => w && setWatchNotif(w)); }, []);
   const updateWatchNotif = patch => {
     setWatchNotif(prev => {
@@ -5759,15 +5759,26 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       },'Test notification')
     ),
     h('div',{style:{marginBottom:20}},
-      h('div',{className:'ge-section-head'},'Watchlist Daily Digest'),
+      h('div',{className:'ge-section-head'},'Watchlist Digest'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
-        'Once-a-day desktop notification (works even with GEnius minimized to the tray) listing any watchlist item that moved more than the thresholds below. Stays silent if nothing crossed either bar that day.'
+        'Desktop notification (works even with GEnius minimized to the tray) listing any watchlist item that moved more than the thresholds below. Stays silent if nothing crossed either bar in that window.'
       ),
       h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:10}},
         h('input',{type:'checkbox',checked:!!watchNotif.enabled,onChange:e=>updateWatchNotif({enabled:e.target.checked})}),
-        h('span',null,'Enable watchlist daily digest')
+        h('span',null,'Enable watchlist digest')
       ),
       h('div',{style:{display:'flex',gap:20,flexWrap:'wrap',opacity:watchNotif.enabled?1:0.5}},
+        h('div',null,
+          h('div',{className:'form-lbl'},'Check every'),
+          h('select',{
+            value:watchNotif.intervalHours ?? 24, disabled:!watchNotif.enabled,
+            onChange:e=>updateWatchNotif({intervalHours: parseFloat(e.target.value)}),
+            style:{padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
+          },
+            [[1,'1 hour'],[2,'2 hours'],[4,'4 hours'],[6,'6 hours'],[12,'12 hours'],[24,'24 hours (once a day)']]
+              .map(([v,l]) => h('option',{key:v,value:v},l))
+          ),
+        ),
         h('div',null,
           h('div',{className:'form-lbl'},'Daily move threshold (%)'),
           h('input',{
