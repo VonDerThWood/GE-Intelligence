@@ -3759,40 +3759,59 @@ function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
 }
 
 // ─── Invention machine profit calculators ──────────────────────────────────
-// Real conversion rates + machine-charge costs pulled from the RS Wiki
-// (runescape.wiki/w/Plank_maker_(machine), Automatic_hide_tanner,
-// Partial_potion_producer — checked 2026-06-29). All three machines convert
-// raw material -> processed material 1:1 (no chance of failure), so profit
-// per item is just outputPrice - inputPrice - extraInputCost - chargeCost.
-// A divine charge costs 72,099gp for 3,000 machine charge -> 24.03gp/charge;
-// that's the cheapest charge source and what these numbers assume.
+// Real conversion rates, machine-charge costs, and throughput pulled from the
+// RS Wiki (runescape.wiki/w/Plank_maker_(machine), Automatic_hide_tanner,
+// Optimised_hide_tanner, Partial_potion_producer_DX — checked 2026-06-29).
+// All three machines convert raw material -> processed material 1:1 (no
+// chance of failure), so profit per item is just
+// outputPrice - inputPrice - extraInputCost - chargeCost. A divine charge
+// costs 72,099gp for 3,000 machine charge -> 24.03gp/charge — the cheapest
+// charge source and what these numbers assume. Hourly/Daily use the
+// upgraded machine variant's throughput (high-capacity plank maker, DX
+// potion producer, optimised hide tanner) since that's what most players
+// actually run at scale.
+// Deliberately NOT including "via sawmill/portable/tannery" NPC-service
+// comparison columns — couldn't find RS3-specific (not OSRS, which has a
+// separate economy) fee numbers confirmed for those, and fabricating exact
+// gp figures would be worse than leaving them out.
 const GP_PER_MACHINE_CHARGE = 24.03;
 const INVENTION_MACHINES = [
   {
-    id: 'plank', label: 'Plank Maker', chargePerItem: 17.3,
-    note: 'Standard plank maker, 99 Invention. The high-capacity version (117 Invention) runs ~15 charge/item instead — slightly cheaper per plank, same profit logic.',
+    id: 'plank', label: 'Plank Maker', chargePerItem: 15, itemsPerHour: 40,
+    note: 'High-capacity plank maker (117 Invention), 15 charge/item, up to 40 logs/hour. Standard plank maker (99 Invention) runs 17.3 charge/item at 13/hour instead — slightly worse on both counts.',
     conversions: [
       { input: 'Logs', output: 'Plank' },
       { input: 'Oak logs', output: 'Oak plank' },
+      { input: 'Willow logs', output: 'Willow plank' },
       { input: 'Teak logs', output: 'Teak plank' },
+      { input: 'Maple logs', output: 'Maple plank' },
+      { input: 'Acadia logs', output: 'Acadia plank' },
       { input: 'Mahogany logs', output: 'Mahogany plank' },
+      { input: 'Yew logs', output: 'Yew plank' },
+      { input: 'Magic logs', output: 'Magic plank' },
+      { input: 'Elder logs', output: 'Elder plank' },
     ],
   },
   {
-    id: 'tanner', label: 'Hide Tanner', chargePerItem: 5,
-    note: 'Automatic hide tanner. Skips the normal coin/rune tanning cost entirely — straight hide-to-leather conversion.',
+    id: 'tanner', label: 'Hide Tanner', chargePerItem: 6, itemsPerHour: 140,
+    note: 'Optimised hide tanner, 6 charge/item, up to 140 hides/hour. Automatic hide tanner (the base version) runs 5 charge/item at only 45/hour instead. Both skip the normal coin/rune tanning cost entirely.',
     conversions: [
       { input: 'Cowhide', output: 'Leather' },
-      { input: 'Green dragonhide', output: "Green d'hide" },
-      { input: 'Blue dragonhide', output: "Blue d'hide" },
-      { input: 'Red dragonhide', output: "Red d'hide" },
-      { input: 'Black dragonhide', output: "Black d'hide" },
+      { input: 'Snake hide', output: 'Snakeskin' },
+      { input: 'Snake hide (swamp)', output: 'Snakeskin' },
+      { input: 'Green dragonhide', output: 'Green dragon leather' },
+      { input: 'Blue dragonhide', output: 'Blue dragon leather' },
+      { input: 'Red dragonhide', output: 'Red dragon leather' },
+      { input: 'Black dragonhide', output: 'Black dragon leather' },
+      { input: 'Royal dragonhide', output: 'Royal dragon leather' },
+      { input: 'Dinosaur hide', output: 'Dinosaur leather' },
+      { input: 'Undead dragonhide', output: 'Undead dragon leather' },
     ],
   },
   {
-    id: 'potion', label: 'Partial Potion Producer', chargePerItem: 5.8,
+    id: 'potion', label: 'Partial Potion Producer', chargePerItem: 5.3, itemsPerHour: 40,
     extraInput: 'Vial of water',
-    note: 'Each herb also needs a Vial of water — factored into the cost below. The DX upgrade runs ~5.3 charge/item instead, marginally cheaper.',
+    note: 'Partial potion producer DX, 5.3 charge/item, up to 40 herbs/hour. Standard version runs 5.8 charge/item at only 13/hour instead. Each herb also needs a Vial of water, factored into the cost below.',
     conversions: [
       { input: 'Guam leaf', output: 'Guam potion (unf)' },
       { input: 'Marrentill', output: 'Marrentill potion (unf)' },
@@ -3800,20 +3819,28 @@ const INVENTION_MACHINES = [
       { input: 'Harralander', output: 'Harralander potion (unf)' },
       { input: 'Ranarr weed', output: 'Ranarr potion (unf)' },
       { input: 'Toadflax', output: 'Toadflax potion (unf)' },
+      { input: 'Spirit weed', output: 'Spirit weed potion (unf)' },
       { input: 'Irit leaf', output: 'Irit potion (unf)' },
       { input: 'Avantoe', output: 'Avantoe potion (unf)' },
       { input: 'Kwuarm', output: 'Kwuarm potion (unf)' },
+      { input: 'Wergali', output: 'Wergali potion (unf)' },
       { input: 'Cadantine', output: 'Cadantine potion (unf)' },
       { input: 'Lantadyme', output: 'Lantadyme potion (unf)' },
       { input: 'Dwarf weed', output: 'Dwarf weed potion (unf)' },
+      { input: 'Bloodweed', output: 'Bloodweed potion (unf)' },
       { input: 'Snapdragon', output: 'Snapdragon potion (unf)' },
+      { input: 'Arbuck', output: 'Arbuck potion (unf)' },
+      { input: 'Fellstalk', output: 'Fellstalk potion (unf)' },
       { input: 'Torstol', output: 'Torstol potion (unf)' },
     ],
   },
 ];
+const MACHINE_COL_WIDTHS = {input:160, output:190, inPrice:110, outPrice:110, profit:110, roi:80, hourly:130, daily:140};
 
 function MachineCalculators({items, onSelect}) {
   const [active, setActive] = useState(INVENTION_MACHINES[0].id);
+  const [sort, setSort] = useState({key:'profit', dir:-1});
+  const cols = useResizableColumns('genius_machine_col_widths_'+active, MACHINE_COL_WIDTHS);
   const byName = useMemo(() => {
     const m = {};
     (items||[]).forEach(it => { if (it.name) m[it.name.toLowerCase()] = it; });
@@ -3823,14 +3850,35 @@ function MachineCalculators({items, onSelect}) {
   const chargeCost = machine.chargePerItem * GP_PER_MACHINE_CHARGE;
   const extraCost = machine.extraInput ? (byName[machine.extraInput.toLowerCase()]?.high || byName[machine.extraInput.toLowerCase()]?.low || 0) : 0;
 
-  const rows = machine.conversions.map(c => {
+  const rows = useMemo(() => machine.conversions.map(c => {
     const inItem = byName[c.input.toLowerCase()];
     const outItem = byName[c.output.toLowerCase()];
     const inPrice = inItem ? (inItem.high || inItem.low || 0) : null;
     const outPrice = outItem ? (outItem.high || outItem.low || 0) : null;
-    const profit = (inPrice != null && outPrice != null) ? outPrice - inPrice - extraCost - chargeCost : null;
-    return {...c, inItem, outItem, inPrice, outPrice, profit};
-  }).sort((a,b) => (b.profit ?? -Infinity) - (a.profit ?? -Infinity));
+    const totalCost = inPrice != null ? inPrice + extraCost + chargeCost : null;
+    const profit = (inPrice != null && outPrice != null) ? outPrice - totalCost : null;
+    const roi = (profit != null && totalCost) ? (profit / totalCost) * 100 : null;
+    const hourly = profit != null ? profit * machine.itemsPerHour : null;
+    const daily = hourly != null ? hourly * 24 : null;
+    return {...c, inItem, outItem, inPrice, outPrice, profit, roi, hourly, daily};
+  }), [machine, byName, extraCost, chargeCost]);
+
+  const sorted = useMemo(() => {
+    const dir = sort.dir;
+    return [...rows].sort((a,b) => {
+      if (sort.key === 'input' || sort.key === 'output') return (a[sort.key]||'').localeCompare(b[sort.key]||'') * dir;
+      const av = a[sort.key], bv = b[sort.key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return (av - bv) * dir;
+    });
+  }, [rows, sort]);
+
+  const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
+  const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
+  const gpCell = v => v != null ? (v>0?'+':'')+fmt.gp(Math.round(v))+'gp' : '—';
+  const gpColor = v => v == null ? T.textDim : v > 0 ? T.green : T.red;
 
   return h('div', {style:{padding:'12px 14px'}},
     h('div', {style:{display:'flex', gap:6, marginBottom:10, flexWrap:'wrap'}},
@@ -3844,23 +3892,43 @@ function MachineCalculators({items, onSelect}) {
       `Machine charge cost: ${machine.chargePerItem} charge/item (${fmt.gp(Math.round(chargeCost))}gp/item, divine charges at ${GP_PER_MACHINE_CHARGE}gp/charge)`,
       machine.extraInput && ` · plus 1 ${machine.extraInput} (${fmt.gp(extraCost)}gp) per item`
     ),
-    h('table', {className:'ge-table'},
-      h('thead', null, h('tr', null,
-        h('th', null, 'Input'), h('th', null, 'Output'),
-        h('th', null, 'Input price'), h('th', null, 'Output price'),
-        h('th', null, 'Profit/item')
-      )),
-      h('tbody', null, rows.map(r => h('tr', {
-          key:r.input, style:{cursor: r.inItem ? 'pointer' : 'default'},
-          onClick: () => r.inItem && onSelect && onSelect(r.inItem),
-        },
-        h('td', null, r.input),
-        h('td', null, r.output),
-        h('td', null, r.inPrice != null ? fmt.gp(r.inPrice)+'gp' : '—'),
-        h('td', null, r.outPrice != null ? fmt.gp(r.outPrice)+'gp' : '—'),
-        h('td', {style:{color: r.profit == null ? T.textDim : r.profit > 0 ? T.green : T.red, fontWeight:'bold'}},
-          r.profit != null ? (r.profit>0?'+':'')+fmt.gp(Math.round(r.profit))+'gp' : '—')
-      )))
+    h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef},
+      h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+        h('colgroup', null,
+          h('col', {style:{width:cols.colWidths.input}}),
+          h('col', {style:{width:cols.colWidths.output}}),
+          h('col', {style:{width:cols.colWidths.inPrice}}),
+          h('col', {style:{width:cols.colWidths.outPrice}}),
+          h('col', {style:{width:cols.colWidths.profit}}),
+          h('col', {style:{width:cols.colWidths.roi}}),
+          h('col', {style:{width:cols.colWidths.hourly}}),
+          h('col', {style:{width:cols.colWidths.daily}}),
+        ),
+        h('thead', null, h('tr', null,
+          h('th', {onClick:()=>toggleSort('input'), style:{cursor:'pointer'}}, 'Input'+sortArrow('input')),
+          h('th', {onClick:()=>toggleSort('output'), style:{cursor:'pointer'}}, 'Output'+sortArrow('output')),
+          h('th', {onClick:()=>toggleSort('inPrice'), style:{cursor:'pointer'}}, 'Input price'+sortArrow('inPrice')),
+          h('th', {onClick:()=>toggleSort('outPrice'), style:{cursor:'pointer'}}, 'Output price'+sortArrow('outPrice')),
+          h('th', {onClick:()=>toggleSort('profit'), style:{cursor:'pointer'}}, 'Profit/item'+sortArrow('profit')),
+          h('th', {onClick:()=>toggleSort('roi'), style:{cursor:'pointer'}}, 'ROI'+sortArrow('roi')),
+          h('th', {onClick:()=>toggleSort('hourly'), style:{cursor:'pointer'}, title:`At ${machine.itemsPerHour} items/hour`}, 'Hourly'+sortArrow('hourly')),
+          h('th', {onClick:()=>toggleSort('daily'), style:{cursor:'pointer'}, title:'Hourly × 24, fully AFK'}, 'Daily'+sortArrow('daily')),
+        )),
+        h('tbody', null, sorted.map(r => h('tr', {
+            key:r.input, style:{cursor: r.inItem ? 'pointer' : 'default'},
+            onClick: () => r.inItem && onSelect && onSelect(r.inItem),
+          },
+          h('td', null, r.input),
+          h('td', null, r.output),
+          h('td', null, r.inPrice != null ? fmt.gp(r.inPrice)+'gp' : '—'),
+          h('td', null, r.outPrice != null ? fmt.gp(r.outPrice)+'gp' : '—'),
+          h('td', {style:{color: gpColor(r.profit), fontWeight:'bold'}}, gpCell(r.profit)),
+          h('td', {style:{color: gpColor(r.roi)}}, r.roi != null ? (r.roi>0?'+':'')+r.roi.toFixed(0)+'%' : '—'),
+          h('td', {style:{color: gpColor(r.hourly)}}, gpCell(r.hourly)),
+          h('td', {style:{color: gpColor(r.daily)}}, gpCell(r.daily)),
+        ))),
+      ),
+      cols.colOrder.slice(0,-1).map(k => cols.overlayHandle(k)),
     )
   );
 }
