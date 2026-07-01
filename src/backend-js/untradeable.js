@@ -8,8 +8,8 @@
  * the Python original on real data before trusting this over it.
  */
 
-const fs = require('fs');
 const path = require('path');
+const storage = require('./storage.js');
 
 const _DIR = __dirname;
 const CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'untradeable.json');
@@ -170,19 +170,13 @@ function _toItem(entry, natureRunePrice = 0) {
   return item;
 }
 
-function _readCache() {
-  return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
-}
-
 async function load(natureRunePrice = 0, force = false) {
-  const cacheFile = path.resolve(CACHE_PATH);
-  fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
-
-  if (!force && fs.existsSync(cacheFile)) {
-    const ageMs = Date.now() - fs.statSync(cacheFile).mtimeMs;
-    if (ageMs < CACHE_TTL) {
-      try { return _readCache(); } catch {}
-    }
+  // Cache age tracked via an embedded fetchedAt timestamp rather than the
+  // file's OS-level mtime — see market_watch.js's load() for why (same
+  // reasoning, same pattern).
+  const cached = await storage.readJSON(CACHE_PATH, null);
+  if (!force && cached && (Date.now() - (cached.fetchedAt || 0)) < CACHE_TTL) {
+    return cached.items;
   }
 
   let allEntries = [];
@@ -205,12 +199,12 @@ async function load(natureRunePrice = 0, force = false) {
   allEntries = allEntries.concat(await _fetchMiscItems());
 
   if (!allEntries.length) {
-    if (fs.existsSync(cacheFile)) return _readCache();
+    if (cached) return cached.items;
     return [];
   }
 
   const items = allEntries.map(e => _toItem(e, natureRunePrice));
-  fs.writeFileSync(cacheFile, JSON.stringify(items, null, 2), 'utf8');
+  await storage.writeJSON(CACHE_PATH, { fetchedAt: Date.now(), items }, { pretty: true });
   return items;
 }
 

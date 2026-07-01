@@ -154,7 +154,7 @@ body {
 .ge-btn.danger { border-color: ${T.red}; color: ${T.red}; }
 .ge-btn.danger:hover { background: rgba(229,57,53,0.15); }
 .content { flex: 1; overflow-y: auto; padding: 14px 16px; }
-.ge-table-wrap { overflow-x: auto; }
+.ge-table-wrap { overflow-x: auto; width: 100%; }
 .col-resize-handle::after { content: ''; position: absolute; right: 3px; top: 4px; bottom: 4px; width: 1px; background: ${T.borderDim}; }
 .col-resize-handle:hover::after { background: ${T.gold}; width: 2px; }
 .ge-table { width: 100%; border-collapse: collapse; font-size: 13px; }
@@ -2241,17 +2241,18 @@ function useResizableColumns(storageKey, defaultWidths) {
   const startColResize = (key) => e => {
     e.preventDefault();
     e.stopPropagation();
-    const table = e.currentTarget.closest('.ge-table-wrap')?.querySelector('table');
     const startW = colWidthsRef.current[key] || 110;
-    const logicalTotal = Object.values(colWidthsRef.current).reduce((a,b) => a + (b||0), 0);
-    const scaleFactor = table && logicalTotal ? (table.getBoundingClientRect().width / logicalTotal) : 1;
     const startX = e.clientX;
+    // offsetWidth is in local (pre-transform) px; getBoundingClientRect is in
+    // viewport (post-transform) px. The ratio gives the CSS scale factor so
+    // that mouse delta (viewport px) converts correctly to column width (logical px).
+    const scaleFactor = wrapNode && wrapNode.offsetWidth
+      ? wrapNode.getBoundingClientRect().width / wrapNode.offsetWidth
+      : 1;
     const onMove = me => {
-      const deltaReal = me.clientX - startX;
-      const deltaLogical = scaleFactor ? deltaReal / scaleFactor : deltaReal;
-      const w = Math.max(50, Math.round(startW + deltaLogical));
+      const w = Math.max(40, Math.round(startW + (me.clientX - startX) / scaleFactor));
       colWidthsRef.current = {...colWidthsRef.current, [key]: w};
-      setColWidths(colWidthsRef.current);
+      setColWidths({...colWidthsRef.current});
     };
     const onUp = () => {
       window.removeEventListener('mousemove', onMove);
@@ -2264,50 +2265,40 @@ function useResizableColumns(storageKey, defaultWidths) {
 
   useEffect(() => {
     if (!wrapNode) return;
-    let raf = null;
+    // Handle positions as cumulative column widths in logical (pre-scale) pixels.
+    // Since handles live inside the CSS-transformed element, this keeps them
+    // visually aligned with column edges at any UI scale — no getBoundingClientRect needed.
+    // position:absolute children of an overflow:auto container scroll with it,
+    // so no scrollLeft compensation is needed either.
     const measure = () => {
-      const ths = wrapNode.querySelectorAll('thead th');
-      const wrapRect = wrapNode.getBoundingClientRect();
       const lefts = {};
-      colOrder.slice(0, -1).forEach((k, i) => {
-        const th = ths[i];
-        if (th) lefts[k] = th.getBoundingClientRect().right - wrapRect.left + wrapNode.scrollLeft;
+      let cumulative = 0;
+      colOrder.slice(0, -1).forEach(k => {
+        cumulative += colWidthsRef.current[k] || 0;
+        lefts[k] = cumulative;
       });
       setHandleLefts(lefts);
     };
-    const scheduleMeasure = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => { raf = null; measure(); });
-    };
     measure();
-    // Also re-measure on ANY DOM change inside the table (rows arriving
-    // after an async data load, tier switches swapping which rows render,
-    // column header text changing) — not just window resizes. This is what
-    // actually closes the bug: the FIRST measure() can land before the real
-    // <thead>/<tr> exist, and nothing was forcing a second attempt before.
-    const mo = new MutationObserver(scheduleMeasure);
-    mo.observe(wrapNode, { childList: true, subtree: true });
-    window.addEventListener('resize', scheduleMeasure);
-    return () => {
-      mo.disconnect();
-      window.removeEventListener('resize', scheduleMeasure);
-      if (raf) cancelAnimationFrame(raf);
-    };
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
     // eslint-disable-next-line
   }, [colWidths, wrapNode]);
 
-  const overlayHandle = key => h('span', {
-    key,
-    onMouseDown: startColResize(key),
-    className: 'col-resize-handle',
-    style:{
-      position:'absolute', top:0, bottom:0,
-      left: (handleLefts[key] || 0) - 4,
-      width:8, cursor:'col-resize', zIndex:10,
-    },
-  });
+  const overlayHandle = key => handleLefts[key]
+    ? h('span', {
+        key,
+        onMouseDown: startColResize(key),
+        className: 'col-resize-handle',
+        style:{
+          position:'absolute', top:0, bottom:0,
+          left: handleLefts[key] - 4,
+          width:8, cursor:'col-resize', zIndex:10,
+        },
+      })
+    : null;
 
-  return { colWidths, tableWrapRef, overlayHandle, colOrder };
+  return { colWidths, displayWidths: colWidths, tableWrapRef, overlayHandle, colOrder };
 }
 
 /* ─── Item table ─────────────────────────────────────────────── */
@@ -3538,18 +3529,13 @@ function CompareTab({compareList, onRemove, onClear, allItems, description}) {
 
 /* ─── Tab views ──────────────────────────────────────────────── */
 function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
-  // Two-pill Normal/DXP switcher — dev-mode only for now (Ben: build and
-  // test it now, hidden, same as the rest of the Almanac, before deciding
-  // whether/how to expose it once the Almanac itself goes public). The
-  // underlying lists stay genuinely separate (main watchlist vs the
-  // Almanac's own dxpWatchlist) rather than merging, since someone
-  // watching dozens of items broadly may not want all of them eligible
-  // for DXP-specific alerts — this is just a unified place to SEE both.
+  // Three-pill Normal/DXP/Seasonal switcher — devMode only while Almanac is pre-release.
   const [view, setView] = useState('normal');
+  const [seasonalEvent, setSeasonalEvent] = useState('christmas');
   const [dxpWatchlist, setDxpWatchlist] = useState([]);
   useEffect(() => { if (devMode) window.genius?.getDxpWatchlist?.().then(list => setDxpWatchlist(list || [])); }, [devMode]);
   const toggleDxpWatch = id => {
-    const sid = String(id); // store as string, matching the Almanac's own convention
+    const sid = String(id);
     setDxpWatchlist(prev => {
       const next = prev.includes(sid) ? prev.filter(x=>x!==sid) : [...prev, sid];
       window.genius?.setDxpWatchlist?.(next);
@@ -3557,60 +3543,132 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
     });
   };
 
-  const activeList = devMode && view === 'dxp' ? dxpWatchlist : watchlist;
+  const activeList   = devMode && view === 'dxp' ? dxpWatchlist : watchlist;
   const activeToggle = devMode && view === 'dxp' ? toggleDxpWatch : onToggleWatch;
-  // dxpWatchlist ids are strings (DXPIntelTab's `for (const id in data)`
-  // always yields string object keys); the main item catalogue's `id` is
-  // a number — String() both sides so the DXP pill actually matches.
-  const watched = items.filter(it=>activeList.map(String).includes(String(it.id)));
+  const watched      = items.filter(it => activeList.map(String).includes(String(it.id)));
 
-  return h('div',null,
-    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
-    devMode && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`}},
-      ['normal','dxp'].map(v => h('button', {
-        key:v,
-        onClick:()=>setView(v),
-        style:{
+  // ── Seasonal view helpers ────────────────────────────────────────────────
+  const seasonalRows = view === 'seasonal'
+    ? SEASONAL_ITEM_DATA.filter(r => r.event === seasonalEvent && !r.noSignal)
+    : [];
+  const seasonalTierLabel = r => {
+    if (r.n === 1 || r.confidence == null) return {label:'Speculative', color:T.textDim};
+    if (r.roundTrip) return {label:'Round-trip', color:T.green};
+    return {label:'Drop-only', color:T.textDim};
+  };
+
+  return h('div', null,
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+
+    // ── Mode pills ──────────────────────────────────────────────────────────
+    devMode && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+      ['normal','dxp','seasonal'].map(v => h('button', {
+        key: v,
+        onClick: () => setView(v),
+        style: {
           padding:'4px 12px', fontSize:11, borderRadius:4, cursor:'pointer',
           border:`1px solid ${view===v ? T.gold : T.borderDim}`,
           background: view===v ? 'rgba(201,168,76,0.15)' : 'transparent',
           color: view===v ? T.goldBright : T.textDim,
         }
-      }, v === 'normal' ? 'Normal' : 'DXP')),
+      }, v === 'normal' ? 'Normal' : v === 'dxp' ? 'DXP' : 'Seasonal')),
       h('span', {
-        title:'These are two separate lists, not one merged watchlist. The main (Normal) watchlist drives the digest notification; the DXP list is pinned inside the Almanac and drives its own buy/sell/announce alerts. Kept separate so watching dozens of items broadly doesn\'t force all of them into DXP-specific alerts.',
+        title:'Three separate lists. Normal drives the digest notification. DXP drives Almanac buy/sell alerts. Seasonal shows all researched items for the chosen event with live prices — not a pinned list, just a live price monitor for the full seasonal dataset.',
         style:{cursor:'help', fontSize:11, color:T.textDim, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center'},
       }, '?'),
     ),
-    !watched.length
-      ? h('div',{className:'empty'},
-          h('div',{className:'icon'},'★'),
-          h('p',null, devMode && view === 'dxp' ? 'No items pinned to the DXP watchlist yet.' : 'Your watchlist is empty.'),
-          h('div',{style:{fontSize:12,color:T.textDim,marginTop:8,lineHeight:1.7,maxWidth:340,textAlign:'center'}},
-            devMode && view === 'dxp'
-              ? h('span', null, 'Pin items from inside the Almanac\'s Confirmed/Negligible/Speculative/Recommendations tables.')
-              : h('span', null,
-                  'Browse any category tab and click the ★ on an item to add it here.',h('br',null),
-                  'Watched items show live prices and signals all in one place.'
-                )
-          )
-        )
-      : h('div',{className:'offer-grid'},
-    watched.map(it =>
-      h('div',{key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
-        h('div',{className:'offer-slot-name'},it.name),
-        h('div',{className:'offer-slot-price'},fmt.gp(it.high||it.low)+'gp'),
-        h('div',{className:'offer-slot-change '+pctClass(it.change_1d)},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
-        h('div',{className:'offer-slot-star'},
-          h('button',{
-            className:'star-btn',
-            onClick:e=>{e.stopPropagation(); activeToggle(it.id);}
-          }, h('span',{className:'star-on'},'★'))
-        ),
-        it.signals&&it.signals.map(s=>h(SignalBadge,{key:s,signal:s,style:{marginTop:4,marginRight:2}}))
+
+    // ── Seasonal sub-event pills ────────────────────────────────────────────
+    devMode && view === 'seasonal' && h('div', {style:{display:'flex', gap:6, padding:'8px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+      SEASONAL_EVENTS.filter(ev => ev.confidence !== 'insufficient').map(ev =>
+        h('button', {
+          key: ev.id,
+          onClick: () => setSeasonalEvent(ev.id),
+          style: {
+            padding:'3px 10px', fontSize:11, borderRadius:4, cursor:'pointer',
+            border:`1px solid ${seasonalEvent===ev.id ? T.gold : T.borderDim}`,
+            background: seasonalEvent===ev.id ? 'rgba(201,168,76,0.12)' : 'transparent',
+            color: seasonalEvent===ev.id ? T.goldBright : T.textDim,
+          }
+        }, `${ev.emoji} ${ev.name}`)
       )
-    )
-  ));
+    ),
+
+    // ── Seasonal grid ───────────────────────────────────────────────────────
+    devMode && view === 'seasonal' && (
+      seasonalRows.length === 0
+        ? h('div', {className:'empty'}, h('p', null, 'No research data for this event.'))
+        : h('div', {className:'offer-grid'},
+            seasonalRows.map(res => {
+              const liveItem = items.find(it => it.name?.toLowerCase() === res.name.toLowerCase());
+              const price    = liveItem?.high || liveItem?.low;
+              const tier     = seasonalTierLabel(res);
+              return h('div', {
+                key: res.name,
+                className: 'offer-slot',
+                onClick: liveItem ? () => onSelect(liveItem) : undefined,
+                style: liveItem ? {} : {cursor:'default', opacity:0.6},
+              },
+                h('div', {className:'offer-slot-name'}, res.name),
+                price
+                  ? h('div', {className:'offer-slot-price'}, fmt.gp(price) + 'gp')
+                  : h('div', {className:'offer-slot-price', style:{color:T.textDim}}, 'No price'),
+                price
+                  ? h('div', {className:'offer-slot-change ' + pctClass(liveItem.change_1d)}, h(ChangeDisplay, {change_1d:liveItem.change_1d, price}))
+                  : h('div', {className:'offer-slot-change'}),
+                h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', marginTop:4}},
+                  h('span', {style:{
+                    fontSize:9, padding:'1px 5px', borderRadius:3,
+                    border:`1px solid ${tier.color}`, color:tier.color,
+                  }}, tier.label),
+                  res.duringPct != null && h('span', {style:{
+                    fontSize:9, padding:'1px 5px', borderRadius:3,
+                    border:`1px solid ${res.duringPct > 0 ? T.green : T.red}`,
+                    color: res.duringPct > 0 ? T.green : T.red,
+                  }}, res.duringPct > 0 ? `▲${res.duringPct}%` : `▼${Math.abs(res.duringPct)}%`),
+                  res.recoveryPct != null && h('span', {style:{
+                    fontSize:9, padding:'1px 5px', borderRadius:3,
+                    border:`1px solid ${T.green}`, color:T.green,
+                  }}, `+${res.recoveryPct}%`),
+                ),
+              );
+            })
+          )
+    ),
+
+    // ── Normal / DXP grid ───────────────────────────────────────────────────
+    view !== 'seasonal' && (
+      !watched.length
+        ? h('div', {className:'empty'},
+            h('div', {className:'icon'}, '★'),
+            h('p', null, devMode && view === 'dxp' ? 'No items pinned to the DXP watchlist yet.' : 'Your watchlist is empty.'),
+            h('div', {style:{fontSize:12, color:T.textDim, marginTop:8, lineHeight:1.7, maxWidth:340, textAlign:'center'}},
+              devMode && view === 'dxp'
+                ? h('span', null, 'Pin items from inside the Almanac\'s Confirmed/Negligible/Speculative/Recommendations tables.')
+                : h('span', null,
+                    'Browse any category tab and click the ★ on an item to add it here.', h('br', null),
+                    'Watched items show live prices and signals all in one place.'
+                  )
+            )
+          )
+        : h('div', {className:'offer-grid'},
+            watched.map(it =>
+              h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
+                h('div', {className:'offer-slot-name'}, it.name),
+                h('div', {className:'offer-slot-price'}, fmt.gp(it.high||it.low)+'gp'),
+                h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
+                h('div', {className:'offer-slot-star'},
+                  h('button', {
+                    className:'star-btn',
+                    onClick: e => { e.stopPropagation(); activeToggle(it.id); }
+                  }, h('span', {className:'star-on'}, '★'))
+                ),
+                it.signals && it.signals.map(s => h(SignalBadge, {key:s, signal:s, style:{marginTop:4, marginRight:2}}))
+              )
+            )
+          )
+    ),
+  );
 }
 
 /* ─── SplitTab — tradeable items + untradeable sub-tab ───────── */
@@ -4776,10 +4834,10 @@ function DXPIntelTab({items, onSelect}) {
   // independent widths since their columns don't correspond 1:1; Honorable
   // Mentions reuses the Recommendations widths rather than getting its own
   // handles, since it's the same columns directly below the same table.
-  const mainCols = useResizableColumns('genius_almanac_main_col_widths',
-    {star:30, name:260, direction:110, confidence:110, medianPct:100, strategy:220, profitPerItem:160, profitForLimit:190, volRatio:80, expand:30});
-  const recCols = useResizableColumns('genius_almanac_rec_col_widths',
-    {star:30, name:220, strategy:220, netRoi:100, profitPerItem:160, profitForLimit:190});
+  const mainCols = useResizableColumns('genius_almanac_main_col_widths_v2',
+    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:150, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26});
+  const recCols = useResizableColumns('genius_almanac_rec_col_widths_v2',
+    {star:26, name:185, strategy:160, netRoi:88, profitPerItem:128, profitForLimit:148});
 
   useEffect(() => {
     // Already have data cached from an earlier visit this session — skip
@@ -5254,14 +5312,14 @@ function DXPIntelTab({items, onSelect}) {
       recs.picks.length === 0 && h('div', {className:'empty-state'}, h('div', null, 'No items currently qualify for this risk tolerance — try Risky, or check back after the next fetch.')),
       recs.picks.length > 0 && h('div', null,
         h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:recCols.tableWrapRef},
-        h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+        h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
           h('colgroup', null,
-            h('col', {style:{width:recCols.colWidths.star}}),
-            h('col', {style:{width:recCols.colWidths.name}}),
-            h('col', {style:{width:recCols.colWidths.strategy}}),
-            h('col', {style:{width:recCols.colWidths.netRoi}}),
-            h('col', {style:{width:recCols.colWidths.profitPerItem}}),
-            h('col', {style:{width:recCols.colWidths.profitForLimit}}),
+            h('col', {style:{width:recCols.displayWidths.star}}),
+            h('col', {style:{width:recCols.displayWidths.name}}),
+            h('col', {style:{width:recCols.displayWidths.strategy}}),
+            h('col', {style:{width:recCols.displayWidths.netRoi}}),
+            h('col', {style:{width:recCols.displayWidths.profitPerItem}}),
+            h('col', {style:{width:recCols.displayWidths.profitForLimit}}),
           ),
           h('thead', null, h('tr', null,
             h('th', null, null),
@@ -5306,14 +5364,14 @@ function DXPIntelTab({items, onSelect}) {
           h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8}},
             `Next best plays just outside your ${recSlots} slot${recSlots===1?'':'s'} — worth swapping in if one frees up.`
           ),
-          h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+          h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
             h('colgroup', null,
-              h('col', {style:{width:recCols.colWidths.star}}),
-              h('col', {style:{width:recCols.colWidths.name}}),
-              h('col', {style:{width:recCols.colWidths.strategy}}),
-              h('col', {style:{width:recCols.colWidths.netRoi}}),
-              h('col', {style:{width:recCols.colWidths.profitPerItem}}),
-              h('col', {style:{width:recCols.colWidths.profitForLimit}}),
+              h('col', {style:{width:recCols.displayWidths.star}}),
+              h('col', {style:{width:recCols.displayWidths.name}}),
+              h('col', {style:{width:recCols.displayWidths.strategy}}),
+              h('col', {style:{width:recCols.displayWidths.netRoi}}),
+              h('col', {style:{width:recCols.displayWidths.profitPerItem}}),
+              h('col', {style:{width:recCols.displayWidths.profitForLimit}}),
             ),
             h('thead', null, h('tr', null,
               h('th', {style:{width:20}}, null),
@@ -5388,18 +5446,18 @@ function DXPIntelTab({items, onSelect}) {
       rows.length === 0
         ? h('div', {className:'empty-state'}, h('div', null, 'No items show a clear signal for this phase.'))
         : h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:mainCols.tableWrapRef},
-          h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+          h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
             h('colgroup', null,
-              h('col', {style:{width:mainCols.colWidths.star}}),
-              h('col', {style:{width:mainCols.colWidths.name}}),
-              h('col', {style:{width:mainCols.colWidths.direction}}),
-              h('col', {style:{width:mainCols.colWidths.confidence}}),
-              h('col', {style:{width:mainCols.colWidths.medianPct}}),
-              h('col', {style:{width:mainCols.colWidths.strategy}}),
-              h('col', {style:{width:mainCols.colWidths.profitPerItem}}),
-              h('col', {style:{width:mainCols.colWidths.profitForLimit}}),
-              h('col', {style:{width:mainCols.colWidths.volRatio}}),
-              h('col', {style:{width:mainCols.colWidths.expand}}),
+              h('col', {style:{width:mainCols.displayWidths.star}}),
+              h('col', {style:{width:mainCols.displayWidths.name}}),
+              h('col', {style:{width:mainCols.displayWidths.direction}}),
+              h('col', {style:{width:mainCols.displayWidths.confidence}}),
+              h('col', {style:{width:mainCols.displayWidths.medianPct}}),
+              h('col', {style:{width:mainCols.displayWidths.strategy}}),
+              h('col', {style:{width:mainCols.displayWidths.profitPerItem}}),
+              h('col', {style:{width:mainCols.displayWidths.profitForLimit}}),
+              h('col', {style:{width:mainCols.displayWidths.volRatio}}),
+              h('col', {style:{width:mainCols.displayWidths.expand}}),
             ),
             h('thead', null, h('tr', null,
               h('th', null, null),
@@ -5489,27 +5547,94 @@ function DXPIntelTab({items, onSelect}) {
 
 /* ─── GEnius Almanac — Seasonal Events ──────────────────────────────────────── */
 
-// All data distilled from research/halloween_findings.md, christmas_findings.md,
-// summer_findings.md, easter_findings.md. Each % is a median across the n= years.
-// strategy: what to actually do. phase: when the price move happens.
+// Per-item research data distilled from the five seasonal research files.
+// duringPct: median % change from pre-event price at the worst point during the event.
+// recoveryPct: median % change from the during-event low back up post-event (null = no clean recovery).
+// confidence: fraction of years where direction agreed (e.g. 3/3 = 1.0).
+// n/nTotal: years of data. volRatio: trading volume vs item's own baseline.
+// roundTrip: true = buy during event, sell after recovery. false = drop only (buy-to-use or holder sell).
+// duringPct: deepest in-event discount from pre-event baseline (buy_pct_median from trough analysis).
+// recoveryPct: post-event phase gain FROM the buy price (post_event phase median).
+// buyDayOffset / sellDayOffset: approximate event day for entry / exit (relative to event start, >end = post-event).
+const SEASONAL_ITEM_DATA = [
+  // ── Christmas (confirmed, n=3) ──────────────────────────────────────────────
+  { event:'christmas', name:'Bucket of milk',        duringPct:-70, recoveryPct:59,  confidence:1.0, n:3, nTotal:3, volRatio:15.6, roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Buy around day 33 of the event when present openings have flooded supply (deepest point: ~-70% from baseline). Sell 7–21 days after event ends — 3/3 years showed +59% recovery from the floor. Cleanest crash+recovery signal in all seasonal research.' },
+  { event:'christmas', name:'Egg',                   duringPct:-60, recoveryPct:25,  confidence:1.0, n:3, nTotal:3, volRatio:9.2,  roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Same supply-flood as Bucket of milk. Buy around day 33, sell 1–2 weeks post-event. 3/3 years within 6% of each other in magnitude — the tightest consistency in the dataset.' },
+  { event:'christmas', name:'Orange',                duringPct:-63, recoveryPct:23,  confidence:1.0, n:3, nTotal:3, volRatio:16.4, roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Same supply-flood mechanism as Bucket of milk. Buy around day 33 (deepest ~-63%), sell 1–2 weeks post-event for +23% recovery from floor. 3/3 years confirmed.' },
+  { event:'christmas', name:'Aurora dye',            duringPct:-43, recoveryPct:14,  confidence:1.0, n:3, nTotal:3, volRatio:8.1,  roundTrip:true,  buyDayOffset:33, sellDayOffset:34, strategy:'Santa\'s Christmas Present supply. The drop concentrates in the last 5 days of the event (-7.6%) and resolves quickly. Buy late event (day 33), sell within days of event end for +14% recovery. 3/3 years confirmed — strongest dye signal in all research.' },
+  { event:'christmas', name:'Scrimshaw of sacrifice (inactive)',  duringPct:-21, recoveryPct:31,  confidence:1.0, n:3, nTotal:3, volRatio:1.3,  roundTrip:true,  buyDayOffset:33, sellDayOffset:41, strategy:'Mystery Gift supply. Rises +12% pre-announce (speculative buying), then falls during event. Buy at event floor (~day 33, -21% from baseline), sell ~day 41 post-event for +31% recovery from floor. Strongest post-event recovery of all scrimshaws.' },
+  { event:'christmas', name:'Scrimshaw of corruption (inactive)', duringPct:-22, recoveryPct:15, confidence:1.0, n:3, nTotal:3, volRatio:1.4,  roundTrip:true,  buyDayOffset:33, sellDayOffset:42, strategy:'Mystery Gift supply. Steady -22% during-event floor then +15% post-event recovery. Less dramatic than Sacrifice but consistent. 3/3 years confirmed.' },
+  { event:'christmas', name:'Scrimshaw of aggression (inactive)', duringPct:-22, recoveryPct:null, confidence:1.0, n:3, nTotal:3, volRatio:0.9,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Mystery Gift supply. Drops -22% during event and CONTINUES FALLING -13% post-event — unlike Sacrifice, there is no recovery. Drop-only: useful for players wanting cheap combat scrimshaws during the event window, but do not hold expecting a rebound. 3/3 years confirmed direction.' },
+  { event:'christmas', name:'Teak plank',            duringPct:-33, recoveryPct:19,  confidence:1.0, n:3, nTotal:3, volRatio:0.5,  roundTrip:true,  buyDayOffset:33, sellDayOffset:47, strategy:'Hidden supply signal — Teak planks are used by players doing Construction during the holiday season, but the present-opening supply flood also hits planks. Drops -33% at event floor, recovers +19% in the ~3 weeks after. 3/3 years confirmed, low volume so fills slowly.' },
+  { event:'christmas', name:'Impious ashes',         duringPct:-32, recoveryPct:12,  confidence:1.0, n:3, nTotal:3, volRatio:1.4,  roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Mystery Gift common pool supply flood. -32% floor around day 33, +12% recovery post-event. 3/3 years. Small magnitude but reliable.' },
+  { event:'christmas', name:'Soul dye',              duringPct:-9,  recoveryPct:15,  confidence:0.67,n:3, nTotal:3, volRatio:6.0,  roundTrip:true,  buyDayOffset:20, sellDayOffset:34, strategy:'Soul dye appears in rare Christmas presents AND Halloween Forgotten Belongings — both events flood supply. Christmas signal: flat-to-mild drop during event, +15% post-event 2/3 years. Buy if available at baseline or below during event, sell post-event. Weaker signal than Halloween; 67% direction agreement.' },
+  { event:'christmas', name:'Green Santa hat',       duringPct:-21, recoveryPct:null, confidence:1.0, n:3, nTotal:3, volRatio:2.1,  roundTrip:false, buyDayOffset:25, sellDayOffset:null, strategy:'Consistent -21% crash during the event (3/3 years) with NO post-event recovery — price stays flat or continues falling. Holder sell signal only: exit before or early in the event. Do not buy the dip.' },
+  { event:'christmas', name:'Purple Santa hat',      duringPct:-10, recoveryPct:null, confidence:1.0, n:3, nTotal:3, volRatio:7.3,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Rises +16% in pre-announce speculation (weeks before the event), then falls -9% during and -15% post. The play is to EXIT during the pre-announce rise — not to buy the dip. 3/3 years show the pre-announce pump-and-dump pattern.' },
+  // ── Christmas (speculative, n=1–2) ─────────────────────────────────────────
+  { event:'christmas', name:'Pink Santa hat',        duringPct:-11, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:10.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Drops -11% late event and continues falling -8% post-event. Drop-only; no recovery observed. Sell if you hold. 2/2 years show the same direction — confirmed despite n=2.' },
+  { event:'christmas', name:'Yellow Santa hat',      duringPct:-27, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.7,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, 2024 only) -11% early event, -27% late event, -60% post-event. Massive crash with no recovery in the 21-day window. Only one year of data — wait for 2025 confirmation before drawing conclusions.' },
+  { event:'christmas', name:'Blue Santa hat',        duringPct:-27, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.5,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, 2025 only) +18% early event, -27% late event, -62% post-event. Very volatile and confusing — early buyers got burned. Only one year of data.' },
+  { event:'christmas', name:'Aurora Santa hat',      duringPct:0,   recoveryPct:17,  confidence:null, n:1, nTotal:1, volRatio:16.7, roundTrip:true,  buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, 2025 only) UNUSUAL PATTERN: rises +12% late event and +17% post-event. May be a demand-driven item (Aurora colourway is popular) with limited supply. Only one year of data — cannot confirm.' },
+  { event:'christmas', name:'Santa hat',             duringPct:-2,  recoveryPct:null, confidence:null, n:12, nTotal:12,volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'10+ years of data, no consistent actionable pattern. Slight pre-announce rise (+1.5% median) and slight post-event drift (-1.7%) — far too small to trade. A discontinued item with sparse GE trades; most years show 0.0% movement. "Seasonal attention" effect only, not a supply-driven trade.' },
+  { event:'christmas', name:'Black Santa hat',       duringPct:-1,  recoveryPct:null, confidence:null, n:12, nTotal:12,volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Even flatter than Santa hat across 10+ years. Most events show 0.0% movement. Only meaningful data in 2014–2015 and 2023–2025; remaining years essentially no trades. No consistent seasonal pattern found.' },
+  // ── Christmas gift tokens (speculative, n=1) ────────────────────────────────
+  { event:'christmas', name:'Frozen Trail token',    duringPct:-48, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:17.5, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Extreme crash: -20% early event, -48% late event, -41% post. Santa\'s Christmas Present 2025 drop. All trail tokens show the same massive crash pattern — supply flood from present openings is brutal. No recovery within 21 days post-event.' },
+  { event:'christmas', name:'Frozen Overpower cosmetic ability scroll', duringPct:-31, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:51.8, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) 51.8x volume spike, -31% buy trough. All Frozen/Warped ability scrolls follow the same supply-flood crash from Santa\'s Christmas Present. No recovery in 21 days.' },
+  { event:'christmas', name:'Primal Pickaxe (Red) Token', duringPct:-51, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.6,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) -50% crash during event from Santa\'s Christmas Present 2025. Armour tokens (Red Primal set, Capes of Devotion/Devastation) all show -49 to -57% crashes with no recovery. Sell if you hold.' },
+  // ── Halloween (confirmed, n=2) ─────────────────────────────────────────────
+  { event:'halloween', name:'Haunted whetstone',     duringPct:0,   recoveryPct:42,  confidence:1.0, n:2, nTotal:2, volRatio:29.2, roundTrip:true,  buyDayOffset:0,  sellDayOffset:28, strategy:'UNIQUE RISE PATTERN — opposite of most seasonal items. Rises +19% during the late event and +18% post-event (massive 29x volume). Buy at event open (day 0, approximately baseline price). Sell around day 28 for a projected +42% gain. 2/2 years confirmed. The mechanism is likely demand-driven: players farm with it more during Halloween and it gets consumed.' },
+  { event:'halloween', name:'Uncut moonstone',       duringPct:-42, recoveryPct:8,   confidence:1.0, n:2, nTotal:2, volRatio:2.1,  roundTrip:true,  buyDayOffset:21, sellDayOffset:25, strategy:'Clan Goodie Bag supply. Trough around event end (day 21, -42% from baseline). Small but confirmed recovery of +8% in the 3–4 days after event. 2/2 years. Buy near event end, sell shortly after.' },
+  { event:'halloween', name:'Chocolate bar',         duringPct:-26, recoveryPct:11,  confidence:1.0, n:2, nTotal:2, volRatio:7.6,  roundTrip:true,  buyDayOffset:15, sellDayOffset:26, strategy:'Clan Goodie Bag supply. Drops -26% around day 15 (3.3x volume), recovers +11% by day 26. 2/2 years confirmed. Small magnitude but very clean pattern — one of the cleaner round-trips in Halloween research.' },
+  { event:'halloween', name:'Regular ghostly ink',   duringPct:-25, recoveryPct:13,  confidence:1.0, n:2, nTotal:2, volRatio:1.0,  roundTrip:true,  buyDayOffset:19, sellDayOffset:27, strategy:'Clan Goodie Bag supply. Trough around day 19 (-25%), recovery +13% by day 27. 2/2 years confirmed. Low volume ratio (1x baseline) means fills can be slow — allow extra time.' },
+  { event:'halloween', name:'Crypt scythe token',    duringPct:-63, recoveryPct:150, confidence:1.0, n:2, nTotal:2, volRatio:14.2, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. Crashes -63% from baseline at trough (day 19), then bounces +150% in the post-event window — nearly full recovery to baseline. 2/2 years. Buy near event end, sell ~day 32. Massive percentage return on a cheap-during-event item, but verify buy limit.' },
+  { event:'halloween', name:'Crypt shieldbow token', duringPct:-41, recoveryPct:77,  confidence:1.0, n:2, nTotal:2, volRatio:19.3, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. Drops -41% at trough, recovers +77% from floor post-event. 2/2 years. Same timing as Crypt scythe. Buy near event end, sell ~day 32.' },
+  { event:'halloween', name:'Crypt staff token',     duringPct:-25, recoveryPct:53,  confidence:1.0, n:2, nTotal:2, volRatio:19.8, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. -25% trough, +53% post-event recovery. 2/2 years. Smaller crash than the other Crypt tokens but still a solid round-trip.' },
+  { event:'halloween', name:'Boolap Bag Mask token', duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:31.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag cosmetic token. -61% from baseline at trough, -83% at the post-event floor. 2/2 years. Item crashes and STAYS down well past the 21-day post window — no recovery. Holder sell only: exit before or very early in the event. Do not buy the dip.' },
+  { event:'halloween', name:'Spooky Hare Mask token',duringPct:-62, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:35.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same crash pattern as Boolap Bag Mask token. -62% trough, -85% post-event floor. 35x volume spike. 2/2 years. Exit before event starts.' },
+  { event:'halloween', name:'Spooky Ghost Mask token',duringPct:-61,recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:25.6, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same crash pattern. -61% trough, -84% post-event floor. 25x volume. 2/2 years. Exit before event starts.' },
+  { event:'halloween', name:'Soul Witch token',      duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:19.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings cosmetic. -61% from baseline at trough, -83% post-event floor. 2/2 years. Drops further than the Spooky Mask series and has no recovery signal. Sell if you hold any before the event.' },
+  { event:'halloween', name:'Soul Surge cosmetic ability scroll', duringPct:-92, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:22.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag ability scroll. One of the most extreme crashes in all seasonal research: -92% from baseline at trough (item loses nearly all its value). 22x volume. No recovery within 21 days post-event. Confirmed 2/2 years. Sell all holdings before event starts.' },
+  { event:'halloween', name:'Soul Dive cosmetic ability scroll',  duringPct:-90, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:20.9, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag ability scroll. -90% from baseline at trough, -94% at post-event floor. Nearly as extreme as Soul Surge. 21x volume. No recovery. Confirmed 2/2 years. Sell all holdings before event starts.' },
+  { event:'halloween', name:'Ensouled pumpkin mask', duringPct:-24, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:8.6,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag supply. ~24% crash at trough, continues falling post-event (no recovery). 8.6x baseline volume. 2/2 years. Holder sell signal.' },
+  { event:'halloween', name:'Soul dye',              duringPct:-58, recoveryPct:null, confidence:null, n:1, nTotal:2, volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings (2025 only — n=1 effective). Massive -58% crash on huge volume when the Forgotten Belongings mechanic ran. 2024 showed 0% movement because Forgotten Belongings didn\'t run that year. Treat as directionally illustrative but unconfirmed until 2026 gives a second data point.' },
+  // ── Halloween bones (n=2) ──────────────────────────────────────────────────
+  { event:'halloween', name:'Bones',                 duringPct:-17, recoveryPct:13,  confidence:1.0, n:2, nTotal:2, volRatio:1.6,  roundTrip:true,  buyDayOffset:19, sellDayOffset:33, strategy:'Halloween loot tables add small amounts of common bones to the market. Trough ~-17% from baseline around day 19, then +13% post-event recovery by day 33. 2/2 years confirmed. Low value item — the percentage move is real but absolute GP is trivial unless traded in large quantities.' },
+  { event:'halloween', name:'Dagannoth bones',       duringPct:-16, recoveryPct:6,   confidence:1.0, n:2, nTotal:2, volRatio:2.2,  roundTrip:true,  buyDayOffset:19, sellDayOffset:33, strategy:'Medium/Large Forgotten Belongings supply. -16% trough around day 19, +6% post-event recovery. 2/2 years confirmed. Small magnitude round-trip — useful for bulk prayer training buyers who want to time their purchase.' },
+  { event:'halloween', name:'Baby dragon bones',     duringPct:-13, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:5.7,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Halloween loot supply (-13% early event, 5.7x volume). Unlike other bones, price CONTINUES to fall post-event rather than recovering. Drop-only — either use for prayer training during the event, or sell before it ends.' },
+  // ── Halloween ashes (n=2) ──────────────────────────────────────────────────
+  { event:'halloween', name:'Impious ashes',         duringPct:-27, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:3.0,  roundTrip:false, buyDayOffset:12, sellDayOffset:null, strategy:'Halloween loot flood drives ashes into the market (-27% trough at day 12, 3x volume). Post-event price stays flat — no recovery. Drop-only: ideal for players who want cheap Dungeoneering/prayer ashes during or just after the event. Not a resell play. (Compare: Christmas Impious ashes ARE a round-trip — different supply dynamic.)' },
+  { event:'halloween', name:'Accursed ashes',        duringPct:-44, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:1.3,  roundTrip:false, buyDayOffset:22, sellDayOffset:null, strategy:'Strong drop signal: -44% from baseline at trough (day 22). No post-event recovery — price stays depressed or falls further. Drop-only. Best prayer training buy window of all the Halloween ashes. 2/2 years confirmed.' },
+  { event:'halloween', name:'Infernal ashes',        duringPct:-26, recoveryPct:4,   confidence:1.0, n:2, nTotal:2, volRatio:1.0,  roundTrip:false, buyDayOffset:21, sellDayOffset:null, strategy:'Drops -26% at trough around day 21 with a very small post-event tick (+4%). The recovery is too small to call this a proper round-trip — treat as drop-only for prayer training purposes. 2/2 years confirm the drop.' },
+  // ── Halloween (speculative, n=1) ───────────────────────────────────────────
+  { event:'halloween', name:"Soul dyed hallowe'en mask", duringPct:0, recoveryPct:9,   confidence:null, n:1, nTotal:1, volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, introduced Halloween 2025) Debuted mid-event on day 15 at ~1B gp with no pre-event baseline — the item did not exist before. Rose +4.4% through late event, +8.7% post-event, and continued appreciating to ~1.52B gp by June 2026. No crash pattern observed. Added for forward tracking: Halloween 2026 will show whether new supply causes a dip or the item holds value. Cannot draw trade conclusions from one partial event.' },
+  { event:'halloween', name:'Red pumpkin',           duringPct:-17, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:12.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -17% late event, -37% post-event. 12.7x volume. Crash with no recovery. Single year of data.' },
+  { event:'halloween', name:'Purple pumpkin',        duringPct:-17, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:14.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Same pattern as Red pumpkin. -17% late event, -30% post-event. Single year of data.' },
+  { event:'halloween', name:'Witch\'s Outfit token', duringPct:-32, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:7.5,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -32% late event, -39% post-event. Single year of data — cannot confirm.' },
+  { event:'halloween', name:'Lucille token',         duringPct:-19, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:12.5, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -19% late event, -32% post-event. Single year of data.' },
+  // ── Summer ─────────────────────────────────────────────────────────────────
+  { event:'summer', name:'Willow composite bow',     duringPct:-28, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:11.1, roundTrip:true,  exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item and leading indicator for the whole cluster — most liquid so it reprices first. Buy during the Beach Event at ~28% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end. If this is already down 25%+, the rest of the cluster is experiencing the same glut even if their GE prices haven\'t moved yet.' },
+  { event:'summer', name:'Saradomin mitre',          duringPct:-14, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:4.0,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item. Buy during the Beach Event at ~14% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end.' },
+  { event:'summer', name:'Zamorak mitre',            duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.8,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item. Buy during the Beach Event at ~13% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end.' },
+  { event:'summer', name:'Armadyl robe top',         duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item. Buy during the Beach Event at ~13% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end.' },
+  { event:'summer', name:'Ancient robe top',         duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item. Buy during the Beach Event at ~13% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end.' },
+  { event:'summer', name:'Guthix mitre',             duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item. Buy during the Beach Event at ~13% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end.' },
+  { event:'summer', name:'Bandos robe legs',         duringPct:-12, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'Fortunate Component item. Buy during the Beach Event at ~12% below baseline and disassemble for Fortunate components, or buy and resell after ~24% price appreciation in the weeks following the event end.' },
+  // ── Halloween debunked ─────────────────────────────────────────────────────
+  { event:'halloween', name:'Dragon bones',          noSignal:true, n:2, nTotal:2, volRatio:null, strategy:'Researched across both Halloween events (2024–2025). No meaningful price movement detected in any phase — the event\'s bone supply is too small relative to ongoing prayer training demand to move Dragon bones at all. Not an actionable trade.' },
+  { event:'halloween', name:'Frost dragon bones',    noSignal:true, n:2, nTotal:2, volRatio:0.07, strategy:'Researched across both events. Minor price movement detected but essentially zero GE volume (vol ratio 0.07 — 93% below baseline). Frost dragon bones are traded so infrequently that any seasonal pattern is unactionable: you cannot fill orders reliably enough to matter.' },
+  { event:'halloween', name:'Dragonkin bones',       noSignal:true, n:2, nTotal:2, volRatio:0.86, strategy:'Researched across both events. Small price signal exists (~-3% early event, +8% post) but volume is too low (0.86× baseline) to reliably fill orders during the brief event window. The signal-to-liquidity ratio is too poor to trade.' },
+];
+
 const SEASONAL_EVENTS = [
   {
     id: 'christmas',
     name: 'Christmas Village',
     emoji: '🎄',
-    // Ran Dec 1–5 ish to Jan 5 ish across 2023/2024/2025
     typicalWindow: 'Early December → Early January',
     nextExpected: 'December 2026',
     n: 3,
     confidence: 'high',
     unconfirmed2026: false,
-    items: [
-      { name: 'Bucket of milk',        phase: 'During event',  dir: 'drop', pct: -75, recoveryPct: +60, note: 'Cleanest crash+recovery in all seasonal research. 3/3 years.' },
-      { name: 'Egg',                   phase: 'During event',  dir: 'drop', pct: -58, recoveryPct: +23, note: '3/3 years direction agreement.' },
-      { name: 'Orange',                phase: 'During event',  dir: 'drop', pct: -57, recoveryPct: +27, note: '3/3 years direction agreement.' },
-      { name: 'Aurora dye',            phase: 'During event',  dir: 'drop', pct: -44, recoveryPct: +13, note: 'Strongest dye signal in all research. 3/3 years round-trip.' },
-      { name: 'Scrimshaw of sacrifice',phase: 'During event',  dir: 'drop', pct: -20, recoveryPct: +24, note: 'Clean round-trip. 3/3 years.' },
-    ],
   },
   {
     id: 'halloween',
@@ -5520,12 +5645,6 @@ const SEASONAL_EVENTS = [
     n: 2,
     confidence: 'medium',
     unconfirmed2026: false,
-    items: [
-      { name: 'Soul dye',              phase: 'During event',  dir: 'drop', pct: -58, recoveryPct: null, note: 'n=1 effective — only ran with Forgotten Belongings in 2025. Treat as illustrative, not confirmed.' },
-      { name: 'Ensouled pumpkin mask', phase: 'During event',  dir: 'drop', pct: -35, recoveryPct: null, note: '2/2 years. No consistent recovery — event items tend to stay down.' },
-      { name: 'Uncut moonstone',       phase: 'During event',  dir: 'drop', pct: -26, recoveryPct: +8,   note: 'Best round-trip candidate. 2/2 years. Small recovery after event.' },
-      { name: 'Regular ghostly ink',   phase: 'During event',  dir: 'drop', pct: -8,  recoveryPct: +13,  note: '2/2 years. Small drop during, slight recovery after.' },
-    ],
   },
   {
     id: 'summer',
@@ -5536,13 +5655,6 @@ const SEASONAL_EVENTS = [
     n: 3,
     confidence: 'high',
     unconfirmed2026: true,
-    items: [
-      { name: 'Willow composite bow',  phase: 'During event',  dir: 'drop', pct: -28, recoveryPct: +24, note: 'Leading indicator for the whole Fortunate-component cluster. Reprices first. 3/3 years.' },
-      { name: 'Saradomin mitre',       phase: 'During event',  dir: 'drop', pct: -14, recoveryPct: null, note: 'Part of heraldic gear cluster. Reprices slower than Willow bow. 3/3 years.' },
-      { name: 'Armadyl mitre',         phase: 'During event',  dir: 'drop', pct: -13, recoveryPct: null, note: 'Same cluster. 3/3 years.' },
-      { name: 'Saradomin stole',       phase: 'During event',  dir: 'drop', pct: -12, recoveryPct: null, note: 'Same cluster. 3/3 years.' },
-      { name: 'Saradomin crozier',     phase: 'During event',  dir: 'drop', pct: -11, recoveryPct: null, note: 'Same cluster. 3/3 years.' },
-    ],
   },
   {
     id: 'easter',
@@ -5553,7 +5665,6 @@ const SEASONAL_EVENTS = [
     n: 3,
     confidence: 'insufficient',
     unconfirmed2026: false,
-    items: [],
     noDataNote: 'Three years of data (2024, 2025, 2026), no consistent market signals found. The only weak signal is Fellstalk seed (+8–13% during the event, 3/3 years) but the magnitude is too small and the item too niche to be actionable. No trading opportunities identified.',
   },
 ];
@@ -5574,35 +5685,113 @@ function _daysUntilNextEvent(event, now = new Date()) {
   return Math.round((target - now) / 86400000);
 }
 
+// Compute estimated profit from research % medians + live price/limit.
+// duringPct is negative (crash). recoveryPct is positive (rebound from bottom).
+// Returns null if we can't compute a useful number.
+function buildSeasonalTrade(research, liveItem) {
+  if (!liveItem || !research) return null;
+  const price = liveItem.high || liveItem.low;
+  const limit = liveItem.limit;
+  if (!price) return null;
+
+  const buyPrice = Math.round(price * (1 + research.duringPct / 100));
+  if (!research.roundTrip || research.recoveryPct == null) {
+    // Drop-only: show savings relative to current price, no sell profit
+    const savings = price - buyPrice;
+    return { buyPrice, sellPrice: null, profitPerItem: null, profitForLimit: null, netProfitPct: null, savings, limit };
+  }
+
+  // Round-trip: buy at the bottom, sell post-event
+  const rawSellPrice = Math.round(buyPrice * (1 + research.recoveryPct / 100));
+  // Cap sell at current price so we don't claim recovery above pre-event
+  const sellPrice = Math.min(rawSellPrice, price);
+  const netSellPrice = applyTax(sellPrice);
+  const profitPerItem = netSellPrice - buyPrice;
+  const profitForLimit = limit ? profitPerItem * limit : null;
+  const netProfitPct = buyPrice > 0 ? (profitPerItem / buyPrice) * 100 : null;
+  return { buyPrice, sellPrice, netSellPrice, profitPerItem, profitForLimit, netProfitPct, savings: null, limit };
+}
+
 function SeasonalEventsTab({items: allItems, onSelect}) {
-  const [activeEvent, setActiveEvent] = useState('christmas');
+  const [activeEvent, setActiveEvent]   = useState('christmas');
+  const [tierFilter, setTierFilter]     = useState('all');   // 'all' | 'roundtrip' | 'droponly' | 'speculative'
+  const [sortCol, setSortCol]           = useState('drop');
+  const [sortDir, setSortDir]           = useState('desc');
+
   const event = SEASONAL_EVENTS.find(e => e.id === activeEvent);
   const now = new Date();
 
-  const confidenceLabel = {high: 'High', medium: 'Medium', insufficient: 'Insufficient data'};
-  const confidenceColor = {high: T.green, medium: T.gold, insufficient: T.textDim};
-  const dirArrow = dir => dir === 'rise' ? '▲' : '▼';
-  const dirColor = dir => dir === 'rise' ? T.green : T.red;
+  const confidenceColor = { high: T.green, medium: T.gold, insufficient: T.textDim };
+  const confidenceLabel = { high: 'High (n≥3)', medium: 'Medium (n=2)', insufficient: 'Insufficient data' };
+
+  // Sorted column header helper
+  const SortHeader = (col, label, align = 'left') => {
+    const active = sortCol === col;
+    return h('div', {
+      onClick: () => { if (active) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortCol(col); setSortDir('desc'); } },
+      style: { cursor: 'pointer', userSelect: 'none', textAlign: align,
+        color: active ? T.goldBright : T.textDim,
+        display: 'flex', alignItems: 'center', gap: 3, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' },
+    }, label, active && h('span', {style:{fontSize:9}}, sortDir === 'desc' ? ' ▼' : ' ▲'));
+  };
+
+  // Build enriched rows for the selected event
+  const eventResearch = SEASONAL_ITEM_DATA.filter(r => r.event === activeEvent);
+  let rows = eventResearch.map(research => {
+    const liveItem = allItems?.find(it => it.name?.toLowerCase() === research.name.toLowerCase());
+    const trade = buildSeasonalTrade(research, liveItem);
+    return { research, liveItem, trade };
+  });
+
+  // Tier filter
+  const isNoSignal    = r => !!r.research.noSignal;
+  const isSpeculative = r => !r.research.noSignal && (r.research.n === 1 || r.research.confidence == null);
+  const isConfirmed   = r => !r.research.noSignal && !isSpeculative(r);
+  // Negligible: round-trip profit/limit < 1M, or drop-only savings/limit < 1M — requires live price to classify.
+  // Items with no live price are not classified as negligible (can't compute).
+  const isNegligible  = r => {
+    if (!isConfirmed(r) || !r.trade || r.research.exemptNegligible) return false;
+    const { profitForLimit, savings, limit } = r.trade;
+    if (profitForLimit != null) return profitForLimit < 1_000_000;
+    if (savings != null && limit) return savings * limit < 1_000_000;
+    return false;
+  };
+  if (tierFilter === 'roundtrip')   rows = rows.filter(r => isConfirmed(r) && !isNegligible(r) && r.research.roundTrip);
+  if (tierFilter === 'droponly')    rows = rows.filter(r => isConfirmed(r) && !isNegligible(r) && !r.research.roundTrip);
+  if (tierFilter === 'negligible')  rows = rows.filter(r => isNegligible(r));
+  if (tierFilter === 'speculative') rows = rows.filter(r => isSpeculative(r) || isNoSignal(r));
+  if (tierFilter === 'all')         rows = rows.filter(r => isConfirmed(r) && !isNegligible(r));
+
+  // Sort
+  rows.sort((a, b) => {
+    let av, bv;
+    if (sortCol === 'drop')    { av = Math.abs(a.research.duringPct ?? 0);  bv = Math.abs(b.research.duringPct ?? 0); }
+    if (sortCol === 'recovery'){ av = a.research.recoveryPct ?? -999;  bv = b.research.recoveryPct ?? -999; }
+    if (sortCol === 'conf')    { av = a.research.confidence ?? -1;     bv = b.research.confidence ?? -1; }
+    if (sortCol === 'profit')  { av = a.trade?.profitForLimit ?? -999999;
+                                 bv = b.trade?.profitForLimit ?? -999999; }
+    if (sortCol === 'vol')     { av = a.research.volRatio ?? 0;        bv = b.research.volRatio ?? 0; }
+    if (sortCol === 'name')    { return sortDir === 'asc' ? a.research.name.localeCompare(b.research.name) : b.research.name.localeCompare(a.research.name); }
+    if (av == null) av = -999999; if (bv == null) bv = -999999;
+    return sortDir === 'asc' ? av - bv : bv - av;
+  });
 
   return h('div', null,
-    h('div', {style: {fontSize: 11, color: T.textDim, fontStyle: 'italic', marginBottom: 12}},
-      'Holiday and seasonal events that move the market. Data from historical price research.'
-    ),
-
-    // Event type selector
+    // Event type selector pills
     h('div', {style: {display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap'}},
       SEASONAL_EVENTS.map(ev => {
         const days = _daysUntilNextEvent(ev, now);
         const isSoon = days != null && days <= 60;
         const c = ev.confidence === 'high' ? T.green : ev.confidence === 'medium' ? T.gold : T.textDim;
+        const isActive = activeEvent === ev.id;
         return h('button', {
           key: ev.id,
-          onClick: () => setActiveEvent(ev.id),
+          onClick: () => { setActiveEvent(ev.id); setTierFilter('all'); setSortCol('drop'); setSortDir('desc'); },
           style: {
             padding: '6px 14px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
-            border: `1px solid ${activeEvent === ev.id ? c : T.borderDim}`,
-            background: activeEvent === ev.id ? `rgba(${ev.confidence === 'high' ? '76,175,80' : ev.confidence === 'medium' ? '201,168,76' : '100,100,100'},0.15)` : 'transparent',
-            color: activeEvent === ev.id ? c : T.textDim,
+            border: `1px solid ${isActive ? c : T.borderDim}`,
+            background: isActive ? `rgba(${ev.confidence === 'high' ? '76,175,80' : ev.confidence === 'medium' ? '201,168,76' : '100,100,100'},0.15)` : 'transparent',
+            color: isActive ? c : T.textDim,
           }
         }, `${ev.emoji} ${ev.name}${isSoon ? ' ⚡' : ''}`);
       })
@@ -5610,16 +5799,16 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
 
     event && h('div', null,
 
-      // 2026 unconfirmed warning
+      // 2026 unconfirmed banner
       event.unconfirmed2026 && h('div', {style: {
-        background: 'rgba(229,57,53,0.1)', border: `1px solid rgba(229,57,53,0.4)`,
+        background: 'rgba(229,57,53,0.08)', border: `1px solid rgba(229,57,53,0.4)`,
         borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 12,
       }},
         h('div', {style: {fontWeight: 'bold', color: T.red, marginBottom: 4}}, '⚠ 2026 Status Unconfirmed'),
-        'The Beach Event / Sandy Caskets has not been officially announced for 2026. The last three years (2023–2025) ran late June through late July, but Jagex has not confirmed this year\'s event. Data below reflects historical patterns only — verify the event is actually running before acting on any of this.',
+        'The Beach Event / Sandy Caskets has not been officially announced for 2026. The last three years (2023–2025) ran late June through late July. Data below reflects historical patterns — verify the event is actually running before acting on any of this.',
       ),
 
-      // Event overview card
+      // Overview card
       h('div', {style: {border: `1px solid ${T.borderDim}`, borderRadius: 6, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 24, flexWrap: 'wrap'}},
         h('div', null,
           h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Typical window'),
@@ -5635,16 +5824,14 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
         h('div', null,
           h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Data confidence'),
           h('div', {style: {fontSize: 13, color: confidenceColor[event.confidence]}},
-            `${confidenceLabel[event.confidence]} (n=${event.n} years)`
+            confidenceLabel[event.confidence]
           ),
         ),
         (() => {
           const days = _daysUntilNextEvent(event, now);
           return days != null && h('div', null,
             h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Days until expected'),
-            h('div', {style: {fontSize: 13, color: days <= 30 ? T.red : days <= 60 ? T.gold : T.text}},
-              `~${days} days`
-            ),
+            h('div', {style: {fontSize: 13, color: days <= 30 ? T.red : days <= 60 ? T.gold : T.text}}, `~${days} days`),
           );
         })(),
       ),
@@ -5658,53 +5845,189 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
         event.noDataNote,
       ),
 
-      // Items table
-      event.confidence !== 'insufficient' && event.items.length > 0 && h('div', null,
-        h('div', {style: {fontSize: 11, color: T.textDim, fontStyle: 'italic', marginBottom: 10}},
-          event.id === 'christmas' && 'These items crash reliably when the Christmas event floods the market with holiday-exclusive supplies. The round-trip play: buy near the bottom during the event, sell after it ends.',
-          event.id === 'halloween' && 'These items crash when Halloween supplies flood the GE. n=2 — treat as early data, not a proven cycle.',
-          event.id === 'summer' && 'Sandy Casket loot (requiring heraldic gear and composite bows as Fortunate-component sources) floods the GE during the event. Willow composite bow reprices first and fastest — if it\'s down 25%+, assume the whole cluster is experiencing the same effect even if their prices haven\'t caught up yet.',
-        ),
-        // Table header
-        h('div', {style: {display: 'grid', gridTemplateColumns: '1fr 120px 90px 90px 1fr', gap: '0 12px', padding: '6px 10px', fontSize: 10, color: T.textDim, borderBottom: `1px solid ${T.borderDim}`, marginBottom: 4}},
-          h('div', null, 'ITEM'),
-          h('div', null, 'PHASE'),
-          h('div', null, 'EFFECT'),
-          h('div', null, 'RECOVERY'),
-          h('div', null, 'NOTES'),
-        ),
-        event.items.map((item, i) => {
-          const itemData = allItems?.find(it => it.name?.toLowerCase() === item.name.toLowerCase());
-          return h('div', {
-            key: item.name,
+      // Main items section
+      event.confidence !== 'insufficient' && eventResearch.length > 0 && h('div', null,
+
+        // Tier filter + legend row
+        h('div', {style: {display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap'}},
+          h('span', {style: {fontSize: 11, color: T.textDim, marginRight: 4}}, 'Show:'),
+          [
+            {id:'all',         label:'Confirmed'},
+            {id:'roundtrip',   label:'🔄 Round-trip'},
+            {id:'droponly',    label:'📉 Drop-only'},
+            {id:'negligible',  label:'🪙 Negligible'},
+            {id:'speculative', label:'🔬 Speculative'},
+          ].map(f => h('button', {
+            key: f.id,
+            onClick: () => setTierFilter(f.id),
             style: {
-              display: 'grid', gridTemplateColumns: '1fr 120px 90px 90px 1fr',
-              gap: '0 12px', padding: '8px 10px', fontSize: 12,
+              padding: '4px 10px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+              border: `1px solid ${tierFilter === f.id ? T.gold : T.borderDim}`,
+              background: tierFilter === f.id ? 'rgba(201,168,76,0.12)' : 'transparent',
+              color: tierFilter === f.id ? T.goldBright : T.textDim,
+            }
+          }, f.label))
+        ),
+
+        // Column headers
+        h('div', {style: {
+          display: 'grid',
+          gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+          gap: '0 8px', padding: '6px 10px', fontSize: 10, borderBottom: `1px solid ${T.borderDim}`, marginBottom: 2,
+        }},
+          SortHeader('name', 'ITEM'),
+          SortHeader('conf', 'CONF', 'right'),
+          SortHeader('drop', 'DROP %', 'right'),
+          SortHeader('recovery', 'RECOVERY', 'right'),
+          SortHeader('vol', 'VOL RATIO', 'right'),
+          SortHeader('profit', 'EST PROFIT/ITEM', 'right'),
+          SortHeader('profit', 'EST PROFIT/LIMIT', 'right'),
+        ),
+
+        // Rows
+        rows.map((row, i) => {
+          const { research: res, liveItem, trade } = row;
+          const price = liveItem?.high || liveItem?.low;
+          const isRT = res.roundTrip;
+          const confStr = res.confidence != null ? `${Math.round(res.confidence * 100)}%` : 'n/a';
+          const confColor = res.confidence == null ? T.textDim : res.confidence >= 1 ? T.green : res.confidence >= 0.67 ? T.gold : T.red;
+
+          // No-signal row — debunked items get a collapsed greyed display
+          if (res.noSignal) return h('div', {
+            key: res.name,
+            style: {
+              display: 'grid', gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+              gap: '0 8px', padding: '8px 10px', fontSize: 12,
+              background: i % 2 === 0 ? T.panel2 : 'transparent',
+              borderRadius: 4, alignItems: 'center', opacity: 0.55,
+            }
+          },
+            h('div', null,
+              h('div', {style: {color: T.textDim, marginBottom: 2}}, res.name),
+              h('div', {style: {fontSize: 10, color: T.textDim}}, '🚫 No signal'),
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim, fontSize: 11}}, `${res.n}/${res.nTotal} yrs`),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}},
+              res.volRatio != null ? `${res.volRatio}×` : '—'
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+          );
+
+          return h('div', {
+            key: res.name,
+            style: {
+              display: 'grid', gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+              gap: '0 8px', padding: '8px 10px', fontSize: 12,
               background: i % 2 === 0 ? T.panel2 : 'transparent',
               borderRadius: 4, alignItems: 'start',
             }
           },
-            h('div', {
-              style: {color: itemData ? T.goldBright : T.text, cursor: itemData ? 'pointer' : 'default', textDecoration: itemData ? 'underline' : 'none'},
-              onClick: itemData && onSelect ? () => onSelect(itemData) : undefined,
-            }, item.name),
-            h('div', {style: {color: T.textDim}}, item.phase),
-            h('div', {style: {color: dirColor(item.dir), fontWeight: 'bold'}},
-              `${dirArrow(item.dir)} ${Math.abs(item.pct)}%`
-            ),
+            // Item name
             h('div', null,
-              item.recoveryPct != null
-                ? h('span', {style: {color: T.green}}, `+${item.recoveryPct}%`)
-                : h('span', {style: {color: T.textDim}}, '—')
+              h('div', {
+                style: {color: liveItem ? T.goldBright : T.text, cursor: liveItem ? 'pointer' : 'default', textDecoration: liveItem ? 'underline' : 'none', marginBottom: 2},
+                onClick: liveItem && onSelect ? () => onSelect(liveItem) : undefined,
+              }, res.name),
+              h('div', {style: {fontSize: 10, color: isRT ? T.green : T.textDim}},
+                isRT ? '🔄 Round-trip' : '📉 Drop-only'
+              ),
+              price && h('div', {style: {fontSize: 10, color: T.textDim}}, `Current: ${fmt.gp(price)} gp`),
             ),
-            h('div', {style: {fontSize: 11, color: T.textDim}}, item.note),
-          );
-        })
-      ),
 
-      // n=2 caveat for Halloween
-      event.id === 'halloween' && h('div', {style: {marginTop: 14, fontSize: 11, color: T.textDim, fontStyle: 'italic', borderTop: `1px solid ${T.borderDim}`, paddingTop: 10}},
-        'Halloween data covers 2024 and 2025 only. Two years is enough to see a pattern, not enough to call it reliable. The 2025 event introduced Death\'s Forgotten Belongings (a major new item sink) which is unlikely to repeat in the same form — treat 2025-heavy signals (Soul dye especially) as illustrative until more data accumulates.'
+            // Confidence
+            h('div', {style: {textAlign: 'right', color: confColor, fontWeight: 'bold', paddingTop: 2}},
+              confStr,
+              h('div', {style: {fontSize: 9, color: T.textDim, fontWeight: 'normal'}}, `${res.n}/${res.nTotal} yrs`)
+            ),
+
+            // Drop %
+            h('div', {style: {textAlign: 'right', color: res.duringPct > 0 ? T.green : T.red, fontWeight: 'bold', paddingTop: 2}},
+              res.duringPct > 0 ? `▲ ${res.duringPct}%` : res.duringPct === 0 ? '≈ baseline' : `▼ ${Math.abs(res.duringPct)}%`,
+              trade?.buyPrice && h('div', {style: {fontSize: 9, color: T.textDim, fontWeight: 'normal'}}, `~${fmt.gp(trade.buyPrice)}`),
+              res.buyDayOffset != null && h('div', {style: {fontSize: 9, color: T.textDim, fontWeight: 'normal'}},
+                `buy day ${res.buyDayOffset < 0 ? `${res.buyDayOffset}` : `+${res.buyDayOffset}`}`
+              )
+            ),
+
+            // Recovery %
+            h('div', {style: {textAlign: 'right', paddingTop: 2}},
+              res.recoveryPct != null
+                ? h('span', {style: {color: T.green, fontWeight: 'bold'}}, `▲ ${res.recoveryPct}%`)
+                : h('span', {style: {color: T.textDim}}, '—'),
+              trade?.sellPrice && h('div', {style: {fontSize: 9, color: T.textDim}}, `~${fmt.gp(trade.sellPrice)}`),
+              res.sellDayOffset != null && h('div', {style: {fontSize: 9, color: T.textDim}},
+                `sell day +${res.sellDayOffset}`
+              )
+            ),
+
+            // Vol ratio
+            h('div', {style: {textAlign: 'right', paddingTop: 2, color: T.text}},
+              res.volRatio != null ? `${res.volRatio}×` : h('span', {style:{color:T.textDim}}, '—')
+            ),
+
+            // Est profit per item
+            h('div', {style: {textAlign: 'right', paddingTop: 2}},
+              !price ? h('span', {style:{color:T.textDim}}, 'no price') :
+              !trade ? h('span', {style:{color:T.textDim}}, '—') :
+              trade.profitPerItem != null
+                ? h('span', {style:{color: trade.profitPerItem >= 0 ? T.green : T.red, fontWeight:'bold'}}, fmt.gp(trade.profitPerItem) + ' gp')
+                : trade.savings != null
+                  ? h('span', {style:{color:T.gold}}, `-${fmt.gp(trade.savings)} gp`)
+                  : h('span', {style:{color:T.textDim}}, '—')
+            ),
+
+            // Est profit per buy limit
+            h('div', {style: {textAlign: 'right', paddingTop: 2}},
+              !price ? h('span', {style:{color:T.textDim}}, '—') :
+              !trade ? h('span', {style:{color:T.textDim}}, '—') :
+              trade.profitForLimit != null
+                ? h('span', {style:{color: trade.profitForLimit >= 0 ? T.green : T.red, fontWeight:'bold'}},
+                    fmt.gp(trade.profitForLimit) + ' gp',
+                    trade.limit && h('div', {style:{fontSize:9, color:T.textDim, fontWeight:'normal'}}, `(lim ${trade.limit.toLocaleString()})`)
+                  )
+                : trade.savings != null && trade.limit
+                  ? h('span', {style:{color:T.gold}},
+                      fmt.gp(trade.savings * trade.limit) + ' gp saved',
+                      h('div', {style:{fontSize:9,color:T.textDim}}, `(lim ${trade.limit.toLocaleString()})`)
+                    )
+                  : h('span', {style:{color:T.textDim}}, '—')
+            ),
+          );
+        }),
+
+        // Strategy drawer — show strategy for any selected event item on expand
+        rows.length > 0 && h('div', {style: {marginTop: 16, borderTop: `1px solid ${T.borderDim}`, paddingTop: 12}},
+          h('div', {style: {fontSize: 11, color: T.textDim, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em'}}, 'Trading Strategies'),
+          rows.map(row => h('div', {
+            key: row.research.name,
+            style: {marginBottom: 10, padding: '8px 12px', background: T.panel2, borderRadius: 4,
+              borderLeft: `3px solid ${row.research.noSignal ? 'rgba(100,100,100,0.3)' : row.research.roundTrip ? T.green : T.textDim}`,
+              opacity: row.research.noSignal ? 0.6 : 1,
+            },
+          },
+            h('div', {style:{fontWeight:'bold', color: T.text, fontSize:12, marginBottom:4}},
+              row.research.noSignal ? `🚫 ${row.research.name}` : row.research.name
+            ),
+            h('div', {style:{fontSize:11, color: T.textDim, lineHeight:1.5}}, row.research.strategy),
+          ))
+        ),
+
+        // Event-specific footnotes
+        event.id === 'halloween' && h('div', {style: {marginTop: 12, fontSize: 11, color: T.textDim, fontStyle: 'italic', borderTop: `1px solid ${T.borderDim}`, paddingTop: 10}},
+          'Halloween data covers 2024 and 2025 only (n=2). Day offsets are relative to event start. Crypt token recovery figures assume event-end price ≈ in-event trough, which held both years. Soul dye is n=1 effective — see Speculative tab.'
+        ),
+        event.id === 'summer' && h('div', {style: {marginTop: 12, fontSize: 11, color: T.textDim, fontStyle: 'italic', borderTop: `1px solid ${T.borderDim}`, paddingTop: 10}},
+          'Drop-only items (heraldic gear cluster) have no post-event recovery signal. The play is buying them cheap during the event for Fortunate component disassembly, not reselling. Round-trip profit column is blank for these intentionally.'
+        ),
+        tierFilter === 'all' && h('div', {style: {marginTop: 10, fontSize: 11, color: T.textDim, borderTop: `1px solid ${T.borderDim}`, paddingTop: 8}},
+          'Showing confirmed items with meaningful profit potential. 🪙 Negligible for real-but-small signals (under 1M gp/limit). 🔬 Speculative for n=1 items and limited history.'
+        ),
+        tierFilter === 'negligible' && h('div', {style: {marginTop: 10, fontSize: 11, color: T.textDim, borderTop: `1px solid ${T.borderDim}`, paddingTop: 8}},
+          'These patterns are real and confirmed, but the expected profit per buy limit is under 1M gp at current prices. Useful for prayer training or bulk item timing, not as a primary GP strategy. Note: Beach Event items are exempt — their buy limits refill quickly enough that volume across many slots makes them worthwhile regardless.'
+        ),
       ),
     ),
   );
@@ -5731,7 +6054,12 @@ function AboutTab() {
           className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
           onClick:()=>window.genius?.openExternal('https://discord.gg/WFbJt9cDpP'),
         }, '💬 Discord'),
+        h('button', {
+          className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
+          onClick:()=>window.genius?.openExternal('https://ko-fi.com/vonderthwood'),
+        }, '☕ Ko-fi'),
       ),
+      h('div', {style:{fontSize:11, color:T.textDim, marginTop:8}}, 'If you want to throw me a penny for my thoughts.'),
     ),
     h('div', {style:{maxWidth:560}},
       h('div', {style:{marginBottom:24}},
@@ -5850,14 +6178,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   // not in the static NAV constant) can actually be dragged/reordered
   // here too — previously this editor always read the static NAV list
   // directly, so dxp_intel was never reorderable even with dev mode on.
-  const sidebarNavItems = useMemo(() => {
-    const base = NAV.filter(n=>n.id);
-    if (!s.devMode) return base;
-    const idx = base.findIndex(n => n.id === 'dashboard') + 1;
-    const withDev = [...base];
-    withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
-    return withDev;
-  }, [s.devMode]);
+  const sidebarNavItems = useMemo(() => NAV.filter(n=>n.id), []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hiddenItemsOpen, setHiddenItemsOpen] = useState(false);
   return h('div',null,
@@ -7935,6 +8256,7 @@ const NAV = [
   {id:'materials',      label:'Misc',             icon:'◆'},
   {id:'news',           label:'News',             icon:'✦'},
   {id:'settings',       label:'Settings',         icon:'⚙'},
+  {id:'dxp_intel',      label:'GEnius Almanac',   icon:'📅'},
   {id:'about',          label:'About',            icon:'ℹ'},
 ];
 
@@ -8001,14 +8323,7 @@ function App() {
   }, []);
 
   // Custom nav order — flatten NAV when user has custom order (no group separators)
-  const navBase = useMemo(() => {
-    if (!settings.devMode) return NAV;
-    // Hidden dev-only entry, inserted right below Dashboard — never shown unless devMode is on
-    const idx = NAV.findIndex(n => n.id === 'dashboard') + 1;
-    const withDev = [...NAV];
-    withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
-    return withDev;
-  }, [settings.devMode]);
+  const navBase = useMemo(() => NAV, []);
   const navItems = useMemo(() => {
     const order = settings.navOrder;
     if (!order || !order.length) return navBase;

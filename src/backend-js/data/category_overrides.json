@@ -2274,20 +2274,16 @@
     "low_tier"
   ],
   "armadyl robe": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "bandos robe": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "saradomin robe": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "zamorak robe": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "zamorak robe top": [
     "materials"
@@ -2296,32 +2292,26 @@
     "materials"
   ],
   "guthix robe": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "ancient robe": [
     "treasure_trails",
     "magic"
   ],
   "armadyl cloak": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "bandos cloak": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "saradomin cloak": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "zamorak cloak": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "guthix cloak": [
-    "treasure_trails",
-    "prayer"
+    "treasure_trails"
   ],
   "ancient cloak": [
     "treasure_trails"
@@ -2416,8 +2406,7 @@
     "melee"
   ],
   "blessed spirit shield": [
-    "boss",
-    "prayer"
+    "boss"
   ],
   "blessed flask": [
     "prayer"
@@ -3138,11 +3127,11 @@
   "scripture of amascut": [
     "boss"
   ],
+  "bones to peaches (item)": [
+    "materials"
+  ],
   "brooch of the gods": [
     "pocket"
-  ],
-  "bones to peaches": [
-    "prayer"
   ],
   "crystal armour seed": [
     "materials"
@@ -5348,16 +5337,16 @@
     "artisan"
   ],
   "perfect juju prayer potion (1)": [
-    "herblore"
+    "prayer"
   ],
   "perfect juju prayer potion (2)": [
-    "herblore"
+    "prayer"
   ],
   "perfect juju prayer potion (3)": [
-    "herblore"
+    "prayer"
   ],
   "perfect juju prayer potion (4)": [
-    "herblore"
+    "prayer"
   ],
   "ripper demon wildcard": [
     "supplies"

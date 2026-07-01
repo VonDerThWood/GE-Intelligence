@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <title>GEnius — RS3 Market Intelligence</title>
+  <style>html, body { background: #1a1209; margin: 0; }</style>
+  <link href="vendor/fonts/fonts.css" rel="stylesheet" />
+  <script src="vendor/react.production.min.js" defer></script>
+  <script src="vendor/react-dom.production.min.js" defer></script>
+  <script src="bridge.js"></script>
+</head>
+<body>
+  <div id="splash" style="position:fixed; inset:0; z-index:99999; background:#1a1209; display:flex; flex-direction:column; align-items:center; justify-content:center; transition:opacity 0.4s ease;">
+    <img src="assets/logo-full.png" alt="GEnius" style="width:340px; max-width:80vw; filter:drop-shadow(0 4px 24px rgba(0,0,0,0.6));" />
+    <div style="margin-top:18px; color:#9c7b3f; font-family:Georgia,serif; font-size:13px; letter-spacing:2px; text-transform:uppercase;">Loading market data…</div>
+  </div>
+  <div id="root"></div>
+  <script src="renderer.js" defer></script>
+</body>
+</html>

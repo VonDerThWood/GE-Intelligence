@@ -19,38 +19,39 @@
  * not just a sample.
  */
 
-const fs = require('fs');
 const path = require('path');
+const storage = require('./storage.js');
 
 // Python: re.compile(r'\(tier\s+(\d+)\)|(?<![\d+.])\s(\d+)$', re.IGNORECASE)
 const _TIER_RE = /\(tier\s+(\d+)\)|(?<![\d+.])\s(\d+)$/i;
 
 const SCRIPT_DIR = __dirname;
-const OVERRIDES_FILE = path.join(SCRIPT_DIR, 'data', 'category_overrides.json');
 const PERSONAL_OVERRIDES_FILE = path.join(SCRIPT_DIR, 'data', 'personal_overrides.json');
 
-function _loadOverridesFile(filePath) {
-  try {
-    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
-    const out = {};
-    for (const [k, v] of Object.entries(data)) {
-      if (k.startsWith('_')) continue;
-      out[k.toLowerCase()] = Array.isArray(v) ? v : [v];
-    }
-    return out;
-  } catch (e) {
-    console.log(`[catalogue] Could not load overrides from ${filePath}: ${e.message}`);
-    return {};
+// category_overrides.json is bulk/dev-curated and read-only at runtime (only
+// ever edited directly in the project, never by the app itself) — required
+// directly rather than read through storage.js, since require()'ing a
+// .json file just parses it with no fs access of its own at the call site,
+// and a bundler (for a future mobile build) can inline this exact same way
+// at build time. personal_overrides.json is the one users actually edit
+// in-app, so that one goes through storage.js and gets (re)loaded async —
+// see reloadOverrides() below.
+const BASE_OVERRIDES_RAW = require('./data/category_overrides.json');
+
+function _normalizeOverrides(data) {
+  const out = {};
+  for (const [k, v] of Object.entries(data)) {
+    if (k.startsWith('_')) continue;
+    out[k.toLowerCase()] = Array.isArray(v) ? v : [v];
   }
+  return out;
 }
 
-function _loadOverrides() {
-  const base = _loadOverridesFile(OVERRIDES_FILE);
-  const personal = _loadOverridesFile(PERSONAL_OVERRIDES_FILE);
-  return { ...base, ...personal };
-}
-
-let OVERRIDES = _loadOverrides();
+// Available synchronously from the moment this module loads — every item
+// gets at least the bulk overrides immediately, with personal overrides
+// layered in once reloadOverrides() resolves (called once at startup by
+// api.js, and again whenever the user saves an edit in the in-app editor).
+let OVERRIDES = _normalizeOverrides(BASE_OVERRIDES_RAW);
 
 const CATEGORY_RULES = {
 
@@ -139,22 +140,31 @@ const CATEGORY_RULES = {
   ],
 
   // --- Prayer ---
+  // Narrowed scope (Ben, 2026-06-28): bones, ashes, Powder of burials, and
+  // Perfect juju prayer potion only — actual prayer-training consumables,
+  // not anything that happens to give a passive prayer bonus or a prayer
+  // restore effect as a side feature. Previously this list also matched
+  // general combat potions (Saradomin brew, Overload, Super restore),
+  // Ensouled heads (Necromancy reanimation material, not prayer), tools
+  // (Bonecrusher, Attuned ectoplasmator), and boss-drop scriptures (already
+  // correctly routed to "boss" via category_overrides.json exact entries,
+  // so listing them here did nothing but confuse the list) — all removed.
+  // The GWD cloaks/robes/Blessed spirit shield secondary "prayer" tag
+  // (passive prayer bonus while worn) lived in category_overrides.json,
+  // not here — removed there instead. "Bones to peaches" also dropped
+  // entirely (not just moved out of Prayer) — it's a Magic spell-cast
+  // item, but rarely used enough that a dedicated Magic-tab slot isn't
+  // worth it either; falls through to Misc instead.
   prayer: [
     "dragon bones", "frost dragon bones", "hardened dragon bones",
     "reinforced dragon bones", "airut bones", "dagannoth bones",
     "ourg bones", "wyvern bones", "fayrg bones", "raurg bones",
     "superior dragon bones", "tortured ourg bones",
-    "lava dragon bones", "bones to peaches",
+    "lava dragon bones",
     " bones",
     "infernal ashes", "impious ashes", "accursed ashes",
-    "tortured ashes", "searing ashes",
-    "ensouled ",
-    "prayer potion", "super restore", "saradomin brew",
-    "overload", "extreme prayer",
-    "blessed flask", "blessed flask",
-    "bonecrusher", "attuned ectoplasmator",
-    "scripture of jas", "scripture of ful", "scripture of bik",
-    "scripture of wen", "scripture of amascut",
+    "tortured ashes", "searing ashes", "demonic ashes",
+    "powder of burial", "juju prayer",
   ],
 
   // --- Archaeology ---
@@ -691,8 +701,9 @@ function assignCategories(name) {
 }
 
 
-function reloadOverrides() {
-  OVERRIDES = _loadOverrides();
+async function reloadOverrides() {
+  const personal = await storage.readJSON(PERSONAL_OVERRIDES_FILE, {});
+  OVERRIDES = { ..._normalizeOverrides(BASE_OVERRIDES_RAW), ..._normalizeOverrides(personal) };
   console.log(`[catalogue] Reloaded ${Object.keys(OVERRIDES).length} overrides`);
 }
 

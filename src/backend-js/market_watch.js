@@ -11,8 +11,8 @@
  * the Python original on real data before trusting this over it.
  */
 
-const fs = require('fs');
 const path = require('path');
+const storage = require('./storage.js');
 
 const _DIR = __dirname;
 const CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'market_watch.json');
@@ -91,19 +91,16 @@ function _parse(html) {
   return results;
 }
 
-function _readCache() {
-  return JSON.parse(fs.readFileSync(CACHE_PATH, 'utf8'));
-}
-
 async function load(force = false) {
-  const cacheFile = path.resolve(CACHE_PATH);
-  fs.mkdirSync(path.dirname(cacheFile), { recursive: true });
-
-  if (!force && fs.existsSync(cacheFile)) {
-    const ageMs = Date.now() - fs.statSync(cacheFile).mtimeMs;
-    if (ageMs < CACHE_TTL) {
-      try { return _readCache(); } catch {}
-    }
+  // Cache age is tracked via an embedded fetchedAt timestamp inside the
+  // JSON itself rather than the file's OS-level mtime — Capacitor's
+  // Filesystem plugin (the mobile storage backend) doesn't expose mtime
+  // the same way Node's fs does, so this keeps the TTL check identical on
+  // both platforms instead of needing a stat() primitive in storage.js
+  // just for this one cache.
+  const cached = await storage.readJSON(CACHE_PATH, null);
+  if (!force && cached && (Date.now() - (cached.fetchedAt || 0)) < CACHE_TTL) {
+    return cached.indexes;
   }
 
   let html;
@@ -112,7 +109,7 @@ async function load(force = false) {
     html = await res.text();
   } catch (e) {
     console.log(`[market_watch] Fetch failed: ${e.message}`);
-    if (fs.existsSync(cacheFile)) return _readCache();
+    if (cached) return cached.indexes;
     return [];
   }
 
@@ -120,11 +117,11 @@ async function load(force = false) {
   console.log(`[market_watch] ${indexes.length} indexes fetched`);
 
   if (!indexes.length) {
-    if (fs.existsSync(cacheFile)) return _readCache();
+    if (cached) return cached.indexes;
     return [];
   }
 
-  fs.writeFileSync(cacheFile, JSON.stringify(indexes, null, 2), 'utf8');
+  await storage.writeJSON(CACHE_PATH, { fetchedAt: Date.now(), indexes }, { pretty: true });
   return indexes;
 }
 
