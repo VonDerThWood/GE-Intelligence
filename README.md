@@ -93,7 +93,6 @@ On first launch, GEnius will fetch the current GE price data and begin populatin
 - [Electron](https://www.electronjs.org/) v28
 - React (UMD, no build step for the renderer)
 - [RS Wiki API](https://runescape.wiki/w/RuneScape_Wiki_API) for prices and item data
-- Python (bundled) for signal processing and opportunity scoring
 - [electron-store](https://github.com/sindresorhus/electron-store) for local persistence
 
 ---
