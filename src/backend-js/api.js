@@ -48,7 +48,17 @@ async function createGeniusApi({ dataDir, store }) {
   // category_overrides.json — the in-app editor should only ever touch
   // Ben's own per-item edits, never the whole catalogue. catalogue.js
   // merges both files at category-assignment time (personal wins per item).
-  const overridesFile = path.join(__dirname, 'data', 'personal_overrides.json');
+  //
+  // Lives in dataDir now (a real, always-writable per-user location — same
+  // as alertsFile/portfolioFile above), NOT bundled inside src/backend-js/
+  // data/ like it used to be. That old location required asarUnpack +
+  // resolveWritable gymnastics to be writable at all in a packaged install,
+  // and was the direct cause of the category editor's Save silently no-op'ing
+  // (2026-07-10). Shipping Ben's corrections to every user's fresh install
+  // is now sync-overrides.js's job at build time (it merges this file's
+  // content into category_overrides.json, the actual bundled/read-only
+  // bulk file, instead of reshipping this file itself) — see that script.
+  const overridesFile = path.join(dataDir, 'personal_overrides.json');
 
   // ─── In-memory state ────────────────────────────────────────────────────
   let historyData = {};            // { itemId: [{timestamp, price, volume}] }
@@ -63,18 +73,37 @@ async function createGeniusApi({ dataDir, store }) {
   let historyLoadDone;
   const historyLoadedPromise = new Promise(res => { historyLoadDone = res; });
 
+  // One-time migration for anyone upgrading from a build where this file
+  // still lived at the old asarUnpack location — copies it over exactly
+  // once (if the new dataDir copy doesn't exist yet, but an old one with
+  // real content does). Safe to run unconditionally: a no-op for anyone
+  // who never had the old file, or who's already migrated.
+  if (!(await storage.pathExists(overridesFile))) {
+    const legacyPath = storage.resolveWritable(path.join(__dirname, 'data', 'personal_overrides.json'));
+    const legacy = await storage.readJSON(legacyPath, null);
+    if (legacy && Object.keys(legacy).length) {
+      await storage.writeJSON(overridesFile, legacy, { pretty: true });
+      console.log(`[catalogue] Migrated ${Object.keys(legacy).length} personal overrides to ${overridesFile}`);
+    }
+  }
+
   // catalogue.js's bulk overrides are available synchronously the moment it
   // loads, but personal_overrides.json (the user-editable file) is now
   // loaded async — without this, the very first price fetch after launch
   // would categorize everything using only the bulk file, missing any
   // personal in-app edits until the next save-overrides call happened to
   // trigger a reload.
-  await catalogue.reloadOverrides();
+  await catalogue.reloadOverrides(overridesFile);
 
   let athCache = await storage.readJSON(athCacheFile, {});       // { itemId: { data: [...] } }
   let snapshotData = await storage.readJSON(snapshotFile, {});   // { itemId: [{t,p,v}] }
   const itemHistoryCache = new Map();
   const itemStatsCache = new Map();
+  // Session-only, never written to disk (unlike itemStatsCache) — Ben:
+  // drop sources are a "quickly check where this comes from" lookup, not
+  // something worth persisting across restarts. Still worth caching in
+  // memory so re-opening the same item this session doesn't re-fetch.
+  const dropSourcesCache = new Map();
   for (const [name, stats] of Object.entries(await storage.readJSON(itemStatsFile, {}))) {
     itemStatsCache.set(name, stats);
   }
@@ -144,40 +173,62 @@ async function createGeniusApi({ dataDir, store }) {
   // fetch() instead of Node's https.get — works unchanged in a webview
   // with no Node access (e.g. a future Capacitor/mobile build).
   async function fetchHistoryForItemOnce(itemId, timeoutMs) {
-    const url = `https://api.weirdgloop.org/exchange/history/rs/all?id=${itemId}`;
-    let res;
-    try {
-      res = await fetch(url, {
-        headers: { 'User-Agent': 'GEnius/1.3 (github.com/VonDerThWood/GE-Intelligence)' },
-        signal: AbortSignal.timeout(timeoutMs),
-      });
-    } catch (e) {
-      console.warn(`[history] Network error for item ${itemId}:`, e.message);
-      return false;
-    }
-    if (!res.ok) {
-      console.warn(`[history] HTTP ${res.status} fetching item ${itemId} (timeout ${timeoutMs}ms)`);
-      return false;
-    }
-    try {
-      const json = await res.json();
-      const raw = json[String(itemId)] || null;
-      if (raw && raw.length) {
-        const points = raw.map(p => ({
-          timestamp: p.timestamp,
-          price: p.price,
-          volume: p.volume || 0,
-        })).filter(p => p.price);
-        historyData[String(itemId)] = points;
-        dirtyHistoryIds.add(String(itemId));
-        historyVersion++;
-        athCache[String(itemId)] = { data: points.map(p => ({timestamp:p.timestamp, high:p.price, low:p.price, volume:p.volume})) };
+    // AbortSignal.timeout bounds fetch() itself, but a response whose
+    // headers arrive fine and then stalls mid-body (server hang, a proxy/
+    // AV product interfering) can leave res.json() below hanging past that
+    // same nominal deadline — the abort's coverage of an in-progress body
+    // read isn't a rock-solid guarantee across every fetch implementation.
+    // Confirmed for real (Ben, 2026-07-14): history population sat stuck
+    // at 99% (7184/7261) for "several minutes" with zero new history files
+    // written — a single item wedged the whole queue indefinitely, well
+    // past what its 12s/20s timeouts should have allowed. Wrapping the
+    // whole attempt in a hard Promise.race backstop (timeout + grace)
+    // guarantees this function always settles, so one bad item can never
+    // block the rest of the queue again, regardless of the exact cause.
+    const attempt = async () => {
+      const url = `https://api.weirdgloop.org/exchange/history/rs/all?id=${itemId}`;
+      let res;
+      try {
+        res = await fetch(url, {
+          headers: { 'User-Agent': 'GEnius/1.3 (github.com/VonDerThWood/GE-Intelligence)' },
+          signal: AbortSignal.timeout(timeoutMs),
+        });
+      } catch (e) {
+        console.warn(`[history] Network error for item ${itemId}:`, e.message);
+        return false;
       }
-      return !!raw;
-    } catch (e) {
-      console.warn(`[history] Parse error for item ${itemId}:`, e.message);
-      return false;
-    }
+      if (!res.ok) {
+        console.warn(`[history] HTTP ${res.status} fetching item ${itemId} (timeout ${timeoutMs}ms)`);
+        return false;
+      }
+      try {
+        const json = await res.json();
+        const raw = json[String(itemId)] || null;
+        if (raw && raw.length) {
+          const points = raw.map(p => ({
+            timestamp: p.timestamp,
+            price: p.price,
+            volume: p.volume || 0,
+          })).filter(p => p.price);
+          historyData[String(itemId)] = points;
+          dirtyHistoryIds.add(String(itemId));
+          historyVersion++;
+          athCache[String(itemId)] = { data: points.map(p => ({timestamp:p.timestamp, high:p.price, low:p.price, volume:p.volume})) };
+        }
+        return !!raw;
+      } catch (e) {
+        console.warn(`[history] Parse error for item ${itemId}:`, e.message);
+        return false;
+      }
+    };
+
+    const backstop = new Promise(resolve => {
+      setTimeout(() => {
+        console.warn(`[history] Hard backstop hit for item ${itemId} (attempt exceeded ${timeoutMs + 5000}ms wall-clock) — giving up on this attempt`);
+        resolve(false);
+      }, timeoutMs + 5000);
+    });
+    return Promise.race([attempt(), backstop]);
   }
 
   // A slow connection can legitimately take longer than a single short
@@ -634,6 +685,98 @@ async function createGeniusApi({ dataDir, store }) {
     return result;
   }
 
+  // ─── Drop sources ────────────────────────────────────────────────────────
+  // "Where does this come from" lookup for the detail panel — click-to-fetch
+  // only (never auto-loaded like getItemStats above), and never persisted to
+  // disk (dropSourcesCache is session-only). Ben: this is for spot-checking
+  // unusual items, not something that needs to survive a restart.
+  //
+  // The wiki's drop table is server-rendered from a Cargo query (not
+  // present in raw wikitext — unlike getItemStats' infobox parsing above),
+  // so this fetches and parses the rendered HTML page instead, the same
+  // approach untradeable.js uses for its wiki tables. Items with no
+  // monster-drop source (bought from a shop, made via Crafting, etc.)
+  // simply have no item-drops table on their wiki page — that's a normal,
+  // expected outcome, not a fetch failure.
+  //
+  // Originally anchored on the section heading text ("Drop sources") to
+  // find the right table — wrong assumption, confirmed for real on Air
+  // rune: that item's section is titled "Item sources" instead (common/
+  // currency-tier items seem to get the broader heading; gear/boss drops
+  // get "Drop sources"), so the heading-text search silently found nothing
+  // and reported "no drop sources" for an item with 128 real ones. Anchor
+  // on the table's class instead (`item-drops`) — stable across every page
+  // checked regardless of what the section is titled. When a page has more
+  // than one such table (Air rune has two), only the FIRST is the current/
+  // active source list; later ones are historical "no longer dropped"
+  // tables (confirmed via their drop-removed row class) — using only the
+  // first table, plus filtering drop-removed rows defensively, keeps
+  // discontinued sources out of the result.
+  function _stripHtmlTags(html) {
+    return html.replace(/<[^>]+>/g, ' ')
+      .replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&#160;/g, ' ').replace(/&nbsp;/g, ' ')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  // Common, well-liked items (runes, ores, basic supplies) can have 100+
+  // monster sources — a small detail panel can't usefully show all of
+  // them, and the wiki's own default sort (ascending rarity — see
+  // autosort=4 on the table) already puts the most common/easiest sources
+  // first, so a cap keeps the useful ones without truncating arbitrarily.
+  const DROP_SOURCES_CAP = 25;
+
+  function parseDropSources(html) {
+    const tableMatch = html.match(/<table[^>]*class="[^"]*\bitem-drops\b[^"]*"[^>]*>([\s\S]*?)<\/table>/);
+    if (!tableMatch) return { sources: [], totalCount: 0 };
+
+    const rows = [];
+    const rowRe = /<tr([^>]*)>([\s\S]*?)<\/tr>/g;
+    let rm, isHeaderRow = true;
+    while ((rm = rowRe.exec(tableMatch[1])) !== null) {
+      if (isHeaderRow) { isHeaderRow = false; continue; } // header row uses <th>, never matched by the <td> loop below anyway — skipped for clarity
+      if (/drop-removed/.test(rm[1])) continue; // no longer an active source
+
+      const cells = [];
+      const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
+      let cm;
+      while ((cm = cellRe.exec(rm[2])) !== null) cells.push(cm[1]);
+      if (cells.length < 4) continue;
+
+      const source = _stripHtmlTags(cells[0]);
+      const level = (_stripHtmlTags(cells[1]).match(/^[\d,]+/) || [''])[0];
+      const quantity = _stripHtmlTags(cells[2]);
+      // Prefer the machine-readable data-drop-fraction attribute over the
+      // cell's visible text — the text often carries footnote markers like
+      // "[f 1]" that read as noise once stripped of their link context.
+      const fractions = [...new Set([...cells[3].matchAll(/data-drop-fraction="([^"]+)"/g)].map(m => m[1]))];
+      const rarity = fractions.length ? fractions.join(' / ') : _stripHtmlTags(cells[3]);
+
+      if (source) rows.push({ source, level, quantity, rarity });
+    }
+    const totalCount = rows.length;
+    if (rows.length > DROP_SOURCES_CAP) rows.length = DROP_SOURCES_CAP;
+    return { sources: rows, totalCount };
+  }
+
+  async function getDropSources(itemName) {
+    if (!itemName) return null;
+    if (dropSourcesCache.has(itemName)) return dropSourcesCache.get(itemName);
+
+    let result = null;
+    try {
+      const url = `https://runescape.wiki/w/${encodeURIComponent(itemName.replace(/ /g, '_'))}`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(10000),
+      });
+      const html = await res.text();
+      result = parseDropSources(html);
+    } catch (e) { result = { sources: [], error: e.message }; }
+
+    dropSourcesCache.set(itemName, result);
+    return result;
+  }
+
   // ─── Portfolio ───────────────────────────────────────────────────────────
   function getWeekStr(date) {
     const d = new Date(date);
@@ -777,7 +920,7 @@ async function createGeniusApi({ dataDir, store }) {
       // never re-reads the file on its own — without this, a saved edit
       // sits correctly on disk but is invisible to every fetch for the
       // rest of the app's run, looking exactly like "it didn't save."
-      await catalogue.reloadOverrides();
+      await catalogue.reloadOverrides(overridesFile);
       return { success: true };
     } catch (e) {
       return { success: false, error: e.message };
@@ -1064,6 +1207,7 @@ async function createGeniusApi({ dataDir, store }) {
     updateSnapshots, getPriceSnapshots,
     // wiki stats
     getItemStats,
+    getDropSources,
     // portfolio
     getPortfolio, savePosition, deletePosition, sellPosition, reopenPosition,
     // alerts
