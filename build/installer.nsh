@@ -12,8 +12,19 @@
 !macroend
 
 !macro customInstall
+  ; The Sleep here (missing before — preInit above has one, this didn't)
+  ; matters specifically when "Launch GEnius after install" is checked:
+  ; that launch fires shortly after this macro finishes, and Windows
+  ; doesn't always release a just-killed process's single-instance-lock
+  ; resource instantly. Without a gap, the freshly-launched instance can
+  ; spuriously see the lock as still held, assume another copy is running,
+  ; and silently quit before ever creating a window — installer finishes,
+  ; checkbox was checked, nothing visibly opens. Confirmed plausible for
+  ; real (Ben, 2026-07-14): intermittent "sometimes opens, sometimes
+  ; doesn't, even with Launch checked" is the exact signature of this race.
   nsExec::Exec 'taskkill /F /IM GEnius.exe /T'
   Pop $0
+  Sleep 2000
 !macroend
 
 ; Overrides electron-builder's built-in "is app running" check
