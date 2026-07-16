@@ -4226,7 +4226,6 @@ const APP_NEWS = [
   {
     version: 'Coming Soon',
     items: [
-      'GEnius Almanac — track items that historically spike around seasonal events like DXP weekends; early buy signals ahead of the rush',
       'GEnius Mobile — a real Android app, same no-accounts/no-servers approach as desktop, fetching live prices and tracking everything locally on your device',
     ]
   },
