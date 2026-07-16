@@ -33,6 +33,28 @@
 const fs = require('fs');
 const path = require('path');
 
+// A handful of files under src/backend-js/data/ (personal_overrides.json,
+// untradeable's dev-fallback cache) get __dirname-relative paths computed
+// at the call site so the SAME path works unmodified in dev. In a packaged
+// build, __dirname for a required module resolves inside the read-only
+// app.asar archive — reads there work fine (Electron's asar-patched fs
+// serves them transparently), but writes are rejected outright, even
+// though `asarUnpack` (see package.json) physically copies these exact
+// files to a real, writable mirror at the parallel app.asar.unpacked path.
+// asarUnpack does NOT redirect a path string that still says ".../app.asar/..."
+// to that mirror — code has to ask for the unpacked path explicitly. This
+// resolves any path through that unpacked mirror when running packaged,
+// and passes dev paths through unchanged (no "app.asar" segment to find).
+// Confirmed for real (2026-07-10): this exact gap made the in-app category
+// editor's Save silently no-op in the installed app — the write to the
+// asar-internal path failed every time.
+function resolveWritable(filePath) {
+  const marker = 'app.asar' + path.sep;
+  const idx = filePath.indexOf(marker);
+  if (idx === -1) return filePath;
+  return filePath.slice(0, idx) + 'app.asar.unpacked' + path.sep + filePath.slice(idx + marker.length);
+}
+
 async function atomicWrite(filePath, data) {
   const tmp = filePath + '.tmp';
   await fs.promises.writeFile(tmp, data, 'utf8');
@@ -93,6 +115,18 @@ async function loadDirBatched(dirPath, { batchSize = 200 } = {}) {
         console.warn(`[storage] Skipping unreadable file ${f} in ${dirPath}:`, e.message);
       }
     }));
+    // Confirmed for real (2026-07-09): with 7000+ item history files, this
+    // directory alone took ~32 real-world seconds — almost certainly real
+    // disk-I/O latency (AV real-time scanning per file open is the classic
+    // cause with thousands of small files), not something batching alone
+    // fixes. Batching within a batch was already here; what was missing was
+    // a yield BETWEEN batches — ~36 batches back-to-back with each batch's
+    // 200 parallel reads settling around the same moment is enough
+    // synchronous JSON.parse/callback work in a row to read as a frozen
+    // window to Windows even though every individual read is async. This
+    // doesn't make the load faster, but it keeps the app responsive (no
+    // more AppHangTransient) while it runs.
+    await new Promise(res => setTimeout(res, 0));
   }
   return out;
 }
@@ -168,5 +202,5 @@ async function createKVStore(filePath) {
 module.exports = {
   atomicWrite, readJSON, writeJSON, ensureDir, pathExists,
   listJSONFiles, loadDirBatched, writeDirItem, readDirItem,
-  migrateLegacyHistoryFile, createKVStore,
+  migrateLegacyHistoryFile, createKVStore, resolveWritable,
 };
