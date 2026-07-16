@@ -409,7 +409,7 @@
     "ammo"
   ],
   "casket": [
-    "food"
+    "treasure_trails"
   ],
   "cave eel": [
     "food"
@@ -476,19 +476,16 @@
     "mining"
   ],
   "clean guam": [
-    "herblore",
-    "food"
+    "herblore"
   ],
   "clean marrentill": [
-    "herblore",
-    "food"
+    "herblore"
   ],
   "clean ranarr": [
-    "herblore",
-    "food"
+    "herblore"
   ],
   "clean toadflax": [
-    "food"
+    "herblore"
   ],
   "cod": [
     "food"
@@ -714,7 +711,7 @@
     "artisan"
   ],
   "empty pot": [
-    "food"
+    "materials"
   ],
   "energy potion (1)": [
     "herblore"
@@ -729,7 +726,7 @@
     "herblore"
   ],
   "equa leaves": [
-    "food"
+    "summoning"
   ],
   "eucalyptus logs": [
     "mining"
@@ -762,7 +759,7 @@
     "herblore"
   ],
   "eye of newt": [
-    "food"
+    "herblore"
   ],
   "fayrg bones": [
     "prayer"
@@ -793,11 +790,10 @@
     "herblore"
   ],
   "fishing rod": [
-    "food"
+    "mining"
   ],
   "flax": [
-    "artisan",
-    "food"
+    "artisan"
   ],
   "forinthry bracelet (1)": [
     "artisan"
@@ -924,7 +920,7 @@
     "low_tier"
   ],
   "harpoon": [
-    "food"
+    "mining"
   ],
   "headless arrow": [
     "ammo"
@@ -1039,7 +1035,6 @@
   ],
   "leather gloves": [
     "ranged",
-    "food",
     "low_tier"
   ],
   "limestone": [
@@ -1049,7 +1044,7 @@
     "food"
   ],
   "lobster pot": [
-    "food"
+    "mining"
   ],
   "logs": [
     "artisan",
@@ -1422,7 +1417,7 @@
     "rares"
   ],
   "red spiders' eggs": [
-    "food"
+    "herblore"
   ],
   "red topaz": [
     "artisan"
@@ -1475,7 +1470,7 @@
     "materials"
   ],
   "rope": [
-    "food"
+    "materials"
   ],
   "ruby": [
     "artisan"
@@ -1640,14 +1635,13 @@
     "mining"
   ],
   "sinew": [
-    "artisan",
-    "food"
+    "artisan"
   ],
   "skeletal helm": [
     "low_tier"
   ],
   "skewer": [
-    "food"
+    "materials"
   ],
   "slayer's respite": [
     "food"
@@ -1677,7 +1671,7 @@
     "food"
   ],
   "small fishing net": [
-    "food"
+    "mining"
   ],
   "smoke rune": [
     "runes"
@@ -1903,7 +1897,7 @@
     "herblore"
   ],
   "supercompost": [
-    "food"
+    "farming"
   ],
   "swamp paste": [
     "food"
@@ -2020,7 +2014,7 @@
     "low_tier"
   ],
   "white berries": [
-    "food"
+    "herblore"
   ],
   "white dagger": [
     "melee",
@@ -2058,7 +2052,7 @@
     "food"
   ],
   "woad leaf": [
-    "food"
+    "materials"
   ],
   "wolf bones": [
     "prayer"
@@ -2326,8 +2320,7 @@
     "treasure_trails"
   ],
   "heated tea flask": [
-    "treasure_trails",
-    "food"
+    "treasure_trails"
   ],
   "heavy chest": [
     "treasure_trails"
@@ -3761,7 +3754,7 @@
     "archaeology"
   ],
   "skewer stick": [
-    "food"
+    "materials"
   ],
   "skewered": [
     "food"
@@ -5357,5 +5350,133 @@
   "super restore mix (1)": [
     "herblore",
     "supplies"
+  ],
+  "magic frame": [
+    "artisan"
+  ],
+  "wine of saradomin": [
+    "herblore"
+  ],
+  "wine of guthix": [
+    "herblore"
+  ],
+  "draconic shards": [
+    "artisan"
+  ],
+  "luck of the dwarves": [
+    "hybrid"
+  ],
+  "fly fishing rod": [
+    "mining"
+  ],
+  "barb-tail harpoon": [
+    "mining"
+  ],
+  "hard leather gloves": [
+    "ranged",
+    "low_tier"
+  ],
+  "studded leather gloves": [
+    "ranged",
+    "low_tier"
+  ],
+  "apex sinew": [
+    "artisan"
+  ],
+  "portent of restoration i": [
+    "archaeology"
+  ],
+  "portent of restoration ii": [
+    "archaeology"
+  ],
+  "portent of restoration iii": [
+    "archaeology"
+  ],
+  "portent of restoration iv": [
+    "archaeology"
+  ],
+  "portent of restoration v": [
+    "archaeology"
+  ],
+  "portent of restoration vi": [
+    "archaeology"
+  ],
+  "portent of restoration vii": [
+    "archaeology"
+  ],
+  "portent of restoration viii": [
+    "archaeology"
+  ],
+  "portent of restoration ix": [
+    "archaeology"
+  ],
+  "portent of restoration x": [
+    "archaeology"
+  ],
+  "powerburst of acceleration (1)": [
+    "archaeology"
+  ],
+  "powerburst of acceleration (2)": [
+    "archaeology"
+  ],
+  "powerburst of acceleration (3)": [
+    "archaeology"
+  ],
+  "powerburst of acceleration (4)": [
+    "archaeology"
+  ],
+  "albino rat scroll (cheese feast)": [
+    "summoning"
+  ],
+  "granite lobster scroll (crushing claw)": [
+    "summoning"
+  ],
+  "casket-salvaging scrimshaw": [
+    "treasure_trails"
+  ],
+  "crayfish cage": [
+    "mining"
+  ],
+  "empty seaweed net": [
+    "mining"
+  ],
+  "karambwan vessel": [
+    "mining"
+  ],
+  "sea turtle bait": [
+    "mining"
+  ],
+  "manta ray bait": [
+    "mining"
+  ],
+  "great white shark bait": [
+    "mining"
+  ],
+  "bones to bananas (item)": [
+    "materials"
+  ],
+  "left banana of knowledge": [
+    "cosmetics"
+  ],
+  "right banana of knowledge": [
+    "cosmetics"
+  ],
+  "cake tin": [
+    "artisan"
+  ],
+  "fortunate components": [
+    "invention"
+  ],
+  "skewered rabbit": [
+    "food"
+  ],
+  "skewered chompy": [
+    "food"
+  ],
+  "skewered bird meat": [
+    "food"
+  ],
+  "skewered beast": [
+    "food"
   ]
 }

@@ -2,14 +2,24 @@
  * GEnius Catalogue - dynamic category assignment with manual overrides.
  * Override files (checked first, keywords second):
  *   category_overrides.json - bulk/dev-curated, edited directly in the
- *     project (e.g. via build_overrides.js or hand edits).
- *   personal_overrides.json - Ben's individual per-item edits made
- *     through the in-app Settings category editor. Kept in a SEPARATE
- *     file specifically so the two never collide — one whole-file copy
- *     used to carry personal edits forward into new builds, which once
- *     silently clobbered a whole session's worth of bulk catalogue
- *     fixes (see SESSION_LOG.md, 2026-06-26). Personal entries always
- *     win when both files have the same item.
+ *     project (e.g. via build_overrides.js or hand edits) — the ONLY file
+ *     bundled with the app. Every fresh install starts from this alone.
+ *   personal_overrides.json - Ben's individual per-item edits made through
+ *     the in-app Settings category editor. Lives in the caller's dataDir
+ *     (passed into reloadOverrides() below) — an ordinary per-user runtime
+ *     file, same as alerts.json/portfolio.json, NOT bundled with the app at
+ *     all. Getting Ben's corrections into everyone's install is
+ *     sync-overrides.js's job at build time: it merges his local copy of
+ *     this file INTO category_overrides.json before packaging, rather than
+ *     this file being reshipped as itself — seemed clever at the time to
+ *     keep them as two separately-reshipped files (see SESSION_LOG.md,
+ *     2026-06-26 for the collision incident that motivated it), but two
+ *     files serving one purpose (bulk corrections for every user) is more
+ *     moving parts than the actual need justified, and the personal file
+ *     living inside the bundled asar is what caused the Save button to
+ *     silently no-op (2026-07-10). Personal entries always win over bulk
+ *     when both have the same item, for the one release cycle where an
+ *     edit exists only locally and hasn't been merged into bulk yet.
  *
  * Faithful JS port of python/catalogue.py (Python-to-JS backend
  * migration, see TODO.txt / SESSION_LOG.md, 2026-06-26). Verify against
@@ -19,14 +29,10 @@
  * not just a sample.
  */
 
-const path = require('path');
 const storage = require('./storage.js');
 
 // Python: re.compile(r'\(tier\s+(\d+)\)|(?<![\d+.])\s(\d+)$', re.IGNORECASE)
 const _TIER_RE = /\(tier\s+(\d+)\)|(?<![\d+.])\s(\d+)$/i;
-
-const SCRIPT_DIR = __dirname;
-const PERSONAL_OVERRIDES_FILE = path.join(SCRIPT_DIR, 'data', 'personal_overrides.json');
 
 // category_overrides.json is bulk/dev-curated and read-only at runtime (only
 // ever edited directly in the project, never by the app itself) — required
@@ -34,8 +40,8 @@ const PERSONAL_OVERRIDES_FILE = path.join(SCRIPT_DIR, 'data', 'personal_override
 // .json file just parses it with no fs access of its own at the call site,
 // and a bundler (for a future mobile build) can inline this exact same way
 // at build time. personal_overrides.json is the one users actually edit
-// in-app, so that one goes through storage.js and gets (re)loaded async —
-// see reloadOverrides() below.
+// in-app, so that one goes through storage.js and gets (re)loaded async,
+// from whatever path the caller passes to reloadOverrides() — see below.
 const BASE_OVERRIDES_RAW = require('./data/category_overrides.json');
 
 function _normalizeOverrides(data) {
@@ -449,7 +455,11 @@ const CATEGORY_RULES = {
     "potato with", "baked potato",
     "jellyfish", "blue blubber jellyfish",
     "1/3 ", "2/3 ",
-    "cooked", "ration", "chilli",
+    // "ration" alone (meant for "Field ration") is a substring of
+    // "restoration"/"acceleration" — was silently tagging Archaeology's
+    // Portent of restoration I-X and Powerburst of acceleration as food.
+    // Confirmed for real (Ben, 2026-07-14) auditing the Food category.
+    "cooked", "field ration", "chilli",
     "summer pie", "wild pie", "fish pie", "admiral pie",
     "mushroom potato", "egg and tomato",
   ],
@@ -701,8 +711,11 @@ function assignCategories(name) {
 }
 
 
-async function reloadOverrides() {
-  const personal = await storage.readJSON(PERSONAL_OVERRIDES_FILE, {});
+// personalOverridesPath: the caller's dataDir-based personal_overrides.json
+// (see api.js). Omitted entirely for standalone CLI use below — bulk
+// overrides alone are enough to exercise assignCategories against sample items.
+async function reloadOverrides(personalOverridesPath) {
+  const personal = personalOverridesPath ? await storage.readJSON(personalOverridesPath, {}) : {};
   OVERRIDES = { ..._normalizeOverrides(BASE_OVERRIDES_RAW), ..._normalizeOverrides(personal) };
   console.log(`[catalogue] Reloaded ${Object.keys(OVERRIDES).length} overrides`);
 }
