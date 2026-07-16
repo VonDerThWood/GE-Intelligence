@@ -12,7 +12,22 @@ const path = require('path');
 const storage = require('./storage.js');
 
 const _DIR = __dirname;
-const CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'untradeable.json');
+// Dev-only fallback — lands in the repo's data/ folder when run.js is
+// invoked without a dataDir (e.g. `node untradeable.js` directly). The real
+// app always passes dataDir through to load() below, which resolves to the
+// actual writable userData dir instead. This fallback resolves to a
+// resources/data/ path that doesn't exist in the packaged install (never
+// packaged, and the installer doesn't create it) — which is exactly why
+// the cache write used to fail silently-then-loudly every single launch:
+// readJSON returned null (no such file) forcing a live re-fetch every time,
+// and the write at the bottom of load() then threw (no such directory),
+// which — unguarded — discarded the freshly-fetched items entirely rather
+// than just failing to persist them. Reported by Ben as the Almanac
+// Components pill going empty on every launch of the installed app, plus
+// the repeated full-app freezes: two live wiki-page fetches + regex parses
+// on EVERY price-fetch cycle, forever, since the cache could never actually
+// stick.
+const _DEV_FALLBACK_CACHE_PATH = storage.resolveWritable(path.join(_DIR, '..', '..', 'data', 'untradeable.json'));
 const CACHE_TTL = 86400 * 1000; // 24 hours, in ms
 
 const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)' };
@@ -170,11 +185,12 @@ function _toItem(entry, natureRunePrice = 0) {
   return item;
 }
 
-async function load(natureRunePrice = 0, force = false) {
+async function load(natureRunePrice = 0, force = false, dataDir = null) {
+  const cachePath = dataDir ? path.join(dataDir, 'untradeable_cache.json') : _DEV_FALLBACK_CACHE_PATH;
   // Cache age tracked via an embedded fetchedAt timestamp rather than the
   // file's OS-level mtime — see market_watch.js's load() for why (same
   // reasoning, same pattern).
-  const cached = await storage.readJSON(CACHE_PATH, null);
+  const cached = await storage.readJSON(cachePath, null);
   if (!force && cached && (Date.now() - (cached.fetchedAt || 0)) < CACHE_TTL) {
     return cached.items;
   }
@@ -204,7 +220,14 @@ async function load(natureRunePrice = 0, force = false) {
   }
 
   const items = allEntries.map(e => _toItem(e, natureRunePrice));
-  await storage.writeJSON(CACHE_PATH, { fetchedAt: Date.now(), items }, { pretty: true });
+  // Guarded — a failed cache write (e.g. the dev-fallback path's directory
+  // doesn't exist in a packaged install) should cost future launches a
+  // re-fetch, not throw away the items this call just successfully fetched.
+  try {
+    await storage.writeJSON(cachePath, { fetchedAt: Date.now(), items }, { pretty: true });
+  } catch (e) {
+    console.log(`[untradeable] Cache write failed (will re-fetch next time): ${e.message}`);
+  }
   return items;
 }
 

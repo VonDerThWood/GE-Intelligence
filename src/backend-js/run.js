@@ -616,13 +616,21 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
       const { load: loadUntradeable } = require('./untradeable.js');
       const natureRuneItem = items.find(it => (it.name || '').toLowerCase() === 'nature rune');
       const natureRunePrice = natureRuneItem ? natureRuneItem.high : 0;
-      const utItems = await loadUntradeable(natureRunePrice);
+      const utItems = await loadUntradeable(natureRunePrice, false, dataDir);
       for (const it of utItems) it.natureRunePrice = natureRunePrice;
       items = items.concat(utItems);
       console.log(`[untradeable] Appended ${utItems.length} untradeable items`);
     } catch (e) {
       console.log(`[untradeable] Error: ${e.message}`);
     }
+  } else if (usedFallbackItems && !items.some(it => it.untradeable)) {
+    // Sanity check — the fallback path assumes `items` (the previous full
+    // file) already has untradeable items merged in, so re-appending here
+    // would duplicate them. If that assumption is ever false (e.g. the
+    // previous file predates the untradeable feature, or was reset), the
+    // Almanac's Components pill silently vanishes with no error anywhere —
+    // this makes that state visible in logs instead of silent.
+    console.log('[untradeable] WARNING: fallback items contain none — Components pill will be empty until the next successful full/prices fetch.');
   }
 
   // Fetch market indexes (1h cache)
