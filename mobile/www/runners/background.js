@@ -175,8 +175,8 @@ addEventListener('checkNotifications', async (resolve, reject) => {
 
     // --- Watchlist digest (uses the rolling price log this runner builds itself) ---
     if (watchlistSettings.enabled && watchlist.length && dump) {
-      const todayStr = new Date().toISOString().slice(0, 10);
-      const lastSent = CapacitorKV.get('rb_watchlistDigestLastSent').value;
+      const intervalMs = (watchlistSettings.intervalHours || 24) * 3600000;
+      const lastSentMs = parseInt(CapacitorKV.get('rb_watchlistDigestLastSent').value || '0', 10);
       const priceLog = getJSON('rb_priceLog', {});
       const now = Date.now();
 
@@ -190,7 +190,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       }
       setJSON('rb_priceLog', priceLog);
 
-      if (lastSent !== todayStr) {
+      if (now - lastSentMs >= intervalMs) {
         const pctChange = (id, days) => {
           const log = priceLog[id] || [];
           if (log.length < 2) return null;
@@ -226,7 +226,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
           });
           if (movers.length > top.length) lines.push(`+${movers.length - top.length} more`);
           queue(`Watchlist — ${movers.length} item${movers.length === 1 ? '' : 's'} moving`, lines.join('\n'));
-          CapacitorKV.set('rb_watchlistDigestLastSent', todayStr);
+          CapacitorKV.set('rb_watchlistDigestLastSent', String(now));
         }
       }
     }

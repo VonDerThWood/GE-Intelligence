@@ -222,6 +222,7 @@ async function buildGenius() {
 
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
+    getDropSources:         (name) => a.getDropSources(name),
     getItemHistory:          (id)  => a.getItemHistory(id),
     getItemHistoryLocal:     (id)  => a.getItemHistoryLocal(id),
     getHistoryStatus:        ()    => a.getHistoryStatus(),

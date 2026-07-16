@@ -154,9 +154,12 @@ body {
 .ge-btn.danger { border-color: ${T.red}; color: ${T.red}; }
 .ge-btn.danger:hover { background: rgba(229,57,53,0.15); }
 .content { flex: 1; overflow-y: auto; padding: 14px 16px; }
-.ge-table-wrap { overflow-x: auto; }
+.ge-table-wrap { overflow-x: auto; width: 100%; }
 .col-resize-handle::after { content: ''; position: absolute; right: 3px; top: 4px; bottom: 4px; width: 1px; background: ${T.borderDim}; }
 .col-resize-handle:hover::after { background: ${T.gold}; width: 2px; }
+th.col-drop-target { box-shadow: inset 3px 0 0 ${T.gold}; }
+thead th[draggable="true"] { cursor: grab; }
+thead th[draggable="true"]:active { cursor: grabbing; }
 .ge-table { width: 100%; border-collapse: collapse; font-size: 13px; }
 .ge-table th { padding: 6px 10px; font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: ${T.gold}; border-bottom: 2px solid ${T.border}; text-align: left; cursor: pointer; user-select: none; background: rgba(0,0,0,0.2); white-space: nowrap; }
 .ge-table th:hover { color: ${T.goldBright}; }
@@ -804,8 +807,23 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
       if (p.high && p.high > ath.price) ath = {price: p.high, date: fmtTs(p.timestamp)};
       if (p.low  && p.low  < atl.price) atl = {price: p.low,  date: fmtTs(p.timestamp)};
     });
+    // getItemTimeseries caches this data PERMANENTLY on first fetch (see its
+    // comment in api.js) — real perf tradeoff for not re-downloading years
+    // of history repeatedly, but it means this series can go stale and
+    // silently miss a genuine new all-time high/low that's happened since.
+    // Confirmed for real (2026-07-13, Dragon Rider lance): current price
+    // sat clearly below the displayed "All-Time Low," which is definitionally
+    // impossible — the cached series just hadn't seen today's price yet.
+    // Folding in the item's live current price here (already available,
+    // no extra fetch) closes that gap without touching the cache itself.
+    const live = item.high || item.low;
+    if (live) {
+      const today = fmtTs(Math.floor(Date.now() / 1000));
+      if (live > ath.price) ath = {price: live, date: today};
+      if (live < atl.price) atl = {price: live, date: today};
+    }
     return {ath, atl};
-  }, [timeseries]);
+  }, [timeseries, item.high, item.low]);
 
   // Support & resistance levels — volume-weighted, like real "Volume
   // Profile" technical analysis: a price the item traded heavily at one
@@ -1856,6 +1874,11 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const [imageOpen, setImageOpen]     = useState(false);
   const [wikiStats, setWikiStats]     = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  // Drop sources — deliberately NOT auto-fetched like wikiStats above.
+  // Ben: this is a click-to-check lookup for unusual items, not something
+  // that should fire a wiki request on every item click.
+  const [dropSources, setDropSources] = useState(null); // null = not fetched, {sources:[...]} once loaded
+  const [dropSourcesLoading, setDropSourcesLoading] = useState(false);
   const [iconUrl, setIconUrl]         = useState(null);
   const [editingCats, setEditingCats] = useState(false);
   const [draftCats, setDraftCats]     = useState([]);
@@ -1881,6 +1904,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     if (!item) return;
     setWikiStats(null);
     setStatsLoading(true);
+    setDropSources(null);
+    setDropSourcesLoading(false);
     setEditingCats(false);
     setDraftCats(item.categories || []);
     setNoteText((notes && notes[item.id]) || '');
@@ -2169,7 +2194,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         )
       ),
 
-      h('div',{style:{marginTop:12}},
+      h('div',{style:{marginTop:12, display:'flex', gap:6, flexWrap:'wrap'}},
         h('button',{
           className:'ge-btn',
           style:{fontSize:11, padding:'3px 10px'},
@@ -2177,7 +2202,41 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             const url = `https://runescape.wiki/w/${encodeURIComponent(item.name.replace(/ /g,'_'))}`;
             window.genius?.openExternal(url);
           }
-        },'📖 RS Wiki')
+        },'📖 RS Wiki'),
+        !item.untradeable && h('button',{
+          className:'ge-btn',
+          style:{fontSize:11, padding:'3px 10px'},
+          disabled: dropSourcesLoading,
+          title:'Fetch where this item drops from, straight from the RS Wiki — not saved, just a quick lookup',
+          onClick:()=>{
+            if (dropSourcesLoading) return;
+            setDropSourcesLoading(true);
+            window.genius?.getDropSources(item.name).then(res => {
+              setDropSources(res || {sources:[]});
+              setDropSourcesLoading(false);
+            }).catch(() => { setDropSources({sources:[]}); setDropSourcesLoading(false); });
+          }
+        }, dropSourcesLoading ? '⏳ Loading…' : '🐲 Drop sources')
+      ),
+
+      dropSources && h('div', {style:{marginTop:8}},
+        dropSources.sources.length === 0
+          ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'No monster drop sources listed on the wiki page — probably bought, made, or otherwise not a drop.')
+          : h('table', {style:{width:'100%', borderCollapse:'collapse', fontSize:11}},
+              h('thead', null, h('tr', null,
+                h('th', {style:{textAlign:'left', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px 0', borderBottom:`1px solid ${T.border}`}}, 'Source'),
+                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Qty'),
+                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 0 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Rarity'),
+              )),
+              h('tbody', null, dropSources.sources.map((s,i) => h('tr', {key:i},
+                h('td', {style:{padding:'3px 4px 3px 0', color:T.text}}, s.source),
+                h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.textDim}}, s.quantity || '—'),
+                h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color:T.gold}}, s.rarity || '—'),
+              )))
+            ),
+        dropSources.totalCount > dropSources.sources.length && h('div', {
+          style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:4},
+        }, `+ ${dropSources.totalCount - dropSources.sources.length} more sources — see full list on the wiki`)
       ),
 
       h(RecipeSection, {item, allItems}),
@@ -2205,51 +2264,115 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   );
 }
 
-// Shared drag-to-resize column logic — ItemTable and the Alch signal table
-// both had their own hand-rolled copy of this exact same ~50-line block
-// (separately keyed localStorage, same math) before the Almanac needed it
-// a third time. Same mechanics as both originals: widths live in a <colgroup>
-// (not on individual <th>/<td> — letting the table itself size naturally
-// while the colgroup pins each column), and resize handles are absolutely-
-// positioned overlay spans (not on the <th> borders) so the divider is
-// grabbable at any row, not just the header. defaultWidths' key order IS
-// the column order — must match the table's actual <th>/<col> order, same
-// as the COL_ORDER arrays the original two tables kept manually in sync.
-function useResizableColumns(storageKey, defaultWidths) {
-  const colOrder = Object.keys(defaultWidths);
-  const load = () => {
+// Shared column logic for every resizable table in the app: drag-to-resize
+// on the column dividers AND drag-to-reorder on the header cells, both
+// persisted per-table in localStorage (widths at storageKey, order at
+// storageKey+'_order'). Widths live in a <colgroup>; resize handles are
+// absolutely-positioned overlay spans so the divider is grabbable at any row.
+//
+// HANDLE POSITIONING (the old "sliding columns" bug): handle positions used
+// to be computed from the *stored* widths (cumulative sum), assuming each
+// column renders at exactly its stored width. They don't always — padding,
+// content overflow, and UI-scale rounding all make rendered widths drift
+// from stored ones, so handles ended up floating over the wrong columns and
+// dragging one resized a column you weren't visually touching. Now positions
+// come from the real DOM: cumulative th.offsetWidth, which is in logical
+// (pre-transform) px, so it stays correct at any UI Scale, and a
+// ResizeObserver on the table re-measures whenever the rendered layout
+// actually changes (also covers the old mount-timing bug where the one-shot
+// measurement ran before the table existed).
+//
+// visibleCols (optional): the subset of defaultWidths keys the table is
+// currently rendering (e.g. ItemTable hides its `signals` column on some
+// tabs). Order state always tracks the FULL key set; rendering/measuring
+// filter down to the visible ones.
+function useTableColumns(storageKey, defaultWidths, visibleCols) {
+  const defaultOrder = Object.keys(defaultWidths);
+  const orderKey = storageKey + '_order';
+  const loadWidths = () => {
     try { return {...defaultWidths, ...JSON.parse(localStorage.getItem(storageKey)||'{}')}; }
     catch { return {...defaultWidths}; }
   };
-  const [colWidths, setColWidths] = useState(load);
+  const loadOrder = () => {
+    // Saved order survives column additions/removals across versions:
+    // unknown keys are dropped, new keys are appended in default position.
+    try {
+      const saved = JSON.parse(localStorage.getItem(orderKey)||'null');
+      if (Array.isArray(saved)) {
+        const valid = saved.filter(k => defaultOrder.includes(k));
+        const missing = defaultOrder.filter(k => !valid.includes(k));
+        if (valid.length) return [...valid, ...missing];
+      }
+    } catch {}
+    return [...defaultOrder];
+  };
+  const [colWidths, setColWidths] = useState(loadWidths);
+  const [colOrderFull, setColOrderFull] = useState(loadOrder);
   const colWidthsRef = useRef(colWidths);
-  // A plain useRef for the wrap div doesn't trigger anything when the node
-  // actually mounts — confirmed for real this was the Almanac resize bug:
-  // the measurement effect below only ran once (dep [colWidths], which
-  // never changes on its own) and on the Almanac specifically, that one run
-  // could land before the table's real rows/thead existed, leaving every
-  // handle's measured position empty forever after — all 9 handles stacked
-  // at the same fallback (-4) position, functionally unusable (the cursor
-  // still showed col-resize since SOME handle was technically there, but
-  // dragging any of them did nothing visible). A callback ref forces a
-  // state update — and thus a re-run of the effect below — at the exact
-  // moment the DOM node mounts, which a plain ref can't do.
+  colWidthsRef.current = colWidths;
+  // MachineCalculators swaps storageKey per machine — reload when it changes
+  // (useState initializers only run on first mount).
+  const mountedKeyRef = useRef(storageKey);
+  useEffect(() => {
+    if (mountedKeyRef.current === storageKey) return;
+    mountedKeyRef.current = storageKey;
+    setColWidths(loadWidths());
+    setColOrderFull(loadOrder());
+    // eslint-disable-next-line
+  }, [storageKey]);
+
+  const colOrder = visibleCols ? colOrderFull.filter(k => visibleCols.includes(k)) : colOrderFull;
+
+  // Callback ref (not a plain useRef) so mounting the wrap div triggers a
+  // re-measure — a plain ref changing .current re-runs nothing.
   const [wrapNode, setWrapNode] = useState(null);
   const tableWrapRef = useCallback(node => setWrapNode(node), []);
   const [handleLefts, setHandleLefts] = useState({});
 
+  useEffect(() => {
+    if (!wrapNode) return;
+    const measure = () => {
+      const ths = wrapNode.querySelectorAll('thead th');
+      if (!ths.length) return;
+      const lefts = {};
+      let cumulative = 0;
+      // On-screen th order matches colOrder (tables render from it).
+      colOrder.forEach((k, i) => {
+        const th = ths[i];
+        if (!th) return;
+        cumulative += th.offsetWidth;
+        if (i < colOrder.length - 1) lefts[k] = cumulative;
+      });
+      setHandleLefts(lefts);
+    };
+    measure();
+    window.addEventListener('resize', measure);
+    let ro = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      ro = new ResizeObserver(measure);
+      const table = wrapNode.querySelector('table');
+      if (table) ro.observe(table);
+    }
+    return () => {
+      window.removeEventListener('resize', measure);
+      if (ro) ro.disconnect();
+    };
+    // eslint-disable-next-line
+  }, [colWidths, colOrderFull, visibleCols && visibleCols.join(','), wrapNode]);
+
   const startColResize = (key) => e => {
     e.preventDefault();
     e.stopPropagation();
-    const table = e.currentTarget.closest('.ge-table-wrap')?.querySelector('table');
     const startW = colWidthsRef.current[key] || 110;
-    const logicalTotal = Object.values(colWidthsRef.current).reduce((a,b) => a + (b||0), 0);
-    const scaleFactor = table && logicalTotal ? (table.getBoundingClientRect().width / logicalTotal) : 1;
     const startX = e.clientX;
+    // offsetWidth is in local (pre-transform) px; getBoundingClientRect is in
+    // viewport (post-transform) px. The ratio gives the CSS scale factor so
+    // that mouse delta (viewport px) converts correctly to column width (logical px).
+    const scaleFactor = wrapNode && wrapNode.offsetWidth
+      ? wrapNode.getBoundingClientRect().width / wrapNode.offsetWidth
+      : 1;
     const onMove = me => {
-      const deltaReal = me.clientX - startX;
-      const deltaLogical = scaleFactor ? deltaReal / scaleFactor : deltaReal;
-      const w = Math.max(50, Math.round(startW + deltaLogical));
+      const w = Math.max(40, Math.round(startW + (me.clientX - startX) / scaleFactor));
       colWidthsRef.current = {...colWidthsRef.current, [key]: w};
       setColWidths(colWidthsRef.current);
     };
@@ -2262,60 +2385,85 @@ function useResizableColumns(storageKey, defaultWidths) {
     window.addEventListener('mouseup', onUp);
   };
 
-  useEffect(() => {
-    if (!wrapNode) return;
-    let raf = null;
-    const measure = () => {
-      const ths = wrapNode.querySelectorAll('thead th');
-      const wrapRect = wrapNode.getBoundingClientRect();
-      const lefts = {};
-      colOrder.slice(0, -1).forEach((k, i) => {
-        const th = ths[i];
-        if (th) lefts[k] = th.getBoundingClientRect().right - wrapRect.left + wrapNode.scrollLeft;
-      });
-      setHandleLefts(lefts);
-    };
-    const scheduleMeasure = () => {
-      if (raf) return;
-      raf = requestAnimationFrame(() => { raf = null; measure(); });
-    };
-    measure();
-    // Also re-measure on ANY DOM change inside the table (rows arriving
-    // after an async data load, tier switches swapping which rows render,
-    // column header text changing) — not just window resizes. This is what
-    // actually closes the bug: the FIRST measure() can land before the real
-    // <thead>/<tr> exist, and nothing was forcing a second attempt before.
-    const mo = new MutationObserver(scheduleMeasure);
-    mo.observe(wrapNode, { childList: true, subtree: true });
-    window.addEventListener('resize', scheduleMeasure);
-    return () => {
-      mo.disconnect();
-      window.removeEventListener('resize', scheduleMeasure);
-      if (raf) cancelAnimationFrame(raf);
-    };
-    // eslint-disable-next-line
-  }, [colWidths, wrapNode]);
+  const overlayHandle = key => handleLefts[key]
+    ? h('span', {
+        key,
+        onMouseDown: startColResize(key),
+        className: 'col-resize-handle',
+        style:{
+          position:'absolute', top:0, bottom:0,
+          left: handleLefts[key] - 4,
+          width:8, cursor:'col-resize', zIndex:10,
+        },
+      })
+    : null;
 
-  const overlayHandle = key => h('span', {
-    key,
-    onMouseDown: startColResize(key),
-    className: 'col-resize-handle',
-    style:{
-      position:'absolute', top:0, bottom:0,
-      left: (handleLefts[key] || 0) - 4,
-      width:8, cursor:'col-resize', zIndex:10,
+  // ── Header drag-to-reorder ──
+  const dragKeyRef = useRef(null);
+  const [dropTarget, setDropTarget] = useState(null);
+  const moveCol = (from, to) => {
+    setColOrderFull(prev => {
+      if (from === to || !prev.includes(from) || !prev.includes(to)) return prev;
+      const insertAt = prev.indexOf(to);
+      const next = prev.filter(k => k !== from);
+      next.splice(insertAt, 0, from);
+      try { localStorage.setItem(orderKey, JSON.stringify(next)); } catch {}
+      return next;
+    });
+  };
+  const reorderProps = key => ({
+    draggable: true,
+    onDragStart: e => {
+      dragKeyRef.current = key;
+      e.dataTransfer.effectAllowed = 'move';
+      try { e.dataTransfer.setData('text/plain', key); } catch {}
     },
+    onDragOver: e => {
+      if (dragKeyRef.current && dragKeyRef.current !== key) {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+        setDropTarget(t => t === key ? t : key);
+      }
+    },
+    onDragLeave: () => setDropTarget(t => t === key ? null : t),
+    onDrop: e => {
+      e.preventDefault();
+      const from = dragKeyRef.current;
+      dragKeyRef.current = null;
+      setDropTarget(null);
+      if (from && from !== key) moveCol(from, key);
+    },
+    onDragEnd: () => { dragKeyRef.current = null; setDropTarget(null); },
+    className: dropTarget === key ? 'col-drop-target' : undefined,
   });
 
-  return { colWidths, tableWrapRef, overlayHandle, colOrder };
+  // th(key, props, ...children): renders a header cell with reorder
+  // drag-and-drop wired in, merging the table's own props (sort onClick,
+  // titles, styles) on top.
+  const th = (key, props, ...children) => {
+    const rp = reorderProps(key);
+    const merged = {...(props||{}), ...rp, key};
+    if (props && props.className) merged.className = props.className + (rp.className ? ' ' + rp.className : '');
+    merged.style = {userSelect:'none', ...(props && props.style)};
+    return h('th', merged, ...children);
+  };
+
+  // colgroup() + handles(): the two order-dependent bits every table needs.
+  const colgroup = () => h('colgroup', null,
+    colOrder.map(k => h('col', {key:k, style:{width: colWidths[k]}}))
+  );
+  const handles = () => colOrder.slice(0, -1).map(k => overlayHandle(k));
+
+  return { colWidths, displayWidths: colWidths, tableWrapRef, overlayHandle, colOrder, colgroup, handles, th };
 }
+// Back-compat alias — call sites migrated to useTableColumns, kept so any
+// stragglers fail loudly in review rather than silently at runtime.
+const useResizableColumns = useTableColumns;
 
 /* ─── Item table ─────────────────────────────────────────────── */
 const DEFAULT_COL_WIDTHS = {name:340, high:110, change_1d:110, volume:140, signals:160, star:30};
-function loadColWidths() {
-  try { return {...DEFAULT_COL_WIDTHS, ...JSON.parse(localStorage.getItem('genius_col_widths')||'{}')}; }
-  catch { return {...DEFAULT_COL_WIDTHS}; }
-}
+const ITEM_TABLE_VISIBLE = ['name','high','change_1d','volume','signals','star'];
+const ITEM_TABLE_VISIBLE_NO_SIGNALS = ITEM_TABLE_VISIBLE.filter(k => k !== 'signals');
 
 function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals}) {
   // watchlist/onToggleWatch are read unconditionally below (star column
@@ -2328,63 +2476,8 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
   // crash, regardless of which tab calls it next.
   const [sort, setSort] = useState({key:'name',dir:1});
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, item}
-  const [colWidths, setColWidths] = useState(loadColWidths);
-  const colWidthsRef = useRef(colWidths);
-  const startColResize = (key) => e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const table = e.currentTarget.closest('.ge-table-wrap')?.querySelector('table');
-    const startW = colWidthsRef.current[key] || 110;
-    const logicalTotal = Object.values(colWidthsRef.current).reduce((a,b) => a + (b||0), 0);
-    // Derive the real-world scale factor (handles UI Scale zoom) from rendered vs logical total width
-    const scaleFactor = table && logicalTotal ? (table.getBoundingClientRect().width / logicalTotal) : 1;
-    const startX = e.clientX;
-    const onMove = me => {
-      const deltaReal = me.clientX - startX;
-      const deltaLogical = scaleFactor ? deltaReal / scaleFactor : deltaReal;
-      const w = Math.max(50, Math.round(startW + deltaLogical));
-      colWidthsRef.current = {...colWidthsRef.current, [key]: w};
-      setColWidths(colWidthsRef.current);
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      try { localStorage.setItem('genius_col_widths', JSON.stringify(colWidthsRef.current)); } catch {}
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-  const COL_ORDER = ['name','high','change_1d','volume', ...(showSignals?['signals']:[]), 'star'];
-  const tableWrapRef = useRef(null);
-  const [handleLefts, setHandleLefts] = useState({});
-  useEffect(() => {
-    const measure = () => {
-      const wrap = tableWrapRef.current;
-      if (!wrap) return;
-      const ths = wrap.querySelectorAll('thead th');
-      const wrapRect = wrap.getBoundingClientRect();
-      const lefts = {};
-      COL_ORDER.filter(k => k !== 'star').forEach((k, i) => {
-        const th = ths[i];
-        if (th) lefts[k] = th.getBoundingClientRect().right - wrapRect.left + wrap.scrollLeft;
-      });
-      setHandleLefts(lefts);
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [colWidths, items.length, showSignals]);
-  // Full-height overlay handles — rendered over the table so the divider is grabbable at any row, not just the header
-  const overlayHandle = key => h('span', {
-    key,
-    onMouseDown: startColResize(key),
-    className: 'col-resize-handle',
-    style:{
-      position:'absolute', top:0, bottom:0,
-      left: (handleLefts[key] || 0) - 4,
-      width:8, cursor:'col-resize', zIndex:10,
-    },
-  });
+  const cols = useTableColumns('genius_col_widths', DEFAULT_COL_WIDTHS,
+    showSignals ? ITEM_TABLE_VISIBLE : ITEM_TABLE_VISIBLE_NO_SIGNALS);
 
   const openCtx = (e, it) => {
     e.preventDefault();
@@ -2459,8 +2552,40 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
   const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
   if (!items.length) return h('div',{className:'empty'},h('div',{className:'icon'},'◎'),h('p',null,'No items in this category yet.'));
-  return h('div',{className:'ge-table-wrap', style:{position:'relative'}, ref:tableWrapRef, onClick: ctxMenu ? closeCtx : undefined},
-    COL_ORDER.filter(k => k !== 'star').map(k => overlayHandle(k)),
+  const thFor = k => {
+    switch (k) {
+      case 'name':      return cols.th(k, {onClick:()=>tog('name')}, 'Item'+arr('name'));
+      case 'high':      return cols.th(k, {onClick:()=>tog('high')}, 'Price'+arr('high'));
+      case 'change_1d': return cols.th(k, {onClick:()=>tog('change_1d')}, 'Change'+arr('change_1d'));
+      case 'volume':    return cols.th(k, {onClick:()=>tog('volume')}, 'Volume'+arr('volume'));
+      case 'signals':   return cols.th(k, null, 'Signals');
+      case 'star':      return cols.th(k, {style:{width:30}}, null);
+      default:          return cols.th(k, null, null);
+    }
+  };
+  const tdFor = (k, it) => {
+    switch (k) {
+      case 'name': return h('td', {key:k}, h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between'}},
+        h('span',null, it.name),
+        SHOW_THUMBNAILS && h(ItemThumb,{name:it.name}),
+      ));
+      case 'high': return h('td', {key:k, style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp');
+      case 'change_1d': return h('td', {key:k}, h(ChangeDisplay,{change_1d:it.change_1d, price:it.high||it.low}));
+      case 'volume': return h('td', {key:k}, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume}));
+      case 'signals': return h('td', {key:k}, h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},
+        (it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s}))
+      ));
+      case 'star': return h('td', {key:k, onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center',padding:'6px 6px'}},
+        h('button',{className:'star-btn'},
+          h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
+        )
+      );
+      default: return h('td', {key:k}, null);
+    }
+  };
+
+  return h('div',{className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef, onClick: ctxMenu ? closeCtx : undefined},
+    cols.handles(),
     ctxMenu && createPortal(h('div', {
       style:{
         position:'fixed', zIndex:9999, left:ctxMenu.x, top:ctxMenu.y,
@@ -2566,22 +2691,8 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
       h('button',{className:'ge-btn',style:{padding:'2px 10px',fontSize:11},onClick:clearMulti},'✕ Clear')
     ),
     h('table',{className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
-      h('colgroup',null,
-        h('col',{style:{width:colWidths.name}}),
-        h('col',{style:{width:colWidths.high}}),
-        h('col',{style:{width:colWidths.change_1d}}),
-        h('col',{style:{width:colWidths.volume}}),
-        showSignals && h('col',{style:{width:colWidths.signals}}),
-        h('col',{style:{width:colWidths.star}}),
-      ),
-      h('thead',null,h('tr',null,
-        h('th',{onClick:()=>tog('name')},'Item'+arr('name')),
-        h('th',{onClick:()=>tog('high')},'Price'+arr('high')),
-        h('th',{onClick:()=>tog('change_1d')},'Change'+arr('change_1d')),
-        h('th',{onClick:()=>tog('volume')},'Volume'+arr('volume')),
-        showSignals && h('th',null,'Signals'),
-        h('th',{style:{width:30}},null)
-      )),
+      cols.colgroup(),
+      h('thead',null,h('tr',null, cols.colOrder.map(k => thFor(k)))),
       h('tbody',null, sorted.map(it =>
         h('tr',{
           key:it.id, 'data-item-id':it.id,
@@ -2591,23 +2702,7 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
             else { clearMulti(); onSelect(it); }
           },
           onContextMenu: e => openCtx(e, it),
-        },
-          h('td',null, h('div',{style:{display:'flex', alignItems:'center', justifyContent:'space-between'}},
-            h('span',null, it.name),
-            SHOW_THUMBNAILS && h(ItemThumb,{name:it.name}),
-          )),
-          h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
-          h('td',null, h(ChangeDisplay,{change_1d:it.change_1d, price:it.high||it.low})),
-          h('td',null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
-          showSignals && h('td',null, h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},
-            (it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s}))
-          )),
-          h('td',{onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center',padding:'6px 6px'}},
-            h('button',{className:'star-btn'},
-              h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
-            )
-          )
-        )
+        }, cols.colOrder.map(k => tdFor(k, it)))
       ))
     )
   );
@@ -3538,18 +3633,13 @@ function CompareTab({compareList, onRemove, onClear, allItems, description}) {
 
 /* ─── Tab views ──────────────────────────────────────────────── */
 function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
-  // Two-pill Normal/DXP switcher — dev-mode only for now (Ben: build and
-  // test it now, hidden, same as the rest of the Almanac, before deciding
-  // whether/how to expose it once the Almanac itself goes public). The
-  // underlying lists stay genuinely separate (main watchlist vs the
-  // Almanac's own dxpWatchlist) rather than merging, since someone
-  // watching dozens of items broadly may not want all of them eligible
-  // for DXP-specific alerts — this is just a unified place to SEE both.
+  // Three-pill Normal/DXP/Seasonal switcher — devMode only while Almanac is pre-release.
   const [view, setView] = useState('normal');
+  const [seasonalEvent, setSeasonalEvent] = useState('christmas');
   const [dxpWatchlist, setDxpWatchlist] = useState([]);
   useEffect(() => { if (devMode) window.genius?.getDxpWatchlist?.().then(list => setDxpWatchlist(list || [])); }, [devMode]);
   const toggleDxpWatch = id => {
-    const sid = String(id); // store as string, matching the Almanac's own convention
+    const sid = String(id);
     setDxpWatchlist(prev => {
       const next = prev.includes(sid) ? prev.filter(x=>x!==sid) : [...prev, sid];
       window.genius?.setDxpWatchlist?.(next);
@@ -3557,60 +3647,132 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
     });
   };
 
-  const activeList = devMode && view === 'dxp' ? dxpWatchlist : watchlist;
+  const activeList   = devMode && view === 'dxp' ? dxpWatchlist : watchlist;
   const activeToggle = devMode && view === 'dxp' ? toggleDxpWatch : onToggleWatch;
-  // dxpWatchlist ids are strings (DXPIntelTab's `for (const id in data)`
-  // always yields string object keys); the main item catalogue's `id` is
-  // a number — String() both sides so the DXP pill actually matches.
-  const watched = items.filter(it=>activeList.map(String).includes(String(it.id)));
+  const watched      = items.filter(it => activeList.map(String).includes(String(it.id)));
 
-  return h('div',null,
-    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
-    devMode && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`}},
-      ['normal','dxp'].map(v => h('button', {
-        key:v,
-        onClick:()=>setView(v),
-        style:{
+  // ── Seasonal view helpers ────────────────────────────────────────────────
+  const seasonalRows = view === 'seasonal'
+    ? SEASONAL_ITEM_DATA.filter(r => r.event === seasonalEvent && !r.noSignal && !r.archived)
+    : [];
+  const seasonalTierLabel = r => {
+    if (r.n === 1 || r.confidence == null) return {label:'Speculative', color:T.textDim};
+    if (r.roundTrip) return {label:'Round-trip', color:T.green};
+    return {label:'Drop-only', color:T.textDim};
+  };
+
+  return h('div', null,
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+
+    // ── Mode pills ──────────────────────────────────────────────────────────
+    devMode && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+      ['normal','dxp','seasonal'].map(v => h('button', {
+        key: v,
+        onClick: () => setView(v),
+        style: {
           padding:'4px 12px', fontSize:11, borderRadius:4, cursor:'pointer',
           border:`1px solid ${view===v ? T.gold : T.borderDim}`,
           background: view===v ? 'rgba(201,168,76,0.15)' : 'transparent',
           color: view===v ? T.goldBright : T.textDim,
         }
-      }, v === 'normal' ? 'Normal' : 'DXP')),
+      }, v === 'normal' ? 'Normal' : v === 'dxp' ? 'DXP' : 'Seasonal')),
       h('span', {
-        title:'These are two separate lists, not one merged watchlist. The main (Normal) watchlist drives the daily-digest notification; the DXP list is pinned inside the Almanac and drives its own buy/sell/announce alerts. Kept separate so watching dozens of items broadly doesn\'t force all of them into DXP-specific alerts.',
+        title:'Three separate lists. Normal drives the digest notification. DXP drives Almanac buy/sell alerts. Seasonal shows all researched items for the chosen event with live prices — not a pinned list, just a live price monitor for the full seasonal dataset.',
         style:{cursor:'help', fontSize:11, color:T.textDim, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center'},
       }, '?'),
     ),
-    !watched.length
-      ? h('div',{className:'empty'},
-          h('div',{className:'icon'},'★'),
-          h('p',null, devMode && view === 'dxp' ? 'No items pinned to the DXP watchlist yet.' : 'Your watchlist is empty.'),
-          h('div',{style:{fontSize:12,color:T.textDim,marginTop:8,lineHeight:1.7,maxWidth:340,textAlign:'center'}},
-            devMode && view === 'dxp'
-              ? h('span', null, 'Pin items from inside the Almanac\'s Confirmed/Negligible/Speculative/Recommendations tables.')
-              : h('span', null,
-                  'Browse any category tab and click the ★ on an item to add it here.',h('br',null),
-                  'Watched items show live prices and signals all in one place.'
-                )
-          )
-        )
-      : h('div',{className:'offer-grid'},
-    watched.map(it =>
-      h('div',{key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
-        h('div',{className:'offer-slot-name'},it.name),
-        h('div',{className:'offer-slot-price'},fmt.gp(it.high||it.low)+'gp'),
-        h('div',{className:'offer-slot-change '+pctClass(it.change_1d)},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
-        h('div',{className:'offer-slot-star'},
-          h('button',{
-            className:'star-btn',
-            onClick:e=>{e.stopPropagation(); activeToggle(it.id);}
-          }, h('span',{className:'star-on'},'★'))
-        ),
-        it.signals&&it.signals.map(s=>h(SignalBadge,{key:s,signal:s,style:{marginTop:4,marginRight:2}}))
+
+    // ── Seasonal sub-event pills ────────────────────────────────────────────
+    devMode && view === 'seasonal' && h('div', {style:{display:'flex', gap:6, padding:'8px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+      SEASONAL_EVENTS.filter(ev => ev.confidence !== 'insufficient').map(ev =>
+        h('button', {
+          key: ev.id,
+          onClick: () => setSeasonalEvent(ev.id),
+          style: {
+            padding:'3px 10px', fontSize:11, borderRadius:4, cursor:'pointer',
+            border:`1px solid ${seasonalEvent===ev.id ? T.gold : T.borderDim}`,
+            background: seasonalEvent===ev.id ? 'rgba(201,168,76,0.12)' : 'transparent',
+            color: seasonalEvent===ev.id ? T.goldBright : T.textDim,
+          }
+        }, `${ev.emoji} ${ev.name}`)
       )
-    )
-  ));
+    ),
+
+    // ── Seasonal grid ───────────────────────────────────────────────────────
+    devMode && view === 'seasonal' && (
+      seasonalRows.length === 0
+        ? h('div', {className:'empty'}, h('p', null, 'No research data for this event.'))
+        : h('div', {className:'offer-grid'},
+            seasonalRows.map(res => {
+              const liveItem = items.find(it => it.name?.toLowerCase() === res.name.toLowerCase());
+              const price    = liveItem?.high || liveItem?.low;
+              const tier     = seasonalTierLabel(res);
+              return h('div', {
+                key: res.name,
+                className: 'offer-slot',
+                onClick: liveItem ? () => onSelect(liveItem) : undefined,
+                style: liveItem ? {} : {cursor:'default', opacity:0.6},
+              },
+                h('div', {className:'offer-slot-name'}, res.name),
+                price
+                  ? h('div', {className:'offer-slot-price'}, fmt.gp(price) + 'gp')
+                  : h('div', {className:'offer-slot-price', style:{color:T.textDim}}, 'No price'),
+                price
+                  ? h('div', {className:'offer-slot-change ' + pctClass(liveItem.change_1d)}, h(ChangeDisplay, {change_1d:liveItem.change_1d, price}))
+                  : h('div', {className:'offer-slot-change'}),
+                h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', marginTop:4}},
+                  h('span', {style:{
+                    fontSize:9, padding:'1px 5px', borderRadius:3,
+                    border:`1px solid ${tier.color}`, color:tier.color,
+                  }}, tier.label),
+                  res.duringPct != null && h('span', {style:{
+                    fontSize:9, padding:'1px 5px', borderRadius:3,
+                    border:`1px solid ${res.duringPct > 0 ? T.green : T.red}`,
+                    color: res.duringPct > 0 ? T.green : T.red,
+                  }}, res.duringPct > 0 ? `▲${res.duringPct}%` : `▼${Math.abs(res.duringPct)}%`),
+                  res.recoveryPct != null && h('span', {style:{
+                    fontSize:9, padding:'1px 5px', borderRadius:3,
+                    border:`1px solid ${T.green}`, color:T.green,
+                  }}, `+${res.recoveryPct}%`),
+                ),
+              );
+            })
+          )
+    ),
+
+    // ── Normal / DXP grid ───────────────────────────────────────────────────
+    view !== 'seasonal' && (
+      !watched.length
+        ? h('div', {className:'empty'},
+            h('div', {className:'icon'}, '★'),
+            h('p', null, devMode && view === 'dxp' ? 'No items pinned to the DXP watchlist yet.' : 'Your watchlist is empty.'),
+            h('div', {style:{fontSize:12, color:T.textDim, marginTop:8, lineHeight:1.7, maxWidth:340, textAlign:'center'}},
+              devMode && view === 'dxp'
+                ? h('span', null, 'Pin items from inside the Almanac\'s Confirmed/Negligible/Speculative/Recommendations tables.')
+                : h('span', null,
+                    'Browse any category tab and click the ★ on an item to add it here.', h('br', null),
+                    'Watched items show live prices and signals all in one place.'
+                  )
+            )
+          )
+        : h('div', {className:'offer-grid'},
+            watched.map(it =>
+              h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
+                h('div', {className:'offer-slot-name'}, it.name),
+                h('div', {className:'offer-slot-price'}, fmt.gp(it.high||it.low)+'gp'),
+                h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
+                h('div', {className:'offer-slot-star'},
+                  h('button', {
+                    className:'star-btn',
+                    onClick: e => { e.stopPropagation(); activeToggle(it.id); }
+                  }, h('span', {className:'star-on'}, '★'))
+                ),
+                it.signals && it.signals.map(s => h(SignalBadge, {key:s, signal:s, style:{marginTop:4, marginRight:2}}))
+              )
+            )
+          )
+    ),
+  );
 }
 
 /* ─── SplitTab — tradeable items + untradeable sub-tab ───────── */
@@ -3739,20 +3901,196 @@ function RecipePane({allItems}) {
   );
 }
 
-function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel}) {
+function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel, showMachines, allItems}) {
   const [view, setView] = useState('items');
   const tradeableItems    = useMemo(() => (items||[]).filter(it => !it.untradeable), [items]);
   const untradeableItems  = useMemo(() => (items||[]).filter(it =>  it.untradeable), [items]);
   const displayItems = view === 'items' ? tradeableItems : untradeableItems;
   return h('div', null,
     description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
-    untradeableItems.length > 0 && h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
+    (untradeableItems.length > 0 || showMachines) && h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
       h('button', {className: view==='items' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('items')},
         `Items (${tradeableItems.length})`),
-      h('button', {className: view==='split' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('split')},
-        `${splitLabel} (${untradeableItems.length})`)
+      untradeableItems.length > 0 && h('button', {className: view==='split' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('split')},
+        `${splitLabel} (${untradeableItems.length})`),
+      showMachines && h('button', {className: view==='machines' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('machines')},
+        'Machines')
     ),
-    h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+    view === 'machines' ? h(MachineCalculators, {items: allItems || items, onSelect}) : h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+  );
+}
+
+// ─── Invention machine profit calculators ──────────────────────────────────
+// Real conversion rates, machine-charge costs, and throughput pulled from the
+// RS Wiki (runescape.wiki/w/Plank_maker_(machine), Automatic_hide_tanner,
+// Optimised_hide_tanner, Partial_potion_producer_DX — checked 2026-06-29).
+// All three machines convert raw material -> processed material 1:1 (no
+// chance of failure), so profit per item is just
+// outputPrice - inputPrice - extraInputCost - chargeCost. A divine charge
+// costs 72,099gp for 3,000 machine charge -> 24.03gp/charge — the cheapest
+// charge source and what these numbers assume. Hourly/Daily use the
+// upgraded machine variant's throughput (high-capacity plank maker, DX
+// potion producer, optimised hide tanner) since that's what most players
+// actually run at scale.
+// Deliberately NOT including "via sawmill/portable/tannery" NPC-service
+// comparison columns — couldn't find RS3-specific (not OSRS, which has a
+// separate economy) fee numbers confirmed for those, and fabricating exact
+// gp figures would be worse than leaving them out.
+const GP_PER_MACHINE_CHARGE = 24.03;
+const INVENTION_MACHINES = [
+  {
+    id: 'plank', label: 'Plank Maker', chargePerItem: 15, itemsPerHour: 40,
+    note: 'High-capacity plank maker (117 Invention), 15 charge/item, up to 40 logs/hour. Standard plank maker (99 Invention) runs 17.3 charge/item at 13/hour instead — slightly worse on both counts.',
+    conversions: [
+      { input: 'Logs', output: 'Plank' },
+      { input: 'Oak logs', output: 'Oak plank' },
+      { input: 'Willow logs', output: 'Willow plank' },
+      { input: 'Teak logs', output: 'Teak plank' },
+      { input: 'Maple logs', output: 'Maple plank' },
+      { input: 'Acadia logs', output: 'Acadia plank' },
+      { input: 'Mahogany logs', output: 'Mahogany plank' },
+      { input: 'Yew logs', output: 'Yew plank' },
+      { input: 'Magic logs', output: 'Magic plank' },
+      { input: 'Elder logs', output: 'Elder plank' },
+      // Added ahead of WeirdGloop actually carrying price data for either
+      // side (2026-07-10, 120 Construction launch day) — the input (Eternal
+      // magic logs) is already tracked and trading heavily, the output
+      // (Eternal plank — NOT "Eternal magic plank", the "magic" drops from
+      // the plank's name) isn't yet, but this table already shows '—' for
+      // any missing side rather than erroring, so there's no reason to wait
+      // on the data before wiring the conversion in.
+      { input: 'Eternal magic logs', output: 'Eternal plank' },
+    ],
+  },
+  {
+    id: 'tanner', label: 'Hide Tanner', chargePerItem: 6, itemsPerHour: 140,
+    note: 'Optimised hide tanner, 6 charge/item, up to 140 hides/hour. Automatic hide tanner (the base version) runs 5 charge/item at only 45/hour instead. Both skip the normal coin/rune tanning cost entirely.',
+    conversions: [
+      { input: 'Cowhide', output: 'Leather' },
+      { input: 'Snake hide', output: 'Snakeskin' },
+      { input: 'Snake hide (swamp)', output: 'Snakeskin' },
+      { input: 'Green dragonhide', output: 'Green dragon leather' },
+      { input: 'Blue dragonhide', output: 'Blue dragon leather' },
+      { input: 'Red dragonhide', output: 'Red dragon leather' },
+      { input: 'Black dragonhide', output: 'Black dragon leather' },
+      { input: 'Royal dragonhide', output: 'Royal dragon leather' },
+      { input: 'Dinosaur hide', output: 'Dinosaur leather' },
+      { input: 'Undead dragonhide', output: 'Undead dragon leather' },
+    ],
+  },
+  {
+    id: 'potion', label: 'Partial Potion Producer', chargePerItem: 5.3, itemsPerHour: 40,
+    extraInput: 'Vial of water',
+    note: 'Partial potion producer DX, 5.3 charge/item, up to 40 herbs/hour. Standard version runs 5.8 charge/item at only 13/hour instead. Each herb also needs a Vial of water, factored into the cost below.',
+    conversions: [
+      { input: 'Clean guam', output: 'Guam potion (unfinished)' },
+      { input: 'Clean marrentill', output: 'Marrentill potion (unfinished)' },
+      { input: 'Clean tarromin', output: 'Tarromin potion (unfinished)' },
+      { input: 'Clean harralander', output: 'Harralander potion (unfinished)' },
+      { input: 'Clean ranarr', output: 'Ranarr potion (unfinished)' },
+      { input: 'Clean toadflax', output: 'Toadflax potion (unfinished)' },
+      { input: 'Clean spirit weed', output: 'Spirit weed potion (unfinished)' },
+      { input: 'Clean irit', output: 'Irit potion (unfinished)' },
+      { input: 'Clean avantoe', output: 'Avantoe potion (unfinished)' },
+      { input: 'Clean kwuarm', output: 'Kwuarm potion (unfinished)' },
+      { input: 'Clean wergali', output: 'Wergali potion (unfinished)' },
+      { input: 'Clean cadantine', output: 'Cadantine potion (unfinished)' },
+      { input: 'Clean lantadyme', output: 'Lantadyme potion (unfinished)' },
+      { input: 'Clean dwarf weed', output: 'Dwarf weed potion (unfinished)' },
+      { input: 'Clean bloodweed', output: 'Bloodweed potion (unfinished)' },
+      { input: 'Clean snapdragon', output: 'Snapdragon potion (unfinished)' },
+      { input: 'Clean arbuck', output: 'Arbuck potion (unfinished)' },
+      { input: 'Clean fellstalk', output: 'Fellstalk potion (unfinished)' },
+      { input: 'Clean torstol', output: 'Torstol potion (unfinished)' },
+    ],
+  },
+];
+const MACHINE_COL_WIDTHS = {input:160, output:190, inPrice:110, outPrice:110, profit:110, roi:80, hourly:130, daily:140};
+
+function MachineCalculators({items, onSelect}) {
+  const [active, setActive] = useState(INVENTION_MACHINES[0].id);
+  const [sort, setSort] = useState({key:'profit', dir:-1});
+  const cols = useTableColumns('genius_machine_col_widths_'+active, MACHINE_COL_WIDTHS);
+  const byName = useMemo(() => {
+    const m = {};
+    (items||[]).forEach(it => { if (it.name) m[it.name.toLowerCase()] = it; });
+    return m;
+  }, [items]);
+  const machine = INVENTION_MACHINES.find(m => m.id === active);
+  const chargeCost = machine.chargePerItem * GP_PER_MACHINE_CHARGE;
+  const extraCost = machine.extraInput ? (byName[machine.extraInput.toLowerCase()]?.high || byName[machine.extraInput.toLowerCase()]?.low || 0) : 0;
+
+  const rows = useMemo(() => machine.conversions.map(c => {
+    const inItem = byName[c.input.toLowerCase()];
+    const outItem = byName[c.output.toLowerCase()];
+    const inPrice = inItem ? (inItem.high || inItem.low || 0) : null;
+    const outPrice = outItem ? (outItem.high || outItem.low || 0) : null;
+    const totalCost = inPrice != null ? inPrice + extraCost + chargeCost : null;
+    const profit = (inPrice != null && outPrice != null) ? outPrice - totalCost : null;
+    const roi = (profit != null && totalCost) ? (profit / totalCost) * 100 : null;
+    const hourly = profit != null ? profit * machine.itemsPerHour : null;
+    const daily = hourly != null ? hourly * 24 : null;
+    return {...c, inItem, outItem, inPrice, outPrice, profit, roi, hourly, daily};
+  }), [machine, byName, extraCost, chargeCost]);
+
+  const sorted = useMemo(() => {
+    const dir = sort.dir;
+    return [...rows].sort((a,b) => {
+      if (sort.key === 'input' || sort.key === 'output') return (a[sort.key]||'').localeCompare(b[sort.key]||'') * dir;
+      const av = a[sort.key], bv = b[sort.key];
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;
+      if (bv == null) return -1;
+      return (av - bv) * dir;
+    });
+  }, [rows, sort]);
+
+  const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
+  const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
+  const gpCell = v => v != null ? (v>0?'+':'')+fmt.gp(Math.round(v))+'gp' : '—';
+  const gpColor = v => v == null ? T.textDim : v > 0 ? T.green : T.red;
+
+  return h('div', {style:{padding:'12px 14px'}},
+    h('div', {style:{display:'flex', gap:6, marginBottom:10, flexWrap:'wrap'}},
+      INVENTION_MACHINES.map(m => h('button', {
+        key:m.id, onClick:()=>setActive(m.id),
+        className: active===m.id ? 'ge-btn gold' : 'ge-btn',
+      }, m.label))
+    ),
+    h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:4, lineHeight:1.5}}, machine.note),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10}},
+      `Machine charge cost: ${machine.chargePerItem} charge/item (${fmt.gp(Math.round(chargeCost))}gp/item, divine charges at ${GP_PER_MACHINE_CHARGE}gp/charge)`,
+      machine.extraInput && ` · plus 1 ${machine.extraInput} (${fmt.gp(extraCost)}gp) per item`
+    ),
+    h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef},
+      h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
+        cols.colgroup(),
+        h('thead', null, h('tr', null, cols.colOrder.map(k => {
+          const labels = {input:'Input', output:'Output', inPrice:'Input price', outPrice:'Output price', profit:'Profit/item', roi:'ROI', hourly:'Hourly', daily:'Daily'};
+          const titles = {hourly:`At ${machine.itemsPerHour} items/hour`, daily:'Hourly × 24, fully AFK'};
+          return cols.th(k, {onClick:()=>toggleSort(k), style:{cursor:'pointer'}, title:titles[k]}, labels[k]+sortArrow(k));
+        }))),
+        h('tbody', null, sorted.map(r => h('tr', {
+            key:r.input, style:{cursor: r.inItem ? 'pointer' : 'default'},
+            onClick: () => r.inItem && onSelect && onSelect(r.inItem),
+          },
+          cols.colOrder.map(k => {
+            switch (k) {
+              case 'input':    return h('td', {key:k}, r.input);
+              case 'output':   return h('td', {key:k}, r.output);
+              case 'inPrice':  return h('td', {key:k}, r.inPrice != null ? fmt.gp(r.inPrice)+'gp' : '—');
+              case 'outPrice': return h('td', {key:k}, r.outPrice != null ? fmt.gp(r.outPrice)+'gp' : '—');
+              case 'profit':   return h('td', {key:k, style:{color: gpColor(r.profit), fontWeight:'bold'}}, gpCell(r.profit));
+              case 'roi':      return h('td', {key:k, style:{color: gpColor(r.roi)}}, r.roi != null ? (r.roi>0?'+':'')+r.roi.toFixed(0)+'%' : '—');
+              case 'hourly':   return h('td', {key:k, style:{color: gpColor(r.hourly)}}, gpCell(r.hourly));
+              case 'daily':    return h('td', {key:k, style:{color: gpColor(r.daily)}}, gpCell(r.daily));
+              default:         return h('td', {key:k}, null);
+            }
+          })
+        ))),
+      ),
+      cols.handles(),
+    )
   );
 }
 
@@ -3855,12 +4193,45 @@ function MarketTab({items, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    // Everything shipped/fixed since v2.0.0 went out, not yet its own
+    // numbered release — convention going forward (Ben, 2026-07-10): the
+    // top entry is always "Post vX.X.X" for whatever the last actually-
+    // pushed version was, and it accumulates entries as work lands. When
+    // Ben decides to cut the next release, this whole entry gets renamed
+    // to the new version number (e.g. "v2.1.0") and a fresh empty
+    // "Post v2.1.0" entry starts above it — never left to go stale.
+    version: 'Post v2.0.0',
+    items: [
+      'Fixed column resizing across every table in the app (Almanac, Market, Alch, Machine Calculators) — dragging a divider used to slide the wrong column around instead of resizing the one you grabbed.',
+      'Added drag-to-reorder for table columns — grab any header and drop it where you want, on every table in the app.',
+      'New: 🐲 Drop sources button in the item detail panel — fetches the real monster/source drop table straight from the wiki on click (not saved, just a quick lookup).',
+      'Fixed the Invention tab\'s Components pill silently disappearing — the untradeable-items cache was trying to write to a folder that doesn\'t exist in the installed app, so it never actually stuck.',
+      'Fixed a recurring freeze/"Not Responding" hang on launch — price history loading now yields between batches instead of running 7000+ file reads back-to-back.',
+      'Fixed the category editor\'s Save button silently doing nothing in the installed app — turns out saving into a file that lives inside a read-only app archive doesn\'t work great.',
+      'Fixed a missing "Pocket" category — it was a real, valid category (Luck of the Dwarves needed it) with no way to actually select it in the editor.',
+      'Rebuilt how personal category edits are stored and shipped — moved off a fragile setup that could silently fail to save, onto the same reliable system every other saved setting already uses.',
+      'Plank Maker calculator now includes Eternal magic logs → Eternal plank (120 Construction) — will show live profit numbers as soon as the new item shows up in price data.',
+      'Fixed All-Time Low/High in the item chart being able to show a stale number lower/higher than the actual current price — the all-time data is cached permanently for performance, but never accounted for the live price possibly having since broken that record.',
+      'Fixed intermittent "installer finishes, nothing opens (or only a tray icon shows up)" even with Launch checked — closed a race between the installer force-closing any running copy and the freshly-launched one starting, plus added a safety net so the window shows itself even if the very first launch after install is slowed down by antivirus scanning the new files for the first time.',
+      'Cleaned up ~55 miscategorized items sitting in Food — Herblore ingredients, fishing/cooking tools, Treasure Trails and Summoning items, Archaeology portents/powerbursts, and a couple of cosmetics had all ended up there. Also fixed the underlying cause (an overly broad "ration" keyword match) so Portents of restoration and Powerbursts of acceleration can\'t drift back into Food again.',
+    ]
+  },
+  {
     version: 'Coming Soon',
     items: [
       'GEnius Almanac — track items that historically spike around seasonal events like DXP weekends; early buy signals ahead of the rush',
-      'Portfolio Analytics — profit by category, value over time, win rate, hold time distribution, and best possible sale price within your hold window',
-      'Advanced Alerts — signal-based triggers (e.g. alert when SURGE fires on a watchlist item), not just price thresholds',
-      'Price Since Post — track how item prices move after RS3 news articles; see what the market actually reacted to',
+      'GEnius Mobile — a real Android app, same no-accounts/no-servers approach as desktop, fetching live prices and tracking everything locally on your device',
+    ]
+  },
+  {
+    version: 'v1.8.3',
+    items: [
+      'Portfolio Analytics — investor tiers from 10M to 100B, milestone badges (biggest win/loss, win streaks, trade count), allocation breakdowns by item and category, and a concentration warning if you\'re overexposed to one item or category (rares are exempt — that\'s just what owning a rare looks like).',
+      'Advanced Alerts — alerts can now trigger on a signal (SURGE, DUMP, ACCUMULATION, DISTRIBUTION, FRENZY, HIGH_VOL) or on an item becoming alch-profitable, not just a price or % threshold.',
+      'Price Since Post — RS3 news articles now track how mentioned items\' prices moved since the article was posted, so you can see what the market actually did in response.',
+      'Invention tab now has a Machines pill with profit calculators for the Plank Maker, Hide Tanner, and Partial Potion Producer — every log/hide/herb tier covered, sortable and resizable columns, live prices, real machine charge costs, profit/item, ROI%, and hourly/daily projections.',
+      'Fixed several real freezes and lag sources: a 30-second main-thread block on every Dashboard visit, history loading blocking window creation on launch, history population getting stuck at 99%, and slow alt-tab/focus during price fetches.',
+      'Fixed a crash in Portfolio when a position was missing its item name.',
     ]
   },
   {
@@ -4563,6 +4934,7 @@ let _dxpDataCache = null;
 let _dxpDataCacheTime = null; // when _dxpDataCache was last (re)fetched — shown in the UI so it's obvious the tab is showing session-cached data, not necessarily this exact moment's numbers
 
 function DXPIntelTab({items, onSelect}) {
+  const [activeView, setActiveView] = useState('dxp'); // 'dxp' | 'seasonal'
   const [data, setData] = useState(() => _dxpDataCache);
   const [loading, setLoading] = useState(() => !_dxpDataCache);
   const [refreshing, setRefreshing] = useState(false);
@@ -4589,10 +4961,10 @@ function DXPIntelTab({items, onSelect}) {
   // independent widths since their columns don't correspond 1:1; Honorable
   // Mentions reuses the Recommendations widths rather than getting its own
   // handles, since it's the same columns directly below the same table.
-  const mainCols = useResizableColumns('genius_almanac_main_col_widths',
-    {star:30, name:260, direction:110, confidence:110, medianPct:100, strategy:220, profitPerItem:160, profitForLimit:190, volRatio:80, expand:30});
-  const recCols = useResizableColumns('genius_almanac_rec_col_widths',
-    {star:30, name:220, strategy:220, netRoi:100, profitPerItem:160, profitForLimit:190});
+  const mainCols = useTableColumns('genius_almanac_main_col_widths_v2',
+    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:150, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26});
+  const recCols = useTableColumns('genius_almanac_rec_col_widths_v2',
+    {star:26, name:185, strategy:160, netRoi:88, profitPerItem:128, profitForLimit:148});
 
   useEffect(() => {
     // Already have data cached from an earlier visit this session — skip
@@ -4761,6 +5133,111 @@ function DXPIntelTab({items, onSelect}) {
   const rowTierLabel = r => confident(r) && !r.negligible ? 'Confirmed' : confident(r) && r.negligible ? 'Negligible' : 'Speculative';
   const isSearching = search.trim().length > 0;
 
+  // ── Column definitions for the three Almanac tables ──
+  // Header + cell renderers keyed by column id, rendered through the hook's
+  // user-reorderable colOrder — a positional <th>/<td> list can't reorder.
+  const PROFIT_ITEM_TIP = 'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.';
+  const PROFIT_LIMIT_TIP = 'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest. Calculated from the item\'s CURRENT price.';
+  const mainThFor = k => {
+    const sortable = key => ({onClick:()=>toggleSort(key), style:{cursor:'pointer'}});
+    switch (k) {
+      case 'star':           return mainCols.th(k, null, null);
+      case 'name':           return mainCols.th(k, sortable('name'), 'Item'+sortArrow('name'));
+      case 'direction':      return mainCols.th(k, sortable('direction'), 'Direction'+sortArrow('direction'));
+      case 'confidence':     return mainCols.th(k, sortable('confidence'), 'Confidence'+sortArrow('confidence'));
+      case 'medianPct':      return mainCols.th(k, sortable('medianPct'), 'Median %'+sortArrow('medianPct'));
+      case 'strategy':       return mainCols.th(k, null, 'Trading Strategy');
+      case 'profitPerItem':  return mainCols.th(k, {...sortable('profitPerItem'), title:PROFIT_ITEM_TIP}, 'Probable profit/item'+sortArrow('profitPerItem'));
+      case 'profitForLimit': return mainCols.th(k, {...sortable('profitForLimit'), title:PROFIT_LIMIT_TIP}, 'Probable profit (buy limit)'+sortArrow('profitForLimit'));
+      case 'volRatio':       return mainCols.th(k, sortable('volRatio'), 'Vol'+sortArrow('volRatio'));
+      case 'expand':         return mainCols.th(k, null, null);
+      default:               return mainCols.th(k, null, null);
+    }
+  };
+  const mainTdFor = (k, r, t, tradeLabel) => {
+    switch (k) {
+      case 'star': return h('td', {
+        key:k,
+        style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
+        onClick:()=>toggleDxpWatch(r.id),
+      }, dxpWatchlist.includes(r.id) ? '★' : '☆');
+      case 'name': return h('td', {
+        key:k,
+        style:{cursor: onSelect ? 'pointer' : 'default', textDecoration: onSelect ? 'underline' : 'none', textDecorationColor:'transparent'},
+        onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
+        onMouseEnter: e => { if (onSelect) e.currentTarget.style.color = T.goldBright; },
+        onMouseLeave: e => { if (onSelect) e.currentTarget.style.color = ''; },
+        title: onSelect ? 'Open item details' : undefined,
+      },
+        r.name,
+        isSearching && h('span', {
+          style:{
+            marginLeft:8, fontSize:9, padding:'1px 6px', borderRadius:8, textDecoration:'none',
+            border:`1px solid ${T.borderDim}`, color:T.textDim, verticalAlign:'middle',
+          }
+        }, rowTierLabel(r)),
+      );
+      case 'direction': return h('td', {key:k, style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop');
+      case 'confidence': return h('td', {key:k}, `${r.score}/${r.total}`);
+      case 'medianPct': return h('td', {key:k, style:{color: r.medianPct>=0 ? T.green : T.red}}, `${r.medianPct>=0?'+':''}${r.medianPct}%`);
+      case 'strategy': return h('td', {
+        key:k,
+        style:{fontSize:11, color:T.textDim, cursor:'pointer'},
+        onClick:()=>setExpanded(expanded===r.id?null:r.id),
+        title:'Show trading strategy details',
+      }, tradeLabel);
+      case 'profitPerItem': return h('td', {key:k, style:{color: t?.profitPerItem==null ? T.textDim : t.profitPerItem>=0 ? T.gold : T.red}}, t?.profitPerItem!=null ? (t.profitPerItem>=0?'+':'')+fmt.gp(t.profitPerItem)+'gp' : '—');
+      case 'profitForLimit': return h('td', {key:k, style:{color: t?.profitForLimit==null ? T.textDim : t.profitForLimit>=0 ? T.gold : T.red}}, t?.profitForLimit!=null ? (t.profitForLimit>=0?'+':'')+fmt.gp(t.profitForLimit)+'gp' : '—');
+      case 'volRatio': return h('td', {key:k, style:{color:T.textDim}}, r.volRatio!=null ? r.volRatio+'x' : '—');
+      case 'expand': return h('td', {
+        key:k,
+        style:{cursor:'pointer', color:T.textDim, textAlign:'center'},
+        onClick:()=>setExpanded(expanded===r.id?null:r.id),
+        title:'Show trading strategy details',
+      }, expanded===r.id ? '▾' : '›');
+      default: return h('td', {key:k}, null);
+    }
+  };
+  // Recommendations + Honorable Mentions share column defs (same columns,
+  // same widths hook) — HM's headers just aren't sortable.
+  const recThFor = (k, sortableHeaders) => {
+    const sortable = key => sortableHeaders ? {onClick:()=>toggleRecSort(key), style:{cursor:'pointer'}} : null;
+    const arrow = key => sortableHeaders ? recSortArrow(key) : '';
+    switch (k) {
+      case 'star':           return recCols.th(k, null, null);
+      case 'name':           return recCols.th(k, sortable('name'), 'Item'+arrow('name'));
+      case 'strategy':       return recCols.th(k, null, 'Trading Strategy');
+      case 'netRoi':         return recCols.th(k, {...(sortable('netRoi')||{}), title:'Net of the 2% GE sell tax'}, 'Net ROI'+arrow('netRoi'));
+      case 'profitPerItem':  return recCols.th(k, {...(sortable('profitPerItem')||{}), title:PROFIT_ITEM_TIP}, 'Probable profit/item'+arrow('profitPerItem'));
+      case 'profitForLimit': return recCols.th(k, {...(sortable('profitForLimit')||{}), title:PROFIT_LIMIT_TIP}, 'Probable profit (buy limit)'+arrow('profitForLimit'));
+      default:               return recCols.th(k, null, null);
+    }
+  };
+  const recTdFor = (k, r) => {
+    switch (k) {
+      case 'star': return h('td', {
+        key:k,
+        style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
+        onClick: e => { e.stopPropagation(); toggleDxpWatch(r.id); },
+      }, dxpWatchlist.includes(r.id) ? '★' : '☆');
+      case 'name': return h('td', {key:k}, r.name);
+      case 'strategy': return h('td', {
+        key:k,
+        style:{fontSize:11, color:T.textDim, cursor:'pointer'},
+        onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
+        title:'Show trading strategy details',
+      },
+        r.trade.sameySequence
+          ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
+          : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
+      );
+      case 'netRoi': return h('td', {key:k, style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%');
+      case 'profitPerItem': return h('td', {key:k, style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp');
+      case 'profitForLimit': return h('td', {key:k, style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—');
+      default: return h('td', {key:k}, null);
+    }
+  };
+
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
     const filtered = allRows.filter(r => {
@@ -4856,11 +5333,28 @@ function DXPIntelTab({items, onSelect}) {
   return h('div', {style:{padding:'16px 20px', maxWidth:900}},
     h('div', {style:{display:'flex', alignItems:'center', gap:8, marginBottom:4}},
       h('span', {style:{fontSize:16}}, '📅'),
-      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac — DXP Edition'),
+      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac'),
     ),
-    h('div', {style:{fontSize:12, color:T.gold, fontStyle:'italic', marginBottom:6}},
+    h('div', {style:{fontSize:12, color:T.gold, fontStyle:'italic', marginBottom:10}},
       'The market has seasons too. This is their almanac.'
     ),
+    h('div', {style:{display:'flex', gap:6, marginBottom:16}},
+      [
+        {id:'dxp',      label:'📅 DXP Weekend'},
+        {id:'seasonal', label:'🗓️ Seasonal Events'},
+      ].map(v => h('button', {
+        key: v.id,
+        onClick: () => setActiveView(v.id),
+        style: {
+          padding:'6px 16px', fontSize:12, borderRadius:4, cursor:'pointer',
+          border:`1px solid ${activeView===v.id ? T.gold : T.borderDim}`,
+          background: activeView===v.id ? 'rgba(201,168,76,0.15)' : 'transparent',
+          color: activeView===v.id ? T.goldBright : T.textDim,
+        },
+      }, v.label))
+    ),
+    activeView === 'seasonal' && h(SeasonalEventsTab, {items, onSelect}),
+    activeView === 'dxp' && h('div', null,
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
       // itemCount is a real measured count (every item with enough local
       // price history to get a timing computation, not a hardcoded guess —
@@ -5050,100 +5544,36 @@ function DXPIntelTab({items, onSelect}) {
       recs.picks.length === 0 && h('div', {className:'empty-state'}, h('div', null, 'No items currently qualify for this risk tolerance — try Risky, or check back after the next fetch.')),
       recs.picks.length > 0 && h('div', null,
         h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:recCols.tableWrapRef},
-        h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
-          h('colgroup', null,
-            h('col', {style:{width:recCols.colWidths.star}}),
-            h('col', {style:{width:recCols.colWidths.name}}),
-            h('col', {style:{width:recCols.colWidths.strategy}}),
-            h('col', {style:{width:recCols.colWidths.netRoi}}),
-            h('col', {style:{width:recCols.colWidths.profitPerItem}}),
-            h('col', {style:{width:recCols.colWidths.profitForLimit}}),
-          ),
-          h('thead', null, h('tr', null,
-            h('th', null, null),
-            h('th', {onClick:()=>toggleRecSort('name'), style:{cursor:'pointer'}}, 'Item'+recSortArrow('name')),
-            h('th', null, 'Trading Strategy'),
-            h('th', {onClick:()=>toggleRecSort('netRoi'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax'}, 'Net ROI'+recSortArrow('netRoi')),
-            h('th', {onClick:()=>toggleRecSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'+recSortArrow('profitPerItem')),
-            h('th', {onClick:()=>toggleRecSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'+recSortArrow('profitForLimit')),
-          )),
+        h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
+          recCols.colgroup(),
+          h('thead', null, h('tr', null, recCols.colOrder.map(k => recThFor(k, true)))),
           h('tbody', null, sortedPicks.flatMap(r => [
             h('tr', {
               key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
               onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-            },
-              h('td', {
-                style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
-                onClick: e => { e.stopPropagation(); toggleDxpWatch(r.id); },
-              }, dxpWatchlist.includes(r.id) ? '★' : '☆'),
-              h('td', null, r.name),
-              h('td', {
-                style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-                onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
-                title:'Show trading strategy details',
-              },
-                r.trade.sameySequence
-                  ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
-                  : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
-              ),
-              h('td', {style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%'),
-              h('td', {style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp'),
-              h('td', {style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—'),
-            ),
+            }, recCols.colOrder.map(k => recTdFor(k, r))),
             expanded===r.id && h('tr', {key:r.id+'-detail'},
-              h('td', {colSpan:6, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
+              h('td', {colSpan:recCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
             ),
           ]))
         ),
-        recCols.colOrder.slice(0,-1).map(k => recCols.overlayHandle(k)),
+        recCols.handles(),
         ),
         recs.honorableMentions.length > 0 && h('div', {style:{marginTop:18}},
           h('div', {className:'form-lbl', style:{marginBottom:6}}, 'Honorable mentions'),
           h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8}},
             `Next best plays just outside your ${recSlots} slot${recSlots===1?'':'s'} — worth swapping in if one frees up.`
           ),
-          h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
-            h('colgroup', null,
-              h('col', {style:{width:recCols.colWidths.star}}),
-              h('col', {style:{width:recCols.colWidths.name}}),
-              h('col', {style:{width:recCols.colWidths.strategy}}),
-              h('col', {style:{width:recCols.colWidths.netRoi}}),
-              h('col', {style:{width:recCols.colWidths.profitPerItem}}),
-              h('col', {style:{width:recCols.colWidths.profitForLimit}}),
-            ),
-            h('thead', null, h('tr', null,
-              h('th', {style:{width:20}}, null),
-              h('th', null, 'Item'),
-              h('th', null, 'Trading Strategy'),
-              h('th', {title:'Net of the 2% GE sell tax'}, 'Net ROI'),
-              h('th', {title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'),
-              h('th', {title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'),
-            )),
+          h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
+            recCols.colgroup(),
+            h('thead', null, h('tr', null, recCols.colOrder.map(k => recThFor(k, false)))),
             h('tbody', null, recs.honorableMentions.flatMap(r => [
               h('tr', {
                 key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
                 onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-              },
-                h('td', {
-                  style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
-                  onClick: e => { e.stopPropagation(); toggleDxpWatch(r.id); },
-                }, dxpWatchlist.includes(r.id) ? '★' : '☆'),
-                h('td', null, r.name),
-                h('td', {
-                  style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-                  onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
-                  title:'Show trading strategy details',
-                },
-                  r.trade.sameySequence
-                    ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
-                    : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
-                ),
-                h('td', {style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%'),
-                h('td', {style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp'),
-                h('td', {style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—'),
-              ),
+              }, recCols.colOrder.map(k => recTdFor(k, r))),
               expanded===r.id && h('tr', {key:r.id+'-detail'},
-                h('td', {colSpan:6, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
+                h('td', {colSpan:recCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
               ),
             ]))
           ),
@@ -5184,31 +5614,9 @@ function DXPIntelTab({items, onSelect}) {
       rows.length === 0
         ? h('div', {className:'empty-state'}, h('div', null, 'No items show a clear signal for this phase.'))
         : h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:mainCols.tableWrapRef},
-          h('table', {className:'ge-table', style:{tableLayout:'fixed'}},
-            h('colgroup', null,
-              h('col', {style:{width:mainCols.colWidths.star}}),
-              h('col', {style:{width:mainCols.colWidths.name}}),
-              h('col', {style:{width:mainCols.colWidths.direction}}),
-              h('col', {style:{width:mainCols.colWidths.confidence}}),
-              h('col', {style:{width:mainCols.colWidths.medianPct}}),
-              h('col', {style:{width:mainCols.colWidths.strategy}}),
-              h('col', {style:{width:mainCols.colWidths.profitPerItem}}),
-              h('col', {style:{width:mainCols.colWidths.profitForLimit}}),
-              h('col', {style:{width:mainCols.colWidths.volRatio}}),
-              h('col', {style:{width:mainCols.colWidths.expand}}),
-            ),
-            h('thead', null, h('tr', null,
-              h('th', null, null),
-              h('th', {onClick:()=>toggleSort('name'), style:{cursor:'pointer'}}, 'Item'+sortArrow('name')),
-              h('th', {onClick:()=>toggleSort('direction'), style:{cursor:'pointer'}}, 'Direction'+sortArrow('direction')),
-              h('th', {onClick:()=>toggleSort('confidence'), style:{cursor:'pointer'}}, 'Confidence'+sortArrow('confidence')),
-              h('th', {onClick:()=>toggleSort('medianPct'), style:{cursor:'pointer'}}, 'Median %'+sortArrow('medianPct')),
-              h('th', null, 'Trading Strategy'),
-              h('th', {onClick:()=>toggleSort('profitPerItem'), style:{cursor:'pointer'}, title:'Net of the 2% GE sell tax. Calculated from the item\'s CURRENT price — actual profit when the trade happens may be higher or lower.'}, 'Probable profit/item'+sortArrow('profitPerItem')),
-              h('th', {onClick:()=>toggleSort('profitForLimit'), style:{cursor:'pointer'}, title:'Profit per item (net of the 2% GE sell tax) × the GE buy limit — one full limit\'s worth of units, not a hard cap on what you can actually invest. Calculated from the item\'s CURRENT price.'}, 'Probable profit (buy limit)'+sortArrow('profitForLimit')),
-              h('th', {onClick:()=>toggleSort('volRatio'), style:{cursor:'pointer'}}, 'Vol'+sortArrow('volRatio')),
-              h('th', null, null),
-            )),
+          h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
+            mainCols.colgroup(),
+            h('thead', null, h('tr', null, mainCols.colOrder.map(k => mainThFor(k)))),
             h('tbody', null, rows.map(r => {
               const t = r.trade;
               const tradeLabel = !t ? '—'
@@ -5216,45 +5624,9 @@ function DXPIntelTab({items, onSelect}) {
                   ? `Buy ~day ${t.buyDay} → Sell ~day ${t.sellDay}`
                   : `Sell ~day ${t.sellDay} → Buy ~day ${t.buyDay} (next cycle)`;
               return [
-              h('tr', {key:r.id},
-                h('td', {
-                  style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
-                  onClick:()=>toggleDxpWatch(r.id),
-                }, dxpWatchlist.includes(r.id) ? '★' : '☆'),
-                h('td', {
-                  style:{cursor: onSelect ? 'pointer' : 'default', textDecoration: onSelect ? 'underline' : 'none', textDecorationColor:'transparent'},
-                  onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-                  onMouseEnter: e => { if (onSelect) e.currentTarget.style.color = T.goldBright; },
-                  onMouseLeave: e => { if (onSelect) e.currentTarget.style.color = ''; },
-                  title: onSelect ? 'Open item details' : undefined,
-                },
-                  r.name,
-                  isSearching && h('span', {
-                    style:{
-                      marginLeft:8, fontSize:9, padding:'1px 6px', borderRadius:8, textDecoration:'none',
-                      border:`1px solid ${T.borderDim}`, color:T.textDim, verticalAlign:'middle',
-                    }
-                  }, rowTierLabel(r)),
-                ),
-                h('td', {style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop'),
-                h('td', null, `${r.score}/${r.total}`),
-                h('td', {style:{color: r.medianPct>=0 ? T.green : T.red}}, `${r.medianPct>=0?'+':''}${r.medianPct}%`),
-                h('td', {
-                  style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-                  onClick:()=>setExpanded(expanded===r.id?null:r.id),
-                  title:'Show trading strategy details',
-                }, tradeLabel),
-                h('td', {style:{color: t?.profitPerItem==null ? T.textDim : t.profitPerItem>=0 ? T.gold : T.red}}, t?.profitPerItem!=null ? (t.profitPerItem>=0?'+':'')+fmt.gp(t.profitPerItem)+'gp' : '—'),
-                h('td', {style:{color: t?.profitForLimit==null ? T.textDim : t.profitForLimit>=0 ? T.gold : T.red}}, t?.profitForLimit!=null ? (t.profitForLimit>=0?'+':'')+fmt.gp(t.profitForLimit)+'gp' : '—'),
-                h('td', {style:{color:T.textDim}}, r.volRatio!=null ? r.volRatio+'x' : '—'),
-                h('td', {
-                  style:{cursor:'pointer', color:T.textDim, textAlign:'center'},
-                  onClick:()=>setExpanded(expanded===r.id?null:r.id),
-                  title:'Show trading strategy details',
-                }, expanded===r.id ? '▾' : '›'),
-              ),
+              h('tr', {key:r.id}, mainCols.colOrder.map(k => mainTdFor(k, r, t, tradeLabel))),
               expanded===r.id && h('tr', {key:r.id+'-detail'},
-                h('td', {colSpan:10, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}},
+                h('td', {colSpan:mainCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}},
                   r.negligible && r.negligibleReason && h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`, fontSize:12, color:T.gold}},
                     r.negligibleReason
                   ),
@@ -5276,8 +5648,535 @@ function DXPIntelTab({items, onSelect}) {
               ),
             ];}))
           ),
-          mainCols.colOrder.slice(0,-1).map(k => mainCols.overlayHandle(k)),
+          mainCols.handles(),
           )
+    ), // end dxp view wrapper div
+    ),
+  );
+}
+
+/* ─── GEnius Almanac — Seasonal Events ──────────────────────────────────────── */
+
+// Per-item research data distilled from the five seasonal research files.
+// duringPct: median % change from pre-event price at the worst point during the event.
+// recoveryPct: median % change from the during-event low back up post-event (null = no clean recovery).
+// confidence: fraction of years where direction agreed (e.g. 3/3 = 1.0).
+// n/nTotal: years of data. volRatio: trading volume vs item's own baseline.
+// roundTrip: true = buy during event, sell after recovery. false = drop only (buy-to-use or holder sell).
+// duringPct: deepest in-event discount from pre-event baseline (buy_pct_median from trough analysis).
+// recoveryPct: post-event phase gain FROM the buy price (post_event phase median).
+// buyDayOffset / sellDayOffset: approximate event day for entry / exit (relative to event start, >end = post-event).
+const SEASONAL_ITEM_DATA = [
+  // ── Christmas (confirmed, n=3) ──────────────────────────────────────────────
+  { event:'christmas', name:'Bucket of milk',        duringPct:-70, recoveryPct:59,  confidence:1.0, n:3, nTotal:3, volRatio:15.6, roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Buy around day 33 of the event when present openings have flooded supply (deepest point: ~-70% from baseline). Sell 7–21 days after event ends — 3/3 years showed +59% recovery from the floor. Cleanest crash+recovery signal in all seasonal research.' },
+  { event:'christmas', name:'Egg',                   duringPct:-60, recoveryPct:25,  confidence:1.0, n:3, nTotal:3, volRatio:9.2,  roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Same supply-flood as Bucket of milk. Buy around day 33, sell 1–2 weeks post-event. 3/3 years within 6% of each other in magnitude — the tightest consistency in the dataset.' },
+  { event:'christmas', name:'Orange',                duringPct:-63, recoveryPct:23,  confidence:1.0, n:3, nTotal:3, volRatio:16.4, roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Same supply-flood mechanism as Bucket of milk. Buy around day 33 (deepest ~-63%), sell 1–2 weeks post-event for +23% recovery from floor. 3/3 years confirmed.' },
+  { event:'christmas', name:'Aurora dye',            duringPct:-43, recoveryPct:14,  confidence:1.0, n:3, nTotal:3, volRatio:8.1,  roundTrip:true,  buyDayOffset:33, sellDayOffset:34, strategy:'Santa\'s Christmas Present supply. The drop concentrates in the last 5 days of the event (-7.6%) and resolves quickly. Buy late event (day 33), sell within days of event end for +14% recovery. 3/3 years confirmed — strongest dye signal in all research.' },
+  { event:'christmas', name:'Scrimshaw of sacrifice (inactive)',  duringPct:-21, recoveryPct:31,  confidence:1.0, n:3, nTotal:3, volRatio:1.3,  roundTrip:true,  buyDayOffset:33, sellDayOffset:41, strategy:'Mystery Gift supply. Rises +12% pre-announce (speculative buying), then falls during event. Buy at event floor (~day 33, -21% from baseline), sell ~day 41 post-event for +31% recovery from floor. Strongest post-event recovery of all scrimshaws.' },
+  { event:'christmas', name:'Scrimshaw of corruption (inactive)', duringPct:-22, recoveryPct:15, confidence:1.0, n:3, nTotal:3, volRatio:1.4,  roundTrip:true,  buyDayOffset:33, sellDayOffset:42, strategy:'Mystery Gift supply. Steady -22% during-event floor then +15% post-event recovery. Less dramatic than Sacrifice but consistent. 3/3 years confirmed.' },
+  { event:'christmas', name:'Scrimshaw of aggression (inactive)', duringPct:-22, recoveryPct:null, confidence:1.0, n:3, nTotal:3, volRatio:0.9,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Mystery Gift supply. Drops -22% during event and CONTINUES FALLING -13% post-event — unlike Sacrifice, there is no recovery. Drop-only: useful for players wanting cheap combat scrimshaws during the event window, but do not hold expecting a rebound. 3/3 years confirmed direction.' },
+  { event:'christmas', name:'Teak plank',            duringPct:-33, recoveryPct:19,  confidence:1.0, n:3, nTotal:3, volRatio:0.5,  roundTrip:true,  buyDayOffset:33, sellDayOffset:47, strategy:'Hidden supply signal — Teak planks are used by players doing Construction during the holiday season, but the present-opening supply flood also hits planks. Drops -33% at event floor, recovers +19% in the ~3 weeks after. 3/3 years confirmed, low volume so fills slowly.' },
+  { event:'christmas', name:'Impious ashes',         duringPct:-32, recoveryPct:12,  confidence:1.0, n:3, nTotal:3, volRatio:1.4,  roundTrip:true,  buyDayOffset:33, sellDayOffset:37, strategy:'Mystery Gift common pool supply flood. -32% floor around day 33, +12% recovery post-event. 3/3 years. Small magnitude but reliable.' },
+  { event:'christmas', name:'Soul dye',              duringPct:-9,  recoveryPct:15,  confidence:0.67,n:3, nTotal:3, volRatio:6.0,  roundTrip:true,  buyDayOffset:20, sellDayOffset:34, strategy:'Soul dye appears in rare Christmas presents AND Halloween Forgotten Belongings — both events flood supply. Christmas signal: flat-to-mild drop during event, +15% post-event 2/3 years. Buy if available at baseline or below during event, sell post-event. Weaker signal than Halloween; 67% direction agreement.' },
+  { event:'christmas', name:'Green Santa hat',       duringPct:-21, recoveryPct:null, confidence:1.0, n:3, nTotal:3, volRatio:2.1,  roundTrip:false, buyDayOffset:25, sellDayOffset:null, strategy:'Consistent -21% crash during the event (3/3 years) with NO post-event recovery — price stays flat or continues falling. Holder sell signal only: exit before or early in the event. Do not buy the dip.' },
+  { event:'christmas', name:'Purple Santa hat',      duringPct:-10, recoveryPct:null, confidence:1.0, n:3, nTotal:3, volRatio:7.3,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Rises +16% in pre-announce speculation (weeks before the event), then falls -9% during and -15% post. The play is to EXIT during the pre-announce rise — not to buy the dip. 3/3 years show the pre-announce pump-and-dump pattern.' },
+  // ── Christmas (speculative, n=1–2) ─────────────────────────────────────────
+  { event:'christmas', name:'Pink Santa hat',        duringPct:-11, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:10.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Drops -11% late event and continues falling -8% post-event. Drop-only; no recovery observed. Sell if you hold. 2/2 years show the same direction — confirmed despite n=2.' },
+  { event:'christmas', name:'Yellow Santa hat',      duringPct:-27, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.7,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, 2024 only) -11% early event, -27% late event, -60% post-event. Massive crash with no recovery in the 21-day window. Only one year of data — wait for 2025 confirmation before drawing conclusions.' },
+  { event:'christmas', name:'Blue Santa hat',        duringPct:-27, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.5,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, 2025 only) +18% early event, -27% late event, -62% post-event. Very volatile and confusing — early buyers got burned. Only one year of data.' },
+  { event:'christmas', name:'Aurora Santa hat',      duringPct:0,   recoveryPct:17,  confidence:null, n:1, nTotal:1, volRatio:16.7, roundTrip:true,  buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, 2025 only) UNUSUAL PATTERN: rises +12% late event and +17% post-event. May be a demand-driven item (Aurora colourway is popular) with limited supply. Only one year of data — cannot confirm.' },
+  { event:'christmas', name:'Santa hat',             duringPct:-2,  recoveryPct:null, confidence:null, n:12, nTotal:12,volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'10+ years of data, no consistent actionable pattern. Slight pre-announce rise (+1.5% median) and slight post-event drift (-1.7%) — far too small to trade. A discontinued item with sparse GE trades; most years show 0.0% movement. "Seasonal attention" effect only, not a supply-driven trade.' },
+  { event:'christmas', name:'Black Santa hat',       duringPct:-1,  recoveryPct:null, confidence:null, n:12, nTotal:12,volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Even flatter than Santa hat across 10+ years. Most events show 0.0% movement. Only meaningful data in 2014–2015 and 2023–2025; remaining years essentially no trades. No consistent seasonal pattern found.' },
+  // ── Christmas gift tokens (speculative, n=1) ────────────────────────────────
+  { event:'christmas', name:'Frozen Trail token',    duringPct:-48, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:17.5, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Extreme crash: -20% early event, -48% late event, -41% post. Santa\'s Christmas Present 2025 drop. All trail tokens show the same massive crash pattern — supply flood from present openings is brutal. No recovery within 21 days post-event.' },
+  { event:'christmas', name:'Frozen Overpower cosmetic ability scroll', duringPct:-31, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:51.8, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) 51.8x volume spike, -31% buy trough. All Frozen/Warped ability scrolls follow the same supply-flood crash from Santa\'s Christmas Present. No recovery in 21 days.' },
+  { event:'christmas', name:'Primal Pickaxe (Red) Token', duringPct:-51, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.6,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) -50% crash during event from Santa\'s Christmas Present 2025. Armour tokens (Red Primal set, Capes of Devotion/Devastation) all show -49 to -57% crashes with no recovery. Sell if you hold.' },
+  // ── Halloween (confirmed, n=2) ─────────────────────────────────────────────
+  { event:'halloween', name:'Haunted whetstone',     duringPct:0,   recoveryPct:42,  confidence:1.0, n:2, nTotal:2, volRatio:29.2, roundTrip:true,  buyDayOffset:0,  sellDayOffset:28, strategy:'UNIQUE RISE PATTERN — opposite of most seasonal items. Rises +19% during the late event and +18% post-event (massive 29x volume). Buy at event open (day 0, approximately baseline price). Sell around day 28 for a projected +42% gain. 2/2 years confirmed. The mechanism is likely demand-driven: players farm with it more during Halloween and it gets consumed.' },
+  { event:'halloween', name:'Uncut moonstone',       duringPct:-42, recoveryPct:8,   confidence:1.0, n:2, nTotal:2, volRatio:2.1,  roundTrip:true,  buyDayOffset:21, sellDayOffset:25, strategy:'Clan Goodie Bag supply. Trough around event end (day 21, -42% from baseline). Small but confirmed recovery of +8% in the 3–4 days after event. 2/2 years. Buy near event end, sell shortly after.' },
+  { event:'halloween', name:'Chocolate bar',         duringPct:-26, recoveryPct:11,  confidence:1.0, n:2, nTotal:2, volRatio:7.6,  roundTrip:true,  buyDayOffset:15, sellDayOffset:26, strategy:'Clan Goodie Bag supply. Drops -26% around day 15 (3.3x volume), recovers +11% by day 26. 2/2 years confirmed. Small magnitude but very clean pattern — one of the cleaner round-trips in Halloween research.' },
+  { event:'halloween', name:'Regular ghostly ink',   duringPct:-25, recoveryPct:13,  confidence:1.0, n:2, nTotal:2, volRatio:1.0,  roundTrip:true,  buyDayOffset:19, sellDayOffset:27, strategy:'Clan Goodie Bag supply. Trough around day 19 (-25%), recovery +13% by day 27. 2/2 years confirmed. Low volume ratio (1x baseline) means fills can be slow — allow extra time.' },
+  { event:'halloween', name:'Crypt scythe token',    duringPct:-63, recoveryPct:150, confidence:1.0, n:2, nTotal:2, volRatio:14.2, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. Crashes -63% from baseline at trough (day 19), then bounces +150% in the post-event window — nearly full recovery to baseline. 2/2 years. Buy near event end, sell ~day 32. Massive percentage return on a cheap-during-event item, but verify buy limit.' },
+  { event:'halloween', name:'Crypt shieldbow token', duringPct:-41, recoveryPct:77,  confidence:1.0, n:2, nTotal:2, volRatio:19.3, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. Drops -41% at trough, recovers +77% from floor post-event. 2/2 years. Same timing as Crypt scythe. Buy near event end, sell ~day 32.' },
+  { event:'halloween', name:'Crypt staff token',     duringPct:-25, recoveryPct:53,  confidence:1.0, n:2, nTotal:2, volRatio:19.8, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. -25% trough, +53% post-event recovery. 2/2 years. Smaller crash than the other Crypt tokens but still a solid round-trip.' },
+  { event:'halloween', name:'Boolap Bag Mask token', duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:31.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag cosmetic token. -61% from baseline at trough, -83% at the post-event floor. 2/2 years. Item crashes and STAYS down well past the 21-day post window — no recovery. Holder sell only: exit before or very early in the event. Do not buy the dip.' },
+  { event:'halloween', name:'Spooky Hare Mask token',duringPct:-62, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:35.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same crash pattern as Boolap Bag Mask token. -62% trough, -85% post-event floor. 35x volume spike. 2/2 years. Exit before event starts.' },
+  { event:'halloween', name:'Spooky Ghost Mask token',duringPct:-61,recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:25.6, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same crash pattern. -61% trough, -84% post-event floor. 25x volume. 2/2 years. Exit before event starts.' },
+  { event:'halloween', name:'Soul Witch token',      duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:19.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings cosmetic. -61% from baseline at trough, -83% post-event floor. 2/2 years. Drops further than the Spooky Mask series and has no recovery signal. Sell if you hold any before the event.' },
+  { event:'halloween', name:'Soul Surge cosmetic ability scroll', duringPct:-92, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:22.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag ability scroll. One of the most extreme crashes in all seasonal research: -92% from baseline at trough (item loses nearly all its value). 22x volume. No recovery within 21 days post-event. Confirmed 2/2 years. Sell all holdings before event starts.' },
+  { event:'halloween', name:'Soul Dive cosmetic ability scroll',  duringPct:-90, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:20.9, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag ability scroll. -90% from baseline at trough, -94% at post-event floor. Nearly as extreme as Soul Surge. 21x volume. No recovery. Confirmed 2/2 years. Sell all holdings before event starts.' },
+  { event:'halloween', name:'Ensouled pumpkin mask', duringPct:-24, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:8.6,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag supply. ~24% crash at trough, continues falling post-event (no recovery). 8.6x baseline volume. 2/2 years. Holder sell signal.' },
+  { event:'halloween', name:'Soul dye',              duringPct:-58, recoveryPct:null, confidence:null, n:1, nTotal:2, volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings (2025 only — n=1 effective). Massive -58% crash on huge volume when the Forgotten Belongings mechanic ran. 2024 showed 0% movement because Forgotten Belongings didn\'t run that year. Treat as directionally illustrative but unconfirmed until 2026 gives a second data point.' },
+  // ── Halloween bones (n=2) ──────────────────────────────────────────────────
+  { event:'halloween', name:'Bones',                 duringPct:-17, recoveryPct:13,  confidence:1.0, n:2, nTotal:2, volRatio:1.6,  roundTrip:true,  buyDayOffset:19, sellDayOffset:33, strategy:'Halloween loot tables add small amounts of common bones to the market. Trough ~-17% from baseline around day 19, then +13% post-event recovery by day 33. 2/2 years confirmed. Low value item — the percentage move is real but absolute GP is trivial unless traded in large quantities.' },
+  { event:'halloween', name:'Dagannoth bones',       duringPct:-16, recoveryPct:6,   confidence:1.0, n:2, nTotal:2, volRatio:2.2,  roundTrip:true,  buyDayOffset:19, sellDayOffset:33, strategy:'Medium/Large Forgotten Belongings supply. -16% trough around day 19, +6% post-event recovery. 2/2 years confirmed. Small magnitude round-trip — useful for bulk prayer training buyers who want to time their purchase.' },
+  { event:'halloween', name:'Baby dragon bones',     duringPct:-13, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:5.7,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Halloween loot supply (-13% early event, 5.7x volume). Unlike other bones, price CONTINUES to fall post-event rather than recovering. Drop-only — either use for prayer training during the event, or sell before it ends.' },
+  // ── Halloween ashes (n=2) ──────────────────────────────────────────────────
+  { event:'halloween', name:'Impious ashes',         duringPct:-27, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:3.0,  roundTrip:false, buyDayOffset:12, sellDayOffset:null, strategy:'Halloween loot flood drives ashes into the market (-27% trough at day 12, 3x volume). Post-event price stays flat — no recovery. Drop-only: ideal for players who want cheap Dungeoneering/prayer ashes during or just after the event. Not a resell play. (Compare: Christmas Impious ashes ARE a round-trip — different supply dynamic.)' },
+  { event:'halloween', name:'Accursed ashes',        duringPct:-44, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:1.3,  roundTrip:false, buyDayOffset:22, sellDayOffset:null, strategy:'Strong drop signal: -44% from baseline at trough (day 22). No post-event recovery — price stays depressed or falls further. Drop-only. Best prayer training buy window of all the Halloween ashes. 2/2 years confirmed.' },
+  { event:'halloween', name:'Infernal ashes',        duringPct:-26, recoveryPct:4,   confidence:1.0, n:2, nTotal:2, volRatio:1.0,  roundTrip:false, buyDayOffset:21, sellDayOffset:null, strategy:'Drops -26% at trough around day 21 with a very small post-event tick (+4%). The recovery is too small to call this a proper round-trip — treat as drop-only for prayer training purposes. 2/2 years confirm the drop.' },
+  // ── Halloween (speculative, n=1) ───────────────────────────────────────────
+  { event:'halloween', name:"Soul dyed hallowe'en mask", duringPct:0, recoveryPct:9,   confidence:null, n:1, nTotal:1, volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, introduced Halloween 2025) Debuted mid-event on day 15 at ~1B gp with no pre-event baseline — the item did not exist before. Rose +4.4% through late event, +8.7% post-event, and continued appreciating to ~1.52B gp by June 2026. No crash pattern observed. Added for forward tracking: Halloween 2026 will show whether new supply causes a dip or the item holds value. Cannot draw trade conclusions from one partial event.' },
+  { event:'halloween', name:'Red pumpkin',           duringPct:-17, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:12.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -17% late event, -37% post-event. 12.7x volume. Crash with no recovery. Single year of data.' },
+  { event:'halloween', name:'Purple pumpkin',        duringPct:-17, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:14.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Same pattern as Red pumpkin. -17% late event, -30% post-event. Single year of data.' },
+  { event:'halloween', name:'Witch\'s Outfit token', duringPct:-32, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:7.5,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -32% late event, -39% post-event. Single year of data — cannot confirm.' },
+  { event:'halloween', name:'Lucille token',         duringPct:-19, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:12.5, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -19% late event, -32% post-event. Single year of data.' },
+  // ── Summer ───────────────────────────────────────────────────────────────
+  // ARCHIVED 2026: Jagex removed Sandy Clues, the reward mechanic that flooded
+  // the GE with heraldic Fortunate-component gear during the Beach Event. That
+  // supply glut was the sole source of every signal below, so these dips are not
+  // expected to recur. Kept greyed for historical reference only — do not trade.
+  { event:'summer', name:'Willow composite bow',     archived:true, duringPct:-28, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:11.1, roundTrip:true,  exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues were removed, so the Beach Event no longer dumps heraldic Fortunate-component gear into the GE. The −28% in-event dip below will not recur this year — do not trade on it. Historical reference (2023–2025, n=3): this was the most liquid item and the first to reprice, so it led the whole cluster.' },
+  { event:'summer', name:'Saradomin mitre',          archived:true, duringPct:-14, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:4.0,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues removed — the Beach Event no longer floods this heraldic gear into the GE, so the −14% dip below won\'t recur. Historical reference only (2023–2025, n=3).' },
+  { event:'summer', name:'Zamorak mitre',            archived:true, duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.8,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues removed — the Beach Event no longer floods this heraldic gear into the GE, so the −13% dip below won\'t recur. Historical reference only (2023–2025, n=3).' },
+  { event:'summer', name:'Armadyl robe top',         archived:true, duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues removed — the Beach Event no longer floods this heraldic gear into the GE, so the −13% dip below won\'t recur. Historical reference only (2023–2025, n=3).' },
+  { event:'summer', name:'Ancient robe top',         archived:true, duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues removed — the Beach Event no longer floods this heraldic gear into the GE, so the −13% dip below won\'t recur. Historical reference only (2023–2025, n=3).' },
+  { event:'summer', name:'Guthix mitre',             archived:true, duringPct:-13, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues removed — the Beach Event no longer floods this heraldic gear into the GE, so the −13% dip below won\'t recur. Historical reference only (2023–2025, n=3).' },
+  { event:'summer', name:'Bandos robe legs',         archived:true, duringPct:-12, recoveryPct:24,  confidence:1.0, n:3, nTotal:3, volRatio:3.9,  roundTrip:true, exemptNegligible:true, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ ARCHIVED (2026): Sandy Clues removed — the Beach Event no longer floods this heraldic gear into the GE, so the −12% dip below won\'t recur. Historical reference only (2023–2025, n=3).' },
+  // ── Halloween debunked ─────────────────────────────────────────────────────
+  { event:'halloween', name:'Dragon bones',          noSignal:true, n:2, nTotal:2, volRatio:null, strategy:'Researched across both Halloween events (2024–2025). No meaningful price movement detected in any phase — the event\'s bone supply is too small relative to ongoing prayer training demand to move Dragon bones at all. Not an actionable trade.' },
+  { event:'halloween', name:'Frost dragon bones',    noSignal:true, n:2, nTotal:2, volRatio:0.07, strategy:'Researched across both events. Minor price movement detected but essentially zero GE volume (vol ratio 0.07 — 93% below baseline). Frost dragon bones are traded so infrequently that any seasonal pattern is unactionable: you cannot fill orders reliably enough to matter.' },
+  { event:'halloween', name:'Dragonkin bones',       noSignal:true, n:2, nTotal:2, volRatio:0.86, strategy:'Researched across both events. Small price signal exists (~-3% early event, +8% post) but volume is too low (0.86× baseline) to reliably fill orders during the brief event window. The signal-to-liquidity ratio is too poor to trade.' },
+];
+
+const SEASONAL_EVENTS = [
+  {
+    id: 'christmas',
+    name: 'Christmas Village',
+    emoji: '🎄',
+    typicalWindow: 'Early December → Early January',
+    nextExpected: 'December 2026',
+    n: 3,
+    confidence: 'high',
+    unconfirmed2026: false,
+  },
+  {
+    id: 'halloween',
+    name: 'Harvest Hollow',
+    emoji: '🎃',
+    typicalWindow: 'Mid-October → Early November',
+    nextExpected: 'October 2026',
+    n: 2,
+    confidence: 'medium',
+    unconfirmed2026: false,
+  },
+  {
+    id: 'summer',
+    name: 'Beach Event / Sandy Caskets',
+    emoji: '🏖️',
+    typicalWindow: 'Late June → Late July',
+    nextExpected: 'June–July 2026',
+    n: 3,
+    confidence: 'high',
+    unconfirmed2026: true,
+  },
+  {
+    id: 'easter',
+    name: 'Easter Event',
+    emoji: '🐣',
+    typicalWindow: 'Late March → Mid-April',
+    nextExpected: 'March–April 2027',
+    n: 3,
+    confidence: 'insufficient',
+    unconfirmed2026: false,
+    noDataNote: 'Three years of data (2024, 2025, 2026), no consistent market signals found. The only weak signal is Fellstalk seed (+8–13% during the event, 3/3 years) but the magnitude is too small and the item too niche to be actionable. No trading opportunities identified.',
+  },
+];
+
+// Rough "days until next expected event" — month/day anchors, good enough
+// for a "coming up soon" indicator. No attempt at exact annual date prediction.
+function _daysUntilNextEvent(event, now = new Date()) {
+  const anchors = {
+    christmas: { month: 12, day: 1 },
+    halloween: { month: 10, day: 14 },
+    summer:    { month: 6,  day: 24 },
+    easter:    { month: 3,  day: 28 },
+  };
+  const a = anchors[event.id];
+  if (!a) return null;
+  let target = new Date(now.getFullYear(), a.month - 1, a.day);
+  if (target <= now) target = new Date(now.getFullYear() + 1, a.month - 1, a.day);
+  return Math.round((target - now) / 86400000);
+}
+
+// Compute estimated profit from research % medians + live price/limit.
+// duringPct is negative (crash). recoveryPct is positive (rebound from bottom).
+// Returns null if we can't compute a useful number.
+function buildSeasonalTrade(research, liveItem) {
+  if (!liveItem || !research) return null;
+  const price = liveItem.high || liveItem.low;
+  const limit = liveItem.limit;
+  if (!price) return null;
+
+  const buyPrice = Math.round(price * (1 + research.duringPct / 100));
+  if (!research.roundTrip || research.recoveryPct == null) {
+    // Drop-only: show savings relative to current price, no sell profit
+    const savings = price - buyPrice;
+    return { buyPrice, sellPrice: null, profitPerItem: null, profitForLimit: null, netProfitPct: null, savings, limit };
+  }
+
+  // Round-trip: buy at the bottom, sell post-event
+  const rawSellPrice = Math.round(buyPrice * (1 + research.recoveryPct / 100));
+  // Cap sell at current price so we don't claim recovery above pre-event
+  const sellPrice = Math.min(rawSellPrice, price);
+  const netSellPrice = applyTax(sellPrice);
+  const profitPerItem = netSellPrice - buyPrice;
+  const profitForLimit = limit ? profitPerItem * limit : null;
+  const netProfitPct = buyPrice > 0 ? (profitPerItem / buyPrice) * 100 : null;
+  return { buyPrice, sellPrice, netSellPrice, profitPerItem, profitForLimit, netProfitPct, savings: null, limit };
+}
+
+function SeasonalEventsTab({items: allItems, onSelect}) {
+  const [activeEvent, setActiveEvent]   = useState('christmas');
+  const [tierFilter, setTierFilter]     = useState('all');   // 'all' | 'roundtrip' | 'droponly' | 'speculative'
+  const [sortCol, setSortCol]           = useState('drop');
+  const [sortDir, setSortDir]           = useState('desc');
+
+  const event = SEASONAL_EVENTS.find(e => e.id === activeEvent);
+  const now = new Date();
+
+  const confidenceColor = { high: T.green, medium: T.gold, insufficient: T.textDim };
+  const confidenceLabel = { high: 'High (n≥3)', medium: 'Medium (n=2)', insufficient: 'Insufficient data' };
+
+  // Sorted column header helper
+  const SortHeader = (col, label, align = 'left') => {
+    const active = sortCol === col;
+    return h('div', {
+      onClick: () => { if (active) setSortDir(d => d === 'asc' ? 'desc' : 'asc'); else { setSortCol(col); setSortDir('desc'); } },
+      style: { cursor: 'pointer', userSelect: 'none', textAlign: align,
+        color: active ? T.goldBright : T.textDim,
+        display: 'flex', alignItems: 'center', gap: 3, justifyContent: align === 'right' ? 'flex-end' : 'flex-start' },
+    }, label, active && h('span', {style:{fontSize:9}}, sortDir === 'desc' ? ' ▼' : ' ▲'));
+  };
+
+  // Build enriched rows for the selected event
+  const eventResearch = SEASONAL_ITEM_DATA.filter(r => r.event === activeEvent);
+  let rows = eventResearch.map(research => {
+    const liveItem = allItems?.find(it => it.name?.toLowerCase() === research.name.toLowerCase());
+    const trade = buildSeasonalTrade(research, liveItem);
+    return { research, liveItem, trade };
+  });
+
+  // Tier filter
+  const isArchived    = r => !!r.research.archived;
+  const isNoSignal    = r => !!r.research.noSignal;
+  const isSpeculative = r => !r.research.noSignal && !r.research.archived && (r.research.n === 1 || r.research.confidence == null);
+  const isConfirmed   = r => !r.research.noSignal && !r.research.archived && !isSpeculative(r);
+  // Negligible: round-trip profit/limit < 1M, or drop-only savings/limit < 1M — requires live price to classify.
+  // Items with no live price are not classified as negligible (can't compute).
+  const isNegligible  = r => {
+    if (!isConfirmed(r) || !r.trade || r.research.exemptNegligible) return false;
+    const { profitForLimit, savings, limit } = r.trade;
+    if (profitForLimit != null) return profitForLimit < 1_000_000;
+    if (savings != null && limit) return savings * limit < 1_000_000;
+    return false;
+  };
+  if (tierFilter === 'roundtrip')   rows = rows.filter(r => isConfirmed(r) && !isNegligible(r) && r.research.roundTrip);
+  if (tierFilter === 'droponly')    rows = rows.filter(r => isConfirmed(r) && !isNegligible(r) && !r.research.roundTrip);
+  if (tierFilter === 'negligible')  rows = rows.filter(r => isNegligible(r));
+  if (tierFilter === 'speculative') rows = rows.filter(r => isSpeculative(r) || isNoSignal(r) || isArchived(r));
+  if (tierFilter === 'all')         rows = rows.filter(r => (isConfirmed(r) && !isNegligible(r)) || isArchived(r));
+
+  // Sort
+  rows.sort((a, b) => {
+    // Archived (mechanic-removed) items always sort to the bottom.
+    if (!!a.research.archived !== !!b.research.archived) return a.research.archived ? 1 : -1;
+    let av, bv;
+    if (sortCol === 'drop')    { av = Math.abs(a.research.duringPct ?? 0);  bv = Math.abs(b.research.duringPct ?? 0); }
+    if (sortCol === 'recovery'){ av = a.research.recoveryPct ?? -999;  bv = b.research.recoveryPct ?? -999; }
+    if (sortCol === 'conf')    { av = a.research.confidence ?? -1;     bv = b.research.confidence ?? -1; }
+    if (sortCol === 'profit')  { av = a.trade?.profitForLimit ?? -999999;
+                                 bv = b.trade?.profitForLimit ?? -999999; }
+    if (sortCol === 'vol')     { av = a.research.volRatio ?? 0;        bv = b.research.volRatio ?? 0; }
+    if (sortCol === 'name')    { return sortDir === 'asc' ? a.research.name.localeCompare(b.research.name) : b.research.name.localeCompare(a.research.name); }
+    if (av == null) av = -999999; if (bv == null) bv = -999999;
+    return sortDir === 'asc' ? av - bv : bv - av;
+  });
+
+  return h('div', null,
+    // Event type selector pills
+    h('div', {style: {display: 'flex', gap: 6, marginBottom: 16, flexWrap: 'wrap'}},
+      SEASONAL_EVENTS.map(ev => {
+        const days = _daysUntilNextEvent(ev, now);
+        const isSoon = days != null && days <= 60;
+        const c = ev.confidence === 'high' ? T.green : ev.confidence === 'medium' ? T.gold : T.textDim;
+        const isActive = activeEvent === ev.id;
+        return h('button', {
+          key: ev.id,
+          onClick: () => { setActiveEvent(ev.id); setTierFilter('all'); setSortCol('drop'); setSortDir('desc'); },
+          style: {
+            padding: '6px 14px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+            border: `1px solid ${isActive ? c : T.borderDim}`,
+            background: isActive ? `rgba(${ev.confidence === 'high' ? '76,175,80' : ev.confidence === 'medium' ? '201,168,76' : '100,100,100'},0.15)` : 'transparent',
+            color: isActive ? c : T.textDim,
+          }
+        }, `${ev.emoji} ${ev.name}${isSoon ? ' ⚡' : ''}`);
+      })
+    ),
+
+    event && h('div', null,
+
+      // 2026 unconfirmed banner
+      event.unconfirmed2026 && h('div', {style: {
+        background: 'rgba(229,57,53,0.08)', border: `1px solid rgba(229,57,53,0.4)`,
+        borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 12,
+      }},
+        h('div', {style: {fontWeight: 'bold', color: T.red, marginBottom: 4}}, '⚠ 2026 — Sandy Clues Removed'),
+        'Jagex removed Sandy Clues, the reward mechanic that used to flood the Grand Exchange with heraldic Fortunate-component gear during the summer Beach Event. That supply glut was the entire source of the price signals below, so the historical dips are not expected to recur in 2026. These items are archived for reference only — do not trade them on the old pattern. If a replacement summer mechanic emerges, its item set will need fresh research.',
+      ),
+
+      // Overview card
+      h('div', {style: {border: `1px solid ${T.borderDim}`, borderRadius: 6, padding: '12px 16px', marginBottom: 16, display: 'flex', gap: 24, flexWrap: 'wrap'}},
+        h('div', null,
+          h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Typical window'),
+          h('div', {style: {fontSize: 13, color: T.text}}, event.typicalWindow),
+        ),
+        h('div', null,
+          h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Next expected'),
+          h('div', {style: {fontSize: 13, color: event.unconfirmed2026 ? T.red : T.text}},
+            event.nextExpected,
+            event.unconfirmed2026 && h('span', {style: {fontSize: 10, color: T.red, marginLeft: 6}}, '(unconfirmed)')
+          ),
+        ),
+        h('div', null,
+          h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Data confidence'),
+          h('div', {style: {fontSize: 13, color: confidenceColor[event.confidence]}},
+            confidenceLabel[event.confidence]
+          ),
+        ),
+        (() => {
+          const days = _daysUntilNextEvent(event, now);
+          return days != null && h('div', null,
+            h('div', {style: {fontSize: 11, color: T.textDim, marginBottom: 2}}, 'Days until expected'),
+            h('div', {style: {fontSize: 13, color: days <= 30 ? T.red : days <= 60 ? T.gold : T.text}}, `~${days} days`),
+          );
+        })(),
+      ),
+
+      // No data / insufficient
+      event.confidence === 'insufficient' && h('div', {style: {
+        border: `1px solid ${T.borderDim}`, borderRadius: 6, padding: '14px 16px',
+        color: T.textDim, fontSize: 12,
+      }},
+        h('div', {style: {fontWeight: 'bold', color: T.text, marginBottom: 8}}, '📊 Research result: no actionable signals'),
+        event.noDataNote,
+      ),
+
+      // Main items section
+      event.confidence !== 'insufficient' && eventResearch.length > 0 && h('div', null,
+
+        // Tier filter + legend row
+        h('div', {style: {display: 'flex', gap: 6, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap'}},
+          h('span', {style: {fontSize: 11, color: T.textDim, marginRight: 4}}, 'Show:'),
+          [
+            {id:'all',         label:'Confirmed'},
+            {id:'roundtrip',   label:'🔄 Round-trip'},
+            {id:'droponly',    label:'📉 Drop-only'},
+            {id:'negligible',  label:'🪙 Negligible'},
+            {id:'speculative', label:'🔬 Speculative'},
+          ].map(f => h('button', {
+            key: f.id,
+            onClick: () => setTierFilter(f.id),
+            style: {
+              padding: '4px 10px', fontSize: 11, borderRadius: 4, cursor: 'pointer',
+              border: `1px solid ${tierFilter === f.id ? T.gold : T.borderDim}`,
+              background: tierFilter === f.id ? 'rgba(201,168,76,0.12)' : 'transparent',
+              color: tierFilter === f.id ? T.goldBright : T.textDim,
+            }
+          }, f.label))
+        ),
+
+        // Column headers
+        h('div', {style: {
+          display: 'grid',
+          gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+          gap: '0 8px', padding: '6px 10px', fontSize: 10, borderBottom: `1px solid ${T.borderDim}`, marginBottom: 2,
+        }},
+          SortHeader('name', 'ITEM'),
+          SortHeader('conf', 'CONF', 'right'),
+          SortHeader('drop', 'DROP %', 'right'),
+          SortHeader('recovery', 'RECOVERY', 'right'),
+          SortHeader('vol', 'VOL RATIO', 'right'),
+          SortHeader('profit', 'EST PROFIT/ITEM', 'right'),
+          SortHeader('profit', 'EST PROFIT/LIMIT', 'right'),
+        ),
+
+        // Rows
+        rows.map((row, i) => {
+          const { research: res, liveItem, trade } = row;
+          const price = liveItem?.high || liveItem?.low;
+          const isRT = res.roundTrip;
+          const confStr = res.confidence != null ? `${Math.round(res.confidence * 100)}%` : 'n/a';
+          const confColor = res.confidence == null ? T.textDim : res.confidence >= 1 ? T.green : res.confidence >= 0.67 ? T.gold : T.red;
+
+          // No-signal row — debunked items get a collapsed greyed display
+          if (res.noSignal) return h('div', {
+            key: res.name,
+            style: {
+              display: 'grid', gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+              gap: '0 8px', padding: '8px 10px', fontSize: 12,
+              background: i % 2 === 0 ? T.panel2 : 'transparent',
+              borderRadius: 4, alignItems: 'center', opacity: 0.55,
+            }
+          },
+            h('div', null,
+              h('div', {style: {color: T.textDim, marginBottom: 2}}, res.name),
+              h('div', {style: {fontSize: 10, color: T.textDim}}, '🚫 No signal'),
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim, fontSize: 11}}, `${res.n}/${res.nTotal} yrs`),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}},
+              res.volRatio != null ? `${res.volRatio}×` : '—'
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+          );
+
+          // Archived row — historically valid but the driver mechanic was removed,
+          // so it's shown greyed for reference (numbers kept) and never as a trade.
+          if (res.archived) return h('div', {
+            key: res.name,
+            style: {
+              display: 'grid', gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+              gap: '0 8px', padding: '8px 10px', fontSize: 12,
+              background: i % 2 === 0 ? T.panel2 : 'transparent',
+              borderRadius: 4, alignItems: 'center', opacity: 0.5,
+            }
+          },
+            h('div', null,
+              h('div', {style: {color: T.textDim, marginBottom: 2}}, res.name),
+              h('div', {style: {fontSize: 10, color: T.textDim}}, '📦 Archived (2026)'),
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, `${res.n}/${res.nTotal} yrs`),
+            h('div', {style: {textAlign: 'right', color: T.textDim}},
+              res.duringPct > 0 ? `▲ ${res.duringPct}%` : `▼ ${Math.abs(res.duringPct)}%`
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim}},
+              res.recoveryPct != null ? `▲ ${res.recoveryPct}%` : '—'
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim}},
+              res.volRatio != null ? `${res.volRatio}×` : '—'
+            ),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, 'archived'),
+            h('div', {style: {textAlign: 'right', color: T.textDim}}, '—'),
+          );
+
+          return h('div', {
+            key: res.name,
+            style: {
+              display: 'grid', gridTemplateColumns: '1.6fr 70px 70px 70px 80px 100px 110px',
+              gap: '0 8px', padding: '8px 10px', fontSize: 12,
+              background: i % 2 === 0 ? T.panel2 : 'transparent',
+              borderRadius: 4, alignItems: 'start',
+            }
+          },
+            // Item name
+            h('div', null,
+              h('div', {
+                style: {color: liveItem ? T.goldBright : T.text, cursor: liveItem ? 'pointer' : 'default', textDecoration: liveItem ? 'underline' : 'none', marginBottom: 2},
+                onClick: liveItem && onSelect ? () => onSelect(liveItem) : undefined,
+              }, res.name),
+              h('div', {style: {fontSize: 10, color: isRT ? T.green : T.textDim}},
+                isRT ? '🔄 Round-trip' : '📉 Drop-only'
+              ),
+              price && h('div', {style: {fontSize: 10, color: T.textDim}}, `Current: ${fmt.gp(price)} gp`),
+            ),
+
+            // Confidence
+            h('div', {style: {textAlign: 'right', color: confColor, fontWeight: 'bold', paddingTop: 2}},
+              confStr,
+              h('div', {style: {fontSize: 9, color: T.textDim, fontWeight: 'normal'}}, `${res.n}/${res.nTotal} yrs`)
+            ),
+
+            // Drop %
+            h('div', {style: {textAlign: 'right', color: res.duringPct > 0 ? T.green : T.red, fontWeight: 'bold', paddingTop: 2}},
+              res.duringPct > 0 ? `▲ ${res.duringPct}%` : res.duringPct === 0 ? '≈ baseline' : `▼ ${Math.abs(res.duringPct)}%`,
+              trade?.buyPrice && h('div', {style: {fontSize: 9, color: T.textDim, fontWeight: 'normal'}}, `~${fmt.gp(trade.buyPrice)}`),
+              res.buyDayOffset != null && h('div', {style: {fontSize: 9, color: T.textDim, fontWeight: 'normal'}},
+                `buy day ${res.buyDayOffset < 0 ? `${res.buyDayOffset}` : `+${res.buyDayOffset}`}`
+              )
+            ),
+
+            // Recovery %
+            h('div', {style: {textAlign: 'right', paddingTop: 2}},
+              res.recoveryPct != null
+                ? h('span', {style: {color: T.green, fontWeight: 'bold'}}, `▲ ${res.recoveryPct}%`)
+                : h('span', {style: {color: T.textDim}}, '—'),
+              trade?.sellPrice && h('div', {style: {fontSize: 9, color: T.textDim}}, `~${fmt.gp(trade.sellPrice)}`),
+              res.sellDayOffset != null && h('div', {style: {fontSize: 9, color: T.textDim}},
+                `sell day +${res.sellDayOffset}`
+              )
+            ),
+
+            // Vol ratio
+            h('div', {style: {textAlign: 'right', paddingTop: 2, color: T.text}},
+              res.volRatio != null ? `${res.volRatio}×` : h('span', {style:{color:T.textDim}}, '—')
+            ),
+
+            // Est profit per item
+            h('div', {style: {textAlign: 'right', paddingTop: 2}},
+              !price ? h('span', {style:{color:T.textDim}}, 'no price') :
+              !trade ? h('span', {style:{color:T.textDim}}, '—') :
+              trade.profitPerItem != null
+                ? h('span', {style:{color: trade.profitPerItem >= 0 ? T.green : T.red, fontWeight:'bold'}}, fmt.gp(trade.profitPerItem) + ' gp')
+                : trade.savings != null
+                  ? h('span', {style:{color:T.gold}}, `-${fmt.gp(trade.savings)} gp`)
+                  : h('span', {style:{color:T.textDim}}, '—')
+            ),
+
+            // Est profit per buy limit
+            h('div', {style: {textAlign: 'right', paddingTop: 2}},
+              !price ? h('span', {style:{color:T.textDim}}, '—') :
+              !trade ? h('span', {style:{color:T.textDim}}, '—') :
+              trade.profitForLimit != null
+                ? h('span', {style:{color: trade.profitForLimit >= 0 ? T.green : T.red, fontWeight:'bold'}},
+                    fmt.gp(trade.profitForLimit) + ' gp',
+                    trade.limit && h('div', {style:{fontSize:9, color:T.textDim, fontWeight:'normal'}}, `(lim ${trade.limit.toLocaleString()})`)
+                  )
+                : trade.savings != null && trade.limit
+                  ? h('span', {style:{color:T.gold}},
+                      fmt.gp(trade.savings * trade.limit) + ' gp saved',
+                      h('div', {style:{fontSize:9,color:T.textDim}}, `(lim ${trade.limit.toLocaleString()})`)
+                    )
+                  : h('span', {style:{color:T.textDim}}, '—')
+            ),
+          );
+        }),
+
+        // Strategy drawer — show strategy for any selected event item on expand
+        rows.length > 0 && h('div', {style: {marginTop: 16, borderTop: `1px solid ${T.borderDim}`, paddingTop: 12}},
+          h('div', {style: {fontSize: 11, color: T.textDim, fontWeight: 'bold', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.05em'}}, 'Trading Strategies'),
+          rows.map(row => h('div', {
+            key: row.research.name,
+            style: {marginBottom: 10, padding: '8px 12px', background: T.panel2, borderRadius: 4,
+              borderLeft: `3px solid ${row.research.noSignal || row.research.archived ? 'rgba(100,100,100,0.3)' : row.research.roundTrip ? T.green : T.textDim}`,
+              opacity: row.research.noSignal || row.research.archived ? 0.6 : 1,
+            },
+          },
+            h('div', {style:{fontWeight:'bold', color: T.text, fontSize:12, marginBottom:4}},
+              row.research.noSignal ? `🚫 ${row.research.name}`
+                : row.research.archived ? `📦 ${row.research.name}`
+                : row.research.name
+            ),
+            h('div', {style:{fontSize:11, color: T.textDim, lineHeight:1.5}}, row.research.strategy),
+          ))
+        ),
+
+        // Event-specific footnotes
+        event.id === 'halloween' && h('div', {style: {marginTop: 12, fontSize: 11, color: T.textDim, fontStyle: 'italic', borderTop: `1px solid ${T.borderDim}`, paddingTop: 10}},
+          'Halloween data covers 2024 and 2025 only (n=2). Day offsets are relative to event start. Crypt token recovery figures assume event-end price ≈ in-event trough, which held both years. Soul dye is n=1 effective — see Speculative tab.'
+        ),
+        event.id === 'summer' && h('div', {style: {marginTop: 12, fontSize: 11, color: T.textDim, fontStyle: 'italic', borderTop: `1px solid ${T.borderDim}`, paddingTop: 10}},
+          'Historical note: the heraldic gear cluster was driven entirely by Sandy Clues flooding the GE with Fortunate-component gear during the Beach Event. With Sandy Clues removed in 2026, that supply no longer arrives, so the whole cluster is archived — the figures are kept for reference but are not expected to repeat.'
+        ),
+        tierFilter === 'all' && h('div', {style: {marginTop: 10, fontSize: 11, color: T.textDim, borderTop: `1px solid ${T.borderDim}`, paddingTop: 8}},
+          'Showing confirmed items with meaningful profit potential. 🪙 Negligible for real-but-small signals (under 1M gp/limit). 🔬 Speculative for n=1 items and limited history.'
+        ),
+        tierFilter === 'negligible' && h('div', {style: {marginTop: 10, fontSize: 11, color: T.textDim, borderTop: `1px solid ${T.borderDim}`, paddingTop: 8}},
+          'These patterns are real and confirmed, but the expected profit per buy limit is under 1M gp at current prices. Useful for prayer training or bulk item timing, not as a primary GP strategy. Note: Beach Event items are exempt — their buy limits refill quickly enough that volume across many slots makes them worthwhile regardless.'
+        ),
+      ),
     ),
   );
 }
@@ -5303,7 +6202,12 @@ function AboutTab() {
           className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
           onClick:()=>window.genius?.openExternal('https://discord.gg/WFbJt9cDpP'),
         }, '💬 Discord'),
+        h('button', {
+          className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
+          onClick:()=>window.genius?.openExternal('https://ko-fi.com/vonderthwood'),
+        }, '☕ Ko-fi'),
       ),
+      h('div', {style:{fontSize:11, color:T.textDim, marginTop:8}}, 'If you want to throw me a penny for my thoughts.'),
     ),
     h('div', {style:{maxWidth:560}},
       h('div', {style:{marginBottom:24}},
@@ -5350,7 +6254,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
-  const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7});
+  const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7, intervalHours:24});
   useEffect(() => { window.genius?.getWatchlistNotificationSettings?.().then(w => w && setWatchNotif(w)); }, []);
   const updateWatchNotif = patch => {
     setWatchNotif(prev => {
@@ -5422,14 +6326,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   // not in the static NAV constant) can actually be dragged/reordered
   // here too — previously this editor always read the static NAV list
   // directly, so dxp_intel was never reorderable even with dev mode on.
-  const sidebarNavItems = useMemo(() => {
-    const base = NAV.filter(n=>n.id);
-    if (!s.devMode) return base;
-    const idx = base.findIndex(n => n.id === 'dashboard') + 1;
-    const withDev = [...base];
-    withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
-    return withDev;
-  }, [s.devMode]);
+  const sidebarNavItems = useMemo(() => NAV.filter(n=>n.id), []);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [hiddenItemsOpen, setHiddenItemsOpen] = useState(false);
   return h('div',null,
@@ -5573,15 +6470,26 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       },'Test notification')
     ),
     h('div',{style:{marginBottom:20}},
-      h('div',{className:'ge-section-head'},'Watchlist Daily Digest'),
+      h('div',{className:'ge-section-head'},'Watchlist Digest'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
-        'Once-a-day desktop notification (works even with GEnius minimized to the tray) listing any watchlist item that moved more than the thresholds below. Stays silent if nothing crossed either bar that day.'
+        'Desktop notification (works even with GEnius minimized to the tray) listing any watchlist item that moved more than the thresholds below. Stays silent if nothing crossed either bar in that window.'
       ),
       h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:10}},
         h('input',{type:'checkbox',checked:!!watchNotif.enabled,onChange:e=>updateWatchNotif({enabled:e.target.checked})}),
-        h('span',null,'Enable watchlist daily digest')
+        h('span',null,'Enable watchlist digest')
       ),
       h('div',{style:{display:'flex',gap:20,flexWrap:'wrap',opacity:watchNotif.enabled?1:0.5}},
+        h('div',null,
+          h('div',{className:'form-lbl'},'Check every'),
+          h('select',{
+            value:watchNotif.intervalHours ?? 24, disabled:!watchNotif.enabled,
+            onChange:e=>updateWatchNotif({intervalHours: parseFloat(e.target.value)}),
+            style:{padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
+          },
+            [[1,'1 hour'],[2,'2 hours'],[4,'4 hours'],[6,'6 hours'],[12,'12 hours'],[24,'24 hours (once a day)']]
+              .map(([v,l]) => h('option',{key:v,value:v},l))
+          ),
+        ),
         h('div',null,
           h('div',{className:'form-lbl'},'Daily move threshold (%)'),
           h('input',{
@@ -5710,6 +6618,7 @@ const CAT_LABEL = {
   necromancy:     'Necromancy',
   hybrid:         'Hybrid',
   ammo:           'Ammunition',
+  pocket:         'Pocket',
   boss:           'Boss Drops',
   invention:      'Invention',
   herblore:       'Herblore',
@@ -5731,7 +6640,7 @@ const CAT_LABEL = {
 };
 
 const CAT_GROUPS = [
-  { label: 'Combat',      cats: ['melee','magic','ranged','necromancy','hybrid','ammo','boss','codex','supplies'] },
+  { label: 'Combat',      cats: ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','boss','codex','supplies'] },
   { label: 'Skills',      cats: ['herblore','artisan','farming','mining','prayer','archaeology','summoning','invention','runes'] },
   { label: 'Economy',     cats: ['food','materials','low_tier'] },
   { label: 'Collections', cats: ['rares','treasure_trails','cosmetics'] },
@@ -5809,73 +6718,10 @@ function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, thre
 
 /* ─── Alch tab ────────────────────────────────────────────────── */
 const ALCH_DEFAULT_COL_WIDTHS = {name:280, high:110, limit:90, afterTax:110, alch:110, alchProfit:140, alchemiserProfit:170, star:30};
-const ALCH_COL_ORDER = ['name', 'high', 'limit', 'afterTax', 'alch', 'alchProfit', 'alchemiserProfit', 'star'];
-function loadAlchColWidths() {
-  try { return {...ALCH_DEFAULT_COL_WIDTHS, ...JSON.parse(localStorage.getItem('genius_alch_col_widths')||'{}')}; }
-  catch { return {...ALCH_DEFAULT_COL_WIDTHS}; }
-}
 
 function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, description}) {
   const [sort, setSort] = useState({key:'alchProfit', dir:-1});
-
-  // Resizable columns — AlchTab has its own column set (Alch Value, Manual
-  // Profit, Alchemiser Profit) that doesn't match ItemTable's, so this
-  // duplicates the resize pattern rather than trying to force-share
-  // ItemTable's hardcoded columns.
-  const [colWidths, setColWidths] = useState(loadAlchColWidths);
-  const colWidthsRef = useRef(colWidths);
-  const startColResize = (key) => e => {
-    e.preventDefault();
-    e.stopPropagation();
-    const table = e.currentTarget.closest('.ge-table-wrap')?.querySelector('table');
-    const startW = colWidthsRef.current[key] || 110;
-    const logicalTotal = Object.values(colWidthsRef.current).reduce((a,b) => a + (b||0), 0);
-    const scaleFactor = table && logicalTotal ? (table.getBoundingClientRect().width / logicalTotal) : 1;
-    const startX = e.clientX;
-    const onMove = me => {
-      const deltaReal = me.clientX - startX;
-      const deltaLogical = scaleFactor ? deltaReal / scaleFactor : deltaReal;
-      const w = Math.max(50, Math.round(startW + deltaLogical));
-      colWidthsRef.current = {...colWidthsRef.current, [key]: w};
-      setColWidths(colWidthsRef.current);
-    };
-    const onUp = () => {
-      window.removeEventListener('mousemove', onMove);
-      window.removeEventListener('mouseup', onUp);
-      try { localStorage.setItem('genius_alch_col_widths', JSON.stringify(colWidthsRef.current)); } catch {}
-    };
-    window.addEventListener('mousemove', onMove);
-    window.addEventListener('mouseup', onUp);
-  };
-  const tableWrapRef = useRef(null);
-  const [handleLefts, setHandleLefts] = useState({});
-  useEffect(() => {
-    const measure = () => {
-      const wrap = tableWrapRef.current;
-      if (!wrap) return;
-      const ths = wrap.querySelectorAll('thead th');
-      const wrapRect = wrap.getBoundingClientRect();
-      const lefts = {};
-      ALCH_COL_ORDER.filter(k => k !== 'star').forEach((k, i) => {
-        const th = ths[i];
-        if (th) lefts[k] = th.getBoundingClientRect().right - wrapRect.left + wrap.scrollLeft;
-      });
-      setHandleLefts(lefts);
-    };
-    measure();
-    window.addEventListener('resize', measure);
-    return () => window.removeEventListener('resize', measure);
-  }, [colWidths, items.length]);
-  const overlayHandle = key => h('span', {
-    key,
-    onMouseDown: startColResize(key),
-    className: 'col-resize-handle',
-    style:{
-      position:'absolute', top:0, bottom:0,
-      left: (handleLefts[key] || 0) - 4,
-      width:8, cursor:'col-resize', zIndex:10,
-    },
-  });
+  const cols = useTableColumns('genius_alch_col_widths', ALCH_DEFAULT_COL_WIDTHS);
 
   const natureRunePrice = useMemo(() => {
     const nr = items.find(it => it.natureRunePrice);
@@ -5936,67 +6782,68 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
       natureRunePrice ? h('span', null, `Nature rune: ${fmt.gp(natureRunePrice)}gp`) : null,
       divineChargePrice ? h('span', null, `Divine charge: ${fmt.gp(divineChargePrice)}gp (${fmt.gp(chargePerItem)}gp/item)`) : null
     ),
-    h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:tableWrapRef},
-    ALCH_COL_ORDER.filter(k => k !== 'star').map(k => overlayHandle(k)),
+    h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef},
+    cols.handles(),
     h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
-      h('colgroup', null,
-        h('col', {style:{width:colWidths.name}}),
-        h('col', {style:{width:colWidths.high}}),
-        h('col', {style:{width:colWidths.limit}}),
-        h('col', {style:{width:colWidths.afterTax}}),
-        h('col', {style:{width:colWidths.alch}}),
-        h('col', {style:{width:colWidths.alchProfit}}),
-        h('col', {style:{width:colWidths.alchemiserProfit}}),
-        h('col', {style:{width:colWidths.star}}),
-      ),
+      cols.colgroup(),
       h('thead', null,
-        h('tr', null,
-          h(Th, {k:'name',             label:'Item'}),
-          h(Th, {k:'high',             label:'GE Price'}),
-          h(Th, {k:'limit',            label:'Buy Limit'}),
-          h(Th, {k:'afterTax',         label:'After Tax'}),
-          h(Th, {k:'alch',             label:'Alch Value'}),
-          h(Th, {k:'alchProfit',       label:'Manual Profit'}),
-          h('th', {
-            className:'sortable', style:{cursor:'pointer', userSelect:'none'},
-            onClick: () => setSort(s => ({key:'alchemiserProfit', dir: s.key==='alchemiserProfit' ? -s.dir : -1}))
-          },
-            'Alchemiser Profit' + (sort.key==='alchemiserProfit' ? (sort.dir>0 ? ' ↑' : ' ↓') : ''),
-            h('span', {
-              title:'The Alchemiser device cannot hold items worth more than 500,000gp. Items above that threshold can\'t be alchemised this way, regardless of profit.',
-              style:{marginLeft:5, color:T.textDim, cursor:'help', fontSize:11, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'},
-            }, '?')
-          ),
-          h('th', {style:{width:30}}, null)
-        )
+        h('tr', null, cols.colOrder.map(k => {
+          const sortTh = (label) => cols.th(k, {
+            className:'sortable', style:{cursor:'pointer'},
+            onClick: () => setSort(s => ({key:k, dir: s.key===k ? -s.dir : -1})),
+          }, label + (sort.key===k ? (sort.dir>0 ? ' ↑' : ' ↓') : ''));
+          switch (k) {
+            case 'name':       return sortTh('Item');
+            case 'high':       return sortTh('GE Price');
+            case 'limit':      return sortTh('Buy Limit');
+            case 'afterTax':   return sortTh('After Tax');
+            case 'alch':       return sortTh('Alch Value');
+            case 'alchProfit': return sortTh('Manual Profit');
+            case 'alchemiserProfit': return cols.th(k, {
+              className:'sortable', style:{cursor:'pointer'},
+              onClick: () => setSort(s => ({key:k, dir: s.key===k ? -s.dir : -1})),
+            },
+              'Alchemiser Profit' + (sort.key===k ? (sort.dir>0 ? ' ↑' : ' ↓') : ''),
+              h('span', {
+                title:'The Alchemiser device cannot hold items worth more than 500,000gp. Items above that threshold can\'t be alchemised this way, regardless of profit.',
+                style:{marginLeft:5, color:T.textDim, cursor:'help', fontSize:11, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:14, height:14, display:'inline-flex', alignItems:'center', justifyContent:'center'},
+              }, '?')
+            );
+            case 'star': return cols.th(k, {style:{width:30}}, null);
+            default:     return cols.th(k, null, null);
+          }
+        }))
       ),
       h('tbody', null, sorted.map(it =>
         h('tr', {key:it.id, 'data-item-id':it.id,
           className: selected?.id===it.id ? 'selected' : '',
           onClick: () => onSelect(it)
-        },
-          h('td', null, it.name),
-          h('td', null, fmt.gp(it.high||it.low)+'gp'),
-          h('td', {style:{color:T.textDim}}, it.limit ? fmt.gp(it.limit) : '—'),
-          h('td', {style:{color:T.textDim}}, fmt.gp(it.afterTax)+'gp'),
-          h('td', {style:{color:'#ce93d8'}}, fmt.gp(it.alch)+'gp'),
-          h('td', {style:{color: it.alchProfit > 0 ? T.green : T.red}},
-            (it.alchProfit > 0 ? '+' : '') + fmt.gp(it.alchProfit)+'gp'
-          ),
-          (it.high||it.low||0) > 500000
-            ? h('td', {style:{color:T.textDim}, title:'Over the Alchemiser\'s 500,000gp item value limit'}, 'N/A')
-            : h('td', {style:{color: it.alchemiserProfit > 0 ? T.green : T.red}},
-                (it.alchemiserProfit > 0 ? '+' : '') + fmt.gp(it.alchemiserProfit)+'gp'
-              ),
-          h('td', null,
-            h('button', {
-              className:'star-btn',
-              onClick: e => { e.stopPropagation(); onToggleWatch(it.id); }
-            }, h('span', {className: watchlist.includes(it.id)?'star-on':'star-off'},
-              watchlist.includes(it.id)?'★':'☆'
-            ))
-          )
-        )
+        }, cols.colOrder.map(k => {
+          switch (k) {
+            case 'name': return h('td', {key:k}, it.name);
+            case 'high': return h('td', {key:k}, fmt.gp(it.high||it.low)+'gp');
+            case 'limit': return h('td', {key:k, style:{color:T.textDim}}, it.limit ? fmt.gp(it.limit) : '—');
+            case 'afterTax': return h('td', {key:k, style:{color:T.textDim}}, fmt.gp(it.afterTax)+'gp');
+            case 'alch': return h('td', {key:k, style:{color:'#ce93d8'}}, fmt.gp(it.alch)+'gp');
+            case 'alchProfit': return h('td', {key:k, style:{color: it.alchProfit > 0 ? T.green : T.red}},
+              (it.alchProfit > 0 ? '+' : '') + fmt.gp(it.alchProfit)+'gp'
+            );
+            case 'alchemiserProfit': return (it.high||it.low||0) > 500000
+              ? h('td', {key:k, style:{color:T.textDim}, title:'Over the Alchemiser\'s 500,000gp item value limit'}, 'N/A')
+              : h('td', {key:k, style:{color: it.alchemiserProfit > 0 ? T.green : T.red}},
+                  (it.alchemiserProfit > 0 ? '+' : '') + fmt.gp(it.alchemiserProfit)+'gp'
+                );
+            case 'star': return h('td', {key:k},
+              h('button', {
+                className:'star-btn',
+                onClick: e => { e.stopPropagation(); onToggleWatch(it.id); }
+              }, h('span', {className: watchlist.includes(it.id)?'star-on':'star-off'},
+                watchlist.includes(it.id)?'★':'☆'
+              ))
+            );
+            default: return h('td', {key:k}, null);
+          }
+        }))
       ))
     )
     )
@@ -6080,6 +6927,51 @@ function GpInput({value, onChange, placeholder, style}) {
       className:'ge-input', type:'text', placeholder: placeholder || '0',
       value: raw, onChange: handleChange, onBlur: handleBlur,
       style: {...(style||{}), paddingRight: preview ? 60 : undefined}
+    }),
+    preview && h('span', {style:{
+      position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
+      fontSize:10, color:T.gold, pointerEvents:'none', whiteSpace:'nowrap'
+    }}, preview)
+  );
+}
+
+/* ─── Quantity input with K/M/B shorthand ─────────────────────── */
+function QtyInput({value, onChange, placeholder, min, max, style}) {
+  const [raw, setRaw] = useState(value != null ? String(value) : '');
+
+  useEffect(() => {
+    if (value != null && value !== '') setRaw(String(value));
+  }, []);
+
+  const parsed = parseGP(raw);
+  const preview = (raw.length > 0 && typeof parsed === 'number' && String(parsed) !== raw)
+    ? fmt.gp(parsed)
+    : null;
+
+  const handleChange = e => {
+    const v = e.target.value;
+    setRaw(v);
+    const p = parseGP(v);
+    if (typeof p === 'number') {
+      const clamped = Math.round(Math.max(min ?? 1, max != null ? Math.min(p, max) : p));
+      onChange(clamped);
+    }
+  };
+
+  const handleBlur = () => {
+    const p = parseGP(raw);
+    if (typeof p === 'number') {
+      const clamped = Math.round(Math.max(min ?? 1, max != null ? Math.min(p, max) : p));
+      setRaw(String(clamped));
+      onChange(clamped);
+    }
+  };
+
+  return h('div', {style:{position:'relative'}},
+    h('input', {
+      className:'ge-input', type:'text', placeholder: placeholder || '0',
+      value: raw, onChange: handleChange, onBlur: handleBlur,
+      style: {...(style||{}), paddingRight: preview ? 50 : undefined}
     }),
     preview && h('span', {style:{
       position:'absolute', right:8, top:'50%', transform:'translateY(-50%)',
@@ -6177,7 +7069,7 @@ function PositionModal({items, position, onSave, onClose}) {
 
         h('div', {className:'form-grid-2'},
           h('div', null, h('label',{className:'form-lbl'},'Quantity'),
-            h('input',{className:'ge-input',type:'number',min:1,placeholder:'e.g. 100',value:form.quantity,onChange:set('quantity')})),
+            h(QtyInput,{value:form.quantity, placeholder:'e.g. 100k', min:1, onChange:v=>setForm(f=>({...f,quantity:v}))})),
           h('div', null, h('label',{className:'form-lbl'},'Cost Basis (per item)'),
             h(GpInput,{value:form.cost_basis, placeholder:'Price paid each', onChange:v=>setForm(f=>({...f,cost_basis:v}))}))
         ),
@@ -6247,8 +7139,7 @@ function SellModal({position, onSell, onClose}) {
           h('div', null, h('label',{className:'form-lbl'},'Sell Price (per item)'),
             h(GpInput,{value:sellPrice, onChange:v=>setSellPrice(v), placeholder:'Sell price'})),
           h('div', null, h('label',{className:'form-lbl'},`Quantity (max ${position.quantity})`),
-            h('input',{className:'ge-input',type:'number',min:1,max:position.quantity,value:qty,
-              onChange:e=>setQty(Math.min(Math.max(1,Number(e.target.value)),position.quantity))}))
+            h(QtyInput,{value:qty, min:1, max:position.quantity, onChange:v=>setQty(v)}))
         ),
 
         sp > 0 && h('div', {style:{background:'rgba(0,0,0,0.25)',borderRadius:4,padding:'10px',marginBottom:12}},
@@ -7451,11 +8342,14 @@ const TAB_DESCRIPTIONS = {
   alerts:         'Because checking prices every five minutes is exhausting.',
   news:           'The new updates: Congratulations, or condolences. Whichever applies.',
   about:          'What this thing is, and what that symbol next to its name means.',
+  dxp_intel:      'GEnius Almanac — historical DXP price signals with confidence scores and trade timing.',
+  seasonal_intel: 'Seasonal Events — Christmas, Halloween, Summer, and Easter market patterns from historical research.',
 };
 
 /* ─── Nav config ─────────────────────────────────────────────── */
 const NAV = [
   {id:'dashboard',      label:'Dashboard',        icon:'◈'},
+  {id:'dxp_intel',      label:'GEnius Almanac',   icon:'📅'},
   {id:'watchlist',      label:'Watchlist',        icon:'★'},
   {id:'market',         label:'Market',           icon:'◐'},
   {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
@@ -7560,14 +8454,7 @@ function App() {
   }, []);
 
   // Custom nav order — flatten NAV when user has custom order (no group separators)
-  const navBase = useMemo(() => {
-    if (!settings.devMode) return NAV;
-    // Hidden dev-only entry, inserted right below Dashboard — never shown unless devMode is on
-    const idx = NAV.findIndex(n => n.id === 'dashboard') + 1;
-    const withDev = [...NAV];
-    withDev.splice(idx, 0, {id:'dxp_intel', label:'GEnius Almanac', icon:'📅'});
-    return withDev;
-  }, [settings.devMode]);
+  const navBase = useMemo(() => NAV, []);
   const navItems = useMemo(() => {
     const order = settings.navOrder;
     if (!order || !order.length) return navBase;
@@ -7940,7 +8827,7 @@ function App() {
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
-          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components'}),
+          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
           ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','artisan','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
             h(ItemTable,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
