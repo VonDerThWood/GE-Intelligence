@@ -107,6 +107,18 @@ function createWindow() {
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
   mainWindow.once('ready-to-show', () => { mainWindow.show(); });
+  // Safety net — 'ready-to-show' not firing leaves the window permanently
+  // invisible while createTray() below still runs unconditionally, which
+  // looks exactly like "the app only opens to the tray." Confirmed
+  // plausible for real (Ben, 2026-07-14): a fresh install's first launch
+  // is the one moment antivirus real-time scanning hits every file for the
+  // very first time — we already measured that exact effect costing
+  // real seconds elsewhere in this app (history file loading). If the
+  // window hasn't shown itself within a generous window, force it rather
+  // than leave the app silently invisible.
+  setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
+  }, 8000);
   mainWindow.on('close', (e) => {
     if (!isQuitting) { e.preventDefault(); mainWindow.hide(); }
   });
@@ -197,7 +209,17 @@ function startScheduler() {
   const intervalMinutes = store.get('fetchInterval', 15);
   const ms = intervalMinutes * 60 * 1000;
   console.log(`[Scheduler] Fetching every ${intervalMinutes} min`);
-  schedulerInterval = setInterval(() => { runPython('prices'); checkDxpNotifications(); checkWatchlistDigest(); checkReminders(); }, ms);
+  schedulerInterval = setInterval(() => {
+    const lastNewsFetch = store.get('lastNewsFetch', 0);
+    const newsStale = Date.now() - lastNewsFetch > 60 * 60 * 1000;
+    if (newsStale) {
+      store.set('lastNewsFetch', Date.now());
+      runPython('full');
+    } else {
+      runPython('prices');
+    }
+    checkDxpNotifications(); checkWatchlistDigest(); checkReminders();
+  }, ms);
 }
 
 function stopScheduler() {
@@ -225,7 +247,11 @@ ipcMain.handle('get-dxp-events', async () => {
 });
 
 ipcMain.handle('fetch-now', async (_, mode) => {
-  try { await runPython(mode || 'prices'); return { success: true }; }
+  try {
+    await runPython(mode || 'prices');
+    if (!mode || mode === 'full') store.set('lastNewsFetch', Date.now());
+    return { success: true };
+  }
   catch (e) { return { success: false, error: e.message }; }
 });
 
@@ -348,6 +374,7 @@ ipcMain.handle('sell-position', (_, payload) => api.sellPosition(payload));
 ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
+ipcMain.handle('get-drop-sources', async (_, itemName) => api.getDropSources(itemName));
 
 ipcMain.handle('show-notification', (_, { title, body }) => {
   if (store.get('notifications', true)) {

@@ -12,6 +12,7 @@ contextBridge.exposeInMainWorld('genius', {
 
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
+  getDropSources:        (name) => ipcRenderer.invoke('get-drop-sources', name),
   getItemHistory:        (id)   => ipcRenderer.invoke('get-item-history', id),
   getItemHistoryLocal:   (id)   => ipcRenderer.invoke('get-item-history-local', id),
   getHistoryStatus:      ()     => ipcRenderer.invoke('get-history-status'),
