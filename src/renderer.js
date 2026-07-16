@@ -4193,14 +4193,20 @@ function MarketTab({items, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
-    // Everything shipped/fixed since v2.0.0 went out, not yet its own
-    // numbered release — convention going forward (Ben, 2026-07-10): the
-    // top entry is always "Post vX.X.X" for whatever the last actually-
-    // pushed version was, and it accumulates entries as work lands. When
-    // Ben decides to cut the next release, this whole entry gets renamed
-    // to the new version number (e.g. "v2.1.0") and a fresh empty
-    // "Post v2.1.0" entry starts above it — never left to go stale.
-    version: 'Post v2.0.0',
+    // Empty until the next fix/feature lands — see the convention note
+    // on the v2.1.0 entry directly below.
+    version: 'Post v2.1.0',
+    items: []
+  },
+  {
+    // Convention (Ben, 2026-07-10): the top non-empty entry is always
+    // "Post vX.X.X" for whatever the last actually-pushed version was,
+    // and it accumulates entries as work lands. When Ben cuts the next
+    // release, that entry gets renamed to the new version number and a
+    // fresh empty "Post vX.X.X" entry starts above it — never left to
+    // go stale. This entry (v2.1.0) was "Post v2.0.0" until finalized
+    // and pushed on 2026-07-14.
+    version: 'v2.1.0',
     items: [
       'Fixed column resizing across every table in the app (Almanac, Market, Alch, Machine Calculators) — dragging a divider used to slide the wrong column around instead of resizing the one you grabbed.',
       'Added drag-to-reorder for table columns — grab any header and drop it where you want, on every table in the app.',
@@ -4214,6 +4220,7 @@ const APP_NEWS = [
       'Fixed All-Time Low/High in the item chart being able to show a stale number lower/higher than the actual current price — the all-time data is cached permanently for performance, but never accounted for the live price possibly having since broken that record.',
       'Fixed intermittent "installer finishes, nothing opens (or only a tray icon shows up)" even with Launch checked — closed a race between the installer force-closing any running copy and the freshly-launched one starting, plus added a safety net so the window shows itself even if the very first launch after install is slowed down by antivirus scanning the new files for the first time.',
       'Cleaned up ~55 miscategorized items sitting in Food — Herblore ingredients, fishing/cooking tools, Treasure Trails and Summoning items, Archaeology portents/powerbursts, and a couple of cosmetics had all ended up there. Also fixed the underlying cause (an overly broad "ration" keyword match) so Portents of restoration and Powerbursts of acceleration can\'t drift back into Food again.',
+      'Fixed price history population getting permanently stuck partway through (e.g. "7,184 of 7,261 items") with no way to recover except restarting — a single item\'s fetch could occasionally hang well past its own timeout and wedge the whole queue behind it. It now always gives up on a stuck item and moves on.',
     ]
   },
   {
@@ -4511,7 +4518,7 @@ function NewsTab({news, onOpen, description, items, onSelect}) {
 
     // App Updates pane
     sub==='app' && h('div',{style:{padding:'0 14px 12px'}},
-      APP_NEWS.map(section => h('div',{key:section.version, style:{marginBottom:14, paddingTop:12}},
+      APP_NEWS.filter(section => section.items.length > 0).map(section => h('div',{key:section.version, style:{marginBottom:14, paddingTop:12}},
         h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textBright, marginBottom:6,
           paddingBottom:3, borderBottom:`1px solid ${T.borderDim}`}}, section.version),
         h('ul',{style:{listStyle:'none', margin:0, padding:0}},
