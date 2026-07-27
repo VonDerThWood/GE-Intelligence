@@ -222,6 +222,8 @@ thead th[draggable="true"]:active { cursor: grabbing; }
 .signal-badge.THIN         { background: rgba(229,57,53,0.08);   border-color: rgba(229,57,53,0.25);  color: #ef9a9a; }
 .signal-badge.ALCH         { background: rgba(156,39,176,0.15);  border-color: rgba(156,39,176,0.5);  color: #ce93d8; }
 .signal-badge.MANIPULATED  { background: rgba(229,57,53,0.18);   border-color: #e53935;               color: #e53935; font-weight: bold; letter-spacing: 0.03em; }
+.signal-badge.OVERPRICED   { background: rgba(229,57,53,0.12);   border-color: rgba(229,57,53,0.4);   color: #ef9a9a; }
+.signal-badge.UNDERPRICED  { background: rgba(76,175,80,0.12);   border-color: rgba(76,175,80,0.4);   color: #81c784; }
 
 /* ── Star button ── */
 .star-btn { background: none; border: none; cursor: pointer; font-size: 20px; padding: 2px 6px; transition: transform 0.15s; line-height: 1; }
@@ -390,6 +392,8 @@ const SIGNAL_INFO = {
   THIN:         'Volume is 50%+ below average — very few trades. This market is illiquid; prices may be unreliable.',
   ALCH:         'High alchemy yields more than selling on the GE after the 2% tax and the cost of a nature rune. Profitable to alch.',
   MANIPULATED:  'Extreme volume spike on an item with a tiny GE buy limit and a large price move — a classic sign of coordinated buying to inflate the price. Trade with caution.',
+  OVERPRICED:   'The listed GE price is 20%+ higher than real live buy/sell — the displayed price may be a stale or fake default. Verify the live price before trusting it.',
+  UNDERPRICED:  'Real live buy/sell is 20%+ higher than the listed GE price — the item may be worth more than the displayed price shows.',
 };
 
 function SignalBadge({signal, style: extraStyle}) {
@@ -442,6 +446,19 @@ const fmt = {
 };
 const pctClass = n => (n == null) ? 'pct-flat' : n > 0 ? 'pct-up' : n < 0 ? 'pct-down' : 'pct-flat';
 const showPct  = n => n != null ? fmt.pct(n) : '—';
+
+// "7 minutes ago" style relative time for the live-price panel — epoch ms in.
+function timeAgo(ms) {
+  if (!ms) return null;
+  const diffSec = Math.max(0, Math.round((Date.now() - ms) / 1000));
+  if (diffSec < 60) return 'just now';
+  const diffMin = Math.round(diffSec / 60);
+  if (diffMin < 60) return `${diffMin} minute${diffMin===1?'':'s'} ago`;
+  const diffHr = Math.round(diffMin / 60);
+  if (diffHr < 24) return `${diffHr} hour${diffHr===1?'':'s'} ago`;
+  const diffDay = Math.round(diffHr / 24);
+  return `${diffDay} day${diffDay===1?'':'s'} ago`;
+}
 
 // Shows percentage change + raw gp change stacked
 function ChangeDisplay({change_1d, price}) {
@@ -595,6 +612,21 @@ function useToast() {
 }
 
 /* ─── Volume display — last vs avg ──────────────────────────── */
+// Compact "B: # S: #" line for the item table's Price cell — real live
+// instant-buy/instant-sell from the wiki's real-time prices API (see
+// run.js's fetchLivePrices), refreshed on the same 15-min scheduler tick
+// as everything else. Deliberately terse (table already has Item/Price/
+// Change/Volume columns) rather than its own column — same reasoning as
+// Volume's stacked avg/delta line just above.
+function LivePriceLine({liveBuy, liveSell}) {
+  if (liveBuy == null && liveSell == null) return null;
+  return h('div', {className:'vol-avg', style:{whiteSpace:'nowrap'}},
+    liveBuy != null && `B: ${fmt.gp(liveBuy)}`,
+    liveBuy != null && liveSell != null && '  ',
+    liveSell != null && `S: ${fmt.gp(liveSell)}`,
+  );
+}
+
 function VolDisplay({volume, avgVolume}) {
   if (!volume && !avgVolume) return h('span', {style:{color:T.textDim}}, '—');
   const isHigh = avgVolume && volume && volume > avgVolume * 1.5;
@@ -1545,6 +1577,7 @@ const BUILTIN_SHORTHANDS = {
   // Consumables / misc
   'PHAT':   'Blue partyhat',
   'BOND':   'Bond',
+  'OSH':    'Orlando Smith\'s Hat',
   // Crossbows
   'ECB':    'Eldritch crossbow',
   // Ability codexes
@@ -1563,13 +1596,50 @@ const BUILTIN_SHORTHANDS = {
   'GSW':    'Greater Sonic Wave ability codex',
 };
 
-function resolveShorthand(query, userShorthands) {
+function resolveShorthand(query, userShorthands, builtins = BUILTIN_SHORTHANDS) {
   const key = query.trim().toUpperCase();
-  const merged = {...BUILTIN_SHORTHANDS, ...userShorthands};
+  const merged = {...builtins, ...userShorthands};
   const val = merged[key];
   if (!val) return null;
   return Array.isArray(val) ? val : [val];
 }
+
+// Monster-name shorthands (separate map/storage from the item BUILTIN_SHORTHANDS
+// above — "Abby" expanding to a wiki search prefix is a different domain than an
+// item-name expansion, and the two could otherwise collide confusingly).
+// Player community nicknames for bosses (Ben, 2026-07-20) — each resolved term
+// verified directly against the wiki's own opensearch to make sure it lands on
+// the right page (several of these have punctuation the wiki is picky about:
+// apostrophes in K'ril/Kree'arra, a comma in "Kerapac, the bound", "&" in
+// "Vindicta & Gorvek").
+// Single-string values are one specific, unambiguous monster — the search
+// jumps straight to it, same as typing its exact name would. Array values
+// (even single-element ones, like ABBY) mean "deliberately show every
+// candidate" — either because there are genuinely several real targets
+// (RAX), or because the whole point is fanning out to a family (ABBY).
+const BUILTIN_MONSTER_SHORTHANDS = {
+  'ABBY':   ['Abyssal'],
+  'AOD':    'Nex Angel of Death',
+  'ROTS':   'Barrows rise of the six',
+  'RAGO':   'Vorago',
+  'RAX':    ['Araxxor', 'Araxxi'], // either boss, same nickname
+  'KRIL':   "K'ril Tsutsaroth",
+  'KREE':   "Kree'arra",
+  'ZIL':    'Commander Zilyana',
+  'VINDY':  'Vindicta & Gorvek',
+  'GREG':   'Gregorovic',
+  'FURIES': 'Twin Furies',
+  'AG':     'Arch-Glacor',
+  'KERA':   'Kerapac, the bound',
+  'CRO':    'Croesus',
+  'ZUK':    'TzKal-Zuk',
+  'CORP':   'Corporeal Beast',
+  'KBD':    'King Black Dragon',
+  'QBD':    'Queen Black Dragon',
+  'KQ':     'Kalphite Queen',
+  'KK':     'Kalphite King',
+  'RIPPER': 'Ripper Demon',
+};
 
 function useSearch(items, userShorthands = {}) {
   const [query, setQuery] = useState('');
@@ -1803,14 +1873,20 @@ function BigMacLine({price, bondGP}) {
   );
 }
 
-function FlipCalculator({item, onAddToPortfolio}) {
-  const buyPrice  = item.low  || item.high || 0;
-  const sellPrice = item.high || item.low  || 0;
+function FlipCalculator({item, onAddToPortfolio, livePrice}) {
+  // Live instant-buy/instant-sell (when available) is fresher than
+  // item.high/item.low (15-min gazbot dump) — prefer it as the starting
+  // point, but the fields still stay user-editable either way.
+  const buyPrice  = livePrice?.low  ?? (item.low  || item.high || 0);
+  const sellPrice = livePrice?.high ?? (item.high || item.low  || 0);
   const [buy,  setBuy]  = useState(buyPrice);
   const [sell, setSell] = useState(sellPrice);
   const [qty,  setQty]  = useState(1);
 
-  useEffect(() => { setBuy(item.low || item.high || 0); setSell(item.high || item.low || 0); }, [item.id]);
+  useEffect(() => {
+    setBuy(livePrice?.low ?? (item.low || item.high || 0));
+    setSell(livePrice?.high ?? (item.high || item.low || 0));
+  }, [item.id, livePrice]);
 
   const tax       = Math.floor(sell * 0.02);
   const netSell   = sell - tax;
@@ -1880,6 +1956,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const [dropSources, setDropSources] = useState(null); // null = not fetched, {sources:[...]} once loaded
   const [dropSourcesLoading, setDropSourcesLoading] = useState(false);
   const [iconUrl, setIconUrl]         = useState(null);
+  const [livePrice, setLivePrice]     = useState(null); // null = not loaded yet, {} = loaded but no data
   const [editingCats, setEditingCats] = useState(false);
   const [draftCats, setDraftCats]     = useState([]);
   const [savingCats, setSavingCats]   = useState(false);
@@ -1916,6 +1993,12 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     }).catch(() => setStatsLoading(false));
     const wikiName = item.name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
     setIconUrl(`https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`);
+    setLivePrice(null);
+    if (!item.untradeable) {
+      window.genius?.getLiveItemPrice(item.id).then(price => {
+        setLivePrice(price || {});
+      }).catch(() => setLivePrice({}));
+    }
   }, [item?.id]);
 
   const saveCats = async () => {
@@ -1975,7 +2058,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             title: 'Click to enlarge',
             style: {width:32, height:32, imageRendering:'pixelated', flexShrink:0, cursor:'zoom-in'}
           }),
-          h('div', {className:'detail-name', style:{overflow:'hidden', textOverflow:'ellipsis'}}, item.name)
+          h('div', {className:'detail-name', title:item.name, style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, item.name)
         ),
         h('div', {className:'row', style:{gap:4, flexShrink:0}},
           h('button', {
@@ -2043,7 +2126,29 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
               item.high && h('span', {style:{fontSize:11, marginLeft:6, opacity:0.85}},
                 '(' + (item.change_1d > 0 ? '+' : '') + gpFmt(Math.round(item.high - (item.high / (1 + item.change_1d / 100)))) + 'gp)'
               )
-            )
+            ),
+      // Live instant-buy/instant-sell prices from the wiki's real-time
+      // prices API — fresher and per-price-timestamped, unlike item.high/
+      // item.low above which come from the app's 15-min gazbot dump.
+      !item.untradeable && livePrice && (livePrice.high != null || livePrice.low != null) && h('div', {
+        style:{marginTop:8, padding:'6px 8px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11}
+      },
+        h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4}}, 'Live Price'),
+        h('div', {className:'row', style:{gap:14}},
+          livePrice.high != null && h('div', null,
+            h('span', {style:{color:T.green}}, '● '),
+            h('span', {style:{color:T.textDim}}, 'Buy '),
+            h('span', {style:{color:T.text, fontWeight:600}}, gpFmt(livePrice.high)+'gp'),
+            livePrice.highTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.highTime))
+          ),
+          livePrice.low != null && h('div', null,
+            h('span', {style:{color:'#e08030'}}, '● '),
+            h('span', {style:{color:T.textDim}}, 'Sell '),
+            h('span', {style:{color:T.text, fontWeight:600}}, gpFmt(livePrice.low)+'gp'),
+            livePrice.lowTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.lowTime))
+          ),
+        )
+      )
     ),
     h('div', {className:'detail-body'},
       h('div', {className:'sparkline-wrap', onClick:()=>setChartOpen(true), title:'Click to enlarge'},
@@ -2241,7 +2346,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 
       h(RecipeSection, {item, allItems}),
 
-      !item.untradeable && h(FlipCalculator, {item, onAddToPortfolio}),
+      !item.untradeable && h(FlipCalculator, {item, onAddToPortfolio, livePrice}),
 
       h('div',{style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
         h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:6}}, 'NOTES'),
@@ -2569,7 +2674,8 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
         h('span',null, it.name),
         SHOW_THUMBNAILS && h(ItemThumb,{name:it.name}),
       ));
-      case 'high': return h('td', {key:k, style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp');
+      case 'high': return h('td', {key:k, style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp',
+        h(LivePriceLine, {liveBuy:it.liveBuy, liveSell:it.liveSell}));
       case 'change_1d': return h('td', {key:k}, h(ChangeDisplay,{change_1d:it.change_1d, price:it.high||it.low}));
       case 'volume': return h('td', {key:k}, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume}));
       case 'signals': return h('td', {key:k}, h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},
@@ -2810,7 +2916,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     }).slice(0,6), [tradeableItems]);
 
   const signalCounts = useMemo(() => {
-    const counts = {SURGE:0,DUMP:0,ACCUMULATION:0,DISTRIBUTION:0,FRENZY:0,HIGH_VOL:0,MANIPULATED:0};
+    const counts = {SURGE:0,DUMP:0,ACCUMULATION:0,DISTRIBUTION:0,FRENZY:0,HIGH_VOL:0,MANIPULATED:0,OVERPRICED:0,UNDERPRICED:0};
     for (const it of tradeableItems) {
       for (const s of (it.signals||[])) { if (s in counts) counts[s]++; }
     }
@@ -2880,6 +2986,24 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const [showHeatmapLegend, setShowHeatmapLegend] = useState(false);
   const [heatmapLegendPos, setHeatmapLegendPos] = useState(null);
 
+  // Dismiss the Weather/Heatmap legend popovers on outside click or Escape —
+  // neither had ANY way to close except the explicit X (Ben, 2026-07-16:
+  // "small GUI thing... would be nice to not HAVE to X out"). Both popovers
+  // already call e.stopPropagation() on clicks inside themselves, so a
+  // plain document-level click listener only ever fires for genuine
+  // outside clicks — no ref/portal-boundary bookkeeping needed.
+  useEffect(() => {
+    if (!showWeatherLegend && !showHeatmapLegend) return;
+    const onClick = () => { setShowWeatherLegend(false); setShowHeatmapLegend(false); };
+    const onKey = e => { if (e.key === 'Escape') { setShowWeatherLegend(false); setShowHeatmapLegend(false); } };
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [showWeatherLegend, showHeatmapLegend]);
+
   // Hall of Shame
   const hallOfShame = useMemo(() => {
     const priced = tradeableItems.filter(it => (it.high || it.low) > 10000 && it.change_1d != null);
@@ -2913,7 +3037,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     {label:'Ranged',      cats:['ranged','ammo'],                   emoji:'🏹'},
     {label:'Magic',       cats:['magic','runes'],                  emoji:'🔮'},
     {label:'Necromancy',  cats:['necromancy'],                     emoji:'💀'},
-    {label:'Herblore',    cats:['herblore','supplies'],            emoji:'⚗️'},
+    {label:'Herblore',    cats:['herblore'],                       emoji:'⚗️'},
+    {label:'PVM Supplies',cats:['supplies'],                       emoji:'🛡️'},
     {label:'Boss Drops',  cats:['boss'],                           emoji:'🐉'},
     {label:'Rares',       cats:['rares'],                          emoji:'🎩'},
     {label:'Skilling',    cats:['mining','artisan','farming','archaeology'], emoji:'⛏️'},
@@ -3005,6 +3130,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     DISTRIBUTION:{bg:'#2a1a3a',border:'#ce93d8',text:'#ce93d8'},
     FRENZY:{bg:'#3a2a0a',border:'#ffd700',text:'#ffd700'},
     HIGH_VOL:{bg:'#2a2a1a',border:'#c9a84c',text:'#c9a84c'},
+    OVERPRICED:{bg:'#3a1a1a',border:'#ef9a9a',text:'#ef9a9a'},
+    UNDERPRICED:{bg:'#1a3a1a',border:'#81c784',text:'#81c784'},
   };
   const SignalPill = ({signal, count}) => {
     const c = SIG_COLORS[signal] || {bg:T.panel,border:T.border,text:T.text};
@@ -4193,10 +4320,27 @@ function MarketTab({items, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
-    // Empty until the next fix/feature lands — see the convention note
-    // on the v2.1.0 entry directly below.
-    version: 'Post v2.1.0',
-    items: []
+    // Convention (corrected Ben, 2026-07-27): APP_NEWS only ever holds
+    // real, already-shipped versions — no "Post vX.X.X" placeholder
+    // entry in here for unreleased work-in-progress. That bookkeeping
+    // (what's changed since this version, as it lands) lives in
+    // TODO.txt's "POST vX.X.X" section instead, and gets folded into a
+    // brand-new entry here only when Ben actually cuts the next
+    // release — never edited into this array ahead of time.
+    version: 'v2.2.0',
+    items: [
+      'The item detail panel now closes on Escape, not just Backspace — it never had Escape support at all before, unlike every modal elsewhere in the app.',
+      'The Market Weather and Sector Heat Map info popups on the Dashboard now close on Escape or by clicking anywhere outside them, instead of only via their X button.',
+      'Removed a leftover "Hidden developer build" label from the Almanac tab — it\'s been public since v2.0.0, that text was just never cleaned up.',
+      'Fixed a real (rare, but not theoretical) way settings like your Watchlist could get silently wiped: every saved setting used to be rewritten from a snapshot taken when GEnius started, so if two copies of the app were ever briefly running at once, whichever one saved last could overwrite everything the other had changed. Every save now merges into the current file on disk instead.',
+      'New: Monster Lookup tab — search any monster and see its drop table with an estimated gp/kill, straight from the wiki, sortable by Rarity or GE Price (shown as the full value range rather than a single averaged number, defaulting to highest-value drops first). Also shows combat level, HP, weakness, and poison/stun/deflect/drain susceptibility, correctly split for bosses with a Normal/Hard Mode toggle, and for duo/trio encounters like Vindicta & Gorvek where the wiki keeps each half\'s stats on its own separate page. Flags any drop whose rarity the wiki itself lists as "Unknown" rather than silently leaving it out of the gp/kill estimate. Live search suggestions as you type, plus custom search shorthands (Settings) so e.g. "Abby" pulls up every Abyssal-something monster at once. Clicking an item in the drop table opens it in the item lookup panel.',
+      'Split the Dashboard\'s Sector Heat Map "Herblore" tile in two — PVM Supplies (Prayer potions, Saradomin brews, and similar combat consumables) now has its own tile instead of being folded into Herblore.',
+      'Added "OSH" as a search shorthand for Orlando Smith\'s Hat.',
+      'Fixed the item detail panel\'s title wrapping into several cramped lines for long item names instead of truncating with "..." — hover now shows the full name.',
+      'Fixed "price history still loading" showing indefinitely in the item chart for items whose history was actually already fully loaded — a timing bug meant the app could get stuck thinking history was incomplete for the rest of the session.',
+      'New: live Buy/Sell prices — the item detail panel now shows real-time buy/sell prices with "X minutes ago" freshness (feeding the Margin Calculator too), and every item table shows a compact live Buy/Sell line under the price. Sourced from the wiki\'s new real-time RS3 price API, refreshed every 15 minutes alongside the regular price update.',
+      'New OVERPRICED / UNDERPRICED signals — flags items where the listed GE price and the real live buy/sell price have diverged by 20%+ or more. Some items (mainly rare drop-table "Furniture plans") carry a stale in-game default GE price that\'s wildly different from what they actually trade for.',
+    ]
   },
   {
     // Convention (Ben, 2026-07-10): the top non-empty entry is always
@@ -4542,7 +4686,7 @@ const ALERT_CONDITIONS = [
   {value:'signal',     label:'Signal triggers'},
   {value:'alch',       label:'Becomes alch-profitable'},
 ];
-const ALERT_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL'];
+const ALERT_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL','OVERPRICED','UNDERPRICED'];
 
 function alertSummary(a) {
   switch(a.condition) {
@@ -5371,8 +5515,8 @@ function DXPIntelTab({items, onSelect}) {
       // data had loaded, not because that was ever a real measurement —
       // 'Loading…' says that honestly instead of guessing a number.
       itemCount
-        ? `Hidden developer build. Scanned ${itemCount.toLocaleString()} items with available price history, across ${eventCount ?? '11'} historical DXP events. Estimates only — GE prices lag real trading activity during DXP.`
-        : 'Hidden developer build. Loading…'
+        ? `Scanned ${itemCount.toLocaleString()} items with available price history, across ${eventCount ?? '11'} historical DXP events. Estimates only — GE prices lag real trading activity during DXP.`
+        : 'Loading…'
     ),
     h('div', {style:{display:'flex', alignItems:'center', gap:10, fontSize:11, color:T.textDim, marginBottom:14, padding:'6px 10px', border:`1px solid ${T.borderDim}`, borderRadius:6}},
       h('span', null,
@@ -6187,6 +6331,293 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
   );
 }
 
+function MonsterLookupTab({description, monsterShorthands, items, onSelectItem}) {
+  const [query, setQuery] = useState('');
+  const [candidates, setCandidates] = useState(null); // null = no search run yet, [] = search ran, no results
+  const [searching, setSearching] = useState(false);
+  const [monster, setMonster] = useState(null); // resolved wiki page title once a candidate is picked
+  const [drops, setDrops] = useState(null);
+  const [info, setInfo] = useState(null); // combat stats, null if page had no {{Infobox Monster}}
+  const [loading, setLoading] = useState(false);
+  const [mode, setMode] = useState('normal'); // 'normal' | 'hard' — normal/hard mode are genuinely separate encounters, never merged
+  const [sort, setSort] = useState(null); // null = backend's default order (by gp contribution); {key, dir} once user clicks a header
+  const toggleSort = key => setSort(s => ({key, dir: s && s.key===key ? -s.dir : -1}));
+  const sortArrow = key => sort && sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
+
+  // "8/64" -> 0.125, "Always" -> 1, anything unparseable -> null (sorts last
+  // regardless of direction, same convention as a null GE price below).
+  const rarityToProbability = rarity => {
+    if (!rarity) return null;
+    if (/^always$/i.test(rarity)) return 1;
+    const m = rarity.match(/^(\d[\d,]*)\s*\/\s*(\d[\d,]*)/);
+    if (!m) return null;
+    return parseFloat(m[1].replace(/,/g,'')) / parseFloat(m[2].replace(/,/g,''));
+  };
+
+  const sortedDrops = useMemo(() => {
+    if (!drops || !drops.drops) return [];
+    if (!sort) return drops.drops; // backend's default: highest gp contribution first
+    const dir = sort.dir;
+    const getVal = sort.key === 'gePrice'
+      ? d => d.gePrice
+      : d => rarityToProbability(d.rarity);
+    return [...drops.drops].sort((a, b) => {
+      const av = getVal(a), bv = getVal(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;  // unparseable/missing values always sort last
+      if (bv == null) return -1;
+      return (av - bv) * dir;
+    });
+  }, [drops, sort]);
+
+  const selectMonster = (title) => {
+    setMonster(title);
+    setCandidates(null);
+    setLoading(true);
+    setDrops(null);
+    setInfo(null);
+    setSort(null);
+    setMode('normal');
+    Promise.all([
+      window.genius?.getMonsterDrops(title, 'normal'),
+      window.genius?.getMonsterInfo(title, 'normal'),
+    ]).then(([dropsRes, infoRes]) => {
+      setDrops(dropsRes || {drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setInfo(infoRes || null);
+      setLoading(false);
+    }).catch(() => {
+      setDrops({drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setLoading(false);
+    });
+  };
+
+  // Switching modes re-fetches both drops and combat info: multi-version
+  // bosses (Normal/Hard mode) suffix their infobox fields per version, so
+  // level/HP/etc. genuinely differ by mode, not just the drop table. The
+  // backend caches the raw page wikitext/HTML per monster, so this is a
+  // re-parse, not a second network round-trip.
+  const switchMode = (newMode) => {
+    if (newMode === mode || !monster) return;
+    setMode(newMode);
+    setSort(null);
+    setLoading(true);
+    setDrops(null);
+    Promise.all([
+      window.genius?.getMonsterDrops(monster, newMode),
+      window.genius?.getMonsterInfo(monster, newMode),
+    ]).then(([dropsRes, infoRes]) => {
+      setDrops(dropsRes || {drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setInfo(infoRes || null);
+      setLoading(false);
+    }).catch(() => {
+      setDrops({drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setLoading(false);
+    });
+  };
+
+  // Extracted from the old click/Enter-only runSearch so it can also be
+  // called from the debounced live-suggestion effect below, without either
+  // path stepping on the other (autoJump lets typing show a candidate list
+  // instead of yanking focus away by auto-selecting an exact match mid-type).
+  const performSearch = (q, {autoJump} = {autoJump: true}) => {
+    if (!q) return;
+    setSearching(true);
+
+    // A shorthand can expand to more than one search term (e.g. "Abby" ->
+    // "Abyssal", which itself surfaces demon/lord/beast/savage/etc via the
+    // wiki's own prefix search) — run each term and merge results, deduping
+    // by title. When the query wasn't a shorthand at all, this is just the
+    // single plain term.
+    const merged_ = {...BUILTIN_MONSTER_SHORTHANDS, ...monsterShorthands};
+    const rawShorthand = merged_[q.toUpperCase()];
+    const resolved = resolveShorthand(q, monsterShorthands, BUILTIN_MONSTER_SHORTHANDS);
+    const terms = resolved || [q];
+    // Whether to always show the candidate list rather than jump straight to
+    // an exact match — true for a plain query resolving to several distinct
+    // wiki hits under the same name is fine to auto-narrow, but a shorthand
+    // that was deliberately AUTHORED as an array (even a single-element one,
+    // like ABBY -> ['Abyssal']) means "fan out to a family", not "here's the
+    // one exact page" the way a plain-string shorthand (KRIL -> "K'ril
+    // Tsutsaroth") does.
+    const alwaysShowList = Array.isArray(rawShorthand);
+    Promise.all(terms.map(t => window.genius?.searchMonsters(t))).then(resultSets => {
+      setSearching(false);
+      const seen = new Set();
+      const merged = [];
+      for (const set of resultSets) for (const r of (set || [])) {
+        if (!seen.has(r.title)) { seen.add(r.title); merged.push(r); }
+      }
+      if (autoJump && !alwaysShowList) {
+        const target = (resolved ? terms[0] : q).toLowerCase();
+        const exact = merged.find(r => r.title.toLowerCase() === target);
+        if (exact) { selectMonster(exact.title); return; }
+      }
+      setCandidates(merged);
+    }).catch(() => { setSearching(false); setCandidates([]); });
+  };
+
+  const runSearch = () => {
+    const q = query.trim();
+    if (!q || searching) return;
+    setDrops(null);
+    setInfo(null);
+    setMonster(null);
+    setCandidates(null);
+    setSort(null);
+    performSearch(q, {autoJump: true});
+  };
+
+  // Live suggestions as you type — mirrors the item search bar's autocomplete
+  // dropdown. Debounced so every keystroke doesn't fire a wiki request;
+  // doesn't auto-jump to an exact match (that's reserved for Enter/Search so
+  // a still-typing "abby" doesn't get yanked into a single result), and never
+  // fires while a monster is already selected (typing then only matters once
+  // the user clears the selection to search again).
+  const debounceRef = useRef(null);
+  useEffect(() => {
+    if (monster) return;
+    const q = query.trim();
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (q.length < 2) { setCandidates(null); return; }
+    debounceRef.current = setTimeout(() => performSearch(q, {autoJump: false}), 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [query, monster]);
+
+  return h('div', null,
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div', {style:{padding:'14px', maxWidth:640}},
+      h('div', {style:{display:'flex', gap:8}},
+        h('input', {
+          className:'ge-input', style:{flex:1},
+          placeholder:'Monster name (e.g. General Graardor)', value:query,
+          onChange:e=>setQuery(e.target.value),
+          onKeyDown:e=>{ if (e.key === 'Enter') runSearch(); },
+        }),
+        h('button', {
+          className:'ge-btn', style:{fontSize:12, padding:'6px 14px'},
+          disabled:searching, onClick:runSearch,
+        }, searching ? '⏳ Searching…' : '🔍 Search'),
+      ),
+
+      candidates && candidates.length === 0 && h('div', {style:{marginTop:14, fontSize:12, color:T.textDim, fontStyle:'italic'}},
+        `No wiki pages found matching "${query.trim()}".`
+      ),
+
+      candidates && candidates.length > 0 && h('div', {style:{marginTop:10}},
+        candidates.map((c,i) => h('div', {
+          key:i, onClick:()=>selectMonster(c.title),
+          style:{padding:'8px 10px', border:`1px solid ${T.border}`, borderRadius:4, marginBottom:6, cursor:'pointer'},
+        },
+          h('div', {style:{fontSize:13, color:T.text}}, c.title),
+          c.description && h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, c.description),
+        ))
+      ),
+
+      loading && h('div', {style:{marginTop:14, fontSize:12, color:T.textDim}}, '⏳ Fetching drop table…'),
+
+      drops && !loading && !drops.hadAnyTable && h('div', {style:{marginTop:14, fontSize:12, color:T.textDim, fontStyle:'italic'}},
+        'No drop table found on this page — probably not a monster, or it has no listed drops.'
+      ),
+
+      drops && !loading && drops.hadAnyTable && h('div', {style:{marginTop:16}},
+        h('div', {style:{display:'flex', alignItems:'center', gap:10, marginBottom:8}},
+          h('div', {style:{fontSize:15, fontWeight:600, color:T.text}}, monster),
+          h('button', {
+            className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
+            onClick:()=>{
+              const url = `https://runescape.wiki/w/${encodeURIComponent(monster.replace(/ /g,'_'))}`;
+              window.genius?.openExternal(url);
+            }
+          }, '📖 RS Wiki'),
+          drops.hasHardMode && h('div', {style:{display:'flex', gap:4, marginLeft:'auto'}},
+            [{key:'normal', label:'Normal Mode'}, {key:'hard', label:'Hard Mode'}].map(m => h('button', {
+              key:m.key,
+              className: mode===m.key ? 'ge-btn gold' : 'ge-btn',
+              style:{fontSize:11, padding:'3px 10px'},
+              onClick:()=>switchMode(m.key),
+            }, m.label))
+          ),
+        ),
+        info && !info.multi && h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, fontSize:12, color:T.text, marginBottom:10, padding:'8px 10px', border:`1px solid ${T.borderDim}`, borderRadius:6}},
+          info.combatLevel != null && h('div', null, h('span',{style:{color:T.textDim}},'Combat level '), info.combatLevel),
+          info.hitpoints != null && h('div', null, h('span',{style:{color:T.textDim}},'HP '), info.hitpoints.toLocaleString()),
+          info.weakness && h('div', null, h('span',{style:{color:T.textDim}},'Weak to '), info.weakness),
+          info.poisonImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Poison: '), info.poisonImmune ? 'Immune' : 'Susceptible'),
+          info.stunImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Stun: '), info.stunImmune ? 'Immune' : 'Susceptible'),
+          info.deflectImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Deflect: '), info.deflectImmune ? 'Immune' : 'Susceptible'),
+          info.drainImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Drain: '), info.drainImmune ? 'Immune' : 'Susceptible'),
+        ),
+        // Duo/trio encounters (e.g. Vindicta & Gorvek) have no combined
+        // infobox — the backend instead fetches each half's own page, so
+        // render one stat block per part rather than the single-block view.
+        info && info.multi && info.parts.map((p,i) => h('div', {
+          key:i, style:{display:'flex', flexWrap:'wrap', alignItems:'center', gap:14, fontSize:12, color:T.text, marginBottom: i===info.parts.length-1?10:6, padding:'8px 10px', border:`1px solid ${T.borderDim}`, borderRadius:6}
+        },
+          h('div', {style:{fontWeight:600, color:T.gold}}, p.name),
+          p.combatLevel != null && h('div', null, h('span',{style:{color:T.textDim}},'Combat level '), p.combatLevel),
+          p.hitpoints != null && h('div', null, h('span',{style:{color:T.textDim}},'HP '), p.hitpoints.toLocaleString()),
+          p.weakness && h('div', null, h('span',{style:{color:T.textDim}},'Weak to '), p.weakness),
+          p.poisonImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Poison: '), p.poisonImmune ? 'Immune' : 'Susceptible'),
+          p.stunImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Stun: '), p.stunImmune ? 'Immune' : 'Susceptible'),
+          p.deflectImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Deflect: '), p.deflectImmune ? 'Immune' : 'Susceptible'),
+          p.drainImmune != null && h('div', null, h('span',{style:{color:T.textDim}},'Drain: '), p.drainImmune ? 'Immune' : 'Susceptible'),
+        )),
+        !info && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
+          `No combat stats page found for "${monster}" — this is likely a multi-monster encounter page (e.g. a duo boss), and the wiki keeps level/HP/weakness on each individual monster's own page instead of here.`
+        ),
+        h('div', {style:{fontSize:13, color:T.gold, marginBottom:2}},
+          `Estimated gp/kill: ${Math.round(drops.estimatedGpPerKill).toLocaleString()}`
+        ),
+        h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:4}},
+          drops.gpPerKillSource === 'wiki'
+            ? `Per the wiki's own published average for this monster (includes unique drops). Doesn't reflect RDT/luck variance on any single kill.`
+            : `GEnius's own estimate from the wiki's raw drop table — excludes ${drops.untradeableDropCount} untradeable drop${drops.untradeableDropCount===1?'':'s'}, the Rare/Gem drop table (rolled too rarely and inconsistently documented to estimate reliably), and other kill-time bonuses.`
+        ),
+        drops.unknownRarityCount > 0 && h('div', {style:{fontSize:11, color:T.gold, fontStyle:'italic', marginBottom:12}},
+          `⚠ ${drops.unknownRarityCount} drop${drops.unknownRarityCount===1?'':'s'} worth ${Math.round(drops.unknownRarityValue).toLocaleString()}gp total ${drops.unknownRarityCount===1?'has':'have'} no drop rate documented on the wiki (listed as "Unknown") — excluded from the estimate above entirely rather than guessed at, so the real average is higher than shown.`
+        ),
+        !drops.unknownRarityCount && h('div', {style:{marginBottom:12}}),
+        drops.drops.length === 0
+          ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'No individual drops listed.')
+          : h('table', {style:{width:'100%', borderCollapse:'collapse', fontSize:11}},
+              h('thead', null, h('tr', null,
+                h('th', {style:{textAlign:'left', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px 0', borderBottom:`1px solid ${T.border}`}}, 'Item'),
+                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Qty'),
+                h('th', {
+                  onClick:()=>toggleSort('rarity'), style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px', borderBottom:`1px solid ${T.border}`, cursor:'pointer', userSelect:'none'},
+                  title:'Sort by drop chance — click again to reverse',
+                }, 'Rarity'+sortArrow('rarity')),
+                h('th', {
+                  onClick:()=>toggleSort('gePrice'), style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 0 4px 4px', borderBottom:`1px solid ${T.border}`, cursor:'pointer', userSelect:'none'},
+                  title:'Sort by GE price — click again to reverse',
+                }, 'GE Price'+sortArrow('gePrice')),
+              )),
+              h('tbody', null, sortedDrops.map((d,i) => {
+                // Not every drop-table row is a tradeable GE item (untradeable
+                // uniques, "Nothing" rows, etc.) — only make the ones we can
+                // actually find in the item list clickable, same lookup the
+                // item search bar itself uses (case-insensitive exact name).
+                const matched = items && items.find(it => it.name.toLowerCase() === d.item.toLowerCase());
+                return h('tr', {key:i},
+                h('td', {
+                  style:{padding:'3px 4px 3px 0', color: matched ? T.gold : T.text, cursor: matched ? 'pointer' : 'default', textDecoration: matched ? 'underline dotted' : 'none'},
+                  onClick: matched ? () => onSelectItem && onSelectItem(matched) : undefined,
+                  title: matched ? 'Open in item lookup' : undefined,
+                }, d.item),
+                h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.textDim}}, d.quantity || '—'),
+                h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.gold}}, d.rarity || '—'),
+                h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color:T.textDim}}, d.geValueText || (d.gePrice != null ? d.gePrice.toLocaleString() : '—')),
+                );
+              }))
+            ),
+        drops.totalCount > drops.drops.length && h('div', {
+          style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:4},
+        }, `+ ${drops.totalCount - drops.drops.length} more drops — see full list on the wiki`)
+      ),
+    )
+  );
+}
+
 function AboutTab() {
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
@@ -6256,7 +6687,7 @@ function AboutTab() {
   );
 }
 
-function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands}) {
+function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands, monsterShorthands, onSaveMonsterShorthands}) {
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
@@ -6303,6 +6734,23 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     onSaveShorthands(updated);
     setShKey(''); setShDraft('');
     toast(`Shorthand "${k}" saved`, 'success');
+  };
+
+  // Monster shorthands are a separate map from item shorthands above — there's
+  // no local monster list to validate a typed name against (monsters aren't in
+  // `items`), and one shorthand can expand to several search terms at once
+  // (comma-separated here, e.g. "Abby" -> "Abyssal" already covers demon/lord/
+  // beast/savage since the wiki's own search does prefix matching).
+  const [monShKey, setMonShKey] = useState('');
+  const [monShDraft, setMonShDraft] = useState('');
+  const addMonsterShorthand = () => {
+    const k = monShKey.trim(), v = monShDraft.trim();
+    if (!k || !v) { toast('Enter both a shorthand and a search term', 'error'); return; }
+    const terms = v.split(',').map(t => t.trim()).filter(Boolean);
+    const updated = {...(monsterShorthands||{}), [k]: terms.length > 1 ? terms : terms[0]};
+    onSaveMonsterShorthands(updated);
+    setMonShKey(''); setMonShDraft('');
+    toast(`Monster shorthand "${k}" saved`, 'success');
   };
   useEffect(()=>setS(settings),[settings]);
   // Every control here saves immediately on change — no separate "Save
@@ -6587,6 +7035,42 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         )
       ),
       Object.keys(userShorthands||{}).length === 0 && h('div',{style:{fontSize:11,color:T.textDim,fontStyle:'italic'}},'No custom shorthands yet.')
+    ),
+
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Monster Lookup Shorthands'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}},
+        'Add your own abbreviations for the Monster Lookup search. Multiple search terms can be comma-separated. (e.g. "Abby" → "Abyssal" surfaces Abyssal demon, Abyssal lord, Abyssal beast, Abyssal savage, etc.)'
+      ),
+      h('div',{style:{display:'flex',gap:6,marginBottom:10}},
+        h('input',{
+          className:'ge-input', placeholder:'Shorthand (e.g. Abby)',
+          value:monShKey, onChange:e=>setMonShKey(e.target.value.toUpperCase()),
+          style:{width:120, textTransform:'uppercase'},
+        }),
+        h('input',{
+          className:'ge-input', placeholder:'Search term(s) (e.g. Abyssal)',
+          value:monShDraft, onChange:e=>setMonShDraft(e.target.value),
+          style:{flex:1},
+          onKeyDown: e => { if (e.key === 'Enter') addMonsterShorthand(); }
+        }),
+        h('button',{className:'ge-btn gold',onClick:addMonsterShorthand},'Add'),
+      ),
+      Object.keys(monsterShorthands||{}).length > 0 && h('div',{style:{display:'flex',flexDirection:'column',gap:4}},
+        Object.entries(monsterShorthands).map(([k,v]) =>
+          h('div',{key:k,style:{display:'flex',justifyContent:'space-between',alignItems:'center',padding:'5px 8px',background:'rgba(0,0,0,0.2)',borderRadius:3,fontSize:12}},
+            h('span',{style:{color:T.gold,fontWeight:'bold',minWidth:80}}, k),
+            h('span',{style:{color:T.text,flex:1}}, Array.isArray(v) ? v.join(', ') : v),
+            h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:10},onClick:()=>{
+              const updated = {...monsterShorthands};
+              delete updated[k];
+              onSaveMonsterShorthands(updated);
+              toast(`Monster shorthand "${k}" removed`,'info');
+            }},'Remove')
+          )
+        )
+      ),
+      Object.keys(monsterShorthands||{}).length === 0 && h('div',{style:{fontSize:11,color:T.textDim,fontStyle:'italic'}},'No custom monster shorthands yet.')
     ),
 
     hiddenItems && hiddenItems.length > 0 && h('div',{style:{marginBottom:20}},
@@ -8340,6 +8824,7 @@ const TAB_DESCRIPTIONS = {
   archaeology:    'Digging up the past and selling it.',
   invention:      'A PhD in item destruction.',
   boss:           'Rare loot from things that were trying very hard to kill you.',
+  monster_lookup: 'Look up any monster\'s drop table and let GEnius do some morbid gp/kill math for you.',
   treasure_trails:'Rewards from following cryptic instructions written by a sadist.',
   rares:          'Items worth more than most players\' entire banks.',
   expensive:      'Everything over a certain threshold. Handle with care.',
@@ -8377,6 +8862,7 @@ const NAV = [
   {id:'runes',          label:'Runes',            icon:'◈'},
   {id:'low_tier',       label:'Low Tier',         icon:'⚔'},
   {id:'supplies',       label:'PVM Supplies',     icon:'⚗'},
+  {id:'monster_lookup', label:'Monster Lookup',   icon:'🐲'},
   {group:'Skilling'},
   {id:'herblore',       label:'Herblore',         icon:'⚗'},
   {id:'artisan',        label:'Artisan',          icon:'⚒'},
@@ -8418,6 +8904,7 @@ function App() {
   const [portfolio, setPortfolio] = useState({positions:[], tax_stats:{}});
   const [notes, setNotes] = useState({});
   const [userShorthands, setUserShorthands] = useState({});
+  const [monsterShorthands, setMonsterShorthands] = useState({});
   const [updateInfo, setUpdateInfo]         = useState(null);
   const [historyPopup, setHistoryPopup] = useState(null); // null | {done, total, complete}
   const [populatedHistoryIds, setPopulatedHistoryIds] = useState(null); // null = not loaded yet | Set<number>
@@ -8483,7 +8970,8 @@ function App() {
       window.genius.getNotes(),
       window.genius.getShorthands(),
       window.genius.getReminders(),
-    ]).then(([data,wl,al,s,pf,hidden,nt,sh,rm]) => {
+      window.genius.getMonsterShorthands(),
+    ]).then(([data,wl,al,s,pf,hidden,nt,sh,rm,msh]) => {
       console.log('[GEnius] getData returned:', data?.items?.length ?? 0, 'items, timestamp:', data?.timestamp);
       if (data.items)     setItems(data.items);
       if (data.news)      setNews(data.news);
@@ -8497,6 +8985,7 @@ function App() {
       setNotes(nt||{});
       setUserShorthands(sh||{});
       setReminders(rm||[]);
+      setMonsterShorthands(msh||{});
 
       const splash = document.getElementById('splash');
       if (splash) {
@@ -8598,12 +9087,25 @@ function App() {
   // logic, so anything that responds to desktop's Backspace key
   // automatically gets real Android back-button support for free, with
   // no risk of the two ever drifting out of sync.
+  //
+  // Escape does the same thing — added separately (2026-07-16) after
+  // feedback that the panel had no Escape support at all, unlike every
+  // modal in the app (ChartModal, ImageModal, etc. all close on Escape).
+  // Kept as its own condition rather than folded into the Backspace
+  // check above: Escape shouldn't be guarded behind "no text field
+  // focused" the way Backspace has to be (Backspace is a real character
+  // that would otherwise delete text; Escape never types anything, so
+  // blurring/closing on it even while a field is focused is the
+  // conventional, expected behavior — same as every modal already does).
   useEffect(() => {
     const onKey = e => {
-      if (e.key !== 'Backspace') return;
-      const tag = document.activeElement?.tagName;
-      if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
-      if (document.activeElement?.isContentEditable) return;
+      if (e.key === 'Backspace') {
+        const tag = document.activeElement?.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
+        if (document.activeElement?.isContentEditable) return;
+      } else if (e.key !== 'Escape') {
+        return;
+      }
       if (sidebarOpen) { e.preventDefault(); setSidebarOpen(false); }
       else if (selected) { e.preventDefault(); setSelected(null); }
     };
@@ -8863,6 +9365,7 @@ function App() {
           tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
           tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities}),
           tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
+          tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
@@ -8871,7 +9374,7 @@ function App() {
             onSaveReminder: r =>setReminders(rl=>{const i=rl.findIndex(x=>x.id===r.id);return i>=0?rl.map((x,j)=>j===i?r:x):[...rl,r];}),
             onDeleteReminder: id=>setReminders(rl=>rl.filter(r=>r.id!==id)),
           }),
-          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);}}),
+          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);}}),
           tab==='about'&&h(AboutTab),
           tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})
         ),

@@ -1,7 +1,7 @@
 {
   "name": "genius-ge-intelligence",
   "productName": "GEnius",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "RuneScape 3 Grand Exchange Market Intelligence",
   "main": "src/main.js",
   "author": "VonDerThWood",
