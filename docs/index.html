@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEnius — RS3 Grand Exchange Market Intelligence</title>
+<meta name="description" content="A desktop market intelligence tool for RuneScape 3's Grand Exchange. Live prices, signals, portfolio tracking, and more.">
+<link rel="icon" href="assets/favicon.ico">
+<style>
+  :root {
+    --bg:        #1a1206;
+    --panel:     #2b1f0e;
+    --panel2:    #3a2b13;
+    --border:    #6b4c1e;
+    --border-dim:#4a3820;
+    --text:      #f0d98a;
+    --text-dim:  #b89b5e;
+    --text-bright:#fff3d0;
+    --gold:      #c9a84c;
+    --gold-bright:#ffd700;
+    --green:     #4caf50;
+    --red:       #e53935;
+    --blue:      #64b5f6;
+  }
+  /* Mirrors the app's own "Black" theme (Settings -> Theme -> Black) —
+     same gold/text/signal colors, backgrounds swapped to near-black.
+     This only recolors the SITE's own chrome; the screenshots further
+     down are static images of the app's default theme regardless of
+     this toggle — see the note next to the theme button. */
+  :root[data-theme="black"] {
+    --bg:        #000000;
+    --panel:     #0a0a0a;
+    --panel2:    #111111;
+    --border:    #2a2a2a;
+    --border-dim:#1c1c1c;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Georgia', 'Times New Roman', serif;
+    line-height: 1.6;
+  }
+  body {
+    background-image:
+      radial-gradient(circle at 15% 10%, rgba(201,168,76,0.06), transparent 40%),
+      radial-gradient(circle at 85% 30%, rgba(100,181,246,0.05), transparent 40%);
+  }
+  a { color: var(--gold-bright); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 20px; }
+
+  /* Hero */
+  .hero {
+    padding: 64px 20px 48px;
+    text-align: center;
+    border-bottom: 2px solid var(--border);
+    background: linear-gradient(180deg, var(--panel2) 0%, var(--bg) 100%);
+  }
+  .hero img.logo { width: 220px; max-width: 60vw; filter: drop-shadow(0 6px 20px rgba(0,0,0,0.5)); }
+  .hero h1 {
+    font-family: 'Cinzel', 'Georgia', serif;
+    font-size: 15px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text-dim);
+    margin: 18px 0 6px;
+  }
+  .hero p.tagline {
+    font-size: 20px;
+    color: var(--text-bright);
+    max-width: 560px;
+    margin: 0 auto 30px;
+  }
+  .btn-row { display: flex; gap: 14px; justify-content: center; flex-wrap: wrap; margin-bottom: 14px; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 8px;
+    padding: 14px 28px;
+    border-radius: 6px;
+    font-size: 16px;
+    text-decoration: none;
+    font-family: 'Cinzel', 'Georgia', serif;
+    letter-spacing: 0.03em;
+    border: 2px solid var(--border);
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+  }
+  .btn:hover { transform: translateY(-1px); }
+  .btn-primary {
+    background: linear-gradient(180deg, #e0bd5a 0%, #b8933a 100%);
+    color: #241a08;
+    border-color: #8a6b2a;
+    box-shadow: 0 4px 14px rgba(201,168,76,0.35);
+  }
+  .btn-primary:hover { box-shadow: 0 6px 20px rgba(201,168,76,0.5); }
+  .btn-secondary {
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+  }
+  .meta-line { font-size: 13px; color: var(--text-dim); margin-top: 4px; }
+  .theme-toggle-wrap { margin-top: 22px; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+  .theme-toggle-btn { font-size: 13px; padding: 8px 18px; }
+  .theme-note { max-width: 380px; font-size: 11px; font-style: italic; }
+  .meta-line code {
+    background: rgba(0,0,0,0.3);
+    padding: 1px 6px;
+    border-radius: 3px;
+    font-family: 'Consolas', monospace;
+  }
+
+  /* Sections */
+  section { padding: 56px 20px; }
+  section.alt { background: rgba(0,0,0,0.18); }
+  h2.section-title {
+    font-family: 'Cinzel', 'Georgia', serif;
+    font-size: 26px;
+    color: var(--gold-bright);
+    text-align: center;
+    margin: 0 0 8px;
+  }
+  p.section-sub {
+    text-align: center;
+    color: var(--text-dim);
+    max-width: 560px;
+    margin: 0 auto 40px;
+    font-size: 15px;
+  }
+
+  /* Feature grid — fixed 3 columns on wide screens (9 cards = clean 3x3),
+     stepping down to 2 then 1 rather than auto-fit, which packed 5 across
+     at this container width and left the last row lopsided. */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 18px;
+  }
+  @media (max-width: 820px) {
+    .grid { grid-template-columns: repeat(2, 1fr); }
+  }
+  @media (max-width: 540px) {
+    .grid { grid-template-columns: 1fr; }
+  }
+  .card {
+    background: var(--panel);
+    border: 1px solid var(--border-dim);
+    border-radius: 8px;
+    padding: 22px 20px;
+  }
+  .card .icon { font-size: 26px; margin-bottom: 10px; display: block; }
+  .card h3 {
+    font-family: 'Cinzel', 'Georgia', serif;
+    font-size: 16px;
+    color: var(--text-bright);
+    margin: 0 0 8px;
+  }
+  .card p { font-size: 14px; color: var(--text-dim); margin: 0; }
+
+  /* Signal badges */
+  .sig-row { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 30px; }
+  .sig {
+    font-size: 11px; font-weight: bold; letter-spacing: 0.04em;
+    padding: 5px 12px; border-radius: 4px; border: 1px solid;
+  }
+  .sig.surge { background: rgba(76,175,80,0.15); border-color: rgba(76,175,80,0.4); color: var(--green); }
+  .sig.dump  { background: rgba(229,57,53,0.15); border-color: rgba(229,57,53,0.4); color: var(--red); }
+  .sig.frenzy{ background: rgba(255,64,129,0.15); border-color: rgba(255,64,129,0.5); color: #ff80ab; }
+  .sig.manip { background: rgba(229,57,53,0.18); border-color: #e53935; color: #e53935; }
+  .sig.over  { background: rgba(229,57,53,0.12); border-color: rgba(229,57,53,0.4); color: #ef9a9a; }
+  .sig.under { background: rgba(76,175,80,0.12); border-color: rgba(76,175,80,0.4); color: #81c784; }
+  .sig.alch  { background: rgba(156,39,176,0.15); border-color: rgba(156,39,176,0.5); color: #ce93d8; }
+
+  /* Screenshots */
+  .shots {
+    display: flex; flex-direction: column; gap: 40px;
+    max-width: 940px; margin: 0 auto;
+  }
+  .shot figure { margin: 0; }
+  .shot img {
+    width: 100%; display: block;
+    border-radius: 8px;
+    border: 1px solid var(--border-dim);
+    box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+  }
+  .shot figcaption {
+    text-align: center;
+    font-size: 13px;
+    color: var(--text-dim);
+    margin-top: 12px;
+  }
+
+  /* Install steps */
+  .steps {
+    max-width: 560px; margin: 0 auto;
+    counter-reset: step;
+  }
+  .step {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 14px 0;
+    border-bottom: 1px solid var(--border-dim);
+  }
+  .step:last-child { border-bottom: none; }
+  .step .num {
+    flex-shrink: 0;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    background: var(--panel2);
+    border: 1px solid var(--border);
+    color: var(--gold-bright);
+    display: flex; align-items: center; justify-content: center;
+    font-family: 'Cinzel', 'Georgia', serif;
+    font-size: 14px;
+  }
+  .step p { margin: 4px 0 0; font-size: 14px; color: var(--text-dim); }
+  .step strong { color: var(--text-bright); }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 40px 20px 50px;
+    border-top: 2px solid var(--border);
+    font-size: 13px;
+    color: var(--text-dim);
+  }
+  footer .disclaimer { max-width: 560px; margin: 0 auto 16px; font-style: italic; }
+  footer .links a { margin: 0 10px; color: var(--text); text-decoration: none; }
+  footer .links a:hover { color: var(--gold-bright); }
+</style>
+</head>
+<body>
+
+  <div class="hero">
+    <img class="logo" src="assets/logo-full.png" alt="GEnius logo">
+    <h1>RuneScape 3 &middot; Grand Exchange Market Intelligence</h1>
+    <p class="tagline">Track prices, spot opportunities, manage your portfolio, and get a feel for the market — all in one place.</p>
+    <div class="btn-row">
+      <a class="btn btn-primary" href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest" id="download-btn">⬇ Download for Windows</a>
+      <a class="btn btn-secondary" href="https://github.com/VonDerThWood/GE-Intelligence">View on GitHub</a>
+    </div>
+    <div class="meta-line" id="version-line">Free &middot; No account, no server, everything stays on your machine</div>
+    <div class="theme-toggle-wrap">
+      <button class="btn btn-secondary theme-toggle-btn" id="theme-toggle-btn" onclick="toggleSiteTheme()">🌑 Try Black Theme</button>
+      <div class="meta-line theme-note">Recolors this page to match GEnius's Black theme — the screenshots below always show the app's default look.</div>
+    </div>
+  </div>
+
+  <section>
+    <h2 class="section-title">Everything in one place</h2>
+    <p class="section-sub">GEnius pulls live Grand Exchange data and turns it into something you can actually act on.</p>
+    <div class="grid">
+      <div class="card">
+        <span class="icon">📈</span>
+        <h3>Live Market Tracking</h3>
+        <p>Real-time buy/sell prices with per-price freshness timestamps, refreshed every 15 minutes, across 7,000+ tradeable items.</p>
+      </div>
+      <div class="card">
+        <span class="icon">⚡</span>
+        <h3>Market Signals</h3>
+        <p>Automatic flags for surges, dumps, volume frenzies, suspected manipulation, and listed-price/live-price discrepancies.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🐲</span>
+        <h3>Monster Lookup</h3>
+        <p>Search any monster for its drop table, an estimated gp/kill, and combat stats — straight from the wiki, including Normal/Hard mode splits.</p>
+      </div>
+      <div class="card">
+        <span class="icon">💰</span>
+        <h3>Portfolio Tracker</h3>
+        <p>Log real positions, track unrealised P&amp;L, GE tax handled automatically, and see your full closed-trade history.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔔</span>
+        <h3>Alerts &amp; Watchlist</h3>
+        <p>Star items to watch, and set alerts on price thresholds, percent moves, or specific market signals — with optional Discord notifications.</p>
+      </div>
+      <div class="card">
+        <span class="icon">📊</span>
+        <h3>Deep Price Charts</h3>
+        <p>7-day through all-time views, seasonal weekly averages, all-time high/low markers, and a date lookup for any historical price.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔍</span>
+        <h3>Fast Search</h3>
+        <p>Instant search-as-you-type across the entire catalogue, with 40+ built-in community shorthands (FSOA, AGS, EOF...) and your own custom ones.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🎯</span>
+        <h3>Opportunity Scoring</h3>
+        <p>Every item gets a 0–100 score from momentum, volume behaviour, active signals, and alch profitability — sortable at a glance.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🌦️</span>
+        <h3>GEnius Almanac</h3>
+        <p>Historical DXP-event intelligence — see how items have actually moved across past Double XP Weekends, with buy/sell timing suggestions.</p>
+      </div>
+    </div>
+    <div class="sig-row">
+      <span class="sig surge">SURGE</span>
+      <span class="sig dump">DUMP</span>
+      <span class="sig frenzy">FRENZY</span>
+      <span class="sig manip">MANIPULATED</span>
+      <span class="sig over">OVERPRICED</span>
+      <span class="sig under">UNDERPRICED</span>
+      <span class="sig alch">ALCH</span>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="section-title">See it in action</h2>
+    <p class="section-sub">Real screens, straight from the app.</p>
+    <div class="shots">
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-01-dashboard-1.png" alt="GEnius Dashboard showing market pulse, active signals, top movers, and sector heat map">
+          <figcaption>Dashboard — market pulse, active signals, top movers, and the sector heat map at a glance.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-02-dashboard-2.png" alt="GEnius Dashboard, further down showing more market overview widgets">
+          <figcaption>Dashboard — Item of the Day, Mood of the Market, and more.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-03-market.png" alt="GEnius Market tab showing a sortable item table with live buy/sell prices and signal badges">
+          <figcaption>Market — every tradeable item, with live buy/sell prices and signal badges under each price.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-04-opportunities.png" alt="GEnius Opportunities tab showing signal summary counts and a top-20 opportunity score table">
+          <figcaption>Opportunities — signal counts at a glance, ranked by a composite 0–100 opportunity score.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-05-watchlist.png" alt="GEnius Watchlist tab showing starred items">
+          <figcaption>Watchlist — every item you've starred, in one focused view.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-06-portfolio.png" alt="GEnius Portfolio tab showing tracked positions and profit/loss">
+          <figcaption>Portfolio — real positions, unrealised P&amp;L, and full closed-trade history.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-07-alch.png" alt="GEnius Alch tab showing high alchemy profit calculations across items">
+          <figcaption>Alch — every item where high alchemy beats the GE sell price, ranked by profit.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-08-almanac-1.png" alt="GEnius Almanac tab showing historical DXP event intelligence">
+          <figcaption>GEnius Almanac — historical DXP-event intelligence, confirmed vs. speculative patterns.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-09-almanac-2.png" alt="GEnius Almanac tab, further detail on DXP event trade timing">
+          <figcaption>GEnius Almanac — buy/sell day timing suggestions for individual items.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-10-monster-lookup.png" alt="GEnius Monster Lookup tab showing General Graardor's drop table, combat stats, and Normal/Hard Mode toggle">
+          <figcaption>Monster Lookup — drop tables, gp/kill estimates, and combat stats straight from the wiki.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-11-item-graph.png" alt="GEnius item detail panel with an expanded price chart, seasonal averages, and support/resistance">
+          <figcaption>Item price charts — 7d to all-time views, seasonal averages, and all-time high/low with dates.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-12-invention-1.png" alt="GEnius Invention tab showing Invention components and their GE prices">
+          <figcaption>Invention — components, untradeable items, and machine profit calculators.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img src="assets/ss-13-invention-2.png" alt="GEnius Invention tab Plank Maker machine calculator showing profit per log type">
+          <figcaption>Invention — Plank Maker, Hide Tanner, and Partial Potion Producer calculators with live prices.</figcaption>
+        </figure>
+      </div>
+    </div>
+  </section>
+
+  <section class="alt">
+    <h2 class="section-title">Getting started</h2>
+    <p class="section-sub">No account. No subscription. No server GEnius talks to besides public price data.</p>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <p><strong>Download</strong> the latest <code>GEnius Setup x.x.x.exe</code> from the button above, or the <a href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest">Releases page</a>.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <p><strong>Run the installer.</strong> Windows may show a SmartScreen warning since the app isn't code-signed — click "More info" → "Run anyway."</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <p><strong>Launch GEnius.</strong> On first run it fetches current prices and starts building historical data in the background — this can take 10+ minutes for the full catalogue, but the app is usable while it finishes.</p>
+      </div>
+      <div class="step">
+        <div class="num">4</div>
+        <p>That's it. Prices refresh automatically every 15 minutes after that.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <p class="disclaimer">GEnius is a third-party tool and is not affiliated with Jagex or RuneScape. Price data is sourced from public wiki APIs and may not reflect real-time GE prices exactly. Do your own research before making large trades.</p>
+    <div class="links">
+      <a href="https://github.com/VonDerThWood/GE-Intelligence">GitHub</a>
+      <a href="https://github.com/VonDerThWood/GE-Intelligence/releases">Releases</a>
+      <a href="https://github.com/VonDerThWood/GE-Intelligence/issues">Report an Issue</a>
+    </div>
+  </footer>
+
+  <script>
+    // Site-chrome-only theme toggle, mirroring the app's own Black theme —
+    // screenshots are static images of the default theme and never change.
+    // Persisted so a repeat visitor keeps their choice.
+    function applyTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      const btn = document.getElementById('theme-toggle-btn');
+      if (btn) btn.textContent = theme === 'black' ? '☀ Back to Default Theme' : '🌑 Try Black Theme';
+    }
+    function toggleSiteTheme() {
+      const next = document.documentElement.getAttribute('data-theme') === 'black' ? 'default' : 'black';
+      try { localStorage.setItem('genius_site_theme', next); } catch {}
+      applyTheme(next);
+    }
+    (function initTheme() {
+      let saved = 'default';
+      try { saved = localStorage.getItem('genius_site_theme') || 'default'; } catch {}
+      applyTheme(saved);
+    })();
+
+    // Best-effort: show the actual latest release tag instead of generic copy.
+    // Fails silently (rate-limited or offline) — the button/link above already
+    // works fine without this, it's a nice-to-have, not load-bearing.
+    fetch('https://api.github.com/repos/VonDerThWood/GE-Intelligence/releases/latest')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data || !data.tag_name) return;
+        document.getElementById('version-line').textContent =
+          `Latest: ${data.tag_name} · No account, no server, everything stays on your machine`;
+      })
+      .catch(() => {});
+  </script>
+
+</body>
+</html>
