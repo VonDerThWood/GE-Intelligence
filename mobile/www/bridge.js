@@ -8932,6 +8932,9 @@
         const itemHistoryCache = /* @__PURE__ */ new Map();
         const itemStatsCache = /* @__PURE__ */ new Map();
         const dropSourcesCache = /* @__PURE__ */ new Map();
+        const monsterSearchCache = /* @__PURE__ */ new Map();
+        const monsterDropsCache = /* @__PURE__ */ new Map();
+        const monsterInfoCache = /* @__PURE__ */ new Map();
         for (const [name, stats] of Object.entries(await storage2.readJSON(itemStatsFile, {}))) {
           itemStatsCache.set(name, stats);
         }
@@ -9408,6 +9411,160 @@
           dropSourcesCache.set(itemName, result);
           return result;
         }
+        const MONSTER_DROPS_CAP = 40;
+        function _parseAvgQuantity(text) {
+          const bare = text.replace(/\s*\([^)]*\)\s*$/, "").trim();
+          const range = bare.match(/^(\d[\d,]*)\s*[-–]\s*(\d[\d,]*)$/);
+          if (range) return (parseFloat(range[1].replace(/,/g, "")) + parseFloat(range[2].replace(/,/g, ""))) / 2;
+          const n = parseFloat(bare.replace(/,/g, ""));
+          return Number.isFinite(n) ? n : 1;
+        }
+        function _parseDropProbability(cellHtml) {
+          const pct = cellHtml.match(/data-drop-percent="([\d.]+)"/);
+          if (pct) return parseFloat(pct[1]) / 100;
+          if (/^Always$/i.test(_stripHtmlTags(cellHtml))) return 1;
+          const frac = cellHtml.match(/data-drop-fraction="(\d+)\/([\d,]+)"/);
+          if (frac) return parseFloat(frac[1]) / parseFloat(frac[2].replace(/,/g, ""));
+          return null;
+        }
+        function _parseWikiStatedGpPerKill(html) {
+          const m = html.match(/average[\s\S]{0,120}?kill[\s\S]{0,120}?is worth <span class="nocoins coins-pos">([\d,]+)<\/span>/i);
+          if (!m) return null;
+          const n = parseFloat(m[1].replace(/,/g, ""));
+          return Number.isFinite(n) ? n : null;
+        }
+        function parseMonsterDrops(html) {
+          const wikiStatedGpPerKill = _parseWikiStatedGpPerKill(html);
+          const allTables = [...html.matchAll(/<table[^>]*class="[^"]*\bitem-drops\b[^"]*"[^>]*>([\s\S]*?)<\/table>/g)];
+          const tables = allTables.filter((t) => !html.slice(Math.max(0, t.index - 600), t.index).includes("mw-collapsible"));
+          if (tables.length === 0) {
+            return { drops: [], estimatedGpPerKill: wikiStatedGpPerKill || 0, gpPerKillSource: wikiStatedGpPerKill ? "wiki" : "none", untradeableDropCount: 0, totalCount: 0, hadAnyTable: false };
+          }
+          const drops = [];
+          let untradeableDropCount = 0;
+          for (const table of tables) {
+            const rowRe = /<tr([^>]*)>([\s\S]*?)<\/tr>/g;
+            let rm, isHeaderRow = true;
+            while ((rm = rowRe.exec(table[1])) !== null) {
+              if (isHeaderRow) {
+                isHeaderRow = false;
+                continue;
+              }
+              const cells = [];
+              const cellRe = /<td[^>]*>([\s\S]*?)<\/td>/g;
+              let cm;
+              while ((cm = cellRe.exec(rm[2])) !== null) cells.push(cm[1]);
+              if (cells.length < 5) continue;
+              const item = _stripHtmlTags(cells[1]);
+              if (!item) continue;
+              const quantity = _stripHtmlTags(cells[2]);
+              const avgQuantity = _parseAvgQuantity(quantity);
+              const probability = _parseDropProbability(cells[3]);
+              const fraction = cells[3].match(/data-drop-fraction="([^"]+)"/);
+              const rarity = fraction ? fraction[1] : _stripHtmlTags(cells[3]) || "\u2014";
+              const priceText = _stripHtmlTags(cells[4]);
+              const gePrice = priceText === quantity ? 1 : Number.isFinite(parseFloat(priceText.replace(/,/g, ""))) ? parseFloat(priceText.replace(/,/g, "")) : null;
+              if (gePrice === null) untradeableDropCount++;
+              const contribution = probability != null && gePrice != null ? avgQuantity * gePrice * probability : 0;
+              drops.push({ item, quantity, rarity, gePrice, contribution });
+            }
+          }
+          const computedGpPerKill = drops.reduce((sum, d) => sum + d.contribution, 0);
+          drops.sort((a, b) => b.contribution - a.contribution);
+          const totalCount = drops.length;
+          if (drops.length > MONSTER_DROPS_CAP) drops.length = MONSTER_DROPS_CAP;
+          return {
+            drops,
+            untradeableDropCount,
+            totalCount,
+            hadAnyTable: true,
+            estimatedGpPerKill: wikiStatedGpPerKill != null ? wikiStatedGpPerKill : computedGpPerKill,
+            gpPerKillSource: wikiStatedGpPerKill != null ? "wiki" : "computed",
+            computedGpPerKill
+          };
+        }
+        async function searchMonsters(query) {
+          if (!query || !query.trim()) return [];
+          const key = query.trim().toLowerCase();
+          if (monsterSearchCache.has(key)) return monsterSearchCache.get(key);
+          let result = [];
+          try {
+            const url = `https://runescape.wiki/api.php?action=opensearch&search=${encodeURIComponent(query.trim())}&limit=8&format=json`;
+            const res = await fetch(url, {
+              headers: { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" },
+              signal: AbortSignal.timeout(1e4)
+            });
+            const [, titles, descriptions] = await res.json();
+            result = titles.map((title, i) => ({ title, description: descriptions[i] || "" }));
+          } catch (e) {
+            result = [];
+          }
+          monsterSearchCache.set(key, result);
+          return result;
+        }
+        async function getMonsterDrops(monsterName) {
+          if (!monsterName) return null;
+          if (monsterDropsCache.has(monsterName)) return monsterDropsCache.get(monsterName);
+          let result;
+          try {
+            const url = `https://runescape.wiki/w/${encodeURIComponent(monsterName.replace(/ /g, "_"))}`;
+            const res = await fetch(url, {
+              headers: { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" },
+              signal: AbortSignal.timeout(1e4)
+            });
+            const html = await res.text();
+            result = { monsterName, ...parseMonsterDrops(html) };
+          } catch (e) {
+            result = { monsterName, drops: [], estimatedGpPerKill: 0, untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, error: e.message };
+          }
+          monsterDropsCache.set(monsterName, result);
+          return result;
+        }
+        function _infoboxField(wikitext, key) {
+          const m = wikitext.match(new RegExp(`\\|\\s*${key}1?\\s*=\\s*([^\\n|]*)`, "i"));
+          if (!m) return null;
+          return m[1].replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, "$1").trim() || null;
+        }
+        function parseMonsterInfo(wikitext) {
+          if (!/\{\{\s*Infobox Monster\b/i.test(wikitext)) return null;
+          const level = _infoboxField(wikitext, "level");
+          const hp = _infoboxField(wikitext, "lifepoints");
+          const weakness = _infoboxField(wikitext, "weakness");
+          const yesNo = (v) => v == null ? null : /^y/i.test(v);
+          return {
+            combatLevel: level ? parseInt(level.replace(/,/g, ""), 10) : null,
+            hitpoints: hp ? parseInt(hp.replace(/,/g, ""), 10) : null,
+            weakness: weakness || null,
+            aggressive: yesNo(_infoboxField(wikitext, "aggressive")),
+            poisonous: yesNo(_infoboxField(wikitext, "poisonous")),
+            poisonImmune: yesNo(_infoboxField(wikitext, "immune_to_poison")),
+            stunImmune: yesNo(_infoboxField(wikitext, "immune_to_stun")),
+            deflectImmune: yesNo(_infoboxField(wikitext, "immune_to_deflect")),
+            drainImmune: yesNo(_infoboxField(wikitext, "immune_to_drain"))
+          };
+        }
+        async function getMonsterInfo(monsterName) {
+          if (!monsterName) return null;
+          if (monsterInfoCache.has(monsterName)) return monsterInfoCache.get(monsterName);
+          let result = null;
+          try {
+            const url = `https://runescape.wiki/api.php?action=query&titles=${encodeURIComponent(monsterName)}&prop=revisions&rvprop=content&format=json&formatversion=2`;
+            const res = await fetch(url, {
+              headers: { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" },
+              signal: AbortSignal.timeout(8e3)
+            });
+            const json = await res.json();
+            const pages = json.query?.pages;
+            if (pages?.length && !pages[0].missing) {
+              const content = pages[0].revisions?.[0]?.content || "";
+              result = parseMonsterInfo(content);
+            }
+          } catch {
+            result = null;
+          }
+          monsterInfoCache.set(monsterName, result);
+          return result;
+        }
         function getWeekStr(date) {
           const d = new Date(date);
           d.setHours(0, 0, 0, 0);
@@ -9811,6 +9968,10 @@
           // wiki stats
           getItemStats,
           getDropSources,
+          // monster lookup
+          searchMonsters,
+          getMonsterDrops,
+          getMonsterInfo,
           // portfolio
           getPortfolio,
           savePosition,
@@ -11245,7 +11406,7 @@ ${data.length} indexes:
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "2.0.0",
+        version: "2.1.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",
@@ -11504,6 +11665,9 @@ ${data.length} indexes:
       // Item stats from RS Wiki
       getItemStats: (name) => a.getItemStats(name),
       getDropSources: (name) => a.getDropSources(name),
+      searchMonsters: (query) => a.searchMonsters(query),
+      getMonsterDrops: (name) => a.getMonsterDrops(name),
+      getMonsterInfo: (name) => a.getMonsterInfo(name),
       getItemHistory: (id) => a.getItemHistory(id),
       getItemHistoryLocal: (id) => a.getItemHistoryLocal(id),
       getHistoryStatus: () => a.getHistoryStatus(),
@@ -11617,6 +11781,11 @@ ${data.length} indexes:
       getShorthands: () => store.get("userShorthands", {}),
       saveShorthands: (sh) => {
         store.set("userShorthands", sh);
+        return { success: true };
+      },
+      getMonsterShorthands: () => store.get("monsterShorthands", {}),
+      saveMonsterShorthands: (sh) => {
+        store.set("monsterShorthands", sh);
         return { success: true };
       },
       // Category overrides editor

@@ -104,6 +104,16 @@ async function createGeniusApi({ dataDir, store }) {
   // something worth persisting across restarts. Still worth caching in
   // memory so re-opening the same item this session doesn't re-fetch.
   const dropSourcesCache = new Map();
+  // Same session-only philosophy as dropSourcesCache, for the inverse
+  // lookup (monster -> its drops) used by Monster Lookup.
+  const monsterSearchCache = new Map();
+  const monsterDropsCache = new Map();
+  const monsterInfoCache = new Map();
+  // Live GE prices move minute-to-minute, so this is a short TTL cache
+  // (holds {result, fetchedAt}) rather than the session-forever caches
+  // above — just enough to survive a component re-render without
+  // re-hitting the wiki's live-prices API every time.
+  const livePriceCache = new Map();
   for (const [name, stats] of Object.entries(await storage.readJSON(itemStatsFile, {}))) {
     itemStatsCache.set(name, stats);
   }
@@ -248,7 +258,22 @@ async function createGeniusApi({ dataDir, store }) {
 
     while (historyFetchQueue.length > 0 && !historyFetchStop) {
       const id = historyFetchQueue.shift();
-      if (historyData[String(id)]) { done++; continue; } // already have it
+      if (historyData[String(id)]) {
+        // Already have it (loaded from disk on a previous session, most
+        // items on an established install) — still report progress so the
+        // renderer's populatedHistoryIds stays in sync. Previously this
+        // `continue`d silently, so on an install where most items were
+        // already fetched, onProgress could go the entire queue without
+        // firing even once — leaving the renderer's populated-ids snapshot
+        // stuck at whatever it captured right after get-data (often taken
+        // before loadHistory()'s disk read had even finished), wrongly
+        // showing "price history still loading" for items that had been
+        // fully loaded the whole time. Confirmed for real: Gold Bar, which
+        // has 2011-2024 history on disk, still showed the message.
+        done++;
+        if (onProgress) onProgress(done, total);
+        continue;
+      }
       await fetchHistoryForItem(id);
       done++;
       if (!historyInitial300Done && Object.keys(historyData).length >= 300) {
@@ -277,6 +302,13 @@ async function createGeniusApi({ dataDir, store }) {
   }
 
   async function getHistoryPopulatedIds() {
+    // Without this, the renderer's very first refresh (fired right after
+    // get-data resolves) could race loadHistory()'s disk read of the
+    // per-item history files — capturing a near-empty snapshot and
+    // wrongly flagging already-fully-loaded items as "still loading" for
+    // the rest of the session (see runHistoryQueue's onProgress fix above
+    // for the other half of this bug).
+    await historyLoadedPromise;
     return Object.keys(historyData).map(Number);
   }
 
@@ -685,6 +717,42 @@ async function createGeniusApi({ dataDir, store }) {
     return result;
   }
 
+  // Live GE prices — runescape.wiki's real-time prices API (launched 2026-07,
+  // same shape as the long-standing OSRS one), giving true instant-buy/
+  // instant-sell prices WITH timestamps, unlike the 15-min gazbot dump that
+  // powers item.high/item.low everywhere else in the app. Deliberately
+  // scoped to just the Detail Panel's single open item for now rather than
+  // replacing the app-wide price pipeline — see TODO.txt for the planned
+  // follow-up to swap the whole pipeline over once this proves out.
+  const LIVE_PRICE_TTL_MS = 60 * 1000;
+  async function getLiveItemPrice(itemId) {
+    if (!itemId) return null;
+    const cached = livePriceCache.get(itemId);
+    if (cached && Date.now() - cached.fetchedAt < LIVE_PRICE_TTL_MS) return cached.result;
+
+    let result = null;
+    try {
+      const url = `https://prices.runescape.wiki/api/v2/rs/latest?id=${itemId}`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(8000),
+      });
+      const json = await res.json();
+      const raw = json.data?.[String(itemId)];
+      if (raw) {
+        result = {
+          high: raw.high ?? null,
+          highTime: raw.highTime ? raw.highTime * 1000 : null,
+          low: raw.low ?? null,
+          lowTime: raw.lowTime ? raw.lowTime * 1000 : null,
+        };
+      }
+    } catch { result = null; }
+
+    livePriceCache.set(itemId, { result, fetchedAt: Date.now() });
+    return result;
+  }
+
   // ─── Drop sources ────────────────────────────────────────────────────────
   // "Where does this come from" lookup for the detail panel — click-to-fetch
   // only (never auto-loaded like getItemStats above), and never persisted to
@@ -713,8 +781,17 @@ async function createGeniusApi({ dataDir, store }) {
   // first table, plus filtering drop-removed rows defensively, keeps
   // discontinued sources out of the result.
   function _stripHtmlTags(html) {
+    // Numeric entities decoded generically (&#91; -> '[', &#39; -> "'", etc.)
+    // rather than a hardcoded whitelist — confirmed for real that the
+    // whitelist missed &#91;/&#93; ([/]), which showed up literally as
+    // "COMMON &#91; D I &#93;" in a General Graardor drop-table rarity
+    // cell instead of decoding to whatever bracketed qualifier the wiki
+    // actually wrote. &amp;/&nbsp; are named entities so still handled
+    // explicitly.
     return html.replace(/<[^>]+>/g, ' ')
-      .replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&#160;/g, ' ').replace(/&nbsp;/g, ' ')
+      .replace(/&#x([0-9a-fA-F]+);/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
+      .replace(/&#(\d+);/g, (_, dec) => String.fromCharCode(parseInt(dec, 10)))
+      .replace(/&amp;/g, '&').replace(/&nbsp;/g, ' ')
       .replace(/\s+/g, ' ').trim();
   }
 
@@ -774,6 +851,444 @@ async function createGeniusApi({ dataDir, store }) {
     } catch (e) { result = { sources: [], error: e.message }; }
 
     dropSourcesCache.set(itemName, result);
+    return result;
+  }
+
+  // ─── Monster Lookup ────────────────────────────────────────────────────────
+  // The inverse of Drop sources above: given a monster, show what it drops
+  // and an estimated gp/kill. There is no single wiki field for gp/kill that
+  // works across all monsters — only some boss pages have a prose sentence
+  // ("The average kill... is worth X"), ordinary monsters have nothing, and
+  // it's not consistently machine-parseable either way. Instead, GEnius
+  // computes its own estimate straight from the same item-drops table data
+  // parseDropSources already relies on (confirmed directly against the live
+  // wiki: monster pages use the identical `item-drops` table class, just
+  // listing what's dropped rather than where an item comes from).
+  //
+  // Unlike an item page (where multiple item-drops tables are historical —
+  // current vs. no-longer-dropped), a monster page's multiple item-drops
+  // tables are concurrent categories (e.g. Cow has "100% drops", "Tertiary
+  // drops", and "Charms" as three separate tables) — all of them are
+  // aggregated together here, not just the first.
+  const MONSTER_DROPS_CAP = 40;
+
+  function _parseAvgQuantity(text) {
+    // Strip a trailing annotation like "(noted)" or "(m)" before matching a
+    // range — confirmed for real on General Graardor: "15–20 (noted)" was
+    // falling through to a bare parseFloat (which stops at the first
+    // non-digit) and silently using 15 instead of the 17.5 average.
+    const bare = text.replace(/\s*\([^)]*\)\s*$/, '').trim();
+    const range = bare.match(/^(\d[\d,]*)\s*[-–]\s*(\d[\d,]*)$/);
+    if (range) return (parseFloat(range[1].replace(/,/g, '')) + parseFloat(range[2].replace(/,/g, ''))) / 2;
+    const n = parseFloat(bare.replace(/,/g, ''));
+    return Number.isFinite(n) ? n : 1; // unparseable quantity text — assume 1 rather than silently zeroing the estimate
+  }
+
+  function _parseDropProbability(cellHtml) {
+    const pct = cellHtml.match(/data-drop-percent="([\d.]+)"/);
+    if (pct) return parseFloat(pct[1]) / 100;
+    if (/^Always$/i.test(_stripHtmlTags(cellHtml))) return 1;
+    const frac = cellHtml.match(/data-drop-fraction="(\d+)\/([\d,]+)"/);
+    if (frac) return parseFloat(frac[1]) / parseFloat(frac[2].replace(/,/g, ''));
+    return null; // row still shown, just excluded from the gp/kill sum
+  }
+
+  // Some boss pages state their own computed average directly in prose
+  // ("The average General Graardor kill in normal mode, including its
+  // unique drops, is worth <span class="nocoins coins-pos">32,953</span>.")
+  // — confirmed this is a real Jagex-sourced figure, not a loose estimate,
+  // per the TODO's original caution to check before trusting it. When
+  // present, prefer it over our own computed sum below (see why in
+  // parseMonsterDrops's Rare/Gem drop table comment).
+  //
+  // Two bugs found for real on Vindicta & Gorvek (Ben, 2026-07-2x):
+  // (1) the span's content is "191,878 coins" — number AND the word
+  // "coins" both inside the span — not the bare number the old regex
+  // required immediately before the closing tag, so it silently matched
+  // nothing at all and fell through to the (also broken, see below)
+  // computed path. Fixed by tolerating trailing text before </span>.
+  // (2) that stated figure was explicitly labeled "(0% drop increase)" —
+  // the OLD, un-boosted reputation rate. Reputation was removed from the
+  // game as of this same date, so a "0% drop increase" figure is now
+  // stale and reads as too low relative to what current drop rates
+  // actually are. Deliberately skip any wiki-stated average whose nearby
+  // text mentions reputation/drop-increase — safer to fall through to
+  // GEnius's own computed estimate (now deduped to keep only each item's
+  // best-available rate, see parseMonsterDrops) than present a
+  // confidently-labeled but rate-stale number as authoritative.
+  function _parseWikiStatedGpPerKill(html) {
+    const m = html.match(/average[\s\S]{0,120}?kill[\s\S]{0,120}?is worth <span class="nocoins coins-pos">([\d,]+)[^<]*<\/span>/i);
+    if (!m) return null;
+    const context = html.slice(Math.max(0, m.index - 200), m.index + m[0].length);
+    if (/reputation|drop increase/i.test(context)) return null;
+    const n = parseFloat(m[1].replace(/,/g, ''));
+    return Number.isFinite(n) ? n : null;
+  }
+
+  // Confirmed for real on Vindicta & Gorvek (Ben, 2026-07-2x): a page with
+  // separate "Drops (normal mode)" and "Drops (hard mode)" headings (same
+  // pattern as General Graardor, K'ril Tsutsaroth, etc.) was having BOTH
+  // sections' item-drops tables scanned indiscriminately across the whole
+  // page and merged into one list — unlike the reputation-table duplication
+  // fixed just before this, normal/hard mode are genuinely separate
+  // encounters a player chooses between, not two states of the same thing,
+  // so they must never be combined. Scopes parsing to just one mode's own
+  // section of the page; a page with no hard-mode heading at all has no
+  // mode split to worry about, so 'normal' just returns the whole page and
+  // 'hard' correctly returns nothing (this monster has no hard mode).
+  function _extractModeSection(html, mode) {
+    const normalIdx = html.indexOf('id="Drops_(normal_mode)"');
+    const hardIdx = html.indexOf('id="Drops_(hard_mode)"');
+    if (hardIdx === -1) return mode === 'hard' ? null : html; // no mode split on this page
+    if (mode === 'hard') {
+      const after = html.slice(hardIdx);
+      const closeIdx = after.indexOf('</h2>');
+      const nextH2Idx = closeIdx === -1 ? -1 : after.indexOf('mw-heading2', closeIdx + 5);
+      return nextH2Idx === -1 ? after : after.slice(0, nextH2Idx);
+    }
+    if (normalIdx === -1) return null; // hard-mode heading exists but normal-mode one doesn't — unexpected page shape, bail rather than guess
+    return html.slice(normalIdx, hardIdx);
+  }
+
+  function parseMonsterDrops(html, mode = 'normal') {
+    const hasHardMode = html.indexOf('id="Drops_(hard_mode)"') !== -1;
+    const section = _extractModeSection(html, mode);
+    if (section === null) {
+      return { drops: [], estimatedGpPerKill: 0, gpPerKillSource: 'none', untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode };
+    }
+    const wikiStatedGpPerKill = _parseWikiStatedGpPerKill(section);
+    const allTables = [...section.matchAll(/<table[^>]*class="[^"]*\bitem-drops\b[^"]*"[^>]*>([\s\S]*?)<\/table>/g)];
+    // Shared tables like the Rare drop table / Gem drop table are only
+    // rolled with some probability stated ONLY in prose right above them
+    // ("There is a 6/128 chance of rolling the gem drop table. There is
+    // also a 1/100 chance of rolling the rare drop table.") and are
+    // rendered inside a `mw-collapsible` wrapper — their own rows' rarity
+    // fractions are relative to THAT roll, not the monster's absolute
+    // per-kill odds. Confirmed for real on General Graardor: summing that
+    // table's rows as if they were absolute odds alone accounted for most
+    // of a 500-million-gp/kill estimate on a boss that really averages
+    // ~33-48k. There's no reliable machine-readable "chance to access this
+    // table" anywhere, so these tables are excluded from the estimate
+    // entirely rather than guessed at.
+    const tables = allTables.filter(t => !section.slice(Math.max(0, t.index - 600), t.index).includes('mw-collapsible'));
+    if (tables.length === 0) {
+      return { drops: [], estimatedGpPerKill: wikiStatedGpPerKill || 0, gpPerKillSource: wikiStatedGpPerKill ? 'wiki' : 'none', untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode, unknownRarityCount: 0, unknownRarityValue: 0 };
+    }
+
+    const drops = [];
+    let untradeableDropCount = 0;
+    // Some drops are real, tradeable, priced items whose drop RATE the wiki
+    // itself lists as "Unknown" rather than a fraction/percent — confirmed
+    // for real on Vindicta & Gorvek: two Furniture plans worth 5.7M/4.4M
+    // each are marked this way and were silently contributing zero to the
+    // estimate (no probability to weight them by), making the total read
+    // as a real number when it was actually missing several million gp of
+    // undocumented-rate value. Tracked separately from untradeableDropCount
+    // (which is "no GE price at all") so the UI can be honest that this
+    // specific estimate is a floor, not a complete figure — inventing a
+    // guessed rate would be worse than flagging the gap outright.
+    let unknownRarityCount = 0, unknownRarityValue = 0;
+
+    for (const table of tables) {
+      const rowRe = /<tr([^>]*)>([\s\S]*?)<\/tr>/g;
+      let rm, isHeaderRow = true;
+      while ((rm = rowRe.exec(table[1])) !== null) {
+        if (isHeaderRow) { isHeaderRow = false; continue; } // header row uses <th>, never matched by the <td> loop below
+
+        // Capture each <td>'s own attributes (group 1) alongside its inner
+        // content (group 2) — the per-unit price below lives in the GE-price
+        // cell's title="X coins each" ATTRIBUTE, not its content, and the
+        // original single-group version had no way to ever see it.
+        const cells = [], cellAttrs = [];
+        const cellRe = /<td([^>]*)>([\s\S]*?)<\/td>/g;
+        let cm;
+        while ((cm = cellRe.exec(rm[2])) !== null) { cellAttrs.push(cm[1]); cells.push(cm[2]); }
+        if (cells.length < 5) continue; // image, item, quantity, rarity, GE price (alch, cells[5], unused)
+
+        const item = _stripHtmlTags(cells[1]);
+        if (!item) continue;
+        const quantity = _stripHtmlTags(cells[2]);
+        const avgQuantity = _parseAvgQuantity(quantity);
+        const probability = _parseDropProbability(cells[3]);
+        const fraction = cells[3].match(/data-drop-fraction="([^"]+)"/);
+        // Wiki footnote markers (<sup>...[d 1]...</sup>, a citation link to a
+        // note elsewhere on the page explaining some drop-mechanic quirk) are
+        // meaningless on their own without the note text, which GEnius never
+        // fetches — confirmed for real on General Graardor's Femur bone row
+        // showing a bare "[d 1]" with no context. Strip the whole <sup> before
+        // extracting rarity text rather than decode-and-show a marker that
+        // points nowhere.
+        const rarityCell = cells[3].replace(/<sup\b[^>]*>[\s\S]*?<\/sup>/g, '');
+        const rarity = fraction ? fraction[1] : (_stripHtmlTags(rarityCell) || '—');
+        // Cell TEXT is the wiki's own precomputed TOTAL value across the
+        // quantity range (e.g. Magic logs at 902gp each, qty 15–20, shows
+        // "13,530–18,040" — 902×15 to 902×20), not a per-unit price. Its
+        // title attribute, when present, IS the true per-unit price
+        // ("902 coins each") — confirmed for real on General Graardor.
+        // Originally only handled this for Coins specifically (detected by
+        // price text === quantity text, since 1 coin is always worth 1gp),
+        // which avoided squaring the value for that one row — but the exact
+        // same bug existed for every OTHER row with a quantity range too,
+        // just silently: contribution below multiplies by avgQuantity, so
+        // feeding it this already-quantity-multiplied total instead of the
+        // true per-unit price inflated every such row's contribution by
+        // roughly (avgQuantity)x. Reading the title attribute fixes the
+        // general case; the structural Coins check stays as the fallback
+        // for rows with no title (Coins' own cell has none, since 1gp/coin
+        // needs no "each" annotation).
+        const geValueText = _stripHtmlTags(cells[4]);
+        const perUnitMatch = cellAttrs[4].match(/title="([\d,]+(?:\.\d+)?)\s*coins each"/i);
+        const gePricePerUnit = perUnitMatch
+          ? parseFloat(perUnitMatch[1].replace(/,/g, ''))
+          : (geValueText === quantity ? 1 : (Number.isFinite(parseFloat(geValueText.replace(/,/g, ''))) ? parseFloat(geValueText.replace(/,/g, '')) : null));
+        if (gePricePerUnit === null) untradeableDropCount++;
+        else if (probability == null) { unknownRarityCount++; unknownRarityValue += gePricePerUnit; }
+
+        const contribution = (probability != null && gePricePerUnit != null) ? avgQuantity * gePricePerUnit * probability : 0;
+        // gePrice: per-unit price, used for sorting/contribution — comparable
+        // across rows regardless of quantity. geValueText: the wiki's own
+        // displayed total-value text (a range like "13,530–18,040" whenever
+        // quantity is a range, or a single number when it's fixed) — shown
+        // as-is in the UI rather than an "average" that loses the range Ben
+        // specifically wanted kept visible.
+        drops.push({ item, quantity, rarity, gePrice: gePricePerUnit, geValueText, contribution, probability });
+      }
+    }
+
+    // Dedupe by item name WITHIN this one mode's section, keeping only the
+    // row with the HIGHEST drop probability. Confirmed for real on Vindicta
+    // & Gorvek (Ben, 2026-07-2x): every item was listed twice within the
+    // SAME normal-mode section, once from a "0% reputation" table and once
+    // from a "100% reputation" table (reputation boosted drop rates) — e.g.
+    // Dragon Rider lance at both 1/460 and 1/255. Summing both into the
+    // gp/kill estimate roughly doubled it, and the UI showed the same item
+    // twice. Reputation was removed from the game as of this same date, so
+    // there's no longer a real choice between rates to preserve — the
+    // better (higher-probability) one is simply what applies now. This is
+    // deliberately scoped to run AFTER _extractModeSection above already
+    // isolated normal-mode-only or hard-mode-only tables — normal/hard mode
+    // are genuinely separate encounters, never deduped against each other.
+    const bestByItem = new Map();
+    for (const d of drops) {
+      const existing = bestByItem.get(d.item);
+      const dProb = d.probability ?? -1;
+      const existingProb = existing ? (existing.probability ?? -1) : -Infinity;
+      if (!existing || dProb > existingProb) bestByItem.set(d.item, d);
+    }
+    const deduped = [...bestByItem.values()];
+    drops.length = 0;
+    drops.push(...deduped);
+
+    const computedGpPerKill = drops.reduce((sum, d) => sum + d.contribution, 0);
+    // Default order is by per-unit GE price, highest first — NOT by gp
+    // contribution. Contribution factors in rarity/quantity too, so a common
+    // cheap item can outrank a genuinely expensive rare one; since the list
+    // is capped below, sorting by contribution risked silently dropping the
+    // actual highest-value drops off the visible list. Nulls (untradeable
+    // drops) always sort last regardless.
+    drops.sort((a, b) => {
+      if (a.gePrice == null && b.gePrice == null) return 0;
+      if (a.gePrice == null) return 1;
+      if (b.gePrice == null) return -1;
+      return b.gePrice - a.gePrice;
+    });
+    const totalCount = drops.length;
+    if (drops.length > MONSTER_DROPS_CAP) drops.length = MONSTER_DROPS_CAP;
+
+    return {
+      drops, untradeableDropCount, totalCount, hadAnyTable: true, hasHardMode,
+      unknownRarityCount, unknownRarityValue,
+      estimatedGpPerKill: wikiStatedGpPerKill != null ? wikiStatedGpPerKill : computedGpPerKill,
+      gpPerKillSource: wikiStatedGpPerKill != null ? 'wiki' : 'computed',
+      computedGpPerKill,
+    };
+  }
+
+  async function searchMonsters(query) {
+    if (!query || !query.trim()) return [];
+    const key = query.trim().toLowerCase();
+    if (monsterSearchCache.has(key)) return monsterSearchCache.get(key);
+
+    // No live type-ahead here — this is an explicit-search feature (Enter/
+    // button), same "quick lookup on click" philosophy as Drop sources
+    // above, not a per-keystroke network feature like nothing else in
+    // GEnius does. Caching is still worth it in case the same query is
+    // re-submitted this session.
+    let result = [];
+    try {
+      const url = `https://runescape.wiki/api.php?action=opensearch&search=${encodeURIComponent(query.trim())}&limit=8&format=json`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(10000),
+      });
+      const [, titles, descriptions] = await res.json();
+      // Opensearch returns any matching wiki page (achievements, subpages,
+      // player pages), not just monsters — deliberately not pre-filtered by
+      // title heuristics. A selection with no item-drops table on its page
+      // just gets an empty "no drop table found" result from getMonsterDrops
+      // below, same as how Drop sources handles a shop-bought item.
+      result = titles.map((title, i) => ({ title, description: descriptions[i] || '' }));
+    } catch (e) { result = []; }
+
+    monsterSearchCache.set(key, result);
+    return result;
+  }
+
+  // Raw page HTML is cached per monster name (monsterDropsCache reused for
+  // this, values are HTML strings not results — same Map, different
+  // purpose per key would be confusing, so this uses its own cache below),
+  // so switching between Normal/Hard mode for the same monster re-parses
+  // instead of re-fetching. Parsed results are cached per monster+mode
+  // since normal and hard mode are genuinely different result sets now
+  // (see _extractModeSection).
+  const monsterHtmlCache = new Map();
+  async function getMonsterDrops(monsterName, mode = 'normal') {
+    if (!monsterName) return null;
+    const resultKey = `${monsterName}::${mode}`;
+    if (monsterDropsCache.has(resultKey)) return monsterDropsCache.get(resultKey);
+
+    let result;
+    try {
+      let html = monsterHtmlCache.get(monsterName);
+      if (!html) {
+        const url = `https://runescape.wiki/w/${encodeURIComponent(monsterName.replace(/ /g, '_'))}`;
+        const res = await fetch(url, {
+          headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+          signal: AbortSignal.timeout(10000),
+        });
+        html = await res.text();
+        monsterHtmlCache.set(monsterName, html);
+      }
+      result = { monsterName, mode, ...parseMonsterDrops(html, mode) };
+    } catch (e) {
+      result = { monsterName, mode, drops: [], estimatedGpPerKill: 0, untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode: false, error: e.message };
+    }
+
+    monsterDropsCache.set(resultKey, result);
+    return result;
+  }
+
+  // Combat stats (combat level, HP, weakness, poison/stun/deflect/drain
+  // susceptibility) come from the {{Infobox Monster}} template's raw
+  // wikitext parameters, the same "fetch raw wikitext" approach getItemStats
+  // above already uses for item infoboxes — confirmed directly against the
+  // live wiki (Abyssal demon, Chicken, TzHaar-Ket, General Graardor) that
+  // these fields are consistently named: level/lifepoints/weakness/
+  // aggressive/poisonous/immune_to_poison/immune_to_stun/immune_to_deflect/
+  // immune_to_drain. Multi-version monsters (e.g. General Graardor's Normal/
+  // Hard mode/quest-cutscene versions) suffix numbered fields (level1,
+  // lifepoints1, ...) instead of a bare one — this just reads the first
+  // version's numbers as the headline figure rather than trying to show
+  // every version.
+  // Multi-version monsters (Normal/Hard mode, quest cutscene versions, ...)
+  // suffix their infobox fields with a version number (level1/level2,
+  // lifepoints1/lifepoints2, ...) rather than using a bare field. `suffix`
+  // picks which version to read; fields that aren't version-specific
+  // (weakness, immunities, etc.) are usually bare in the wikitext even on
+  // multi-version pages, so this always falls back to the bare field name
+  // when the suffixed one isn't present.
+  function _infoboxField(wikitext, key, suffix) {
+    const candidates = suffix ? [`${key}${suffix}`, key, `${key}1`] : [`${key}1`, key];
+    for (const name of candidates) {
+      const m = wikitext.match(new RegExp(`\\|\\s*${name}\\s*=\\s*([^\\n|]*)`, 'i'));
+      if (m && m[1].trim()) {
+        // Strip wiki-link markup ([[Fire]] / [[Fire spells|Fire]]) down to
+        // display text, same idea as _stripHtmlTags but for wikitext, not HTML.
+        return m[1].replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1').trim() || null;
+      }
+    }
+    return null;
+  }
+
+  function parseMonsterInfo(wikitext, mode) {
+    if (!/\{\{\s*Infobox Monster\b/i.test(wikitext)) return null;
+
+    // version1 = Normal mode, version2 = Hard mode is the wiki's convention
+    // for bosses with a mode toggle (confirmed on Vindicta, General
+    // Graardor, etc.) — read the matching suffix so the panel actually
+    // changes when the user flips Normal/Hard, instead of always showing
+    // version1's numbers regardless of the selected mode.
+    const suffix = mode === 'hard' ? '2' : '1';
+    const level = _infoboxField(wikitext, 'level', suffix);
+    let hp = _infoboxField(wikitext, 'lifepoints', suffix);
+    const weakness = _infoboxField(wikitext, 'weakness', suffix);
+    const yesNo = v => v == null ? null : /^y/i.test(v);
+
+    // Some hard-mode phases (e.g. Gorvek's enrage after Vindicta falls in
+    // the Vindicta & Gorvek encounter) aren't given their own versioned
+    // infobox field at all — the extra HP is only stated in prose ("carries
+    // an additional 300,000 life points"). Pick that up as a fallback only
+    // when hard mode is selected and no versioned field already answered it.
+    if (mode === 'hard') {
+      const prose = wikitext.match(/additional\s+([\d,]+)\s+life\s*points/i);
+      if (prose) hp = prose[1];
+    }
+
+    return {
+      combatLevel: level ? parseInt(level.replace(/,/g, ''), 10) : null,
+      hitpoints: hp ? parseInt(hp.replace(/,/g, ''), 10) : null,
+      weakness: weakness || null,
+      aggressive: yesNo(_infoboxField(wikitext, 'aggressive', suffix)),
+      poisonous: yesNo(_infoboxField(wikitext, 'poisonous', suffix)),
+      poisonImmune: yesNo(_infoboxField(wikitext, 'immune_to_poison', suffix)),
+      stunImmune: yesNo(_infoboxField(wikitext, 'immune_to_stun', suffix)),
+      deflectImmune: yesNo(_infoboxField(wikitext, 'immune_to_deflect', suffix)),
+      drainImmune: yesNo(_infoboxField(wikitext, 'immune_to_drain', suffix)),
+    };
+  }
+
+  async function _fetchMonsterWikitext(monsterName) {
+    // redirects=1 matters here: opensearch (searchMonsters) can surface a
+    // redirect stub as its own title (e.g. "Graardor" -> #REDIRECT
+    // [[General Graardor]]) — the drops HTML fetch below follows redirects
+    // transparently since it's a normal page load, but this wikitext API
+    // call doesn't unless told to, so without this it silently returns the
+    // one-line redirect stub (no infobox) instead of the real page.
+    const url = `https://runescape.wiki/api.php?action=query&titles=${encodeURIComponent(monsterName)}&prop=revisions&rvprop=content&format=json&formatversion=2&redirects=1`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+      signal: AbortSignal.timeout(8000),
+    });
+    const json = await res.json();
+    const pages = json.query?.pages;
+    if (pages?.length && !pages[0].missing) {
+      return pages[0].revisions?.[0]?.content || '';
+    }
+    return null;
+  }
+
+  async function getMonsterInfo(monsterName, mode) {
+    if (!monsterName) return null;
+    mode = mode === 'hard' ? 'hard' : 'normal';
+    const cacheKey = `${monsterName}::${mode}`;
+    if (monsterInfoCache.has(cacheKey)) return monsterInfoCache.get(cacheKey);
+
+    let result = null;
+    try {
+      const content = await _fetchMonsterWikitext(monsterName);
+      if (content != null) result = parseMonsterInfo(content, mode);
+
+      // Duo/trio encounter pages (e.g. "Vindicta & Gorvek") have no infobox
+      // of their own — the wiki keeps combat stats on each individual
+      // monster's own page instead. Split the title on "&"/"and" and fetch
+      // each half separately rather than showing nothing.
+      if (!result && /\s(?:&|and)\s/i.test(monsterName)) {
+        const names = monsterName.split(/\s(?:&|and)\s/i).map(s => s.trim()).filter(Boolean);
+        if (names.length > 1) {
+          const parts = [];
+          for (const name of names) {
+            try {
+              const partContent = await _fetchMonsterWikitext(name);
+              const partInfo = partContent != null ? parseMonsterInfo(partContent, mode) : null;
+              if (partInfo) parts.push({ name, ...partInfo });
+            } catch { /* skip this half, still try the other */ }
+          }
+          if (parts.length) result = { multi: true, parts };
+        }
+      }
+    } catch { result = null; }
+
+    monsterInfoCache.set(cacheKey, result);
     return result;
   }
 
@@ -1208,6 +1723,9 @@ async function createGeniusApi({ dataDir, store }) {
     // wiki stats
     getItemStats,
     getDropSources,
+    getLiveItemPrice,
+    // monster lookup
+    searchMonsters, getMonsterDrops, getMonsterInfo,
     // portfolio
     getPortfolio, savePosition, deletePosition, sellPosition, reopenPosition,
     // alerts

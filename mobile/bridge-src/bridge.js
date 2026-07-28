@@ -223,6 +223,9 @@ async function buildGenius() {
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
     getDropSources:         (name) => a.getDropSources(name),
+    searchMonsters:         (query) => a.searchMonsters(query),
+    getMonsterDrops:        (name) => a.getMonsterDrops(name),
+    getMonsterInfo:         (name) => a.getMonsterInfo(name),
     getItemHistory:          (id)  => a.getItemHistory(id),
     getItemHistoryLocal:     (id)  => a.getItemHistoryLocal(id),
     getHistoryStatus:        ()    => a.getHistoryStatus(),
@@ -320,6 +323,8 @@ async function buildGenius() {
     // Search shorthands
     getShorthands:  () => store.get('userShorthands', {}),
     saveShorthands: (sh) => { store.set('userShorthands', sh); return { success: true }; },
+    getMonsterShorthands:  () => store.get('monsterShorthands', {}),
+    saveMonsterShorthands: (sh) => { store.set('monsterShorthands', sh); return { success: true }; },
 
     // Category overrides editor
     getOverrides:  () => a.getOverrides(),

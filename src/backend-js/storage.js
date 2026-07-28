@@ -193,7 +193,23 @@ async function createKVStore(filePath) {
     },
     set(key, value) {
       data[key] = value;
-      writeJSON(filePath, data, { pretty: true }).catch(e =>
+      // Re-read the file fresh right before writing, rather than blindly
+      // overwriting with this instance's in-memory snapshot from startup.
+      // Confirmed for real (Ben, 2026-07-17): watchlist and dxpWatchlist
+      // both went completely empty after a night of repeated rebuild/
+      // reinstall/relaunch cycles — the old behavior wrote the WHOLE
+      // in-memory object back out on every .set(), so if two instances
+      // ever briefly overlapped (exactly the single-instance-lock race
+      // fixed elsewhere this session, before that fix existed), whichever
+      // instance wrote last silently clobbered every key the other
+      // instance had touched, wholesale. Reading fresh + merging just this
+      // one key closes that window down to the vanishingly small case of
+      // two writes landing at the literal same instant, instead of it
+      // being the default behavior on every single write.
+      readJSON(filePath, {}).then(onDisk => {
+        onDisk[key] = value;
+        return writeJSON(filePath, onDisk, { pretty: true });
+      }).catch(e =>
         console.error(`[storage] KV store write failed for key "${key}":`, e.message));
     },
   };

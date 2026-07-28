@@ -51,6 +51,36 @@ function _toSec(ts) {
   return ts && ts > 1e11 ? ts / 1000 : (ts || 0);
 }
 
+// One bulk request for every tracked item's live instant-buy/instant-sell
+// price + per-price timestamp, from the wiki's real-time prices API
+// (same item-ID space as the gazbot dump above — both ultimately trace
+// back to RS3's own item IDs, confirmed via itemData.id in the loop
+// below). Returns { [itemId]: {high, highTime, low, lowTime} } with
+// timestamps normalized to ms, or null on any failure — best-effort,
+// never allowed to block or fail the main price fetch.
+async function fetchLivePrices() {
+  try {
+    const res = await fetch('https://prices.runescape.wiki/api/v2/rs/latest', {
+      headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const json = await res.json();
+    const out = {};
+    for (const [id, v] of Object.entries(json.data || {})) {
+      out[id] = {
+        high: v.high ?? null, highTime: v.highTime ? v.highTime * 1000 : null,
+        low: v.low ?? null, lowTime: v.lowTime ? v.lowTime * 1000 : null,
+      };
+    }
+    console.log(`[prices] Got live buy/sell for ${Object.keys(out).length} items`);
+    return out;
+  } catch (e) {
+    console.log(`[prices] Live price fetch failed (non-fatal): ${e.message}`);
+    return null;
+  }
+}
+
 async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, historyDataOverride = null) {
   const HEADERS = { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' };
   const DUMP_URL = 'https://chisel.weirdgloop.org/gazproj/gazbot/rs_dump.json';
@@ -147,6 +177,14 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
 
   console.log('[prices] Fetching RS3 GE dump from WeirdGloop...');
 
+  // Live instant-buy/instant-sell + per-price timestamps from the wiki's
+  // real-time prices API (launched 2026-07) — one bulk request for every
+  // tracked item (~470KB, well under a second), fetched alongside the
+  // main dump rather than blocking on it. Best-effort: a failure here
+  // just means no B:/S: line this refresh, never blocks the main price
+  // fetch that everything else depends on.
+  const livePricesPromise = fetchLivePrices();
+
   let raw;
   try {
     const res = await fetch(DUMP_URL, { headers: HEADERS, signal: AbortSignal.timeout(30000) });
@@ -171,6 +209,8 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   }
 
   console.log(`[prices] Got ${Object.keys(raw).length} items from dump`);
+
+  const livePrices = await livePricesPromise;
 
   const itemsOut = [];
   let itemCounter = 1;
@@ -272,9 +312,12 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       }
     }
 
+    const live = livePrices && livePrices[String(itemId)];
     itemsOut.push({
       id: itemId, name, categories, high, low, alch, limit, volume,
       avgVolume, change_1d: changeOneDay, examine, members,
+      liveBuy: live?.high ?? null, liveBuyTime: live?.highTime ?? null,
+      liveSell: live?.low ?? null, liveSellTime: live?.lowTime ?? null,
     });
   }
 
@@ -303,6 +346,13 @@ const VOL_HIGH_MIN = 1.5;
 const VOL_ACTIVE_MIN = 1.1;
 const VOL_QUIET_MAX = 0.9;
 const VOL_THIN_MAX = 0.5;
+// Ben, 2026-07-27: 20% swing between the listed GE price and real live
+// buy/sell (the wiki's real-time prices API — see fetchLivePrices above),
+// gated on a minimum absolute gp gap so it doesn't fire on cheap items
+// where 20% is a trivial few gp. Same gp-floor pattern as SURGE/DUMP's
+// absChgGp >= 1000 check above.
+const DISCREPANCY_PCT_MIN = 20;
+const DISCREPANCY_MIN_GP = 1000;
 
 function runSignals(items) {
   // Tag items with market signals based on price change and volume behavior.
@@ -351,6 +401,27 @@ function runSignals(items) {
     const limit = item.limit || 0;
     if (hasAvg && volRatio >= 2.5 && Math.abs(chg) >= 8.0 && limit > 0 && limit <= 100) {
       signals.push('MANIPULATED');
+    }
+
+    // OVERPRICED / UNDERPRICED: the listed GE price vs. real live buy/sell
+    // have diverged by 20%+ — independent of SURGE/DUMP above (those
+    // compare today's price to yesterday's; this compares the listed
+    // price to what people are ACTUALLY paying/getting right now).
+    // Ben's real example that prompted this: some rare-drop "Furniture
+    // plans" items are listed at a stale ~3-5M gp GE default while real
+    // live trades show them worth a fraction of that.
+    if (item.liveBuy != null || item.liveSell != null) {
+      const liveRef = (item.liveBuy != null && item.liveSell != null)
+        ? (item.liveBuy + item.liveSell) / 2
+        : (item.liveBuy ?? item.liveSell);
+      if (liveRef > 0 && gePrice0 > 0) {
+        const gapGp = Math.abs(gePrice0 - liveRef);
+        const gapPct = ((gePrice0 - liveRef) / liveRef) * 100;
+        if (gapGp >= DISCREPANCY_MIN_GP) {
+          if (gapPct >= DISCREPANCY_PCT_MIN) signals.push('OVERPRICED');
+          else if (gapPct <= -DISCREPANCY_PCT_MIN) signals.push('UNDERPRICED');
+        }
+      }
     }
 
     // Volume tier badge

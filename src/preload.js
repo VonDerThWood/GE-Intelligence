@@ -12,7 +12,11 @@ contextBridge.exposeInMainWorld('genius', {
 
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
+  getLiveItemPrice:      (id) => ipcRenderer.invoke('get-live-item-price', id),
   getDropSources:        (name) => ipcRenderer.invoke('get-drop-sources', name),
+  searchMonsters:        (query) => ipcRenderer.invoke('search-monsters', query),
+  getMonsterDrops:       (name, mode) => ipcRenderer.invoke('get-monster-drops', name, mode),
+  getMonsterInfo:        (name, mode) => ipcRenderer.invoke('get-monster-info', name, mode),
   getItemHistory:        (id)   => ipcRenderer.invoke('get-item-history', id),
   getItemHistoryLocal:   (id)   => ipcRenderer.invoke('get-item-history-local', id),
   getHistoryStatus:      ()     => ipcRenderer.invoke('get-history-status'),
@@ -73,6 +77,8 @@ contextBridge.exposeInMainWorld('genius', {
   // Search shorthands
   getShorthands:  ()   => ipcRenderer.invoke('get-shorthands'),
   saveShorthands: (sh) => ipcRenderer.invoke('save-shorthands', sh),
+  getMonsterShorthands:  ()   => ipcRenderer.invoke('get-monster-shorthands'),
+  saveMonsterShorthands: (sh) => ipcRenderer.invoke('save-monster-shorthands', sh),
 
   // Category overrides editor
   getOverrides:  ()   => ipcRenderer.invoke('get-overrides'),

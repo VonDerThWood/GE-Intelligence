@@ -326,6 +326,8 @@ ipcMain.handle('save-note',  (_, { id, text }) => { const notes = store.get('ite
 
 ipcMain.handle('get-shorthands',  () => store.get('userShorthands', {}));
 ipcMain.handle('save-shorthands', (_, sh) => { store.set('userShorthands', sh); return { success: true }; });
+ipcMain.handle('get-monster-shorthands',  () => store.get('monsterShorthands', {}));
+ipcMain.handle('save-monster-shorthands', (_, sh) => { store.set('monsterShorthands', sh); return { success: true }; });
 
 ipcMain.handle('open-external', (_, url) => {
   if (/^https?:\/\//.test(url)) shell.openExternal(url);
@@ -374,7 +376,11 @@ ipcMain.handle('sell-position', (_, payload) => api.sellPosition(payload));
 ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
+ipcMain.handle('get-live-item-price', async (_, itemId) => api.getLiveItemPrice(itemId));
 ipcMain.handle('get-drop-sources', async (_, itemName) => api.getDropSources(itemName));
+ipcMain.handle('search-monsters', async (_, query) => api.searchMonsters(query));
+ipcMain.handle('get-monster-drops', async (_, monsterName, mode) => api.getMonsterDrops(monsterName, mode));
+ipcMain.handle('get-monster-info', async (_, monsterName, mode) => api.getMonsterInfo(monsterName, mode));
 
 ipcMain.handle('show-notification', (_, { title, body }) => {
   if (store.get('notifications', true)) {
