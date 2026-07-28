@@ -179,6 +179,12 @@
     border-radius: 8px;
     border: 1px solid var(--border-dim);
     box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+    cursor: zoom-in;
+    transition: box-shadow 0.15s, transform 0.15s;
+  }
+  .shot img:hover {
+    box-shadow: 0 8px 34px rgba(201,168,76,0.25);
+    transform: translateY(-2px);
   }
   .shot figcaption {
     text-align: center;
@@ -186,6 +192,29 @@
     color: var(--text-dim);
     margin-top: 12px;
   }
+
+  /* Lightbox */
+  .lightbox {
+    position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,0.88);
+    display: none;
+    align-items: center; justify-content: center;
+    padding: 40px;
+    cursor: zoom-out;
+  }
+  .lightbox.open { display: flex; }
+  .lightbox img {
+    max-width: 100%; max-height: 100%;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    box-shadow: 0 12px 50px rgba(0,0,0,0.6);
+  }
+  .lightbox-close {
+    position: absolute; top: 20px; right: 28px;
+    font-size: 32px; line-height: 1;
+    color: var(--text); background: none; border: none; cursor: pointer;
+  }
+  .lightbox-close:hover { color: var(--gold-bright); }
 
   /* Install steps */
   .steps {
@@ -419,6 +448,34 @@
       <a href="https://github.com/VonDerThWood/GE-Intelligence/issues">Report an Issue</a>
     </div>
   </footer>
+
+  <div class="lightbox" id="lightbox" onclick="closeLightbox()">
+    <button class="lightbox-close" aria-label="Close" onclick="closeLightbox()">&times;</button>
+    <img id="lightbox-img" src="" alt="">
+  </div>
+
+  <script>
+    // Screenshot lightbox — click any .shot img to view it enlarged, click
+    // again/Esc/the X to close. Event delegation on .shots so this works
+    // for all screenshots without an onclick on each individual <img>.
+    function openLightbox(src, alt) {
+      const lb = document.getElementById('lightbox');
+      document.getElementById('lightbox-img').src = src;
+      document.getElementById('lightbox-img').alt = alt || '';
+      lb.classList.add('open');
+    }
+    function closeLightbox() {
+      document.getElementById('lightbox').classList.remove('open');
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      document.querySelectorAll('.shots img').forEach(img => {
+        img.addEventListener('click', () => openLightbox(img.src, img.alt));
+      });
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeLightbox();
+    });
+  </script>
 
   <script>
     // Site-chrome-only theme toggle, mirroring the app's own Black theme —
