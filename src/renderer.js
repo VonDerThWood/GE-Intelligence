@@ -2958,19 +2958,16 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
     return items.filter(it => (it.high || it.low || 0) >= minPrice);
   }, [items, minPrice]);
 
-  const sorted = useMemo(() => {
-    return [...filtered].sort((a,b) => {
-      const av=a[sort.key]??0, bv=b[sort.key]??0;
-      return typeof av==='string' ? av.localeCompare(bv)*sort.dir : (av-bv)*sort.dir;
-    });
-  }, [filtered, sort]);
-
-  const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
-  const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
   // Which number is bold/primary in the Price column — GE (gazbot dump,
   // the "official" listed price) or Live (real instant-buy/sell). Shared
   // across every table via localStorage, same pattern as the Detail
-  // Panel's fullPrice toggle, rather than resetting per-tab.
+  // Panel's fullPrice toggle, rather than resetting per-tab. Declared here
+  // (moved up from further below) because the sort logic right after this
+  // needs it too — referencing priceMode before this existed threw a
+  // "Cannot access before initialization" TDZ error on every render,
+  // crashing any tab that uses ItemTable (Cosmetics, Melee, Magic, etc,
+  // not just Market) to a blank screen. Confirmed for real (Ben,
+  // 2026-07-29): reproduced by switching to the Cosmetics tab.
   const [priceMode, setPriceMode] = useState(() => {
     try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
   });
@@ -2982,6 +2979,28 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
       return next;
     });
   };
+
+  // The "high" column shows either the GE dump price or live buy/sell,
+  // whichever priceMode is active (see the header/cell rendering below) —
+  // sorting has to follow the SAME value that's actually on screen, or a
+  // "Live Price ↓" sort silently orders by the GE price instead. Confirmed
+  // for real (Ben, 2026-07-29): Snowball Pet Token (live ~381M) sorted
+  // above Aurora Trail aura override token (live ~1.3B) because Snowball's
+  // GE-dump price happened to be higher, even though the column was
+  // showing and labeled "Live Price."
+  const sortValue = (it, key) => {
+    if (key === 'high' && priceMode === 'live') return it.liveBuy ?? it.liveSell ?? it.high ?? it.low ?? 0;
+    return it[key] ?? 0;
+  };
+  const sorted = useMemo(() => {
+    return [...filtered].sort((a,b) => {
+      const av=sortValue(a,sort.key), bv=sortValue(b,sort.key);
+      return typeof av==='string' ? av.localeCompare(bv)*sort.dir : (av-bv)*sort.dir;
+    });
+  }, [filtered, sort, priceMode]);
+
+  const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
+  const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
   if (!items.length) return h('div',{className:'empty'},h('div',{className:'icon'},'◎'),h('p',null,'No items in this category yet.'));
   const thFor = k => {
     switch (k) {
@@ -9471,6 +9490,11 @@ function findItemLimit(items, name) {
   const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
   return it ? (it.limit || null) : null;
 }
+function findItemVolume(items, name) {
+  if (!name) return null;
+  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  return it ? (it.volume ?? null) : null;
+}
 
 // Plain 1:1-ish conversion calc (Herbs, Divination, Construction) — no
 // buff modeling here since none of these have sourced numbers the way
@@ -9492,7 +9516,10 @@ function computeConversionStats(inputs, output, items) {
   if (outLimit != null) limits.push(outLimit);
   const bindingLimit = limits.length ? Math.min(...limits) : null;
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
-  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit };
+  const inVolumes = inputs.map(inp => findItemVolume(items, inp.name)).filter(v => v != null);
+  const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
+  const outputVolume = findItemVolume(items, output.name);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume };
 }
 
 // Herblore potion-mixing buffs — real sourced numbers from the wiki's own
@@ -9556,7 +9583,86 @@ function computePotionStats(r, items, buffs) {
   const limits = [r.primary, r.secondary, `${r.name} (3)`].map(n => findItemLimit(items, n)).filter(l => l != null);
   const bindingLimit = limits.length ? Math.min(...limits) : null;
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
-  return { cost, revenue, margin, missing, bindingLimit, outPrice: price3, profitPerLimit };
+  const inVolumes = [r.primary, r.secondary].map(n => findItemVolume(items, n)).filter(v => v != null);
+  const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
+  const outputVolume = findItemVolume(items, `${r.name} (3)`);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice: price3, profitPerLimit, inputVolume, outputVolume };
+}
+
+// Liquidity check for decanting: a dose form's daily volume has to clear
+// its OWN buy limit, not some flat number — a potion with a 2,000 buy
+// limit and 1,500 daily volume is thin even though 1,500 sounds like a
+// lot, since one player alone could nearly exhaust a day's trading in a
+// single limit-full buy. Ben's ask (2026-07-29): "if it's rather low, like
+// a single buy limit or less, it should probably be ignored." Falls back
+// to Flips' flat FLIP_MIN_VOLUME floor only when an item has no buy limit
+// on record at all, so a missing limit can't accidentally wave through an
+// otherwise-unchecked form.
+function hasRealVolume(volume, limit) {
+  if (volume == null) return false;
+  return limit != null ? volume > limit : volume >= FLIP_MIN_VOLUME;
+}
+
+// Per-dose economics for a single potion across its (1)/(2)/(3)/(4) doses
+// and its 6-dose flask, per Ben's request (2026-07-29): break every
+// tradeable form down to a price-per-dose so decanting (converting
+// between dose counts, a free Herblore-adjacent action) can be checked
+// for profit. The flask's per-dose price backs out the cost of an empty
+// "Potion flask" first — a filled flask's GE price is really "6 doses of
+// potion + a container," and comparing it to vial-based doses without
+// stripping that container cost back out would understate how cheap the
+// potion content actually is. Any form that fails hasRealVolume() is
+// dropped from consideration entirely rather than shown at a possibly-
+// fake price.
+function computeDecantingStats(name, items) {
+  const emptyFlaskPrice = findItemPrice(items, 'Potion flask');
+  const flaskName = `${name.replace(/ potion$/i, '')} flask (6)`;
+
+  const forms = [1, 2, 3, 4].map(d => {
+    const itemName = `${name} (${d})`;
+    const price = findItemPrice(items, itemName);
+    const volume = findItemVolume(items, itemName);
+    const limit = findItemLimit(items, itemName);
+    const ok = price != null && hasRealVolume(volume, limit);
+    return { doses: d, itemName, price, volume, limit, pricePerDose: ok ? price / d : null, ok };
+  });
+
+  const flaskPrice = findItemPrice(items, flaskName);
+  const flaskVolume = findItemVolume(items, flaskName);
+  const flaskLimit = findItemLimit(items, flaskName);
+  const flaskOk = flaskPrice != null && hasRealVolume(flaskVolume, flaskLimit) && emptyFlaskPrice != null;
+  if (flaskPrice != null) {
+    forms.push({
+      doses: 6, itemName: flaskName, price: flaskPrice, volume: flaskVolume, limit: flaskLimit,
+      pricePerDose: flaskOk ? (flaskPrice - emptyFlaskPrice) / 6 : null, ok: flaskOk,
+    });
+  }
+
+  const usable = forms.filter(f => f.ok);
+  if (usable.length < 2) {
+    return { cost: null, revenue: null, margin: null, missing: [name], bindingLimit: null, outPrice: null, profitPerLimit: null, forms };
+  }
+
+  // Buy the cheapest per-dose form, decant into the priciest per-dose
+  // form, sell that. Decanting itself costs nothing in-game beyond empty
+  // vials/flasks (already accounted for on the flask side above), so this
+  // is the whole arbitrage: cheapest-source doses in, priciest-sale doses
+  // out, at whatever dose count the sale form actually is.
+  const buyForm  = usable.reduce((a, b) => (a.pricePerDose < b.pricePerDose ? a : b));
+  const sellForm = usable.reduce((a, b) => (a.pricePerDose > b.pricePerDose ? a : b));
+
+  const cost = buyForm.pricePerDose * sellForm.doses + (sellForm.doses === 6 ? emptyFlaskPrice : 0);
+  const revenue = applyTax(sellForm.price);
+  const margin = buyForm === sellForm ? null : revenue - cost;
+  const bindingLimit = Math.min(buyForm.limit || Infinity, sellForm.limit || Infinity);
+  const profitPerLimit = (margin != null && isFinite(bindingLimit)) ? margin * bindingLimit : null;
+
+  return {
+    cost, revenue, margin, missing: buyForm === sellForm ? [name] : [],
+    bindingLimit: isFinite(bindingLimit) ? bindingLimit : null, outPrice: sellForm.price,
+    profitPerLimit, buyForm, sellForm, forms,
+    inputVolume: buyForm.volume, outputVolume: sellForm.volume,
+  };
 }
 
 // Generic sortable table for any Money Makers section — takes rows that
@@ -9580,7 +9686,9 @@ function MoneyMakerTable({rows, onSelect, itemsByName}) {
       h('thead', null, h('tr', null,
         h('th', null, 'Item'),
         h('th', {onClick:()=>tog('cost'), style:{cursor:'pointer'}}, 'Input Cost'+arrow('cost')),
+        h('th', {onClick:()=>tog('inputVolume'), style:{cursor:'pointer'}, title:'Daily trading volume of the input item — thin volume means the buy price may not hold at real quantity'}, 'Input Vol'+arrow('inputVolume')),
         h('th', {onClick:()=>tog('revenue'), style:{cursor:'pointer'}}, 'Output Value'+arrow('revenue')),
+        h('th', {onClick:()=>tog('outputVolume'), style:{cursor:'pointer'}, title:'Daily trading volume of the output item — thin volume means you may not be able to sell your full batch at this price'}, 'Output Vol'+arrow('outputVolume')),
         h('th', {onClick:()=>tog('margin'), style:{cursor:'pointer'}}, 'Margin'+arrow('margin')),
         h('th', {onClick:()=>tog('bindingLimit'), style:{cursor:'pointer'}, title:'The lowest buy limit among all items involved — what actually caps how much of this you can do per 4 hours'}, 'Buy Limit'+arrow('bindingLimit')),
         h('th', {onClick:()=>tog('profitPerLimit'), style:{cursor:'pointer'}, title:'Margin × Buy Limit — total profit if you do this to the max, once, per 4-hour limit reset'}, 'Profit/Limit'+arrow('profitPerLimit')),
@@ -9590,7 +9698,9 @@ function MoneyMakerTable({rows, onSelect, itemsByName}) {
       },
         h('td', null, r.label),
         h('td', {style:{color:'#e08030'}}, r.stats.missing.length ? '—' : fmt.gp(r.stats.cost)+'gp'),
+        h('td', {style:{color:T.textDim}}, r.stats.inputVolume!=null ? r.stats.inputVolume.toLocaleString() : '—'),
         h('td', {style:{color:T.green}}, r.stats.missing.length ? '—' : fmt.gp(r.stats.revenue)+'gp'),
+        h('td', {style:{color:T.textDim}}, r.stats.outputVolume!=null ? r.stats.outputVolume.toLocaleString() : '—'),
         h('td', {style:{color: r.stats.margin>0 ? T.gold : T.red, fontWeight:'bold'}}, r.stats.margin==null ? '—' : (r.stats.margin>=0?'+':'')+fmt.gp(r.stats.margin)+'gp'),
         h('td', {style:{color:T.textDim}}, r.stats.bindingLimit ? r.stats.bindingLimit.toLocaleString() : '—'),
         h('td', {style:{color: r.stats.profitPerLimit>0 ? T.gold : T.red, fontWeight:'bold'}}, r.stats.profitPerLimit==null ? '—' : (r.stats.profitPerLimit>=0?'+':'')+fmt.gp(r.stats.profitPerLimit)+'gp'),
@@ -9644,6 +9754,15 @@ function MoneyMakersTab({items, onSelect}) {
     }).filter(r => r.stats.missing.length === 0);
   }, [items, buffs]);
 
+  const decantingRows = useMemo(() => {
+    return POTION_RECIPES.map(r => {
+      const stats = computeDecantingStats(r.name, items);
+      if (stats.missing.length || !stats.buyForm || !stats.sellForm || stats.buyForm === stats.sellForm) return null;
+      const label = `${r.name}: (${stats.buyForm.doses}) → (${stats.sellForm.doses})`;
+      return { label, itemName: stats.sellForm.itemName, stats };
+    }).filter(Boolean);
+  }, [items]);
+
   const divinationRows = useMemo(() => {
     return DIVINATION_RECIPES.map(r => {
       const stats = computeConversionStats(r.inputs, r.output, items);
@@ -9694,7 +9813,7 @@ function MoneyMakersTab({items, onSelect}) {
 
       skill === 'herblore' && h('div', null,
         h('div', {style:{display:'flex', gap:4, marginBottom:12}},
-          ['herbs','potions'].map(sub => h('button', {
+          ['herbs','potions','decanting'].map(sub => h('button', {
             key:sub, onClick:()=>setHerbSub(sub),
             style:{
               padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
@@ -9708,6 +9827,10 @@ function MoneyMakersTab({items, onSelect}) {
         herbSub === 'potions' && h(HerbloreBuffCheckboxes, {buffs, setBuffs}),
         herbSub === 'herbs' && h(MoneyMakerTable, {rows:herbRows, onSelect:onSelectItem}),
         herbSub === 'potions' && h(MoneyMakerTable, {rows:potionRows, onSelect:onSelectItem}),
+        herbSub === 'decanting' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+          'Price per dose across (1)/(2)/(3)/(4) and the 6-dose flask (flask price minus an empty Potion flask, so container cost isn\'t counted as potion value). Each row buys the cheapest dose form and decants into the priciest one for resale — both sides need real daily volume or the potion is left off entirely.'
+        ),
+        herbSub === 'decanting' && h(MoneyMakerTable, {rows:decantingRows, onSelect:onSelectItem}),
       ),
 
       skill === 'divination' && h(MoneyMakerTable, {rows:divinationRows, onSelect:onSelectItem}),
