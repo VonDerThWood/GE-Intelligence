@@ -187,6 +187,13 @@ async function migrateLegacyHistoryFile(legacyFile, targetDir) {
 // platform (mobile) where the underlying write is async.
 async function createKVStore(filePath) {
   const data = await readJSON(filePath, {});
+  // Tracks in-flight writes so `flush()` can wait for them — needed because
+  // set() below fires its disk write without making the caller wait, so a
+  // process killed (or quitting) right after a set() can lose that write
+  // entirely. Confirmed for real (Ben, 2026-07-29): a devMode toggle was
+  // lost because the app got force-killed (taskkill, for a rebuild/
+  // relaunch cycle) before this write had actually landed on disk.
+  let pending = Promise.resolve();
   return {
     get(key, fallback) {
       return key in data ? data[key] : fallback;
@@ -206,11 +213,24 @@ async function createKVStore(filePath) {
       // one key closes that window down to the vanishingly small case of
       // two writes landing at the literal same instant, instead of it
       // being the default behavior on every single write.
-      readJSON(filePath, {}).then(onDisk => {
-        onDisk[key] = value;
-        return writeJSON(filePath, onDisk, { pretty: true });
-      }).catch(e =>
-        console.error(`[storage] KV store write failed for key "${key}":`, e.message));
+      // Chained onto `pending` (rather than fired independently) so
+      // concurrent set() calls' reads/writes serialize instead of racing
+      // each other, and so flush() has one promise that resolves only once
+      // every queued write — not just the most recent one — is done.
+      pending = pending
+        .then(() => readJSON(filePath, {}))
+        .then(onDisk => {
+          onDisk[key] = value;
+          return writeJSON(filePath, onDisk, { pretty: true });
+        })
+        .catch(e =>
+          console.error(`[storage] KV store write failed for key "${key}":`, e.message));
+    },
+    // Waits for every write queued so far to finish. Call this before
+    // anything that might end the process (quit, or an external kill from
+    // a rebuild script) so a just-toggled setting can't be silently lost.
+    flush() {
+      return pending;
     },
   };
 }

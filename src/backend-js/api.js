@@ -753,6 +753,47 @@ async function createGeniusApi({ dataDir, store }) {
     return result;
   }
 
+  // Live per-item timeseries (Instabuy/Instasell over time + volume) — same
+  // real-time API as getLiveItemPrice above, but the /timeseries endpoint
+  // instead of /latest. Confirmed for real against the live API: the query
+  // param is `lookback`, NOT `timestep` (despite that being the OSRS-era
+  // name still floating around in some docs) — the SPA's own bundled JS
+  // confirmed this, and only these 6 exact values are accepted (anything
+  // else, including a plain day count like "90d", 400s as "lookback must
+  // be a valid value"). Intended as a secondary, higher-resolution
+  // supplement to the existing daily-granularity chart, not a replacement.
+  const LIVE_TIMESERIES_LOOKBACKS = ['6h', '24h', '7d', '30d', '6m', '1y'];
+  const LIVE_TIMESERIES_TTL_MS = 5 * 60 * 1000;
+  const liveTimeseriesCache = new Map();
+  async function getItemLiveTimeseries(itemId, lookback) {
+    if (!itemId || !LIVE_TIMESERIES_LOOKBACKS.includes(lookback)) return null;
+    const cacheKey = `${itemId}::${lookback}`;
+    const cached = liveTimeseriesCache.get(cacheKey);
+    if (cached && Date.now() - cached.fetchedAt < LIVE_TIMESERIES_TTL_MS) return cached.result;
+
+    let result = null;
+    try {
+      const url = `https://prices.runescape.wiki/api/v2/rs/timeseries?id=${itemId}&lookback=${lookback}`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(10000),
+      });
+      const json = await res.json();
+      if (Array.isArray(json.data)) {
+        result = json.data.map(p => ({
+          timestamp: p.timestamp * 1000,
+          instabuy: p.avgHighPrice ?? null,
+          instasell: p.avgLowPrice ?? null,
+          buyVolume: p.highPriceVolume ?? 0,
+          sellVolume: p.lowPriceVolume ?? 0,
+        }));
+      }
+    } catch { result = null; }
+
+    liveTimeseriesCache.set(cacheKey, { result, fetchedAt: Date.now() });
+    return result;
+  }
+
   // ─── Drop sources ────────────────────────────────────────────────────────
   // "Where does this come from" lookup for the detail panel — click-to-fetch
   // only (never auto-loaded like getItemStats above), and never persisted to
@@ -1724,6 +1765,7 @@ async function createGeniusApi({ dataDir, store }) {
     getItemStats,
     getDropSources,
     getLiveItemPrice,
+    getItemLiveTimeseries,
     // monster lookup
     searchMonsters, getMonsterDrops, getMonsterInfo,
     // portfolio

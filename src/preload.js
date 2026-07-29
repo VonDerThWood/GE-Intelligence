@@ -13,6 +13,7 @@ contextBridge.exposeInMainWorld('genius', {
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
   getLiveItemPrice:      (id) => ipcRenderer.invoke('get-live-item-price', id),
+  getItemLiveTimeseries: (id, lookback) => ipcRenderer.invoke('get-item-live-timeseries', id, lookback),
   getDropSources:        (name) => ipcRenderer.invoke('get-drop-sources', name),
   searchMonsters:        (query) => ipcRenderer.invoke('search-monsters', query),
   getMonsterDrops:       (name, mode) => ipcRenderer.invoke('get-monster-drops', name, mode),

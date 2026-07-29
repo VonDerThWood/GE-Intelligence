@@ -5,10 +5,25 @@
   ; the old-uninstaller.exe, the uninstaller finds nothing to delete and
   ; returns 0 immediately — no retry loop, no "cannot be closed" dialog.
   ; The new installer then writes fresh files over the (now empty) location.
+  ;
+  ; Side effect found for real (Ben, 2026-07-29): since the old version's
+  ; real uninstaller.exe never runs anymore, it never gets the chance to
+  ; remove ITS OWN shortcuts or registry uninstall-key entry either. Two
+  ; symptoms from that: (1) the old desktop/Start Menu shortcut is
+  ; orphaned forever — nothing ever deletes it, so it just sits there
+  ; every time, and (2) electron-builder's own shortcut-creation step
+  ; still sees that leftover registry entry, reads it as "this is an
+  ; upgrade, not a fresh install," and — per its default NSIS behavior —
+  ; skips recreating the desktop shortcut on upgrades (it assumes the old
+  ; one is still valid). Since this macro is what broke that assumption,
+  ; it now cleans up the shortcuts itself instead of leaving it to a flow
+  ; it just bypassed.
   nsExec::Exec 'taskkill /F /IM GEnius.exe /T'
   Pop $0
   Sleep 2000
   RMDir /r "$LOCALAPPDATA\Programs\GEnius"
+  Delete "$DESKTOP\GEnius.lnk"
+  Delete "$SMPROGRAMS\GEnius.lnk"
 !macroend
 
 !macro customInstall
@@ -25,6 +40,14 @@
   nsExec::Exec 'taskkill /F /IM GEnius.exe /T'
   Pop $0
   Sleep 2000
+
+  ; Create the shortcuts ourselves rather than trust electron-builder's
+  ; own fresh-install-vs-upgrade detection — preInit above bypasses the
+  ; normal uninstall flow that detection depends on, so it can no longer
+  ; be trusted to fire correctly (see the note in preInit). This runs on
+  ; every install, so a stale/missing shortcut can't recur going forward.
+  CreateShortcut "$DESKTOP\GEnius.lnk" "$INSTDIR\GEnius.exe"
+  CreateShortcut "$SMPROGRAMS\GEnius.lnk" "$INSTDIR\GEnius.exe"
 !macroend
 
 ; Overrides electron-builder's built-in "is app running" check

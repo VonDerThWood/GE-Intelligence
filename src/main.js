@@ -269,8 +269,9 @@ ipcMain.handle('get-settings', () => ({
   devMode:            store.get('devMode', false),
 }));
 
-ipcMain.handle('save-settings', (_, settings) => {
+ipcMain.handle('save-settings', async (_, settings) => {
   Object.entries(settings).forEach(([k, v]) => store.set(k, v));
+  await store.flush();
   startScheduler();
   return { success: true };
 });
@@ -377,6 +378,7 @@ ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
 ipcMain.handle('get-live-item-price', async (_, itemId) => api.getLiveItemPrice(itemId));
+ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-drop-sources', async (_, itemName) => api.getDropSources(itemName));
 ipcMain.handle('search-monsters', async (_, query) => api.searchMonsters(query));
 ipcMain.handle('get-monster-drops', async (_, monsterName, mode) => api.getMonsterDrops(monsterName, mode));
@@ -502,7 +504,20 @@ app.on('activate', () => {
   else mainWindow.show();
 });
 
-app.on('before-quit', () => { isQuitting = true; stopScheduler(); });
+// Delays actual quit until any in-flight settings write has landed on disk —
+// without this, a quit (or an external taskkill) racing a just-toggled
+// setting can lose that write entirely (see the flush() comment in
+// storage.js's createKVStore). preventDefault + a guard flag makes this
+// re-entrant: the real app.quit() call below re-fires before-quit, but by
+// then store.flush() has already resolved so it falls through immediately.
+let quitFlushed = false;
+app.on('before-quit', (event) => {
+  isQuitting = true;
+  stopScheduler();
+  if (quitFlushed || !store) return;
+  event.preventDefault();
+  store.flush().finally(() => { quitFlushed = true; app.quit(); });
+});
 
 // Allow installer/Windows shutdown to close the app properly
 app.on('will-quit', () => { isQuitting = true; });

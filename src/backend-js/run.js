@@ -329,7 +329,74 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
 
   if (webhookUrl) await checkAlerts(signaled, dataDir, webhookUrl);
 
+  // Real intraday change — see updateIntradaySnapshots/computeLiveChange1d
+  // below. Additive only: change_1d (the existing gazbot-"last"-based
+  // figure everything else already depends on — SURGE/DUMP thresholds,
+  // Dashboard risers/fallers, Opportunity Score) is left completely
+  // untouched. change_1d_live sits alongside it, null until ~20h of
+  // snapshots have accumulated (nothing to show on a fresh install or
+  // right after this feature first ships).
+  try {
+    const snapshots = await updateIntradaySnapshots(dataDir, signaled);
+    for (const it of signaled) {
+      const price = it.liveBuy ?? it.high ?? it.low;
+      it.change_1d_live = computeLiveChange1d(snapshots, it.id, price);
+    }
+  } catch (e) {
+    console.log(`[intraday] Error: ${e.message}`);
+  }
+
   return signaled;
+}
+
+// ── Real intraday change ─────────────────────────────────────────────────────
+// The regular change_1d relies on the gazbot dump's own "last" field (or a
+// history-based fallback) — both are snapshots of unknown/coarse freshness.
+// This instead builds a rolling record of the live price itself (the same
+// field the live B:/S: line and Flips tab use) and compares against
+// whatever snapshot sits closest to 24h ago. One entry per item per ~50
+// minutes (not every 15-min fetch) keeps the file small — a 24h window
+// only ever needs ~30 points, not ~96.
+const INTRADAY_MIN_GAP_MS = 50 * 60 * 1000;
+const INTRADAY_RETENTION_MS = 30 * 60 * 60 * 1000; // keep a bit past 24h for lookback slack
+const INTRADAY_MIN_AGE_MS = 20 * 60 * 60 * 1000;   // don't compare against anything younger than this — too close to "today" to call it a daily change
+const INTRADAY_TARGET_AGE_MS = 24 * 60 * 60 * 1000;
+
+async function updateIntradaySnapshots(dataDir, items) {
+  const file = path.join(dataDir, 'intraday_snapshots.json');
+  const store = await storage.readJSON(file, {});
+  const now = Date.now();
+
+  for (const it of items) {
+    if (it.untradeable) continue;
+    const price = it.liveBuy ?? it.high ?? it.low;
+    if (!price) continue;
+    const id = String(it.id);
+    const arr = store[id] || [];
+    const last = arr[arr.length - 1];
+    if (!last || now - last.t >= INTRADAY_MIN_GAP_MS) arr.push({ t: now, p: price });
+    const trimmed = arr.filter(pt => now - pt.t <= INTRADAY_RETENTION_MS);
+    if (trimmed.length) store[id] = trimmed; else delete store[id];
+  }
+
+  await storage.writeJSON(file, store);
+  return store;
+}
+
+function computeLiveChange1d(snapshots, itemId, currentPrice) {
+  if (!currentPrice) return null;
+  const arr = snapshots[String(itemId)];
+  if (!arr || !arr.length) return null;
+
+  let best = null, bestDiff = Infinity;
+  for (const pt of arr) {
+    const age = Date.now() - pt.t;
+    if (age < INTRADAY_MIN_AGE_MS) continue;
+    const diff = Math.abs(age - INTRADAY_TARGET_AGE_MS);
+    if (diff < bestDiff) { bestDiff = diff; best = pt; }
+  }
+  if (!best || !best.p) return null;
+  return pyRound(((currentPrice - best.p) / best.p) * 100, 2);
 }
 
 // ── Signal thresholds ────────────────────────────────────────────────────────
@@ -424,6 +491,29 @@ function runSignals(items) {
       }
     }
 
+    // WIDE_SPREAD: live instabuy/instasell gap is unusually wide relative
+    // to the price — a thin, two-sided market where the "margin" you'd
+    // see on a flip is really just illiquidity, not a real opportunity.
+    // Threshold picked from the actual distribution (checked directly,
+    // not guessed): among decent-volume items with sane live prices,
+    // median spread is ~4.5%, 90th percentile is ~41% — 40% catches
+    // roughly that top decile without flagging ordinary items. Reuses
+    // the same volume floor and GE-price sanity band as the Flips tab's
+    // filters, since a wide "spread" is just as often one fluke print
+    // as it is a real thin market (confirmed for real: without the
+    // sanity band, near-1gp instasell dumps on high-value items produced
+    // spread percentages in the millions).
+    const SPREAD_PCT_MIN = 40;
+    const SPREAD_MIN_GP = 500;
+    const SPREAD_MIN_VOL = 50;
+    if (item.liveBuy != null && item.liveSell != null && item.liveSell > 0 && gePrice0 > 0
+      && vol >= SPREAD_MIN_VOL
+      && item.liveSell >= gePrice0 * 0.5 && item.liveBuy <= gePrice0 * 2) {
+      const spreadGp = item.liveBuy - item.liveSell;
+      const spreadPct = (spreadGp / item.liveSell) * 100;
+      if (spreadGp >= SPREAD_MIN_GP && spreadPct >= SPREAD_PCT_MIN) signals.push('WIDE_SPREAD');
+    }
+
     // Volume tier badge
     if (vol >= MIN_VOL_ABS && avgVol) {
       if (volRatio >= VOL_FRENZY_MIN) signals.push('FRENZY');
@@ -490,6 +580,7 @@ async function checkAlerts(items, dataDir, webhookUrl) {
 
     const condition = alert.condition || 'above';
     const price = item.high || item.low || 0;
+    const liveRef = item.liveBuy ?? item.liveSell;
     const changeOneDay = item.change_1d;
     const signals = item.signals || [];
     const threshold = alert.price || 0;
@@ -499,6 +590,13 @@ async function checkAlerts(items, dataDir, webhookUrl) {
     let hit = false;
     if (condition === 'above' && price > threshold) hit = true;
     else if (condition === 'below' && price < threshold) hit = true;
+    // live_above/live_below check the real instant-buy/instant-sell price
+    // from the wiki's live prices API (item.liveBuy/liveSell, refreshed
+    // the same 15-min cycle as everything else) instead of the regular
+    // gazbot-dump price — still evaluated once per refresh, not a
+    // separate faster poll, but against the fresher of the two fields.
+    else if (condition === 'live_above' && liveRef != null && liveRef > threshold) hit = true;
+    else if (condition === 'live_below' && liveRef != null && liveRef < threshold) hit = true;
     else if (condition === 'pct_up' && changeOneDay !== null && changeOneDay !== undefined && changeOneDay >= pct) hit = true;
     else if (condition === 'pct_down' && changeOneDay !== null && changeOneDay !== undefined && changeOneDay <= -Math.abs(pct)) hit = true;
     else if (condition === 'signal' && signals.includes(sigType)) hit = true;
@@ -516,6 +614,7 @@ async function sendDiscord(triggered, webhookUrl) {
     const condition = alert.condition || 'above';
     const name = alert.item_name;
     const price = item.high || item.low || 0;
+    const liveRef = item.liveBuy ?? item.liveSell;
     const changeOneDay = item.change_1d;
     const signals = item.signals || [];
 
@@ -524,6 +623,10 @@ async function sendDiscord(triggered, webhookUrl) {
       msg = `📈 **${name}** rose above **${fmtGp(alert.price)}gp** — now **${fmtGp(price)}gp**`;
     } else if (condition === 'below') {
       msg = `📉 **${name}** fell below **${fmtGp(alert.price)}gp** — now **${fmtGp(price)}gp**`;
+    } else if (condition === 'live_above') {
+      msg = `📈 **${name}** live price rose above **${fmtGp(alert.price)}gp** — now **${fmtGp(liveRef)}gp**`;
+    } else if (condition === 'live_below') {
+      msg = `📉 **${name}** live price fell below **${fmtGp(alert.price)}gp** — now **${fmtGp(liveRef)}gp**`;
     } else if (condition === 'pct_up') {
       msg = `📈 **${name}** up **+${changeOneDay.toFixed(2)}%** today (threshold: +${alert.pct || 0}%)`;
     } else if (condition === 'pct_down') {
