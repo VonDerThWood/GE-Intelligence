@@ -20,7 +20,31 @@
   ; it just bypassed.
   nsExec::Exec 'taskkill /F /IM GEnius.exe /T'
   Pop $0
-  Sleep 2000
+
+  ; A flat Sleep here was a guess, not a guarantee — confirmed for real
+  ; (Ben, 2026-07-29): a previous install hit RMDir before Windows had
+  ; actually released GEnius.exe's file handle (taskkill returning doesn't
+  ; mean the handle is gone yet), so RMDir couldn't delete the still-open
+  ; files and Windows silently queued them for delete-on-next-reboot
+  ; instead of failing loudly. Nothing looked wrong until an UNRELATED
+  ; reboot weeks later finally ran that backlog and wiped GEnius.exe, its
+  ; DLLs, locales, and .pak files out from under a working install — the
+  ; data-only files (app.asar.unpacked) were untouched because nothing
+  ; had them open. Polling for the exe to actually be deletable — instead
+  ; of just hoping 2 seconds was enough — turns that silent time-bomb into
+  ; either a real delete now or (worst case) the same deferred-delete
+  ; fallback, but only after genuinely trying, not after a guessed delay.
+  StrCpy $1 0
+  poll_unlocked:
+    IntOp $1 $1 + 1
+    ClearErrors
+    Rename "$LOCALAPPDATA\Programs\GEnius\GEnius.exe" "$LOCALAPPDATA\Programs\GEnius\GEnius.exe"
+    IfErrors 0 unlocked
+    IntCmp $1 25 unlocked unlocked ; ~5s max wait (25 x 200ms), then give up and proceed anyway
+    Sleep 200
+    Goto poll_unlocked
+  unlocked:
+
   RMDir /r "$LOCALAPPDATA\Programs\GEnius"
   Delete "$DESKTOP\GEnius.lnk"
   Delete "$SMPROGRAMS\GEnius.lnk"

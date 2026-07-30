@@ -85,6 +85,14 @@ async function ensureDir(dirPath) {
   await fs.promises.mkdir(dirPath, { recursive: true });
 }
 
+// deleteFile exists so callers (api.js) never need their own direct
+// `require('fs')` just to prune old backup files — keeping every real
+// filesystem call funneled through this one file is the whole point of it
+// (see the file comment up top). Quiet no-op if already missing.
+async function deleteFile(filePath) {
+  try { await fs.promises.unlink(filePath); } catch {}
+}
+
 async function listJSONFiles(dirPath) {
   try {
     return (await fs.promises.readdir(dirPath)).filter(f => f.endsWith('.json'));
@@ -239,4 +247,5 @@ module.exports = {
   atomicWrite, readJSON, writeJSON, ensureDir, pathExists,
   listJSONFiles, loadDirBatched, writeDirItem, readDirItem,
   migrateLegacyHistoryFile, createKVStore, resolveWritable,
+  deleteFile,
 };

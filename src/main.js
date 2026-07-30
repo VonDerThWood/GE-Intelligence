@@ -197,6 +197,13 @@ async function checkWatchlistDigest() {
   }
 }
 
+async function checkPortfolioDigest() {
+  const digest = await api.getPortfolioDigest();
+  if (digest) {
+    new Notification({ title: digest.title, body: digest.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
 async function checkReminders() {
   for (const r of await api.getDueReminders()) {
     new Notification({ title: r.title, body: r.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
@@ -218,7 +225,7 @@ function startScheduler() {
     } else {
       runPython('prices');
     }
-    checkDxpNotifications(); checkWatchlistDigest(); checkReminders();
+    checkDxpNotifications(); checkWatchlistDigest(); checkPortfolioDigest(); checkReminders();
   }, ms);
 }
 
@@ -301,6 +308,14 @@ ipcMain.handle('get-watchlist-notification-settings', () => store.get('watchlist
 }));
 ipcMain.handle('set-watchlist-notification-settings', (_, settings) => {
   store.set('watchlistNotificationSettings', settings);
+  return { success: true };
+});
+
+ipcMain.handle('get-portfolio-digest-settings', () => store.get('portfolioDigestSettings', {
+  enabled: false, intervalHours: 0.25,
+}));
+ipcMain.handle('set-portfolio-digest-settings', (_, settings) => {
+  store.set('portfolioDigestSettings', settings);
   return { success: true };
 });
 
@@ -479,6 +494,7 @@ app.whenReady().then(async () => {
   // than blocking startup. Even with the async-batched reads in api.js,
   // there's no reason to make window creation wait on it.
   api.loadHistory();
+  api.runAutoBackup().catch(e => console.error('[autobackup] failed:', e.message));
   startScheduler();
   setTimeout(() => runPython('prices'), 3000);
   setTimeout(() => checkDxpNotifications(), 5000);

@@ -47,6 +47,8 @@ contextBridge.exposeInMainWorld('genius', {
   // Main watchlist daily digest notification (separate from DXP's own)
   getWatchlistNotificationSettings: () => ipcRenderer.invoke('get-watchlist-notification-settings'),
   setWatchlistNotificationSettings: (s) => ipcRenderer.invoke('set-watchlist-notification-settings', s),
+  getPortfolioDigestSettings: () => ipcRenderer.invoke('get-portfolio-digest-settings'),
+  setPortfolioDigestSettings: (s) => ipcRenderer.invoke('set-portfolio-digest-settings', s),
 
   // Date-based reminders (Alerts tab)
   getReminders: () => ipcRenderer.invoke('get-reminders'),

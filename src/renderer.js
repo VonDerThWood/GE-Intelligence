@@ -4130,11 +4130,12 @@ function CompareTab({compareList, onRemove, onClear, allItems, description}) {
 
 /* ─── Tab views ──────────────────────────────────────────────── */
 function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
-  // Three-pill Normal/DXP/Seasonal switcher — devMode only while Almanac is pre-release.
+  // Three-pill Normal/DXP/Seasonal switcher — no longer dev-mode gated
+  // (Ben, 2026-07-29: "those should not be behind dev mode, my apologies").
   const [view, setView] = useState('normal');
   const [seasonalEvent, setSeasonalEvent] = useState('christmas');
   const [dxpWatchlist, setDxpWatchlist] = useState([]);
-  useEffect(() => { if (devMode) window.genius?.getDxpWatchlist?.().then(list => setDxpWatchlist(list || [])); }, [devMode]);
+  useEffect(() => { window.genius?.getDxpWatchlist?.().then(list => setDxpWatchlist(list || [])); }, []);
   const toggleDxpWatch = id => {
     const sid = String(id);
     setDxpWatchlist(prev => {
@@ -4144,8 +4145,8 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
     });
   };
 
-  const activeList   = devMode && view === 'dxp' ? dxpWatchlist : watchlist;
-  const activeToggle = devMode && view === 'dxp' ? toggleDxpWatch : onToggleWatch;
+  const activeList   = view === 'dxp' ? dxpWatchlist : watchlist;
+  const activeToggle = view === 'dxp' ? toggleDxpWatch : onToggleWatch;
   const watched      = items.filter(it => activeList.map(String).includes(String(it.id)));
 
   // ── Seasonal view helpers ────────────────────────────────────────────────
@@ -4162,7 +4163,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
     description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
 
     // ── Mode pills ──────────────────────────────────────────────────────────
-    devMode && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+    h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
       ['normal','dxp','seasonal'].map(v => h('button', {
         key: v,
         onClick: () => setView(v),
@@ -4180,7 +4181,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
     ),
 
     // ── Seasonal sub-event pills ────────────────────────────────────────────
-    devMode && view === 'seasonal' && h('div', {style:{display:'flex', gap:6, padding:'8px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+    view === 'seasonal' && h('div', {style:{display:'flex', gap:6, padding:'8px 14px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
       SEASONAL_EVENTS.filter(ev => ev.confidence !== 'insufficient').map(ev =>
         h('button', {
           key: ev.id,
@@ -4196,7 +4197,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
     ),
 
     // ── Seasonal grid ───────────────────────────────────────────────────────
-    devMode && view === 'seasonal' && (
+    view === 'seasonal' && (
       seasonalRows.length === 0
         ? h('div', {className:'empty'}, h('p', null, 'No research data for this event.'))
         : h('div', {className:'offer-grid'},
@@ -4207,6 +4208,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
               return h('div', {
                 key: res.name,
                 className: 'offer-slot',
+                title: res.strategy || undefined,
                 onClick: liveItem ? () => onSelect(liveItem) : undefined,
                 style: liveItem ? {} : {cursor:'default', opacity:0.6},
               },
@@ -4218,19 +4220,32 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
                   ? h('div', {className:'offer-slot-change ' + pctClass(liveItem.change_1d)}, h(ChangeDisplay, {change_1d:liveItem.change_1d, price}))
                   : h('div', {className:'offer-slot-change'}),
                 h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', marginTop:4}},
-                  h('span', {style:{
-                    fontSize:9, padding:'1px 5px', borderRadius:3,
-                    border:`1px solid ${tier.color}`, color:tier.color,
-                  }}, tier.label),
-                  res.duringPct != null && h('span', {style:{
-                    fontSize:9, padding:'1px 5px', borderRadius:3,
-                    border:`1px solid ${res.duringPct > 0 ? T.green : T.red}`,
-                    color: res.duringPct > 0 ? T.green : T.red,
-                  }}, res.duringPct > 0 ? `▲${res.duringPct}%` : `▼${Math.abs(res.duringPct)}%`),
-                  res.recoveryPct != null && h('span', {style:{
-                    fontSize:9, padding:'1px 5px', borderRadius:3,
-                    border:`1px solid ${T.green}`, color:T.green,
-                  }}, `+${res.recoveryPct}%`),
+                  h('span', {
+                    title: tier.label === 'Round-trip'
+                      ? 'Confirmed pattern: buy the in-event dip, then sell after it recovers post-event — a full profitable round trip in the research.'
+                      : tier.label === 'Drop-only'
+                      ? 'Only the price drop during the event is confirmed — no reliable recovery afterward, so this is a "buy cheap to use" item, not a flip.'
+                      : 'Not enough years of data yet to confirm a repeatable pattern — treat this one as a guess.',
+                    style:{
+                      fontSize:9, padding:'1px 5px', borderRadius:3, cursor:'help',
+                      border:`1px solid ${tier.color}`, color:tier.color,
+                    },
+                  }, tier.label),
+                  res.duringPct != null && h('span', {
+                    title:'Deepest discount from the pre-event baseline price seen during the event (the buy point).',
+                    style:{
+                      fontSize:9, padding:'1px 5px', borderRadius:3, cursor:'help',
+                      border:`1px solid ${res.duringPct > 0 ? T.green : T.red}`,
+                      color: res.duringPct > 0 ? T.green : T.red,
+                    },
+                  }, res.duringPct > 0 ? `▲${res.duringPct}%` : `▼${Math.abs(res.duringPct)}%`),
+                  res.recoveryPct != null && h('span', {
+                    title:'How much it climbed back up after the event, measured from the in-event low (the sell point) — not from the original pre-event price.',
+                    style:{
+                      fontSize:9, padding:'1px 5px', borderRadius:3, cursor:'help',
+                      border:`1px solid ${T.green}`, color:T.green,
+                    },
+                  }, `+${res.recoveryPct}%`),
                 ),
               );
             })
@@ -4242,9 +4257,9 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
       !watched.length
         ? h('div', {className:'empty'},
             h('div', {className:'icon'}, '★'),
-            h('p', null, devMode && view === 'dxp' ? 'No items pinned to the DXP watchlist yet.' : 'Your watchlist is empty.'),
+            h('p', null, view === 'dxp' ? 'No items pinned to the DXP watchlist yet.' : 'Your watchlist is empty.'),
             h('div', {style:{fontSize:12, color:T.textDim, marginTop:8, lineHeight:1.7, maxWidth:340, textAlign:'center'}},
-              devMode && view === 'dxp'
+              view === 'dxp'
                 ? h('span', null, 'Pin items from inside the Almanac\'s Confirmed/Negligible/Speculative/Recommendations tables.')
                 : h('span', null,
                     'Browse any category tab and click the ★ on an item to add it here.', h('br', null),
@@ -5549,6 +5564,35 @@ function DXPIntelTab({items, onSelect}) {
   const eventCount = data?._meta?.event_count ?? null;
   const itemCount = data ? Object.keys(data).filter(k => k !== '_meta').length : 0;
 
+  // Shared row-shape builder for both allRows (strictly filtered, feeds
+  // Confirmed/Negligible/Speculative) and watchlistRows (unfiltered, see
+  // below) — ph may be missing/thin here since watchlistRows calls this
+  // without the statistical gates allRows applies first.
+  const buildDxpRow = (id, entry, ph, liveItem) => {
+    const dominant = ph && ph.total ? (ph.rise >= ph.drop ? 'rise' : 'drop') : null;
+    const score = dominant === 'rise' ? ph.rise : (dominant === 'drop' ? ph.drop : 0);
+    const total = ph?.total || 0;
+    const ratio = total ? score / total : 0;
+    const price = liveItem ? (liveItem.high || liveItem.low || 0) : 0;
+    const medianPct = ph?.median_pct ?? ph?.avg_pct ?? 0;
+    const limit = entry.limit || liveItem?.limit || null;
+    const trade = buildTradeIdea(entry.timing, price, limit);
+    const negligible = trade
+      ? trade.netProfitPct < NEGLIGIBLE_NET_PROFIT_PCT
+        || (trade.profitForLimit != null && trade.profitForLimit < NEGLIGIBLE_PROFIT_FOR_LIMIT_GP)
+      : Math.abs(medianPct) < NEGLIGIBLE_MEDIAN_PCT;
+    return {
+      id, name: entry.name || liveItem?.name || id, price, limit,
+      dominant, score, total, ratio, medianPct, negligible,
+      negligibleReason: negligible ? negligibleReason(trade, medianPct) : null,
+      volRatio: ph?.avg_vol_ratio,
+      insufficientData: !ph || !ph.total || ph.total < 5,
+      timing: entry.timing,
+      trade,
+      events: ph?.events || [],
+    };
+  };
+
   const allRows = useMemo(() => {
     if (!data) return [];
     const out = [];
@@ -5568,31 +5612,33 @@ function DXPIntelTab({items, onSelect}) {
       // 2026-06-24 — without it, Confirmed/Recommendations could surface
       // items the research itself already debunked.
       if (ph.avg_vol_ratio != null && ph.avg_vol_ratio < 0.5) continue;
-      const dominant = ph.rise >= ph.drop ? 'rise' : 'drop';
-      const score = dominant === 'rise' ? ph.rise : ph.drop;
-      const ratio = score / ph.total;
-      if (ratio < 0.5) continue;
-      const liveItem = priceById[id];
-      const price = liveItem ? (liveItem.high || liveItem.low || 0) : 0;
-      const medianPct = ph.median_pct ?? ph.avg_pct ?? 0;
-      const limit = entry.limit || liveItem?.limit || null;
-      const trade = buildTradeIdea(entry.timing, price, limit);
-      const negligible = trade
-        ? trade.netProfitPct < NEGLIGIBLE_NET_PROFIT_PCT
-          || (trade.profitForLimit != null && trade.profitForLimit < NEGLIGIBLE_PROFIT_FOR_LIMIT_GP)
-        : Math.abs(medianPct) < NEGLIGIBLE_MEDIAN_PCT;
-      out.push({
-        id, name: entry.name || liveItem?.name || id, price, limit,
-        dominant, score, total: ph.total, ratio, medianPct, negligible,
-        negligibleReason: negligible ? negligibleReason(trade, medianPct) : null,
-        volRatio: ph.avg_vol_ratio,
-        timing: entry.timing,
-        trade,
-        events: ph.events || [],
-      });
+      const row = buildDxpRow(id, entry, ph, priceById[id]);
+      if (row.ratio < 0.5) continue;
+      out.push(row);
     }
     return out;
   }, [data, activePhase, priceById]);
+
+  // Deliberately bypasses every filter above — the Watchlist tab's own
+  // copy says "regardless of confidence tier," but until now it was
+  // silently filtering through allRows anyway, so a pinned item failing
+  // the same total/volRatio/ratio floors used to gate Confirmed/
+  // Speculative just vanished with no indication why. Confirmed for real
+  // (Ben, 2026-07-29): 12 items pinned, only 9 showing. Built as its own
+  // list (not a patch to allRows) so this can't also leak previously-
+  // excluded items into the Speculative tab, which shares allRows.
+  const watchlistRows = useMemo(() => {
+    if (!data || !dxpWatchlist.length) return [];
+    const out = [];
+    for (const id of dxpWatchlist) {
+      const entry = data[id];
+      if (!entry) continue; // never had any DXP data at all — nothing to show
+      if (isDebunkedDxpItem(entry.name || priceById[id]?.name)) continue;
+      const ph = entry.phases?.[activePhase];
+      out.push(buildDxpRow(id, entry, ph, priceById[id]));
+    }
+    return out;
+  }, [data, dxpWatchlist, activePhase, priceById]);
 
   // Recommendation engine candidates — item-level, independent of the
   // activePhase tab above. A trade idea (buy day -> sell day) is computed
@@ -5704,7 +5750,9 @@ function DXPIntelTab({items, onSelect}) {
           }
         }, rowTierLabel(r)),
       );
-      case 'direction': return h('td', {key:k, style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop');
+      case 'direction': return r.dominant == null
+        ? h('td', {key:k, style:{color:T.textDim}}, '— No data')
+        : h('td', {key:k, style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop');
       case 'confidence': return h('td', {key:k}, `${r.score}/${r.total}`);
       case 'medianPct': return h('td', {key:k, style:{color: r.medianPct>=0 ? T.green : T.red}}, `${r.medianPct>=0?'+':''}${r.medianPct}%`);
       case 'strategy': return h('td', {
@@ -5767,7 +5815,13 @@ function DXPIntelTab({items, onSelect}) {
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    const filtered = allRows.filter(r => {
+    // Watchlist tier reads from watchlistRows (unfiltered) instead of
+    // allRows whenever it's not a cross-tier search — see watchlistRows'
+    // own comment for why. Search still needs to reach every tier
+    // (including allRows-filtered ones) plus the watchlist, so it keeps
+    // using allRows the same as before.
+    const base = (!q && tier === 'watchlist') ? watchlistRows : allRows;
+    const filtered = base.filter(r => {
       if (q && !r.name?.toLowerCase().includes(q)) return false;
       // While searching, ignore the tier pill entirely and show matches
       // from every tier (Confirmed/Negligible/Speculative) plus anything
@@ -5775,7 +5829,7 @@ function DXPIntelTab({items, onSelect}) {
       // regardless of what tab it's in." Each match gets a tier tag in
       // the table instead, so you can still see where it'd normally live.
       if (q) return true;
-      if (tier === 'watchlist') return dxpWatchlist.includes(r.id);
+      if (tier === 'watchlist') return true; // base is already exactly the pinned set
       if (tier === 'confirmed') return confident(r) && !r.negligible;
       if (tier === 'negligible') return confident(r) && r.negligible;
       if (tier === 'speculative') return !confident(r);
@@ -5804,7 +5858,7 @@ function DXPIntelTab({items, onSelect}) {
       return (b.total - a.total);
     });
     return filtered;
-  }, [allRows, sort, tier, dxpWatchlist, search]);
+  }, [allRows, watchlistRows, sort, tier, dxpWatchlist, search]);
 
   const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
   const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
@@ -7068,6 +7122,15 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
+  const [portfolioDigest, setPortfolioDigest] = useState({enabled:false, intervalHours:0.25});
+  useEffect(() => { window.genius?.getPortfolioDigestSettings?.().then(w => w && setPortfolioDigest(w)); }, []);
+  const updatePortfolioDigest = patch => {
+    setPortfolioDigest(prev => {
+      const next = {...prev, ...patch};
+      window.genius?.setPortfolioDigestSettings?.(next);
+      return next;
+    });
+  };
   const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7, intervalHours:24});
   useEffect(() => { window.genius?.getWatchlistNotificationSettings?.().then(w => w && setWatchNotif(w)); }, []);
   const updateWatchNotif = patch => {
@@ -7336,6 +7399,30 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
             onChange:e=>updateWatchNotif({trendThresholdPct: parseFloat(e.target.value)||0}),
             style:{width:70, padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
           }),
+        ),
+      ),
+    ),
+
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Portfolio Digest'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
+        'Desktop notification listing every OPEN portfolio position\'s GE price, live buy, live sell, and running P/L — a plain periodic status check, not an anomaly alert (fires every interval regardless of whether anything moved).'
+      ),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:10}},
+        h('input',{type:'checkbox',checked:!!portfolioDigest.enabled,onChange:e=>updatePortfolioDigest({enabled:e.target.checked})}),
+        h('span',null,'Enable portfolio digest')
+      ),
+      h('div',{style:{opacity:portfolioDigest.enabled?1:0.5}},
+        h('div',null,
+          h('div',{className:'form-lbl'},'Check every'),
+          h('select',{
+            value:portfolioDigest.intervalHours ?? 0.25, disabled:!portfolioDigest.enabled,
+            onChange:e=>updatePortfolioDigest({intervalHours: parseFloat(e.target.value)}),
+            style:{padding:'5px 8px', fontSize:13, background:T.panel2, border:`1px solid ${T.borderDim}`, borderRadius:4, color:T.text},
+          },
+            [[0.25,'15 minutes (matches auto-refresh)'],[0.5,'30 minutes'],[1,'1 hour'],[2,'2 hours'],[4,'4 hours'],[6,'6 hours'],[12,'12 hours'],[24,'24 hours']]
+              .map(([v,l]) => h('option',{key:v,value:v},l))
+          ),
         ),
       ),
     ),
@@ -7925,18 +8012,41 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
   const set = k => e => setForm(f => ({...f, [k]:e.target.value}));
   const totalCost = form.quantity && form.cost_basis ? Number(form.quantity) * Number(form.cost_basis) : 0;
 
+  // Escape still closes it — only the backdrop-click was the problem
+  // (silently discarding in-progress input from a stray click), Escape is
+  // an explicit, deliberate "get me out of here" the same way Cancel is.
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
   const handleSave = () => {
     if (!form.item_name || !form.quantity || !form.cost_basis) return;
-    onSave({...form,
+    const payload = {...form,
       quantity: Number(form.quantity),
       cost_basis: Number(form.cost_basis),
       target_price: form.target_price ? Number(form.target_price) : null,
       stop_loss: form.stop_loss ? Number(form.stop_loss) : null,
       target_profit_pct: form.target_profit_pct ? Number(form.target_profit_pct) : null,
-    }, createAlert);
+    };
+    if (form.status === 'sold' && form.sold_price) {
+      const sq = Number(form.sold_quantity || form.quantity);
+      const sp = Number(form.sold_price);
+      payload.sold_price = sp;
+      payload.sold_quantity = sq;
+      payload.realized_pl = Math.round(sp * sq * 0.98) - Number(form.cost_basis) * sq;
+    }
+    onSave(payload, createAlert);
   };
 
-  return h('div', {className:'modal-overlay', onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+  // No backdrop-click-to-close here (unlike most modals) — this one holds
+  // in-progress form input (buy/sell/edit fields), and a stray click just
+  // outside the box while typing was silently discarding whatever had been
+  // entered so far. Confirmed for real (Ben, 2026-07-29): kept closing it
+  // by accident while entering position data. Closing now requires the X
+  // or Cancel button, an explicit action instead of an easy misclick.
+  return h('div', {className:'modal-overlay'},
     h('div', {className:'modal'},
       h('div', {className:'modal-header'},
         h('div', {className:'detail-name', style:{fontSize:15}}, position ? 'Edit Position' : 'Add Position'),
@@ -7962,6 +8072,29 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
 
         totalCost > 0 && h('div', {style:{fontSize:11,color:T.textDim,marginBottom:12}},
           `Total cost: ${fmt.gp(totalCost)}gp`),
+
+        // Sold-position correction — the whole reason to click into a closed
+        // position instead of just viewing it (Ben's ask, 2026-07-29): fixing
+        // a wrong sale entry used to mean Reopen -> re-Sell just to correct
+        // one typo'd price. Realized P/L recomputes live as these change,
+        // using the same net = price*qty*0.98 formula sellPosition() itself
+        // uses, so the preview always matches what actually gets saved.
+        form.status === 'sold' && h('div', {style:{marginBottom:12}},
+          h('div', {className:'ge-section-head'}, 'Sold Details'),
+          h('div', {className:'form-grid-2'},
+            h('div', null, h('label',{className:'form-lbl'},'Sold Price (per item)'),
+              h(GpInput,{value:form.sold_price||'', placeholder:'Price sold each', onChange:v=>setForm(f=>({...f,sold_price:v}))})),
+            h('div', null, h('label',{className:'form-lbl'},'Sold Quantity'),
+              h(QtyInput,{value:form.sold_quantity||form.quantity, placeholder:'Qty sold', min:1, onChange:v=>setForm(f=>({...f,sold_quantity:v}))})),
+          ),
+          (form.sold_price && (form.sold_quantity||form.quantity)) && (() => {
+            const sq = Number(form.sold_quantity||form.quantity), sp = Number(form.sold_price);
+            const net = Math.round(sp * sq * 0.98);
+            const pl = net - Number(form.cost_basis||0) * sq;
+            return h('div', {style:{fontSize:11,color:T.textDim,marginTop:6}},
+              'Realized P/L: ', h('span',{style:{color: pl>=0?T.green:T.red, fontWeight:'bold'}}, (pl>=0?'+':'')+fmt.gp(pl)+'gp'));
+          })(),
+        ),
 
         h('div', {className:'form-grid-2', style:{marginBottom:12}},
           h('div', null,
@@ -8014,7 +8147,19 @@ function SellModal({position, onSell, onClose}) {
   const cost  = position.cost_basis * q;
   const pl    = net - cost;
 
-  return h('div', {className:'modal-overlay', onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  // No backdrop-click-to-close here (unlike most modals) — this one holds
+  // in-progress form input (buy/sell/edit fields), and a stray click just
+  // outside the box while typing was silently discarding whatever had been
+  // entered so far. Confirmed for real (Ben, 2026-07-29): kept closing it
+  // by accident while entering position data. Closing now requires the X
+  // or Cancel button, an explicit action instead of an easy misclick.
+  return h('div', {className:'modal-overlay'},
     h('div', {className:'modal'},
       h('div', {className:'modal-header'},
         h('div', {className:'detail-name', style:{fontSize:15}}, `Sell: ${position.item_name}`),
@@ -8069,8 +8214,9 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const [showModal,   setShowModal]   = useState(false);
   const [editPos,     setEditPos]     = useState(null);
   const [sellModal,   setSellModal]   = useState(null);
-  const [showClosed,  setShowClosed]  = useState(false);
+  const [showClosed,  setShowClosed]  = useState(true);
   const [ctxMenu,     setCtxMenu]     = useState(null); // {x, y, pos}
+  const [allocView,   setAllocView]   = useState('item'); // 'item' | 'category'
 
   const positions  = portfolio?.positions || [];
   const taxStats   = portfolio?.tax_stats  || {};
@@ -8259,12 +8405,13 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       h('div',{className:'ov-card'},
         h('div',{className:'ov-val '+(unrealizedPL>=0?'pct-up':'pct-down')},
           (unrealizedPL>=0?'+':'')+fmt.gp(unrealizedPL)+'gp'),
-        h('div',{className:'ov-lbl'},`Unrealized P&L (${unrealizedPct>=0?'+':''}${unrealizedPct.toFixed(1)}%)`)
+        h('div',{className:'ov-lbl', title:'Profit & Loss on positions you still hold — what you\'d gain or lose if you sold everything open right now. Not real until you actually sell.'},
+          `Unrealized P&L (${unrealizedPct>=0?'+':''}${unrealizedPct.toFixed(1)}%)`)
       ),
       h('div',{className:'ov-card'},
         h('div',{className:'ov-val '+(realizedPL>=0?'pct-up':'pct-down')},
           (realizedPL>=0?'+':'')+fmt.gp(realizedPL)+'gp'),
-        h('div',{className:'ov-lbl'},'Realized P&L')
+        h('div',{className:'ov-lbl', title:'Profit & Loss already locked in from positions you\'ve actually sold, after GE tax.'},'Realized P&L')
       ),
     ),
 
@@ -8289,7 +8436,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
           h('thead',null, h('tr',null,
             h('th',null,'Item'), h('th',null,'Qty'), h('th',null,'Cost/ea'),
             h('th',null,'Current'), h('th',null,'Value'),
-            h('th',null,'Gross P&L'), h('th',null,'Net P&L'), h('th',null,'P&L %'),
+            h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax.'},'Net P&L'),
+            h('th',{title:'The same P&L as a percentage of what you paid — useful for comparing positions of very different sizes at a glance.'},'P&L %'),
             h('th',null,'Held'), h('th',null,'Target'), h('th',null,'')
           )),
           h('tbody',null, openPos.map(pos =>
@@ -8302,7 +8450,6 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
               h('td',null,fmt.gp(pos.cost_basis)+'gp'),
               h('td',{style:{color:T.gold}},fmt.gp(pos.currentPrice)+'gp'),
               h('td',null,fmt.gp(pos.currentValue)+'gp'),
-              h('td',{className:pos.grossPL>=0?'pct-up':'pct-down'},(pos.grossPL>=0?'+':'')+fmt.gp(pos.grossPL)+'gp'),
               h('td',{className:pos.netPL>=0?'pct-up':'pct-down'},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'),
               h('td',{className:pos.plPct>=0?'pct-up':'pct-down'},fmt.pct(pos.plPct)),
               h('td',{style:{color:T.textDim}},(() => {
@@ -8365,10 +8512,26 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       ))
     ),
 
-    // Allocation
-    totalCurrent > 0 && allocations.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
-      h('div',{className:'ge-section-head'},'Portfolio Allocation'),
-      allocations.map(({name,val,pct}) => {
+    // Allocation — by item or by category, one section toggled by a button
+    // rather than two separate always-visible blocks (Ben's ask, 2026-07-29:
+    // they cover the same underlying gp, just grouped differently, so
+    // showing both stacked was redundant scrolling for the same idea twice).
+    totalCurrent > 0 && (allocations.length > 0 || categoryAllocations.length > 0) && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
+      h('div',{style:{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}},
+        h('div',{className:'ge-section-head',style:{margin:0}},'Portfolio Allocation'),
+        h('div',{style:{display:'flex',gap:4}},
+          ['item','category'].map(v => h('button',{
+            key:v, onClick:()=>setAllocView(v),
+            style:{
+              padding:'2px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: allocView===v ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${allocView===v ? T.gold : T.border}`,
+              color: allocView===v ? T.goldBright : T.textDim,
+            }
+          }, v==='item' ? 'By Item' : 'By Category'))
+        )
+      ),
+      allocView === 'item' && allocations.map(({name,val,pct}) => {
         const allocItem = onSelect && items && items.find(i => i.name.toLowerCase() === name.toLowerCase());
         return h('div',{key:name,style:{marginBottom:8}},
           h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}},
@@ -8382,13 +8545,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             h('div',{className:'alloc-bar-fg',style:{width:`${pct}%`}})
           )
         );
-      })
-    ),
-
-    // Allocation by category
-    totalCurrent > 0 && categoryAllocations.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
-      h('div',{className:'ge-section-head'},'By Category'),
-      categoryAllocations.map(({category,val,pct}) =>
+      }),
+      allocView === 'category' && categoryAllocations.map(({category,val,pct}) =>
         h('div',{key:category,style:{marginBottom:8}},
           h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}},
             h('span',{style:{color: pct >= CATEGORY_CONCENTRATION_WARN_PCT ? T.gold : T.text}}, CAT_LABEL[category] || category),
@@ -8478,12 +8636,14 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       showClosed && h('table',{className:'ge-table'},
         h('thead',null,h('tr',null,
           h('th',null,'Item'),h('th',null,'Qty'),h('th',null,'Cost/ea'),
-          h('th',null,'Sold At'),h('th',null,'Realized P&L')
+          h('th',null,'Sold At'),
+          h('th',{title:'Profit & Loss already locked in on this sale, after GE tax.'},'Realized P&L')
         )),
         h('tbody',null, closedPos.map(pos=>
           h('tr',{key:pos.id,
+            onClick: () => { setEditPos(pos); setShowModal(true); },
             onContextMenu: e => { e.preventDefault(); setCtxMenu({x:e.clientX, y:e.clientY, pos}); },
-            style:{cursor:'context-menu'},
+            style:{cursor:'pointer'},
           },
             h('td',null,pos.item_name),
             h('td',null,(pos.sold_quantity||pos.quantity).toLocaleString()),

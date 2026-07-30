@@ -1495,6 +1495,58 @@ async function createGeniusApi({ dataDir, store }) {
     }
   }
 
+  // Silent safety net against the settings-write race (see storage.js's
+  // createKVStore comment) and against GEnius getting force-killed with a
+  // write still in flight — confirmed for real (Ben, 2026-07-29): the
+  // watchlist went from 18 items down to 2 after a force-kill mid-session,
+  // with no way to recover except an unrelated manual export from a month
+  // earlier. This takes a small snapshot of just watchlist + settings
+  // (not portfolio/alerts/overrides — those already have their own atomic
+  // writes and are large/change constantly, this is specifically for the
+  // small, easy-to-lose, rarely-resaved stuff), one file per CALENDAR DAY
+  // (not per launch — Ben's ask, 2026-07-29, was a 15-day rolling window,
+  // and multiple launches in one day would just be the same day's snapshot
+  // getting overwritten, not extra generations piling up). Anything older
+  // than 15 days gets pruned once a new day's backup is written.
+  const AUTO_BACKUP_DAYS = 15;
+  async function runAutoBackup() {
+    const backupDir = path.join(dataDir, 'autobackups');
+    await storage.ensureDir(backupDir);
+    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayPath = path.join(backupDir, `autobackup-${todayStr}.json`);
+
+    const files = await storage.listJSONFiles(backupDir);
+    const cutoff = new Date(Date.now() - AUTO_BACKUP_DAYS * 86400000).toISOString().slice(0, 10);
+    for (const f of files) {
+      const m = f.match(/^autobackup-(\d{4}-\d{2}-\d{2})\.json$/);
+      if (m && m[1] < cutoff) await storage.deleteFile(path.join(backupDir, f));
+    }
+
+    const snapshot = {
+      version: 1,
+      backedUpAt: new Date().toISOString(),
+      watchlist:      store.get('watchlist', []),
+      hiddenItems:    store.get('hiddenItems', []),
+      itemNotes:      store.get('itemNotes', {}),
+      dxpWatchlist:   store.get('dxpWatchlist', []),
+      reminders:      store.get('reminders', []),
+      userShorthands: store.get('userShorthands', {}),
+      settings: {
+        discordWebhook: store.get('discordWebhook', ''),
+        fetchInterval:  store.get('fetchInterval', 15),
+        theme:          store.get('theme', 'dark'),
+        notifications:  store.get('notifications', true),
+        expensiveThreshold: store.get('expensiveThreshold', 500000000),
+        navOrder:       store.get('navOrder', []),
+        uiScale:        store.get('uiScale', 100),
+        devMode:        store.get('devMode', false),
+        watchlistNotificationSettings: store.get('watchlistNotificationSettings', {}),
+        portfolioDigestSettings:       store.get('portfolioDigestSettings', {}),
+      },
+    };
+    await storage.writeJSON(todayPath, snapshot, { pretty: true });
+  }
+
   // Export/import bundle building is genuinely portable (a mobile build
   // would still want backup/restore, just via a different file picker) —
   // only the actual save/open dialog is Electron-specific, so that part
@@ -1726,6 +1778,52 @@ async function createGeniusApi({ dataDir, store }) {
     };
   }
 
+  // Periodic snapshot of every OPEN position's live buy/sell and GE market
+  // price, unlike getWatchlistDigest above which only fires on a threshold
+  // crossing — Ben's ask (2026-07-29) was a plain periodic status check
+  // (defaulting to 15 minutes, matching the price auto-refresh), not
+  // an anomaly alert, so every open position gets a line every time this
+  // fires, regardless of whether anything moved.
+  async function getPortfolioDigest() {
+    const settings = store.get('portfolioDigestSettings', { enabled: false, intervalHours: 0.25 });
+    if (!settings.enabled) return null;
+
+    const portfolio = await readPortfolio();
+    const open = (portfolio.positions || []).filter(p => p.status === 'open');
+    if (!open.length) return null;
+
+    const intervalMs = (settings.intervalHours || 0.25) * 3600000;
+    const lastSentAt = store.get('portfolioDigestLastSentAt', 0);
+    if (Date.now() - lastSentAt < intervalMs) return null;
+
+    const itemsByName = Object.fromEntries(
+      ((await getData()).items || []).map(i => [i.name.toLowerCase(), i])
+    );
+
+    let totalValue = 0, totalCost = 0, totalPL = 0;
+    const lines = [];
+    for (const pos of open) {
+      const it = itemsByName[(pos.item_name || '').toLowerCase()];
+      if (!it) continue;
+      const gePrice = it.high ?? it.low ?? 0;
+      const curPrice = it.liveBuy ?? it.liveSell ?? gePrice;
+      const value = curPrice * pos.quantity;
+      const cost = pos.cost_basis * pos.quantity;
+      const pl = value - cost;
+      totalValue += value; totalCost += cost; totalPL += pl;
+      const buyStr  = it.liveBuy  != null ? `${it.liveBuy.toLocaleString()}gp`  : '—';
+      const sellStr = it.liveSell != null ? `${it.liveSell.toLocaleString()}gp` : '—';
+      lines.push(`${pos.item_name}: GE ${gePrice.toLocaleString()}gp | Buy ${buyStr} | Sell ${sellStr} (${pl >= 0 ? '+' : ''}${Math.round(pl).toLocaleString()}gp)`);
+    }
+    if (!lines.length) return null;
+
+    store.set('portfolioDigestLastSentAt', Date.now());
+    return {
+      title: `Portfolio digest — ${open.length} open position${open.length === 1 ? '' : 's'}`,
+      body: lines.join('\n') + `\n\nTotal: ${totalPL >= 0 ? '+' : ''}${Math.round(totalPL).toLocaleString()}gp (value ${Math.round(totalValue).toLocaleString()}gp)`,
+    };
+  }
+
   // Plain date-triggered reminders, no price involved. Fires once the day
   // arrives, then marked fired so it never repeats.
   async function getDueReminders() {
@@ -1775,10 +1873,10 @@ async function createGeniusApi({ dataDir, store }) {
     // overrides
     getOverrides, saveOverrides,
     // misc
-    getData, buildExportBundle, applyImportBundle,
+    getData, buildExportBundle, applyImportBundle, runAutoBackup,
     // notification checks (see comment above — what to fire is shared,
     // how to actually show it natively is platform-specific glue)
-    getDxpNotifications, getWatchlistDigest, getDueReminders,
+    getDxpNotifications, getWatchlistDigest, getPortfolioDigest, getDueReminders,
   };
 }
 
