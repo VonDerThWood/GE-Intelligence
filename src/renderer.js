@@ -4712,6 +4712,21 @@ const APP_NEWS = [
     // TODO.txt's "POST vX.X.X" section instead, and gets folded into a
     // brand-new entry here only when Ben actually cuts the next
     // release — never edited into this array ahead of time.
+    version: 'v2.3.0',
+    items: [
+      'New Portfolio Digest notification — a periodic desktop notification listing every open position\'s GE price, live buy/sell, and running P&L, on a plain interval (default every 15 minutes, matching the price auto-refresh) rather than only firing when something crosses a threshold. Settings → Notifications.',
+      'Added a real local safety net for your watchlist and settings — a small backup is now saved automatically once per day (kept for 15 days, oldest pruned automatically) so a settings mishap can\'t cost you more than a day\'s changes.',
+      'Fixed the Almanac\'s "My Watchlist" tab silently dropping pinned items whose confidence data was too thin or one-sided to qualify for Confirmed/Speculative — despite its own description saying "regardless of confidence tier." Items with too little data to judge now show "— No data" instead of just disappearing.',
+      'New Normal/DXP/Seasonal switcher on the Watchlist tab — DXP lets you pin items straight from the Almanac\'s Confirmed/Negligible/Speculative/Recommendations tables, and Seasonal is a live price monitor for every researched item in a given event.',
+      'Seasonal watchlist items now explain themselves — hover the Round-trip/Drop-only badge, the discount %, or the recovery % for what each one actually means, plus the full written strategy note for that item (this already existed for every seasonal item, it just was never shown anywhere until now).',
+      'Portfolio tab cleanup: the "By Item" and "By Category" allocation breakdowns are now one section with a toggle instead of two separate always-visible blocks; Closed Positions is expanded by default; clicking a closed position now opens an editable window (sold price/quantity, with the Realized P&L recalculating live) instead of requiring you to Reopen and re-Sell just to fix a typo; trimmed the open-positions table from three P&L columns down to two (dropped Gross P&L, kept Net P&L and P&L %) and added tooltips explaining what each figure means for anyone unfamiliar with the term.',
+      'Fixed clicking just outside the Add/Edit Position or Sell window in Portfolio silently discarding whatever you\'d typed so far — closing now needs the X, Cancel, or Escape, not an accidental stray click.',
+      'Fixed the Market tab\'s price column sorting by the GE reference price even while displaying (and labeled) Live Price — a "Live Price ↓" sort could quietly put a much higher live price below a much lower one.',
+      'Fixed a crash that could blank out an entire tab (Cosmetics, Melee, Magic, Watchlist, Opportunities, and others) with no error shown, triggered by switching into it.',
+      'Hardened the installer against a rare but real failure mode where an update could silently queue some of its own files for deletion on the next unrelated reboot, weeks later, with zero warning.',
+    ]
+  },
+  {
     version: 'v2.2.0',
     items: [
       'The item detail panel now closes on Escape, not just Backspace — it never had Escape support at all before, unlike every modal elsewhere in the app.',
