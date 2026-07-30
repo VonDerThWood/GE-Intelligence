@@ -2460,7 +2460,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         h(SparklineSVG, {data:sparkHistory.length ? sparkHistory : [item.high||0, item.high||0], color:sparkColor, w:260, ht:52, showLabels:sparkHistory.length > 0}),
         h('span', {className:'sparkline-expand-hint'}, 'click to expand')
       ),
-      devMode && !item.untradeable && h('div', {style:{display:'flex', gap:6, marginTop:4, marginBottom:2}},
+      !item.untradeable && h('div', {style:{display:'flex', gap:6, marginTop:4, marginBottom:2}},
         h('button', {
           onClick: () => { setChartDxpMode(true); setChartOpen(true); },
           title: 'View price chart with DXP event windows overlaid',
@@ -4712,6 +4712,12 @@ const APP_NEWS = [
     // TODO.txt's "POST vX.X.X" section instead, and gets folded into a
     // brand-new entry here only when Ben actually cuts the next
     // release — never edited into this array ahead of time.
+    version: 'v2.3.1',
+    items: [
+      'Removed the Dev Mode gate from two features that were leftover from before the Almanac itself went public (v2.0.0): the "DXP" button on the item Detail Panel (opens the price chart with DXP event windows overlaid) and Portfolio\'s diversification suggestions (flags over-concentrated categories using the same Almanac trade-idea data as Recommendations).',
+    ]
+  },
+  {
     version: 'v2.3.0',
     items: [
       'New Portfolio Digest notification — a periodic desktop notification listing every open position\'s GE price, live buy/sell, and running P&L, on a plain interval (default every 15 minutes, matching the price auto-refresh) rather than only firing when something crosses a threshold. Settings → Notifications.',
@@ -8214,13 +8220,13 @@ function SellModal({position, onSell, onClose}) {
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
 function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onReopenPosition, onSelect, toast, devMode, userShorthands}) {
-  // Diversification suggestions — dev-mode only, since these pull real
-  // picks from the Almanac's trade-idea engine, which itself stays hidden
-  // until Ben says it's ready to go public. Fetches its own copy of the
-  // DXP intelligence data independent of whether the Almanac tab has ever
-  // been opened this session.
+  // Diversification suggestions pull real picks from the Almanac's
+  // trade-idea engine — public since the Almanac itself went public
+  // (v2.0.0). Fetches its own copy of the DXP intelligence data
+  // independent of whether the Almanac tab has ever been opened this
+  // session.
   const [dxpData, setDxpData] = useState(null);
-  useEffect(() => { if (devMode) window.genius?.getDxpIntelligence?.().then(d => setDxpData(d || {})); }, [devMode]);
+  useEffect(() => { window.genius?.getDxpIntelligence?.().then(d => setDxpData(d || {})); }, []);
   const priceById = useMemo(() => {
     const m = {};
     items.forEach(it => { if (it.id) m[String(it.id)] = it; });
@@ -8368,7 +8374,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const COMBAT_GEAR_CATEGORIES = new Set(['melee', 'ranged', 'magic', 'necromancy', 'hybrid']);
   const HIGH_TIER_COMBAT_PRICE_GP = 10_000_000;
   const diversificationSuggestions = useMemo(() => {
-    if (!devMode || !dxpData) return [];
+    if (!dxpData) return [];
     const overweightCategories = new Set(
       categoryAllocations.filter(c => c.pct >= UNDEREXPOSED_CATEGORY_PCT && c.category !== 'rares').map(c => c.category)
     );
@@ -8395,7 +8401,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       if (picks.length >= 5) break;
     }
     return picks;
-  }, [devMode, dxpData, priceById, categoryAllocations]);
+  }, [dxpData, priceById, categoryAllocations]);
 
   const handleSave = async (pos, createAlert) => {
     await onSavePosition(pos);
@@ -8513,7 +8519,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     // necessarily that (Ben: "the portfolio isn't always for short term
     // flips and trades... just some item suggestions"). Just the item and
     // category, nothing tying it to a buy/sell day.
-    devMode && diversificationSuggestions.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
+    diversificationSuggestions.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
       h('div',{className:'ge-section-head'},'Diversification suggestions'),
       h('div',{style:{fontSize:11,color:T.textDim,fontStyle:'italic',marginBottom:8}},
         'Items worth a look in categories your portfolio barely touches — not financial advice, and not tied to any particular timing. Click one to check it out.'
