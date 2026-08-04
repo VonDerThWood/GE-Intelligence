@@ -739,10 +739,19 @@ function LiveTimeseriesChart({data}) {
   };
   const labelIdxs = [0, Math.floor((pts.length-1)*0.25), Math.floor((pts.length-1)*0.5), Math.floor((pts.length-1)*0.75), pts.length-1];
 
+  // Cursor position has to go through the same PAD_L/PAD_R-aware mapping
+  // xAt() uses to actually place points — the rendered SVG's DOM width
+  // maps to the FULL viewBox width `w`, but the plotted line only spans
+  // [PAD_L, w-PAD_R] within that. Using the raw cursor fraction across
+  // the whole width (ignoring padding) put the highlighted point
+  // noticeably left of the actual cursor — confirmed for real (Ben,
+  // 2026-07-30): had to drag the mouse well past a point for the
+  // highlight to catch up to it.
   const onMove = e => {
     const rect = svgRef.current.getBoundingClientRect();
-    const fracX = (e.clientX - rect.left) / rect.width;
-    const i = Math.round(fracX * (pts.length - 1));
+    const svgX = ((e.clientX - rect.left) / rect.width) * w;
+    const frac = (svgX - PAD_L) / chartW;
+    const i = Math.round(frac * (pts.length - 1));
     setHoverIdx(Math.max(0, Math.min(pts.length-1, i)));
   };
 
@@ -784,7 +793,8 @@ function LiveTimeseriesChart({data}) {
       h('div', {style:{color:T.textDim, fontSize:10, marginBottom:2}}, new Date(pts[hoverIdx].timestamp).toLocaleString()),
       buys[hoverIdx]  != null && h('div', null, h('span',{style:{color:T.green}},'Instabuy: '), fmt.gp(buys[hoverIdx])+'gp'),
       sells[hoverIdx] != null && h('div', null, h('span',{style:{color:'#e08030'}},'Instasell: '), fmt.gp(sells[hoverIdx])+'gp'),
-      h('div', null, h('span',{style:{color:T.textDim}},'Volume: '), h('span',{style:{color:T.blue}}, ((pts[hoverIdx].buyVolume||0)+(pts[hoverIdx].sellVolume||0)).toLocaleString())),
+      h('div', null, h('span',{style:{color:T.green}},'Instabuy vol: '), (pts[hoverIdx].buyVolume||0).toLocaleString()),
+      h('div', null, h('span',{style:{color:'#e08030'}},'Instasell vol: '), (pts[hoverIdx].sellVolume||0).toLocaleString()),
     ),
   );
 }
@@ -1007,14 +1017,25 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   useEffect(() => {
     if (!item?.id) return;
     setLoading(true); setError(false); setHistory(null); setTimeseries(null); setTimeseriesLoading(true); setDateLookup(null); setDateQuery(''); setChartView('recent'); setSnapshots([]);
-    window.genius?.getItemHistory(item.id).then(hist => {
-      if (hist && hist.length) setHistory(hist); else setError(true);
+    if (item.untradeable) {
+      // No WeirdGloop GE history exists for untradeable items (Invention
+      // components, combo potions — they never touch the Grand Exchange),
+      // so skip that fetch entirely rather than let it fail into `error`
+      // and block the chart — the recent-range view below already merges
+      // in GEnius's own daily price snapshots (fetched separately below),
+      // which is the only real history these items ever get.
       setLoading(false);
-    }).catch(() => { setError(true); setLoading(false); });
-    window.genius?.getItemTimeseries(item.id).then(ts => {
-      setTimeseries(ts && ts.length ? ts : null);
       setTimeseriesLoading(false);
-    }).catch(() => setTimeseriesLoading(false));
+    } else {
+      window.genius?.getItemHistory(item.id).then(hist => {
+        if (hist && hist.length) setHistory(hist); else setError(true);
+        setLoading(false);
+      }).catch(() => { setError(true); setLoading(false); });
+      window.genius?.getItemTimeseries(item.id).then(ts => {
+        setTimeseries(ts && ts.length ? ts : null);
+        setTimeseriesLoading(false);
+      }).catch(() => setTimeseriesLoading(false));
+    }
     window.genius?.getPriceSnapshots(item.id).then(snaps => {
       setSnapshots(snaps && snaps.length ? snaps : []);
     }).catch(() => {});
@@ -2016,6 +2037,7 @@ function GESearchBar({items, onSelect, userShorthands}) {
         },
           h('div',{className:'ge-result-name'},it.name),
           it.high && h('div',{className:'ge-result-price'},fmt.gp(it.high)+'gp'),
+          h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
           it.categories&&it.categories[0]&&h('div',{className:'ge-result-category'},CAT_LABEL[it.categories[0]]||it.categories[0])
         )
       )
@@ -2024,12 +2046,20 @@ function GESearchBar({items, onSelect, userShorthands}) {
 }
 
 /* ─── Price trend badges ─────────────────────────────────────── */
-function PriceTrendBadges({itemId, currentPrice, onOpenChart}) {
+function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
   const [trends, setTrends] = useState(null);
 
   useEffect(() => {
     if (!itemId || !currentPrice) return;
-    window.genius?.getItemHistory(itemId).then(history => {
+    // Untradeable items (Invention components, combo potions) have no
+    // WeirdGloop GE history — getItemHistory returns null for these
+    // immediately (see api.js). Fall back to GEnius's own daily price
+    // snapshots, the only real history these items ever get. Also used
+    // as a fallback for tradeable items still mid-backfill, same merge
+    // philosophy as ChartModal's recent-range view.
+    (untradeable ? Promise.resolve(null) : window.genius?.getItemHistory(itemId))
+      .then(history => (history && history.length >= 2) ? history : window.genius?.getPriceSnapshots(itemId))
+      .then(history => {
       if (!history || history.length < 2) return;
       const getTs = p => typeof p.timestamp==='number' ? p.timestamp*(p.timestamp<1e12?1000:1) : new Date(p.timestamp).getTime();
       const sorted = [...history].sort((a,b) => getTs(a) - getTs(b));
@@ -2045,7 +2075,7 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart}) {
       };
       setTrends({d7:calc(7), d30:calc(30), d90:calc(90)});
     });
-  }, [itemId, currentPrice]);
+  }, [itemId, currentPrice, untradeable]);
 
   if (!trends) return null;
   const entries = [
@@ -2249,7 +2279,7 @@ function FlipCalculator({item, onAddToPortfolio, livePrice}) {
   );
 }
 
-function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode}) {
+function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem}) {
   const [chartOpen, setChartOpen]     = useState(false);
   const [chartDxpMode, setChartDxpMode] = useState(false);
   const [imageOpen, setImageOpen]     = useState(false);
@@ -2260,6 +2290,17 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   // that should fire a wiki request on every item click.
   const [dropSources, setDropSources] = useState(null); // null = not fetched, {sources:[...]} once loaded
   const [dropSourcesLoading, setDropSourcesLoading] = useState(false);
+  // "Turns into" — unlike Drop sources above, this IS auto-fetched on open
+  // (Ben's ask, 2026-08-02): a much lighter page than a full drop table, and
+  // useful often enough (grimy->clean herbs, raw->cooked food, augmenting
+  // ingredients, etc.) that a click-first gate would just be an extra step
+  // most people take anyway. Prices are never cached across opens — the
+  // wiki page structure is stable but prices change constantly, so this
+  // refetches (and the backend recomputes prices fresh) every time.
+  const [products, setProducts] = useState(null); // null = not loaded yet, {products:[]} once loaded
+  const [productSort, setProductSort] = useState(null); // null = backend's own order; {key, dir} once a header's clicked
+  const toggleProductSort = key => setProductSort(s => ({key, dir: s && s.key===key ? -s.dir : -1}));
+  const productSortArrow = key => productSort && productSort.key===key ? (productSort.dir>0?' ↑':' ↓') : '';
   const [iconUrl, setIconUrl]         = useState(null);
   const [livePrice, setLivePrice]     = useState(null); // null = not loaded yet, {} = loaded but no data
   const [editingCats, setEditingCats] = useState(false);
@@ -2288,6 +2329,13 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     setStatsLoading(true);
     setDropSources(null);
     setDropSourcesLoading(false);
+    setProducts(null);
+    setProductSort(null);
+    if (!item.untradeable) {
+      window.genius?.getItemProducts(item.name).then(res => {
+        setProducts(res || {products:[]});
+      }).catch(() => setProducts({products:[]}));
+    }
     setEditingCats(false);
     setDraftCats(item.categories || []);
     setNoteText((notes && notes[item.id]) || '');
@@ -2339,6 +2387,21 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       setSparkHistory(pts);
     }).catch(() => {});
   }, [item.id]);
+
+  const sortedProducts = (() => {
+    if (!products || !products.products) return [];
+    if (!productSort) return products.products; // backend's own order (wiki table order)
+    const dir = productSort.dir;
+    const getVal = productSort.key === 'name' ? p => p.name.toLowerCase() : p => p.profit;
+    return [...products.products].sort((a, b) => {
+      const av = getVal(a), bv = getVal(b);
+      if (av == null && bv == null) return 0;
+      if (av == null) return 1;  // unknown profit always sorts last regardless of direction
+      if (bv == null) return -1;
+      if (typeof av === 'string') return av.localeCompare(bv) * dir;
+      return (av - bv) * dir;
+    });
+  })();
 
   const slotLabel = (slot) => {
     if (!slot) return null;
@@ -2513,7 +2576,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       ),
 
       // Price trend badges from history
-      item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true)}),
+      item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true), untradeable: item.untradeable}),
 
       // Big Mac price conversion
       !item.untradeable && h(BigMacLine, {
@@ -2652,6 +2715,43 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         dropSources.totalCount > dropSources.sources.length && h('div', {
           style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:4},
         }, `+ ${dropSources.totalCount - dropSources.sources.length} more sources — see full list on the wiki`)
+      ),
+
+      products && products.products.length > 0 && h('div', {style:{marginTop:12}},
+        h('div', {className:'ge-section-head'}, 'Turns Into'),
+        h('table', {style:{width:'100%', borderCollapse:'collapse', fontSize:11}},
+          h('thead', null, h('tr', null,
+            h('th', {
+              onClick:()=>toggleProductSort('name'), style:{textAlign:'left', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px 0', borderBottom:`1px solid ${T.border}`, cursor:'pointer', userSelect:'none'},
+              title:'Sort by name — click again to reverse',
+            }, 'Product'+productSortArrow('name')),
+            h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Cost'),
+            h('th', {
+              onClick:()=>toggleProductSort('profit'), style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 0 4px 4px', borderBottom:`1px solid ${T.border}`, cursor:'pointer', userSelect:'none'},
+              title:'Sort by profit/loss — click again to reverse',
+            }, 'Profit'+productSortArrow('profit')),
+          )),
+          h('tbody', null, sortedProducts.map((p,i) => {
+            const matched = allItems && allItems.find(it => it.name.toLowerCase() === p.name.toLowerCase());
+            return h('tr', {key:i},
+              h('td', {
+                style:{padding:'3px 4px 3px 0', color: matched ? T.gold : T.text, cursor: matched ? 'pointer' : 'default', textDecoration: matched ? 'underline dotted' : 'none'},
+                onClick: matched ? () => onSelectItem && onSelectItem(matched) : undefined,
+                title: (matched ? 'Open in item lookup\n' : '') + p.materials.map(m => `${m.qty} × ${m.name}${m.unitPrice!=null ? ` (${m.unitPrice.toLocaleString()}gp ea)` : ' (price unknown)'}`).join('\n'),
+              }, p.name),
+              h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.textDim}}, p.hasUnknownCost ? '—' : p.cost.toLocaleString()),
+              h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color: p.profit == null ? T.textDim : (p.profit >= 0 ? T.green : T.red)}},
+                p.profit == null ? '—' : `${p.profit >= 0 ? '+' : ''}${p.profit.toLocaleString()}gp`
+              ),
+            );
+          }))
+        ),
+        h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:4}},
+          'Cost/profit cross-reference GEnius\'s own live buy/sell prices, not the wiki\'s own (usually stale or missing) GE price column. Excludes purely cosmetic recolors/augments.'
+        ),
+        products.totalCount > products.products.length && h('div', {
+          style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:2},
+        }, `+ ${products.totalCount - products.products.length} more products — see full list on the wiki`)
       ),
 
       h(RecipeSection, {item, allItems}),
@@ -3373,7 +3473,15 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     };
   }, [showWeatherLegend, showHeatmapLegend]);
 
-  // Hall of Shame
+  // Hall of Shame / Hall of Glory — split 2026-08-03 (Ben): "Most
+  // Volatile" ranked purely by |change_1d|, so a huge PUMP scored
+  // identically to a crash and landed it under "Shame" even though
+  // booming in price is a good outcome for anyone holding it. Moved to
+  // its own positive section (renamed "Wildest Ride" so "volatile"'s
+  // risk-flavored connotation doesn't linger), paired with two new
+  // genuinely-positive entries; Shame gets "Most Overpriced" in its
+  // place — a real warning (GE-listed price sitting 20%+ above live),
+  // not just a big number.
   const hallOfShame = useMemo(() => {
     const priced = tradeableItems.filter(it => (it.high || it.low) > 10000 && it.change_1d != null);
     const biggestCrash = [...priced].sort((a,b) => (a.change_1d||0) - (b.change_1d||0))[0];
@@ -3383,7 +3491,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
         const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
         return rb - ra;
       })[0];
-    const mostVolatile = [...priced].filter(it => (it.signals||[]).includes('FRENZY'))
+    const overpriced  = [...priced].filter(it => (it.signals||[]).includes('OVERPRICED'))
       .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
     const manipulated  = [...priced].filter(it => (it.signals||[]).includes('MANIPULATED'))
       .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
@@ -3393,10 +3501,28 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       entries.push({ icon:'📉', title:'Biggest Crash', item: biggestCrash, stat: (biggestCrash.change_1d).toFixed(2)+'% today' });
     if (biggestDump && biggestDump !== biggestCrash)
       entries.push({ icon:'🚮', title:'Heaviest Dump', item: biggestDump,  stat: (biggestDump.change_1d||0).toFixed(2)+'% on '+(biggestDump.volume&&biggestDump.avgVolume?(biggestDump.volume/biggestDump.avgVolume).toFixed(1)+'x avg vol':'high volume') });
-    if (mostVolatile)
-      entries.push({ icon:'🌪️', title:'Most Volatile',  item: mostVolatile, stat: Math.abs(mostVolatile.change_1d||0).toFixed(2)+'% swing today' });
+    if (overpriced)
+      entries.push({ icon:'🏷️', title:'Most Overpriced', item: overpriced, stat: 'GE price 20%+ above real live buy/sell' });
     if (manipulated)
       entries.push({ icon:'🎭', title:'Probably Manipulated', item: manipulated, stat: Math.abs(manipulated.change_1d||0).toFixed(2)+'% move on tiny buy limit' });
+    return entries;
+  }, [tradeableItems]);
+
+  const hallOfGlory = useMemo(() => {
+    const priced = tradeableItems.filter(it => (it.high || it.low) > 10000 && it.change_1d != null);
+    const bestGainer = [...priced].sort((a,b) => (b.change_1d||0) - (a.change_1d||0))[0];
+    const wildestRide = [...priced].filter(it => (it.signals||[]).includes('FRENZY'))
+      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
+    const hiddenGem = [...priced].filter(it => (it.signals||[]).includes('UNDERPRICED'))
+      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
+
+    const entries = [];
+    if (bestGainer && (bestGainer.change_1d||0) > 3)
+      entries.push({ icon:'📈', title:'Best Gainer', item: bestGainer, stat: '+'+(bestGainer.change_1d).toFixed(2)+'% today' });
+    if (wildestRide && wildestRide !== bestGainer)
+      entries.push({ icon:'🎢', title:'Wildest Ride', item: wildestRide, stat: Math.abs(wildestRide.change_1d||0).toFixed(2)+'% swing today' });
+    if (hiddenGem)
+      entries.push({ icon:'💎', title:'Hidden Gem', item: hiddenGem, stat: 'Real live price well above the GE listing' });
     return entries;
   }, [tradeableItems]);
 
@@ -3484,7 +3610,10 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       onClick: () => onSelect(it),
     },
       h('div', {style:{fontSize:12, color:T.text, flex:1, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
-      h('div', {style:{fontSize:12, color:T.textDim, marginLeft:8, whiteSpace:'nowrap'}}, fmt.gp(price)+'gp'),
+      h('div', {style:{display:'flex', flexDirection:'column', alignItems:'flex-end', marginLeft:8}},
+        h('div', {style:{fontSize:12, color:T.textDim, whiteSpace:'nowrap'}}, fmt.gp(price)+'gp'),
+        h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
+      ),
       showChange && chg != null && h('div', {
         style:{fontSize:11, color: chg>0?T.green:T.red, marginLeft:8, minWidth:46, textAlign:'right'}
       }, (chg>0?'+':'')+chg.toFixed(2)+'%')
@@ -4009,8 +4138,42 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
               h('div', {style:{fontSize:12, color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, entry.item.name),
               h('div', {style:{fontSize:11, color:T.textDim}}, entry.stat),
             ),
-            h('div', {style:{fontSize:12, color:T.red, flexShrink:0, fontWeight:'bold'}},
-              fmt.gp(entry.item.high || entry.item.low)+'gp'
+            h('div', {style:{flexShrink:0, textAlign:'right'}},
+              h('div', {style:{fontSize:12, color:T.red, fontWeight:'bold'}}, fmt.gp(entry.item.high || entry.item.low)+'gp'),
+              h(LivePriceLine, {liveBuy: entry.item.liveBuy, liveSell: entry.item.liveSell}),
+            ),
+          )
+        )
+      )
+    ),
+
+    // Hall of Glory
+    hallOfGlory.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, '🏆 Hall of Glory'),
+      h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
+        hallOfGlory.map((entry, i) =>
+          h('div', {
+            key:i,
+            onClick: () => onSelect(entry.item),
+            style:{
+              display:'flex', alignItems:'center', gap:10,
+              padding:'8px 10px', borderRadius:4, cursor:'pointer',
+              background:T.panel, border:`1px solid ${T.border}`,
+              borderLeft:`3px solid ${T.green}`,
+              transition:'border-color 0.15s',
+            },
+            onMouseEnter: e => e.currentTarget.style.borderColor = T.green,
+            onMouseLeave: e => e.currentTarget.style.borderColor = T.border,
+          },
+            h('div', {style:{fontSize:20, flexShrink:0}}, entry.icon),
+            h('div', {style:{flex:1, minWidth:0}},
+              h('div', {style:{fontSize:10, color:T.green, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2}}, entry.title),
+              h('div', {style:{fontSize:12, color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, entry.item.name),
+              h('div', {style:{fontSize:11, color:T.textDim}}, entry.stat),
+            ),
+            h('div', {style:{flexShrink:0, textAlign:'right'}},
+              h('div', {style:{fontSize:12, color:T.green, fontWeight:'bold'}}, fmt.gp(entry.item.high || entry.item.low)+'gp'),
+              h(LivePriceLine, {liveBuy: entry.item.liveBuy, liveSell: entry.item.liveSell}),
             ),
           )
         )
@@ -4020,20 +4183,37 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 }
 
 /* ─── Compare tab ────────────────────────────────────────────── */
-function CompareTab({compareList, onRemove, onClear, allItems, description}) {
+function CompareTab({compareList, onRemove, onClear, allItems, description, userShorthands}) {
   const [search, setSearch] = useState('');
   const [searchResults, setSearchResults] = useState([]);
 
+  // Shorthand-aware, same as the main search bar/Monster Lookup/Alerts
+  // (see resolveShorthand) — previously a plain substring filter, so
+  // typing a shorthand like a monster/item abbreviation here just came up
+  // empty instead of expanding like it does everywhere else in the app.
   const handleSearch = e => {
     const q = e.target.value;
     setSearch(q);
     if (q.length < 2) { setSearchResults([]); return; }
+    const resolved = resolveShorthand(q, userShorthands || {});
+    if (resolved) {
+      const seen = new Set();
+      const out = [];
+      for (const name of resolved) {
+        const ql = name.toLowerCase();
+        allItems
+          .filter(it => it.name.toLowerCase().includes(ql) && !seen.has(it.id))
+          .forEach(it => { seen.add(it.id); out.push(it); });
+      }
+      setSearchResults(out.slice(0, 8));
+      return;
+    }
     const ql = q.toLowerCase();
     setSearchResults(allItems.filter(it => it.name.toLowerCase().includes(ql)).slice(0, 8));
   };
 
   const ROWS = [
-    {label: 'Price',    render: it => fmt.gp(it.high||it.low)+'gp', color: it => T.gold},
+    {label: 'Price',    render: it => fmt.gp(it.high||it.low)+'gp', color: it => T.gold, live: true},
     {label: 'Change',   render: it => it.change_1d != null ? (it.change_1d>0?'+':'')+it.change_1d.toFixed(2)+'%' : '—',
                         color:  it => it.change_1d == null ? T.textDim : it.change_1d>0 ? T.green : T.red},
     {label: 'Volume',   render: it => it.volume ? fmt.gp(it.volume) : '—', color: () => T.text},
@@ -4119,7 +4299,8 @@ function CompareTab({compareList, onRemove, onClear, allItems, description}) {
                     ? h('div',{style:{display:'flex',flexWrap:'wrap',gap:2}},
                         (it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s}))
                       )
-                    : h('span',{style:{color:row.color(it)}}, row.render(it))
+                    : h('span',{style:{color:row.color(it)}}, row.render(it)),
+                  row.live && h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
                 ))
               ))
             )
@@ -4216,6 +4397,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
                 price
                   ? h('div', {className:'offer-slot-price'}, fmt.gp(price) + 'gp')
                   : h('div', {className:'offer-slot-price', style:{color:T.textDim}}, 'No price'),
+                liveItem && h(LivePriceLine, {liveBuy: liveItem.liveBuy, liveSell: liveItem.liveSell}),
                 price
                   ? h('div', {className:'offer-slot-change ' + pctClass(liveItem.change_1d)}, h(ChangeDisplay, {change_1d:liveItem.change_1d, price}))
                   : h('div', {className:'offer-slot-change'}),
@@ -4272,6 +4454,7 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
               h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
                 h('div', {className:'offer-slot-name'}, it.name),
                 h('div', {className:'offer-slot-price'}, fmt.gp(it.high||it.low)+'gp'),
+                h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
                 h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
                 h('div', {className:'offer-slot-star'},
                   h('button', {
@@ -4712,6 +4895,22 @@ const APP_NEWS = [
     // TODO.txt's "POST vX.X.X" section instead, and gets folded into a
     // brand-new entry here only when Ben actually cuts the next
     // release — never edited into this array ahead of time.
+    version: 'v2.4.0',
+    items: [
+      'Untradeable items (Invention components, combo potions) now show a real price chart and change badges — they were always silently blank before, since the chart tried a Grand Exchange history lookup first (which can never work for something that never touches the GE) and gave up instead of falling back to GEnius\'s own daily price snapshots.',
+      'New "Turns Into" section on the item detail panel — shows what a tradeable item can become (auto-fetched from the wiki), with cost/profit cross-referenced against GEnius\'s own live buy/sell prices, not the wiki\'s often-stale GE price. Filters out cosmetic reskins and untracked outputs, capped at 15 products. Click a product to open it in the detail panel.',
+      'Portfolio, Alch tab, and Monster Lookup\'s drop-table gp/kill estimate all now have the same GE/Live price toggle already used elsewhere in the app — profit, value, and P&L figures recompute off whichever price you pick instead of only ever using the GE reference price.',
+      'Flips: removed the flat price ceiling that could wrongly reject a legitimate demand-driven price spike (a real, high-volume rush now gets through instead of being treated the same as a single junk listing); added detection for coordinated wash-trading on cheap, barely-traded items via a sudden volume spike; staleness tolerance now scales with an item\'s own trading volume instead of one fixed cutoff for every item; the alch-value price ceiling no longer applies to cheap items nobody actually price-anchors off alching.',
+      'Fixed the item chart\'s All-Time Low/High never actually refreshing once first built — could silently show a stale, wrong record price indefinitely.',
+      'Live prices (GE price, plus Buy/Sell straight from the wiki\'s real-time feed) now show up everywhere a price does, not just the item detail panel: the search dropdown, Dashboard\'s watchlist section, Watchlist tab, Opportunity Score table, Compare tab, and Hall of Shame/Glory.',
+      'Compare tab search now supports item shorthands, same as the main search bar — it only ever did a plain name match before.',
+      'Split Hall of Shame into two sections: Hall of Shame (Biggest Crash, Heaviest Dump, Most Overpriced, Probably Manipulated) and a new Hall of Glory (Best Gainer, Wildest Ride, Hidden Gem) — a big price swing isn\'t automatically a bad thing, so genuine spikes/gainers now get their own home instead of being lumped in as "shameful."',
+      'Fixed the News tab flagging items as mentioned in an article just because their name appeared as a substring of an unrelated word — e.g. the item "Gin" was matching inside ordinary words like "begin."',
+      'Major overhaul of the category system behind every tab that filters or groups items — several hundred items that were silently falling into a generic "Misc" bucket (armour sets, potions, clue pages, ores, farming goods, and more) now show their real category, sourced fresh from the wiki.',
+      'Startup and history refresh are substantially faster — the full price-history cache now loads on demand instead of all at once every launch.',
+    ]
+  },
+  {
     version: 'v2.3.1',
     items: [
       'Removed the Dev Mode gate from two features that were leftover from before the Almanac itself went public (v2.0.0): the "DXP" button on the item Detail Panel (opens the price chart with DXP event windows overlaid) and Portfolio\'s diversification suggestions (flags over-concentrated categories using the same Almanac trade-idea data as Recommendations).',
@@ -5110,7 +5309,7 @@ function alertSummary(a) {
   }
 }
 
-function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands}) {
+function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands, onSelect}) {
   const BLANK = {item_name:'', condition:'above', price:'', pct:'', signal_type:'SURGE'};
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
@@ -5229,7 +5428,13 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
               )
             )
           : alerts.map(a => h('div',{key:a.id,className:'alert-row'},
-              h('span',{style:{flex:1,color:T.text,fontSize:12}},a.item_name),
+              h('span',{
+                style:{flex:1,color: onSelect ? T.gold : T.text, fontSize:12, cursor: onSelect ? 'pointer' : 'default'},
+                onClick: onSelect ? () => {
+                  const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+                  if (it) onSelect(it);
+                } : undefined,
+              }, a.item_name),
               h('span',{className:'alert-cond',style:{
                 fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
                 background:'rgba(201,168,76,0.1)', border:`1px solid ${T.borderDim}`, color:T.textDim
@@ -6796,6 +7001,19 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
   const toggleSort = key => setSort(s => ({key, dir: s && s.key===key ? -s.dir : -1}));
   const sortArrow = key => sort && sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
 
+  // Same shared toggle as ItemTable/MarketTab/AlchTab — GE price is the
+  // wiki drop-table's own listed value, Live is GEnius's own live buy/sell
+  // catalogue cross-referenced by item name (falls back to GE price per-row
+  // whenever an item isn't tracked live).
+  const [priceMode, setPriceMode] = useState(() => {
+    try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
+  });
+  const togglePriceMode = () => setPriceMode(m => {
+    const next = m === 'ge' ? 'live' : 'ge';
+    try { localStorage.setItem('genius_price_col_mode', next); } catch {}
+    return next;
+  });
+
   // "8/64" -> 0.125, "Always" -> 1, anything unparseable -> null (sorts last
   // regardless of direction, same convention as a null GE price below).
   const rarityToProbability = rarity => {
@@ -6811,7 +7029,7 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
     if (!sort) return drops.drops; // backend's default: highest gp contribution first
     const dir = sort.dir;
     const getVal = sort.key === 'gePrice'
-      ? d => d.gePrice
+      ? d => (priceMode === 'live' && d.livePrice != null ? d.livePrice : d.gePrice)
       : d => rarityToProbability(d.rarity);
     return [...drops.drops].sort((a, b) => {
       const av = getVal(a), bv = getVal(b);
@@ -6820,7 +7038,7 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
       if (bv == null) return -1;
       return (av - bv) * dir;
     });
-  }, [drops, sort]);
+  }, [drops, sort, priceMode]);
 
   const selectMonster = (title) => {
     setMonster(title);
@@ -6834,11 +7052,11 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
       window.genius?.getMonsterDrops(title, 'normal'),
       window.genius?.getMonsterInfo(title, 'normal'),
     ]).then(([dropsRes, infoRes]) => {
-      setDrops(dropsRes || {drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setDrops(dropsRes || {drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, estimatedGpPerKillLive:0, untradeableDropCount:0, hasHardMode:false, unknownRarityValueLive:0, hasLiveData:false});
       setInfo(infoRes || null);
       setLoading(false);
     }).catch(() => {
-      setDrops({drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setDrops({drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, estimatedGpPerKillLive:0, untradeableDropCount:0, hasHardMode:false, unknownRarityValueLive:0, hasLiveData:false});
       setLoading(false);
     });
   };
@@ -6858,11 +7076,11 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
       window.genius?.getMonsterDrops(monster, newMode),
       window.genius?.getMonsterInfo(monster, newMode),
     ]).then(([dropsRes, infoRes]) => {
-      setDrops(dropsRes || {drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setDrops(dropsRes || {drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, estimatedGpPerKillLive:0, untradeableDropCount:0, hasHardMode:false, unknownRarityValueLive:0, hasLiveData:false});
       setInfo(infoRes || null);
       setLoading(false);
     }).catch(() => {
-      setDrops({drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, untradeableDropCount:0, hasHardMode:false});
+      setDrops({drops:[], hadAnyTable:false, totalCount:0, estimatedGpPerKill:0, estimatedGpPerKillLive:0, untradeableDropCount:0, hasHardMode:false, unknownRarityValueLive:0, hasLiveData:false});
       setLoading(false);
     });
   };
@@ -7017,16 +7235,25 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
         !info && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
           `No combat stats page found for "${monster}" — this is likely a multi-monster encounter page (e.g. a duo boss), and the wiki keeps level/HP/weakness on each individual monster's own page instead of here.`
         ),
-        h('div', {style:{fontSize:13, color:T.gold, marginBottom:2}},
-          `Estimated gp/kill: ${Math.round(drops.estimatedGpPerKill).toLocaleString()}`
+        h('div', {style:{display:'flex', alignItems:'baseline', gap:10, marginBottom:2}},
+          h('div', {style:{fontSize:13, color:T.gold}},
+            drops.gpPerKillSource === 'wiki'
+              ? `Estimated gp/kill: ${Math.round(drops.estimatedGpPerKill).toLocaleString()}`
+              : `Estimated gp/kill (${priceMode==='ge'?'GE':'Live'} price): ${Math.round(priceMode==='live' ? drops.estimatedGpPerKillLive : drops.estimatedGpPerKill).toLocaleString()}`
+          ),
+          drops.hasLiveData && h('button', {
+            className:'ge-btn', style:{fontSize:10, padding:'2px 8px'},
+            onClick: togglePriceMode,
+            title: priceMode==='ge' ? 'Showing the wiki\'s listed GE price per drop — click to price everything off GEnius\'s own live buy/sell instead' : 'Showing GEnius\'s own live buy/sell per drop — click to show the wiki\'s listed GE price instead',
+          }, priceMode==='ge' ? 'Show Live' : 'Show GE'),
         ),
         h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:4}},
           drops.gpPerKillSource === 'wiki'
-            ? `Per the wiki's own published average for this monster (includes unique drops). Doesn't reflect RDT/luck variance on any single kill.`
-            : `GEnius's own estimate from the wiki's raw drop table — excludes ${drops.untradeableDropCount} untradeable drop${drops.untradeableDropCount===1?'':'s'}, the Rare/Gem drop table (rolled too rarely and inconsistently documented to estimate reliably), and other kill-time bonuses.`
+            ? `Per the wiki's own published average for this monster (includes unique drops). Doesn't reflect RDT/luck variance on any single kill.${drops.hasLiveData ? ' The total above is the wiki\'s own fixed figure and doesn\'t change with the toggle, but the per-drop prices below do — cross-referenced from GEnius\'s own live catalogue by item name, falling back to the wiki\'s GE price for anything not tracked live.' : ''}`
+            : `GEnius's own estimate from the wiki's raw drop table — excludes ${drops.untradeableDropCount} untradeable drop${drops.untradeableDropCount===1?'':'s'}, the Rare/Gem drop table (rolled too rarely and inconsistently documented to estimate reliably), and other kill-time bonuses.${drops.hasLiveData ? ' Live prices are cross-referenced from GEnius\'s own catalogue by item name and fall back to the wiki\'s GE price for anything not tracked live.' : ''}`
         ),
         drops.unknownRarityCount > 0 && h('div', {style:{fontSize:11, color:T.gold, fontStyle:'italic', marginBottom:12}},
-          `⚠ ${drops.unknownRarityCount} drop${drops.unknownRarityCount===1?'':'s'} worth ${Math.round(drops.unknownRarityValue).toLocaleString()}gp total ${drops.unknownRarityCount===1?'has':'have'} no drop rate documented on the wiki (listed as "Unknown") — excluded from the estimate above entirely rather than guessed at, so the real average is higher than shown.`
+          `⚠ ${drops.unknownRarityCount} drop${drops.unknownRarityCount===1?'':'s'} worth ${Math.round(priceMode==='live' ? drops.unknownRarityValueLive : drops.unknownRarityValue).toLocaleString()}gp total ${drops.unknownRarityCount===1?'has':'have'} no drop rate documented on the wiki (listed as "Unknown") — excluded from the estimate above entirely rather than guessed at, so the real average is higher than shown.`
         ),
         !drops.unknownRarityCount && h('div', {style:{marginBottom:12}}),
         drops.drops.length === 0
@@ -7041,8 +7268,8 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
                 }, 'Rarity'+sortArrow('rarity')),
                 h('th', {
                   onClick:()=>toggleSort('gePrice'), style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 0 4px 4px', borderBottom:`1px solid ${T.border}`, cursor:'pointer', userSelect:'none'},
-                  title:'Sort by GE price — click again to reverse',
-                }, 'GE Price'+sortArrow('gePrice')),
+                  title:'Sort by price — click again to reverse',
+                }, (priceMode==='ge' ? 'GE Price' : 'Live Price')+sortArrow('gePrice')),
               )),
               h('tbody', null, sortedDrops.map((d,i) => {
                 // Not every drop-table row is a tradeable GE item (untradeable
@@ -7058,7 +7285,11 @@ function MonsterLookupTab({description, monsterShorthands, items, onSelectItem})
                 }, d.item),
                 h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.textDim}}, d.quantity || '—'),
                 h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.gold}}, d.rarity || '—'),
-                h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color:T.textDim}}, d.geValueText || (d.gePrice != null ? d.gePrice.toLocaleString() : '—')),
+                h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color: priceMode==='live' && d.livePrice != null ? T.text : T.textDim}},
+                  priceMode==='live' && d.livePrice != null
+                    ? d.livePrice.toLocaleString()
+                    : (d.geValueText || (d.gePrice != null ? d.gePrice.toLocaleString() : '—'))
+                ),
                 );
               }))
             ),
@@ -7698,6 +7929,28 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
   const [sort, setSort] = useState({key:'alchProfit', dir:-1});
   const cols = useTableColumns('genius_alch_col_widths', ALCH_DEFAULT_COL_WIDTHS);
 
+  // Same shared GE/Live toggle as every other price column in the app
+  // (ItemTable's 'high' column, same localStorage key) — rather than a
+  // separate Live Profit column cluttering the table, the existing price
+  // column itself toggles, and every price-derived column recomputes off
+  // whichever one's active (Ben, 2026-07-31: "it's clogging up the
+  // screen... the columns change math depending on what you're
+  // selecting"). Caught for real on Magic Skull Mask: a low GE price
+  // flagged it as alch-worthy, but its real live buy price was 56-75k —
+  // a completely different profit picture depending on which price you
+  // actually trust.
+  const [priceMode, setPriceMode] = useState(() => {
+    try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
+  });
+  const togglePriceMode = e => {
+    e.stopPropagation();
+    setPriceMode(m => {
+      const next = m === 'ge' ? 'live' : 'ge';
+      try { localStorage.setItem('genius_price_col_mode', next); } catch {}
+      return next;
+    });
+  };
+
   const natureRunePrice = useMemo(() => {
     const nr = items.find(it => it.natureRunePrice);
     return nr ? nr.natureRunePrice : 0;
@@ -7714,14 +7967,19 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
     return items
       .filter(it => it.signals && it.signals.includes('ALCH'))
       .map(it => {
-        const price = it.high || it.low || 0;
+        const gePrice = it.high || it.low || 0;
+        // Falls back to GE price when there's no live buy data at all, so
+        // switching to Live mode doesn't just blank out items that don't
+        // have live data yet.
+        const livePrice = it.liveBuy ?? gePrice;
+        const price = priceMode === 'live' ? livePrice : gePrice;
         const alch = it.alch || 0;
         const afterTax = applyTax(price);
         const alchProfit = alch - price - natureRunePrice;
         const alchemiserProfit = alch - price - natureRunePrice - chargePerItem;
-        return {...it, afterTax, alchProfit, alchemiserProfit};
+        return {...it, price, afterTax, alchProfit, alchemiserProfit};
       });
-  }, [items, natureRunePrice, chargePerItem]);
+  }, [items, natureRunePrice, chargePerItem, priceMode]);
 
   const Th = ({k, label}) => h('th', {
     className:'sortable', style:{cursor:'pointer', userSelect:'none'},
@@ -7733,8 +7991,11 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
       if (sort.key === 'name') {
         return sort.dir * a.name.localeCompare(b.name);
       }
-      const av = a[sort.key] ?? 0;
-      const bv = b[sort.key] ?? 0;
+      // 'high' displays whichever price is active (see the header/cell
+      // toggle) — sort has to follow the same value shown, or a "Live
+      // Price" sort would silently order by the GE price underneath.
+      const av = sort.key === 'high' ? a.price : (a[sort.key] ?? 0);
+      const bv = sort.key === 'high' ? b.price : (b[sort.key] ?? 0);
       return sort.dir * (av < bv ? -1 : av > bv ? 1 : 0);
     });
   }, [alchItems, sort]);
@@ -7769,7 +8030,14 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
           }, label + (sort.key===k ? (sort.dir>0 ? ' ↑' : ' ↓') : ''));
           switch (k) {
             case 'name':       return sortTh('Item');
-            case 'high':       return sortTh('GE Price');
+            case 'high':       return cols.th(k, {onClick:()=>setSort(s => ({key:'high', dir: s.key==='high' ? -s.dir : -1}))},
+              (priceMode==='ge' ? 'GE Price' : 'Live Price') + (sort.key==='high' ? (sort.dir>0 ? ' ↑' : ' ↓') : ''),
+              h('button', {
+                onClick: togglePriceMode,
+                title: priceMode==='ge' ? 'Showing GE (listed) price — click to price everything off live buy instead' : 'Showing live buy price — click to price everything off GE instead',
+                style: {marginLeft:6, fontSize:9, padding:'1px 5px', cursor:'pointer', borderRadius:3, border:`1px solid ${T.border}`, background:'rgba(255,255,255,0.05)', color:T.textDim, textTransform:'none', letterSpacing:0, fontWeight:'normal'}
+              }, '⇄')
+            );
             case 'limit':      return sortTh('Buy Limit');
             case 'afterTax':   return sortTh('After Tax');
             case 'alch':       return sortTh('Alch Value');
@@ -7796,14 +8064,27 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
         }, cols.colOrder.map(k => {
           switch (k) {
             case 'name': return h('td', {key:k}, it.name);
-            case 'high': return h('td', {key:k}, fmt.gp(it.high||it.low)+'gp');
+            case 'high': {
+              const hasLive = it.liveBuy != null || it.liveSell != null;
+              if (priceMode === 'live' && hasLive) {
+                return h('td', {key:k},
+                  h('div', {style:{display:'flex', gap:6, fontSize:11}},
+                    it.liveBuy  != null && h('span', null, h('span',{style:{color:T.green}},'B '), fmt.gp(it.liveBuy)+'gp'),
+                    it.liveSell != null && h('span', null, h('span',{style:{color:'#e08030'}},'S '), fmt.gp(it.liveSell)+'gp'),
+                  ),
+                  h('div', {className:'vol-avg'}, 'GE '+fmt.gp(it.high||it.low)+'gp'),
+                );
+              }
+              return h('td', {key:k, style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp',
+                h(LivePriceLine, {liveBuy:it.liveBuy, liveSell:it.liveSell}));
+            }
             case 'limit': return h('td', {key:k, style:{color:T.textDim}}, it.limit ? fmt.gp(it.limit) : '—');
             case 'afterTax': return h('td', {key:k, style:{color:T.textDim}}, fmt.gp(it.afterTax)+'gp');
             case 'alch': return h('td', {key:k, style:{color:'#ce93d8'}}, fmt.gp(it.alch)+'gp');
             case 'alchProfit': return h('td', {key:k, style:{color: it.alchProfit > 0 ? T.green : T.red}},
               (it.alchProfit > 0 ? '+' : '') + fmt.gp(it.alchProfit)+'gp'
             );
-            case 'alchemiserProfit': return (it.high||it.low||0) > 500000
+            case 'alchemiserProfit': return it.price > 500000
               ? h('td', {key:k, style:{color:T.textDim}, title:'Over the Alchemiser\'s 500,000gp item value limit'}, 'N/A')
               : h('td', {key:k, style:{color: it.alchemiserProfit > 0 ? T.green : T.red}},
                   (it.alchemiserProfit > 0 ? '+' : '') + fmt.gp(it.alchemiserProfit)+'gp'
@@ -8030,6 +8311,11 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
     date_opened: position.date_opened || (position.created_at ? position.created_at.slice(0,10) : todayStr),
   } : blank);
   const [createAlert, setCreateAlert] = useState(false);
+  // Same per-item/total-sale toggle as SellModal (Ben, 2026-07-31) — total
+  // mode writes the derived per-item price straight into form.sold_price
+  // as you type, so handleSave never needs to know which mode was used.
+  const [soldPriceMode, setSoldPriceMode] = useState('perItem');
+  const [soldTotalPrice, setSoldTotalPrice] = useState('');
   const set = k => e => setForm(f => ({...f, [k]:e.target.value}));
   const totalCost = form.quantity && form.cost_basis ? Number(form.quantity) * Number(form.cost_basis) : 0;
 
@@ -8056,6 +8342,15 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
       const sp = Number(form.sold_price);
       payload.sold_price = sp;
       payload.sold_quantity = sq;
+      // Keep quantity in sync with sold_quantity — a sold position's
+      // quantity is supposed to always equal what was actually sold (see
+      // sellPosition() in api.js). Editing sold_quantity here without
+      // also updating quantity let the two silently drift apart, which
+      // corrupted anything summing quantity directly (e.g. the Realized
+      // P&L by Item breakdown) — caught for real (Ben, 2026-07-30): a
+      // Dragon dart tip lot's quantity (3,148) and sold_quantity (3,461)
+      // disagreed by exactly 313 after an edit.
+      payload.quantity = sq;
       payload.realized_pl = Math.round(sp * sq * 0.98) - Number(form.cost_basis) * sq;
     }
     onSave(payload, createAlert);
@@ -8102,11 +8397,32 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
         // uses, so the preview always matches what actually gets saved.
         form.status === 'sold' && h('div', {style:{marginBottom:12}},
           h('div', {className:'ge-section-head'}, 'Sold Details'),
+          h('div', {style:{display:'flex', gap:4, marginBottom:8}},
+            ['perItem','total'].map(m => h('button', {
+              key:m, onClick:()=>setSoldPriceMode(m),
+              style:{
+                padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+                background: soldPriceMode===m ? 'rgba(201,168,76,0.2)' : 'transparent',
+                border: `1px solid ${soldPriceMode===m ? T.gold : T.border}`,
+                color: soldPriceMode===m ? T.goldBright : T.textDim,
+              }
+            }, m==='perItem' ? 'Price per item' : 'Total sale price'))
+          ),
           h('div', {className:'form-grid-2'},
-            h('div', null, h('label',{className:'form-lbl'},'Sold Price (per item)'),
-              h(GpInput,{value:form.sold_price||'', placeholder:'Price sold each', onChange:v=>setForm(f=>({...f,sold_price:v}))})),
+            soldPriceMode === 'total'
+              ? h('div', null, h('label',{className:'form-lbl'},'Total Sale Price'),
+                  h(GpInput,{value:soldTotalPrice, placeholder:'Total gp received', onChange:v=>{
+                    setSoldTotalPrice(v);
+                    const q = Number(form.sold_quantity || form.quantity) || 0;
+                    setForm(f=>({...f, sold_price: q > 0 ? Math.round((Number(v)||0)/q) : f.sold_price}));
+                  }}))
+              : h('div', null, h('label',{className:'form-lbl'},'Sold Price (per item)'),
+                  h(GpInput,{value:form.sold_price||'', placeholder:'Price sold each', onChange:v=>setForm(f=>({...f,sold_price:v}))})),
             h('div', null, h('label',{className:'form-lbl'},'Sold Quantity'),
               h(QtyInput,{value:form.sold_quantity||form.quantity, placeholder:'Qty sold', min:1, onChange:v=>setForm(f=>({...f,sold_quantity:v}))})),
+          ),
+          soldPriceMode === 'total' && form.sold_price > 0 && h('div', {style:{fontSize:11, color:T.textDim, marginTop:4}},
+            `= ${fmt.gp(form.sold_price)}gp per item`
           ),
           (form.sold_price && (form.sold_quantity||form.quantity)) && (() => {
             const sq = Number(form.sold_quantity||form.quantity), sp = Number(form.sold_price);
@@ -8158,10 +8474,22 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
 
 /* ─── Sell modal ──────────────────────────────────────────────── */
 function SellModal({position, onSell, onClose}) {
+  // Per-item vs. total-sale-price toggle (Ben, 2026-07-31): the GE itself
+  // shows an average price per item on the sale summary screen, but
+  // logging a position still meant manually dividing that back out by
+  // hand every time — annoying for e.g. converting 25k Incandescent
+  // energy into Divine charges and selling the batch as one lump sum.
+  // Both inputs are kept in their own state (not derived from each
+  // other) so toggling back and forth doesn't lose what you typed due to
+  // rounding.
+  const [priceMode, setPriceMode] = useState('perItem'); // 'perItem' | 'total'
   const [sellPrice, setSellPrice] = useState(position.currentPrice || '');
+  const [totalPrice, setTotalPrice] = useState('');
   const [qty, setQty] = useState(position.quantity);
-  const sp = typeof sellPrice === 'number' ? sellPrice : Number(sellPrice) || 0;
   const q = Number(qty);
+  const sp = priceMode === 'total'
+    ? (q > 0 ? Math.round((Number(totalPrice) || 0) / q) : 0)
+    : (typeof sellPrice === 'number' ? sellPrice : Number(sellPrice) || 0);
   const gross = sp * q;
   const tax   = Math.round(gross * 0.02);
   const net   = Math.round(sp > 50 ? sp * q * 0.98 : sp * q);
@@ -8187,11 +8515,29 @@ function SellModal({position, onSell, onClose}) {
         h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:onClose}, 'X')
       ),
       h('div', {className:'modal-body'},
+        h('div', {style:{display:'flex', gap:4, marginBottom:10}},
+          ['perItem','total'].map(m => h('button', {
+            key:m, onClick:()=>setPriceMode(m),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: priceMode===m ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${priceMode===m ? T.gold : T.border}`,
+              color: priceMode===m ? T.goldBright : T.textDim,
+            }
+          }, m==='perItem' ? 'Price per item' : 'Total sale price'))
+        ),
         h('div', {className:'form-grid-2'},
-          h('div', null, h('label',{className:'form-lbl'},'Sell Price (per item)'),
-            h(GpInput,{value:sellPrice, onChange:v=>setSellPrice(v), placeholder:'Sell price'})),
+          priceMode === 'total'
+            ? h('div', null, h('label',{className:'form-lbl'},'Total Sale Price'),
+                h(GpInput,{value:totalPrice, onChange:v=>setTotalPrice(v), placeholder:'Total gp received'}))
+            : h('div', null, h('label',{className:'form-lbl'},'Sell Price (per item)'),
+                h(GpInput,{value:sellPrice, onChange:v=>setSellPrice(v), placeholder:'Sell price'})),
           h('div', null, h('label',{className:'form-lbl'},`Quantity (max ${position.quantity})`),
             h(QtyInput,{value:qty, min:1, max:position.quantity, onChange:v=>setQty(v)}))
+        ),
+
+        priceMode === 'total' && sp > 0 && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:12, marginTop:-6}},
+          `= ${fmt.gp(sp)}gp per item`
         ),
 
         sp > 0 && h('div', {style:{background:'rgba(0,0,0,0.25)',borderRadius:4,padding:'10px',marginBottom:12}},
@@ -8218,6 +8564,51 @@ function SellModal({position, onSell, onClose}) {
   );
 }
 
+// Shows every tier in a ladder (Investor Tier / Trade Count), not just
+// next/current/earned — the inline row only ever showed one tier ahead,
+// with no way to see the full climb (Ben, 2026-07-30). `tiers` is in the
+// same descending-threshold order as PORTFOLIO_TIERS/TRADE_COUNT_TIERS;
+// `achievedIndex` is that same array's tierIndex (-1 if nothing earned
+// yet) so this can mark earned/current/locked without recomputing it.
+function TierLadderModal({title, tiers, achievedIndex, onClose}) {
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  const ascending = [...tiers].map((t, i) => ({...t, i})).reverse();
+
+  return h('div', {className:'modal-overlay', onClick:e=>{if(e.target===e.currentTarget)onClose();}},
+    h('div', {className:'modal', style:{maxWidth:420}},
+      h('div', {className:'modal-header'},
+        h('div', {className:'detail-name', style:{fontSize:15}}, title),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:onClose}, 'X')
+      ),
+      h('div', {className:'modal-body', style:{maxHeight:480, overflowY:'auto'}},
+        ascending.map(t => {
+          const earned  = achievedIndex >= 0 && t.i > achievedIndex;
+          const current = t.i === achievedIndex;
+          const locked  = !earned && !current;
+          return h('div', {key:t.label, style:{
+            display:'flex', alignItems:'center', gap:10, padding:'8px 4px',
+            borderBottom:`1px solid ${T.borderDim}`,
+            opacity: locked ? 0.45 : 1,
+          }},
+            h('div', {style:{fontSize:20, filter:locked?'grayscale(1)':'none', minWidth:26, textAlign:'center'}}, t.icon),
+            h('div', {style:{flex:1}},
+              h('div', {style:{fontSize:12, fontWeight:'bold', color: current ? T.gold : T.text}}, t.label),
+              h('div', {style:{fontSize:10, color:T.textDim}}, t.sub),
+            ),
+            current && h('span', {style:{fontSize:9, color:T.goldBright, border:`1px solid ${T.gold}`, borderRadius:3, padding:'1px 6px'}}, 'Current'),
+            earned  && h('span', {style:{fontSize:12, color:T.green}}, '✓'),
+          );
+        })
+      )
+    )
+  );
+}
+
 /* ─── Portfolio tab ───────────────────────────────────────────── */
 function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onReopenPosition, onSelect, toast, devMode, userShorthands}) {
   // Diversification suggestions pull real picks from the Almanac's
@@ -8238,13 +8629,29 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const [showClosed,  setShowClosed]  = useState(true);
   const [ctxMenu,     setCtxMenu]     = useState(null); // {x, y, pos}
   const [allocView,   setAllocView]   = useState('item'); // 'item' | 'category'
+  const [tierModal,   setTierModal]   = useState(null); // 'investor' | 'tradeCount' | null
+
+  // Same shared GE/Live toggle as ItemTable/MarketTab/AlchTab/Monster
+  // Lookup — GE is the listed market price, Live is GEnius's own live
+  // buy/sell (closer to what you'd actually get instant-selling right
+  // now). Affects current value, P&L, and everything derived from it.
+  const [priceMode, setPriceMode] = useState(() => {
+    try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
+  });
+  const togglePriceMode = () => setPriceMode(m => {
+    const next = m === 'ge' ? 'live' : 'ge';
+    try { localStorage.setItem('genius_price_col_mode', next); } catch {}
+    return next;
+  });
 
   const positions  = portfolio?.positions || [];
   const taxStats   = portfolio?.tax_stats  || {};
 
   const enriched = useMemo(() => positions.map(pos => {
     const item = items.find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
-    const currentPrice = item ? (item.high || item.low || 0) : 0;
+    const currentPrice = item
+      ? (priceMode === 'live' ? (item.liveBuy ?? item.liveSell ?? item.high ?? item.low ?? 0) : (item.high || item.low || 0))
+      : 0;
     const currentValue = currentPrice * pos.quantity;
     const costValue    = pos.cost_basis * pos.quantity;
     const grossPL      = currentValue - costValue;
@@ -8255,7 +8662,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const stopDist     = pos.stop_loss    ? currentPrice - pos.stop_loss    : null;
     const category      = item?.categories?.[0] || 'misc';
     return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category};
-  }), [positions, items]);
+  }), [positions, items, priceMode]);
 
   const openPos   = enriched.filter(p => p.status !== 'sold');
   const closedPos = enriched.filter(p => p.status === 'sold');
@@ -8285,6 +8692,49 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const nextTier    = tierIndex > 0  ? PORTFOLIO_TIERS[tierIndex - 1] : null;
   const earnedTiers = tierIndex >= 0 ? PORTFOLIO_TIERS.slice(tierIndex + 1) : [];
 
+  // Trade-count tier ladder — same next/current/earned pattern as
+  // Investor Tier above, added because the old "Trades Closed"/"10
+  // Trades"/"100 Trades" milestones only ever showed what you'd already
+  // hit, with no visibility into what's coming up next (Ben, 2026-07-30).
+  // Full joke ladder is Ben's own (2026-07-30) — every label/threshold
+  // below was picked by him, not invented here.
+  const TRADE_COUNT_TIERS = [
+    { threshold: 12345, icon:'🤪', label:"I Can't Count",           sub:'12,345 trades closed' },
+    { threshold: 10000, icon:'💵', label:'Five Figures',            sub:'10,000 trades closed' },
+    { threshold:  9001, icon:'📈', label:'Scouter Crushing',        sub:'9,001 trades closed' },
+    { threshold:  8675, icon:'☎️', label:"Jenny, I Got Your Number", sub:'8,675 trades closed' },
+    { threshold:  5000, icon:'🏛️', label:'Market Tycoon',           sub:'5,000 trades closed' },
+    { threshold:  3141, icon:'🥧', label:'Irrational Humor, Again', sub:'3,141 trades closed' },
+    { threshold:  2501, icon:'🎂', label:"Wait, No It's Not",       sub:'2,501 trades closed' },
+    { threshold:  2500, icon:'💰', label:'Quarter Millionaire',     sub:'2,500 trades closed' },
+    { threshold:  1337, icon:'💻', label:'Elite',                   sub:'1,337 trades closed' },
+    { threshold:  1000, icon:'⚙️',  label:'Four Figure Club',        sub:'1,000 trades closed' },
+    { threshold:   999, icon:'😅', label:'Just One More',           sub:'999 trades closed' },
+    { threshold:   777, icon:'🎰', label:'Jackpot',                 sub:'777 trades closed' },
+    { threshold:   666, icon:'😈', label:'The Root of All Evil',    sub:'666 trades closed' },
+    { threshold:   500, icon:'🏭', label:'Half a Grand',            sub:'500 trades closed' },
+    { threshold:   420, icon:'🌿', label:'Ranarr Dealer',           sub:'420 trades closed' },
+    { threshold:   404, icon:'❓', label:'Trade Not Found',         sub:'404 trades closed' },
+    { threshold:   333, icon:'👹', label:'Half Evil',               sub:'333 trades closed' },
+    { threshold:   314, icon:'🥧', label:'Not That Kind of Pie',    sub:'314 trades closed' },
+    { threshold:   250, icon:'📊', label:'Quarter K',               sub:'250 trades closed' },
+    { threshold:   150, icon:'💼', label:"Every Day I'm Hustlin",   sub:'150 trades closed' },
+    { threshold:   100, icon:'🔁', label:'Triple Digits',           sub:'100 trades closed' },
+    { threshold:    75, icon:'📈', label:'Three Quarters',          sub:'75 trades closed' },
+    { threshold:    68, icon:'🤏', label:'Too Little, Too Late?',   sub:'68 trades closed' },
+    { threshold:    66, icon:'🛣️', label:'Get Your Kicks',          sub:'66 trades closed' },
+    { threshold:    50, icon:'📊', label:'Fifty-Fifty',             sub:'50 trades closed' },
+    { threshold:    42, icon:'🧠', label:'The Meaning of Life',     sub:'42 trades closed' },
+    { threshold:    25, icon:'🌱', label:'Getting Started',         sub:'25 trades closed' },
+    { threshold:    10, icon:'🔟', label:'Perfect 10',              sub:'10 trades closed' },
+    { threshold:     5, icon:'✋', label:'I Got 5 On It',           sub:'5 trades closed' },
+    { threshold:     1, icon:'1️⃣', label:'The Loneliest Number',    sub:'1 trade closed' },
+  ];
+  const tradeTierIndex = TRADE_COUNT_TIERS.findIndex(t => closedPos.length >= t.threshold);
+  const currentTradeTier = tradeTierIndex >= 0 ? TRADE_COUNT_TIERS[tradeTierIndex] : null;
+  const nextTradeTier    = tradeTierIndex > 0  ? TRADE_COUNT_TIERS[tradeTierIndex - 1] : (tradeTierIndex === -1 ? TRADE_COUNT_TIERS[TRADE_COUNT_TIERS.length - 1] : null);
+  const earnedTradeTiers = tradeTierIndex >= 0 ? TRADE_COUNT_TIERS.slice(tradeTierIndex + 1) : [];
+
   const milestones = useMemo(() => {
     const ms = [];
     if (!closedPos.length) return ms;
@@ -8296,13 +8746,13 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const biggestLossPos = closedPos.find(p => (p.realized_pl||0) === biggestLoss);
     const totalRealized  = profits.reduce((s,n) => s+n, 0);
 
-    ms.push({ icon:'📦', label:'Trades Closed',  value: closedPos.length.toLocaleString(), sub: 'Total closed positions' });
     if (biggestWin > 0)  ms.push({ icon:'🏆', label:'Biggest Win',  value: '+'+fmt.gp(biggestWin)+'gp',  sub: biggestWinPos?.item_name || '' });
     if (biggestLoss < 0) ms.push({ icon:'💀', label:'Biggest Loss', value: fmt.gp(biggestLoss)+'gp',     sub: biggestLossPos?.item_name || '' });
     if (totalRealized >= 100e6) ms.push({ icon:'💰', label:'100m Club',   value: fmt.gp(totalRealized)+'gp total', sub: 'Total realized profit' });
     if (totalRealized >= 1e9)   ms.push({ icon:'💎', label:'Billionaire', value: fmt.gp(totalRealized)+'gp total', sub: 'Total realized profit' });
-    if (closedPos.length >= 10)  ms.push({ icon:'🔁', label:'10 Trades',  value: closedPos.length+' closed', sub: 'Veteran trader' });
-    if (closedPos.length >= 100) ms.push({ icon:'⚙️', label:'100 Trades', value: closedPos.length+' closed', sub: 'Market machine' });
+    // Trade count itself now has its own tier ladder (see
+    // TRADE_COUNT_TIERS/currentTradeTier above) instead of living here as
+    // flat one-off milestones.
     // Flawless — best streak of consecutive profitable trades
     let bestStreak = 0, currentStreak = 0;
     for (const p of closedPos) {
@@ -8314,6 +8764,27 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedPos.length+' for '+closedPos.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
     return ms;
   }, [closedPos, totalCurrent]);
+
+  // Realized P&L grouped by item — a higher-level summary of the Closed
+  // Positions table below (which is per-TRADE, not per-item), so "which
+  // item has actually been making me money" doesn't require manually
+  // adding up rows (Ben, 2026-07-30).
+  const realizedByItem = useMemo(() => {
+    if (!closedPos.length) return [];
+    const map = {};
+    for (const p of closedPos) {
+      const key = p.item_name;
+      if (!map[key]) map[key] = { name: key, trades: 0, qty: 0, pl: 0 };
+      map[key].trades += 1;
+      map[key].qty += (p.sold_quantity ?? p.quantity ?? 0);
+      map[key].pl += (p.realized_pl || 0);
+    }
+    const rows = Object.values(map);
+    const totalAbs = rows.reduce((s, r) => s + Math.abs(r.pl), 0);
+    return rows
+      .map(r => ({ ...r, pct: totalAbs > 0 ? (Math.abs(r.pl) / totalAbs) * 100 : 0 }))
+      .sort((a, b) => b.pl - a.pl);
+  }, [closedPos]);
 
   // Allocation by item
   const allocations = useMemo(() => {
@@ -8422,7 +8893,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     // Overview
     h('div', {className:'overview-grid'},
       h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalInvested)+'gp'), h('div',{className:'ov-lbl'},'Total Invested')),
-      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},'Current Value')),
+      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},`Current Value (${priceMode==='ge'?'GE':'Live'})`)),
       h('div',{className:'ov-card'},
         h('div',{className:'ov-val '+(unrealizedPL>=0?'pct-up':'pct-down')},
           (unrealizedPL>=0?'+':'')+fmt.gp(unrealizedPL)+'gp'),
@@ -8438,7 +8909,14 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
 
     // Toolbar
     h('div',{style:{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}},
-      h('span',{style:{fontSize:12,color:T.textDim}},`${openPos.length} open position${openPos.length!==1?'s':''}`),
+      h('div', {style:{display:'flex', alignItems:'center', gap:10}},
+        h('span',{style:{fontSize:12,color:T.textDim}},`${openPos.length} open position${openPos.length!==1?'s':''}`),
+        h('button', {
+          className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
+          onClick: togglePriceMode,
+          title: priceMode==='ge' ? 'Valuing positions off the GE (listed) price — click to use live buy/sell instead' : 'Valuing positions off live buy/sell — click to use the GE (listed) price instead',
+        }, priceMode==='ge' ? 'GE Price' : 'Live Price'),
+      ),
       h('button',{className:'ge-btn gold',onClick:()=>{setEditPos(null);setShowModal(true);}}, '+ Add Position')
     ),
 
@@ -8456,7 +8934,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       : h('table',{className:'ge-table'},
           h('thead',null, h('tr',null,
             h('th',null,'Item'), h('th',null,'Qty'), h('th',null,'Cost/ea'),
-            h('th',null,'Current'), h('th',null,'Value'),
+            h('th',{title: priceMode==='ge' ? 'GE (listed) price' : 'Live buy/sell price'}, priceMode==='ge'?'Current (GE)':'Current (Live)'), h('th',null,'Value'),
             h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax.'},'Net P&L'),
             h('th',{title:'The same P&L as a percentage of what you paid — useful for comparing positions of very different sizes at a glance.'},'P&L %'),
             h('th',null,'Held'), h('th',null,'Target'), h('th',null,'')
@@ -8593,7 +9071,14 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
 
     // Closed positions
     currentTier && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
-      h('div',{className:'ge-section-head'},'Investor Tier'),
+      h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:8}},
+        h('div',{className:'ge-section-head',style:{margin:0}},'Investor Tier'),
+        h('span',{
+          onClick:()=>setTierModal('investor'),
+          title:'View all tiers',
+          style:{cursor:'pointer', fontSize:11, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:'50%', width:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center'},
+        }, '≡'),
+      ),
       h('div',{style:{display:'flex',flexWrap:'wrap',gap:8,alignItems:'flex-start'}},
         // Next tier — goal badge
         nextTier && h('div',{key:'next',title:`${nextTier.label} · ${nextTier.sub}`,style:{
@@ -8630,6 +9115,48 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       ),
     ),
 
+    currentTradeTier && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
+      h('div',{style:{display:'flex',alignItems:'center',gap:6,marginBottom:8}},
+        h('div',{className:'ge-section-head',style:{margin:0}},'Trade Count'),
+        h('span',{
+          onClick:()=>setTierModal('tradeCount'),
+          title:'View all tiers',
+          style:{cursor:'pointer', fontSize:11, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:'50%', width:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center'},
+        }, '≡'),
+      ),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:8,alignItems:'flex-start'}},
+        nextTradeTier && h('div',{key:'next',title:`${nextTradeTier.label} · ${nextTradeTier.sub}`,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1px dashed ${T.borderDim}`,background:T.panel,opacity:0.6,
+        }},
+          h('div',{style:{fontSize:20,filter:'grayscale(1)'}},nextTradeTier.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.textDim}},nextTradeTier.label),
+          h('div',{style:{fontSize:10,color:T.textDim}},'Next'),
+        ),
+        h('div',{key:'cur',title:`${currentTradeTier.label} · ${currentTradeTier.sub}`,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1.5px solid ${T.gold}`,background:`rgba(201,168,76,0.1)`,
+        }},
+          h('div',{style:{fontSize:20}},currentTradeTier.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.gold}},currentTradeTier.label),
+          h('div',{style:{fontSize:10,color:T.goldBright}},'Current'),
+        ),
+        earnedTradeTiers.map(t => h('div',{key:t.label,title:`${t.label} · ${t.sub}`,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,
+          border:`1px solid ${T.borderDim}`,background:T.panel,opacity:0.55,
+        }},
+          h('div',{style:{fontSize:20}},t.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.text}},t.label),
+        )),
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:8}},
+        currentTradeTier.label+' · '+currentTradeTier.sub+' · '+closedPos.length.toLocaleString()+' trades closed'
+      ),
+    ),
+
     milestones.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
       h('div',{className:'ge-section-head'},'Achievements'),
       h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
@@ -8646,6 +9173,36 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
           h('div',{style:{fontSize:10,color:T.textDim,marginTop:1,textAlign:'center'}},m.sub),
         ))
       )
+    ),
+
+    realizedByItem.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
+      h('div',{className:'ge-section-head'},'Realized P&L by Item'),
+      h('div',{className:'ge-table-wrap'},
+        h('table',{className:'ge-table'},
+          h('thead',null,h('tr',null,
+            h('th',null,'Item'), h('th',null,'Trades'), h('th',null,'Qty'),
+            h('th',null,'Realized P&L'),
+            h('th',{title:'Share of total realized P&L (gains and losses both counted by size), so a big loss shows its real weight too.'},'% of total'),
+          )),
+          h('tbody',null, realizedByItem.map(r => h('tr',{
+            key:r.name,
+            onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===r.name.toLowerCase()); if (it) onSelect(it); } : undefined,
+            style:{cursor: onSelect ? 'pointer' : 'default'},
+          },
+            h('td',{style:{color:T.gold}},r.name),
+            h('td',null,r.trades.toLocaleString()),
+            h('td',null,r.qty.toLocaleString()),
+            h('td',{className:r.pl>=0?'pct-up':'pct-down'},(r.pl>=0?'+':'')+fmt.gp(r.pl)+'gp'),
+            h('td',{style:{color:T.textDim}},r.pct.toFixed(1)+'%'),
+          )))
+        )
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:8,textAlign:'right'}},
+        `${closedPos.length.toLocaleString()} closed trades total · `,
+        h('span',{style:{color: realizedByItem.reduce((s,r)=>s+r.pl,0)>=0?T.green:T.red, fontWeight:'bold'}},
+          (realizedByItem.reduce((s,r)=>s+r.pl,0)>=0?'+':'')+fmt.gp(realizedByItem.reduce((s,r)=>s+r.pl,0))+'gp'
+        ),
+      ),
     ),
 
     closedPos.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
@@ -8726,7 +9283,9 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
         setSellModal(null);
         if (res?.success) toast(`Sold! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
       }
-    })
+    }),
+    tierModal === 'investor'   && h(TierLadderModal, {title:'Investor Tier — all tiers', tiers:PORTFOLIO_TIERS, achievedIndex:tierIndex, onClose:()=>setTierModal(null)}),
+    tierModal === 'tradeCount' && h(TierLadderModal, {title:'Trade Count — all tiers', tiers:TRADE_COUNT_TIERS, achievedIndex:tradeTierIndex, onClose:()=>setTierModal(null)})
   );
 }
 
@@ -9109,7 +9668,7 @@ function ScoreTable({rows, selected, onSelect}) {
                   }, '▾')
                 )
               ),
-              h('td', {style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp'),
+              h('td', {style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
               h('td', null, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
               h('td', null, h(VolDisplay, {volume:it.volume, avgVolume:it.avgVolume})),
               h('td', null, h('div',{style:{display:'flex',flexWrap:'wrap',gap:3}},(it.signals||[]).map(s=>h(SignalBadge,{key:s,signal:s})))),
@@ -9388,19 +9947,113 @@ const FLIP_MIN_SELL_PRICE = 100; // floor so 2gp junk items don't dominate by %,
 // where "volume" is 0-1 trades ever, so any single print swings the
 // number wildly. Neither is a real, repeatable flip.
 const FLIP_MIN_VOLUME = 50; // real, if modest, day-to-day liquidity
-const FLIP_SANITY_LOW = 0.5;  // live prices must sit within 0.5x-2x of
-const FLIP_SANITY_HIGH = 2;   // the item's own established GE price
-// Ben caught a real gap in the check above: Medium plated necronium
-// salvage passed it at 1.72x (under the 2x cap) even though its whole
-// economic purpose is alching — alch value (250,000gp) essentially
-// equals its GE price (248,053gp), so paying 425,493gp for one makes
-// no practical sense and was almost certainly another one-off mistake
-// fill, not a real price level. For any item where alch is a real
-// anchor (within the same 0.5x-2x band of GE price, i.e. alching is
-// genuinely competitive with selling), cap the live-price ceiling at
-// 30% over whichever of GE price/alch is higher, tighter than the
-// plain 2x-of-GE-price band alone.
+const FLIP_SANITY_LOW = 0.5;  // live sell price can't sit too far UNDER
+                               // the item's own established GE price
+                               // (catches a fluke/glitch dump), for any item
+// Ben caught a real gap in an earlier version of this check: Medium
+// plated necronium salvage passed at 1.72x GE price (under a flat 2x
+// cap that used to apply to every item) even though its whole economic
+// purpose is alching — alch value (250,000gp) essentially equals its
+// GE price (248,053gp), so paying 425,493gp for one makes no practical
+// sense and was almost certainly another one-off mistake fill, not a
+// real price level.
+const FLIP_SANITY_HIGH = 2;   // only used for the alch-anchor detection
+                               // band now, not as a ceiling itself
+// For any item where alch is a real anchor (within the same 0.5x-2x
+// band of GE price, i.e. alching is genuinely competitive with
+// selling), cap the live-price ceiling at 30% over whichever of GE
+// price/alch is higher — that's an economic-irrationality check that
+// holds regardless of trading volume.
+//
+// For every OTHER item, there's deliberately NO upper price ceiling at
+// all anymore (removed 2026-07-30, Ben): a real demand-driven spike —
+// a content update suddenly needing an otherwise-cheap item, discussed
+// after seeing it happen on Reddit repeatedly — can legitimately run
+// 5-10x the (slow-to-update) GE reference price with real volume behind
+// it, and the old flat 2x-of-GE-price cap rejected that exact case as
+// hard as it rejected genuine junk. The volume floor below is what
+// actually distinguishes the two: a single absurd listing on an
+// otherwise-dead item (Ben's bronze scimitar example — one guy asking
+// 1M+ for a ~1K item nobody else is trading) still has near-zero real
+// daily volume and gets caught there, while a genuine rush has real
+// volume behind the higher price and correctly passes.
 const FLIP_ALCH_CEILING_MULT = 1.3;
+// Alch only functions as a real economic anchor once the item's actually
+// worth enough to bother — nobody alchs a 270gp item in practice, the
+// nature rune cost and the clicks aren't worth it, so treating alch
+// value as a real price ceiling for something that cheap doesn't reflect
+// real player behavior. Caught for real (Ben, 2026-07-31): Geyser Titan
+// scroll (Boil), GE price 270gp, got Flagged for "overpaying vs. alch
+// value" even though nobody would ever price-anchor that item off
+// alching to begin with. Ben's own rough estimate for where alching
+// stops being worth the effort.
+const FLIP_ALCH_MIN_GE_PRICE = 1000;
+// Removing the flat ceiling above (2026-07-30) opened a different hole,
+// caught by Ben looking at real Flips output right after: volume alone
+// can't tell "genuine spike with real trading behind it" apart from "one
+// isolated instant-buy print from hours/days ago that nobody's touched
+// since," because item.volume counts the item's WHOLE day of trading at
+// whatever its normal price is — it says nothing about whether today's
+// specific liveBuy print is still fillable right now. Ben's own example,
+// confirmed directly against real data: Leather vambraces' liveSell was
+// 10 minutes old, but its liveBuy — 999,999gp against a ~1,113gp GE
+// price — was 755 minutes (12.6 hours) old, i.e. one person's single
+// instant-buy from that morning, still being reported as "the" live
+// price because nobody had instant-bought since. A genuinely fresh spike
+// (both sides actively trading right now) passes this fine; a stale
+// isolated print does not, regardless of the item's overall daily volume.
+const FLIP_MAX_PRICE_AGE_HRS_FLOOR = 6;   // never tighter than this, even for very liquid items
+const FLIP_MAX_PRICE_AGE_HRS_CEIL  = 48;  // never looser than this, no matter how thin the item
+// A flat 6h cutoff (as this used to be) is right for cheap/liquid junk
+// like Leather vambraces or Imphide, but way too aggressive for
+// legitimately expensive, sporadically-traded items — real trading on
+// those clusters in bursts (peak hours, after a raid reset, etc.) rather
+// than spreading evenly through the day, so being quiet for 8-11 hours
+// doesn't mean the price is fake, just that nobody's traded again yet.
+// Caught for real (Ben, 2026-07-31): Brooch of the Gods (50 vol vs a 39
+// avg — basically a normal day) and Anima core body of Zaros (133 vs 86
+// avg) both got Flagged purely for being 8-11h stale, despite nothing
+// actually looking suspicious about them. Scales the allowed staleness
+// inversely with the item's own average daily volume instead of one
+// number for everyone — tuned against these real examples (800/vol
+// clears Brooch's 11h and Anima core's 8h without loosening genuinely
+// liquid items past the original 6h floor).
+function flipMaxPriceAgeMs(avgVolume) {
+  const hrs = avgVolume > 0 ? 800 / avgVolume : FLIP_MAX_PRICE_AGE_HRS_CEIL;
+  return Math.min(FLIP_MAX_PRICE_AGE_HRS_CEIL, Math.max(FLIP_MAX_PRICE_AGE_HRS_FLOOR, hrs)) * 3600000;
+}
+// Freshness alone still let real cases through, caught immediately by
+// Ben looking at live output: Imphide's liveBuy (888,888gp — a
+// suspiciously round troll-offer number, against a 710gp GE price) was
+// only ~3.5h old, well inside the freshness window, so it wasn't one
+// stale print — it was a genuinely recent one-off overpay. Raw cod was
+// worse: its liveBuy (27,568gp vs a 2,268gp GE price) was only 15
+// minutes old — a RECURRING overpay, not a single fluke moment at all.
+// Neither is something the freshness check alone could ever catch,
+// since both were legitimately fresh. What both share instead: liveBuy
+// sitting many multiples above liveSell, while a genuine demand rush
+// pushes BOTH sides up together (real competing buyers bid up the sell
+// side too). 5x is deliberately generous — WIDE_SPREAD's own 40%-spread
+// threshold is only ~1.4x — so this only catches the genuinely extreme
+// cases (Imphide 869x, Raw cod 12.2x) without choking on a real spike.
+const FLIP_MAX_BUY_SELL_RATIO = 5;
+// Volume-anomaly check (Ben, 2026-07-31): a coordinated wash trade can
+// make liveBuy and liveSell agree with each other perfectly (same person
+// controls both sides), which sails straight past every check above —
+// none of them look at whether the price shape is "off," because it
+// isn't. What's off instead is the volume itself: Ben's real example,
+// Gardening trowel going from an average of ~1 trade/day to 88 on the
+// day of a 1M-gp print. FRENZY doesn't catch this either — it requires
+// vol >= 5,000 absolute AND the item's GE price to be >= 900gp, both of
+// which specifically exclude the cheap, barely-traded items this
+// targets (that's WHY they're targeted — nobody's watching them).
+// Deliberately narrow: only fires when the item's own normal volume is
+// tiny (a real, liquid item jumping 10x+ during genuine high demand is
+// exactly the legitimate spike this whole redesign exists to protect,
+// not something to flag) AND today's volume is a huge multiple of that
+// tiny baseline.
+const FLIP_VOLUME_ANOMALY_AVG_MAX = 25;
+const FLIP_VOLUME_ANOMALY_RATIO_MIN = 10;
 // Shared by FlipsTab and the Detail Panel's Flip Margin block, so both
 // use the exact same math and sanity thresholds rather than the Detail
 // Panel drifting out of sync with whatever Flips itself checks. Always
@@ -9408,6 +10061,11 @@ const FLIP_ALCH_CEILING_MULT = 1.3;
 // callers that just want the ranked list filter on `qualifies`; the
 // Detail Panel shows `disqualifyReason` instead when an item doesn't
 // make the cut, so the "why isn't this in Flips" question has an answer.
+// `disqualifyCategory` tags WHY something got excluded — 'spread' for
+// anything about the live price itself looking untrustworthy (what
+// FlipsTab's second pill surfaces so these stay visible instead of
+// silently vanishing), vs the mundane exclusions (no margin, no buy
+// limit, too little volume) that aren't interesting to look at.
 function computeFlipStats(it) {
   if (it.untradeable || it.liveBuy == null || it.liveSell == null) {
     return { qualifies: false, disqualifyReason: 'No live buy/sell data available for this item.' };
@@ -9417,17 +10075,32 @@ function computeFlipStats(it) {
   const limit = it.limit || 0;
   const profitForLimit = margin * limit;
   const gePrice = it.high || it.low || 0;
-  const alchIsAnchor = it.alch && gePrice > 0 && it.alch >= gePrice*FLIP_SANITY_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
-  const ceiling = gePrice > 0
-    ? (alchIsAnchor ? Math.min(gePrice*FLIP_SANITY_HIGH, Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT) : gePrice*FLIP_SANITY_HIGH)
-    : Infinity;
+  const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_SANITY_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
+  const ceiling = alchIsAnchor ? Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT : Infinity;
   const base = { margin, roiPct, profitForLimit, gePrice, ceiling, limit };
 
   if (it.liveSell < FLIP_MIN_SELL_PRICE) return { ...base, qualifies:false, disqualifyReason:`Sell price is under the ${fmt.gp(FLIP_MIN_SELL_PRICE)}gp floor Flips uses to avoid junk items dominating by percentage.` };
   if (margin <= 0) return { ...base, qualifies:false, disqualifyReason:'No positive margin right now — instabuy (after tax) doesn\'t beat instasell.' };
   if (!limit) return { ...base, qualifies:false, disqualifyReason:'This item has no GE buy limit on record.' };
   if ((it.volume||0) < FLIP_MIN_VOLUME) return { ...base, qualifies:false, disqualifyReason:`Daily volume (${(it.volume||0).toLocaleString()}) is below Flips' liquidity floor of ${FLIP_MIN_VOLUME} — too thin to trust a single live print.` };
-  if (!(gePrice > 0 && it.liveSell >= gePrice*FLIP_SANITY_LOW && it.liveBuy <= ceiling)) return { ...base, qualifies:false, disqualifyReason:'Live price strays too far from this item\'s established GE price — likely a one-off fluke print rather than a real, repeatable margin.' };
+  if (!(gePrice > 0 && it.liveSell >= gePrice*FLIP_SANITY_LOW)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live sell price is far under this item\'s established GE price — likely a one-off fluke/glitch dump rather than a real, repeatable margin.' };
+  if (it.liveBuy > ceiling) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
+  if (it.liveSell > 0 && it.liveBuy / it.liveSell > FLIP_MAX_BUY_SELL_RATIO) {
+    return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Live buy is ${(it.liveBuy/it.liveSell).toFixed(1)}x live sell — one side is being overpaid in isolation, not a real two-sided market.` };
+  }
+  const now = Date.now();
+  const buyAgeMs = it.liveBuyTime != null ? now - it.liveBuyTime : Infinity;
+  const sellAgeMs = it.liveSellTime != null ? now - it.liveSellTime : Infinity;
+  const maxAgeMs = flipMaxPriceAgeMs(it.avgVolume);
+  if (buyAgeMs > maxAgeMs || sellAgeMs > maxAgeMs) {
+    const staleHrs = Math.round(Math.max(buyAgeMs, sellAgeMs) / 3600000);
+    const allowedHrs = Math.round(maxAgeMs / 3600000);
+    return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Live price data is ${staleHrs}h old — longer than the ${allowedHrs}h this item's own trading pace should reasonably take, likely one isolated trade nobody's matched since.` };
+  }
+  if (it.avgVolume && it.avgVolume <= FLIP_VOLUME_ANOMALY_AVG_MAX && (it.volume||0) / it.avgVolume >= FLIP_VOLUME_ANOMALY_RATIO_MIN) {
+    const volRatio = (it.volume / it.avgVolume).toFixed(1);
+    return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Volume is ${volRatio}x this item's own average (${it.volume.toLocaleString()} vs ~${Math.round(it.avgVolume).toLocaleString()}/day normally) on an otherwise barely-traded item — a classic wash-trade signature, not organic demand.` };
+  }
 
   return { ...base, qualifies:true, disqualifyReason:null };
 }
@@ -9442,6 +10115,7 @@ const FLIP_PROFIT_FILTERS = [
   {label:'10M+',   value:10000000},
 ];
 function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, description}) {
+  const [pillTab, setPillTab] = useState('flips'); // 'flips' | 'flagged'
   const [sort, setSort] = useState({key:'profitForLimit', dir:-1});
   const [page, setPage] = useState(0);
   // Defaults to 1M+ (Ben: "That would cut it down from over 900 results
@@ -9449,11 +10123,17 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
   // full buy-limit's worth of margin, not the per-item margin itself.
   const [minProfit, setMinProfit] = useState(1000000);
 
-  const flips = useMemo(() => {
-    return items
-      .map(it => ({...it, ...computeFlipStats(it)}))
-      .filter(it => it.qualifies);
-  }, [items]);
+  const allStats = useMemo(() => items.map(it => ({...it, ...computeFlipStats(it)})), [items]);
+  const flips = useMemo(() => allStats.filter(it => it.qualifies), [allStats]);
+  // Flagged pill (Ben, 2026-07-30): items that LOOK like a huge flip on
+  // paper but got excluded specifically for a spread-sanity reason
+  // (stale/isolated print, buy far above sell, alch-ceiling violation,
+  // low-side dump) — kept visible instead of silently vanishing, since
+  // seeing "Imphide 888,888gp" and knowing exactly why it's excluded is
+  // more useful than it just not being there. Deliberately excludes the
+  // mundane disqualifications (no margin, no buy limit, too little
+  // volume) — those aren't interesting to look at, just noise.
+  const flagged = useMemo(() => allStats.filter(it => !it.qualifies && it.disqualifyCategory === 'spread'), [allStats]);
 
   const filtered = useMemo(() => flips.filter(it => it.profitForLimit >= minProfit), [flips, minProfit]);
 
@@ -9477,10 +10157,46 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
   return h('div', {style:{padding:'4px 0'}},
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
     h('div', {style:{padding:'14px'}},
-      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
-        `${flips.length.toLocaleString()} items with a live buy/sell spread worth flipping (${sorted.length.toLocaleString()} shown at the current profit filter). Margin = instabuy minus 2% GE tax, minus instasell — the real spread available right now, not just today's price change. Excludes low-volume items and prices that stray too far from the item's established GE price, since both are usually a single fluke print rather than a real repeatable margin.`
+      h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+        ['flips','flagged'].map(v => h('button', {
+          key:v, onClick:()=>setPillTab(v),
+          style:{
+            padding:'4px 12px', fontSize:11, cursor:'pointer', borderRadius:3,
+            background: pillTab===v ? 'rgba(201,168,76,0.2)' : 'transparent',
+            border: `1px solid ${pillTab===v ? T.gold : T.border}`,
+            color: pillTab===v ? T.goldBright : T.textDim,
+          }
+        }, v==='flips' ? `Flips (${flips.length.toLocaleString()})` : `Flagged (${flagged.length.toLocaleString()})`))
       ),
-      h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
+      pillTab === 'flagged' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        `Items that look like a huge margin on paper but got excluded from Flips for a spread-sanity reason — a stale isolated print, one side badly overpaid relative to the other, or a price well past what the item is actually worth. Kept visible here instead of silently vanishing, since knowing WHY something's excluded beats it just not being there.`
+      ),
+      pillTab === 'flagged' && (
+        flagged.length === 0
+          ? h('div', {className:'empty'}, h('div', {className:'icon'}, '◎'), h('p', null, 'Nothing currently flagged for a spread-sanity issue.'))
+          : h('div', {className:'ge-table-wrap'},
+              h('table', {className:'ge-table'},
+                h('thead', null, h('tr', null,
+                  h('th', null, 'Item'), h('th', null, 'Buy'), h('th', null, 'Sell'),
+                  h('th', null, 'GE Price'), h('th', null, 'Volume'), h('th', null, 'Why it\'s flagged'),
+                )),
+                h('tbody', null, [...flagged].sort((a,b)=>(b.margin||0)-(a.margin||0)).map(it => h('tr', {
+                  key:it.id, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it),
+                },
+                  h('td', null, it.name),
+                  h('td', {style:{color:'#e08030'}}, fmt.gp(it.liveSell)+'gp'),
+                  h('td', {style:{color:T.green}}, fmt.gp(it.liveBuy)+'gp'),
+                  h('td', {style:{color:T.textDim}}, it.gePrice ? fmt.gp(it.gePrice)+'gp' : '—'),
+                  h('td', null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
+                  h('td', {style:{fontSize:11, color:T.textDim}}, it.disqualifyReason),
+                )))
+              )
+            )
+      ),
+      pillTab === 'flips' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        `${flips.length.toLocaleString()} items with a live buy/sell spread worth flipping (${sorted.length.toLocaleString()} shown at the current profit filter). Margin = instabuy minus 2% GE tax, minus instasell — the real spread available right now, not just today's price change. Excludes low-volume items (near-zero-volume items let a single fluke print swing the numbers wildly), sell prices dumped too far under the item's GE price, prices that are stale relative to how often this specific item normally trades (6-48 hours depending on its typical volume — a single old instant-buy print nobody's matched since, not something you could actually get filled at now), one side badly overpaid relative to the other, a huge volume spike on an item that barely trades at all normally (a wash-trade signature), and — for items where alching is basically the whole economic purpose — buy prices well above what alching that item is actually worth. A genuine high-volume demand spike is allowed through even far above GE price.`
+      ),
+      pillTab === 'flips' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
         h('span', {style:{fontSize:10, color:T.textDim, marginRight:2}}, 'Min Profit (buy limit):'),
         FLIP_PROFIT_FILTERS.map(opt => h('button', {
           key:opt.value,
@@ -9493,7 +10209,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
           }
         }, opt.label))
       ),
-      sorted.length === 0
+      pillTab === 'flips' && (sorted.length === 0
         ? h('div', {className:'empty'}, h('div', {className:'icon'}, '◎'), h('p', null,
             flips.length === 0 ? 'No live flip data available yet — give the app a moment to fetch it.' : 'No items meet this profit filter — try lowering it.'
           ))
@@ -9528,13 +10244,13 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 ),
               )))
             )
-          ),
-      sorted.length > FLIP_PAGE_SIZE && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:10, fontSize:11}},
+          )),
+      pillTab === 'flips' && sorted.length > FLIP_PAGE_SIZE && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:10, fontSize:11}},
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:11}, disabled:pageClamped===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Prev'),
         h('span', {style:{color:T.textDim}}, `Page ${pageClamped+1} of ${totalPages} (${sorted.length.toLocaleString()} total)`),
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:11}, disabled:pageClamped>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1,p+1))}, 'Next →'),
       ),
-      h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
+      pillTab === 'flips' && h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
         '⚠ Live buy/sell reflects the most recent real trades, not a live order book — by the time you place an offer, the spread may already have moved or closed. Buy limits reset per 4 hours; volume figures are daily totals, not what\'s available to trade this instant.'
       ),
     )
@@ -10037,8 +10753,8 @@ const TAB_DESCRIPTIONS = {
   watchlist:      'The items you\'ve decided are worth obsessing over.',
   market:         'Everything the Grand Exchange has to offer. Yes, all of it.',
   opportunities:  'Items showing unusual price or volume activity. May or may not be a trap.',
-  flips:          'Real live buy/sell spreads, ranked by what they could actually make you.',
-  money_makers:   'Known item-conversion moneymakers — buy raw, process cheaply, resell.',
+  flips:          'Let GEnius take the BS out of Buy & Sell.',
+  money_makers:   'Some assembly required.',
   portfolio:      'Track positions, profits, losses, and questionable financial decisions.',
   alch:           'Items where nature runes are paying their own rent.',
   melee:          'For those who solve problems up close and personally.',
@@ -10067,10 +10783,9 @@ const TAB_DESCRIPTIONS = {
   rares:          'Items worth more than most players\' entire banks.',
   expensive:      'Everything over a certain threshold. Handle with care.',
   cosmetics:      'Look good. That\'s it. That\'s the whole tab.',
-  materials:      'Items that defied categorisation. We\'re working on it.',
+  materials:      'The junk drawer of RuneScape.',
   alerts:         'Because checking prices every five minutes is exhausting.',
   news:           'The new updates: Congratulations, or condolences. Whichever applies.',
-  about:          'What this thing is, and what that symbol next to its name means.',
   dxp_intel:      'GEnius Almanac — historical DXP price signals with confidence scores and trade timing.',
   seasonal_intel: 'Seasonal Events — Christmas, Halloween, Summer, and Easter market patterns from historical research.',
 };
@@ -10150,6 +10865,59 @@ function App() {
   const [populatedHistoryIds, setPopulatedHistoryIds] = useState(null); // null = not loaded yet | Set<number>
   const refreshPopulatedHistoryIds = useCallback(() => {
     window.genius?.getHistoryPopulatedIds?.().then(ids => setPopulatedHistoryIds(new Set(ids)));
+  }, []);
+  // Trigger history population if needed. Previously this only ever ran
+  // once, inside the initial-mount getData() effect, gated on that FIRST
+  // call already having items — which is empty on a genuine first launch
+  // (no latest.json exists yet; the initial price fetch fires 3s later
+  // and takes real time to complete), so the whole check got skipped
+  // permanently rather than just delayed. Confirmed for real (Ben,
+  // 2026-08-02, across several fresh mobile installs tonight): the
+  // "Building history" popup never showed up on a true first launch, only
+  // on the SECOND one, once latest.json already had real data from the
+  // completed first-launch fetch. Extracted so onFetchComplete can also
+  // call this with its own freshly-fetched items — covers the true-
+  // first-launch case the moment real data first exists, not just on the
+  // next restart. Safe to call repeatedly (e.g. every periodic refresh):
+  // startHistoryPopulation/runHistoryQueue already no-op if a population
+  // run is already active or genuinely complete.
+  //
+  // Previously this only ever fired on a true first run or while under 50
+  // items were stored — meaning if the app got closed before the (~45+
+  // minute) full catalogue backfill finished, it never resumed on later
+  // launches. Confirmed for real: after a long time using the app, only
+  // ~20% of the catalogue (1415/7182 items) had ever been populated.
+  // Comparing against the actual remaining gap instead means it keeps
+  // making progress across restarts until genuinely done.
+  // startHistoryPopulation already filters to just the unfetched ids
+  // internally, so calling it with the full list here is safe.
+  const triggerHistoryPopulationIfNeeded = useCallback((items) => {
+    if (!items || !items.length) return;
+    window.genius?.getHistoryStatus().then(status => {
+      // Untradeable items (Invention components, combo potions — ~106 of
+      // them, added by untradeable.js) have an id but no real GE exchange
+      // history to ever fetch. Without excluding them, the queue can
+      // never reach 100% — it perpetually re-queues and re-fails the same
+      // ~100 ids on every single launch, which is exactly why the
+      // "Building history" popup kept reappearing stuck at the same
+      // not-quite-complete count.
+      const sorted = [...items]
+        .filter(it => it.id && !it.untradeable)
+        .sort((a,b) => (b.volume||0) - (a.volume||0));
+      const allIds = sorted.map(it => it.id);
+      if (status.isFirstRun || status.stored < allIds.length) {
+        // Always seeded from the REAL persisted stored/total counts,
+        // never from a per-session counter starting at 0 — that's what
+        // made a resume look like lost progress before (see
+        // SESSION_LOG.md, 2026-06-26). initial300Done is persisted in
+        // main.js across restarts, so a real interruption during the
+        // first 300 correctly resumes showing "still on the first 300"
+        // instead of wrongly claiming background mode.
+        setHistoryPopup({stored:status.stored, total:allIds.length,
+          initial300Done:status.initial300Done, fullyComplete:false});
+        window.genius?.startHistoryPopulation(allIds);
+      }
+    });
   }, []);
   const [selected, setSelected] = useState(null);
   const [quickAddPos, setQuickAddPos] = useState(null); // pre-filled position from margin calc
@@ -10233,43 +11001,7 @@ function App() {
         setTimeout(() => splash.remove(), 400);
       }
 
-      // Trigger history population if needed. Previously this only ever
-      // fired on a true first run or while under 50 items were stored —
-      // meaning if the app got closed before the (~45+ minute) full
-      // catalogue backfill finished, it never resumed on later launches.
-      // Confirmed for real: after a long time using the app, only ~20%
-      // of the catalogue (1415/7182 items) had ever been populated.
-      // Comparing against the actual remaining gap instead means it
-      // keeps making progress across restarts until genuinely done.
-      // startHistoryPopulation already filters to just the unfetched
-      // ids internally, so calling it with the full list here is safe.
-      if (data.items && data.items.length) {
-        window.genius?.getHistoryStatus().then(status => {
-          // Untradeable items (Invention components, combo potions —
-          // ~106 of them, added by untradeable.js) have an id but no
-          // real GE exchange history to ever fetch. Without excluding
-          // them, the queue can never reach 100% — it perpetually
-          // re-queues and re-fails the same ~100 ids on every single
-          // launch, which is exactly why the "Building history" popup
-          // kept reappearing stuck at the same not-quite-complete count.
-          const sorted = [...data.items]
-            .filter(it => it.id && !it.untradeable)
-            .sort((a,b) => (b.volume||0) - (a.volume||0));
-          const allIds = sorted.map(it => it.id);
-          if (status.isFirstRun || status.stored < allIds.length) {
-            // Always seeded from the REAL persisted stored/total counts,
-            // never from a per-session counter starting at 0 — that's
-            // what made a resume look like lost progress before (see
-            // SESSION_LOG.md, 2026-06-26). initial300Done is persisted
-            // in main.js across restarts, so a real interruption during
-            // the first 300 correctly resumes showing "still on the
-            // first 300" instead of wrongly claiming background mode.
-            setHistoryPopup({stored:status.stored, total:allIds.length,
-              initial300Done:status.initial300Done, fullyComplete:false});
-            window.genius?.startHistoryPopulation(allIds);
-          }
-        });
-      }
+      triggerHistoryPopulationIfNeeded(data.items);
       refreshPopulatedHistoryIds();
     }).catch(e => {
       console.error('[GEnius] Initial load error:', e);
@@ -10296,6 +11028,7 @@ function App() {
         if (data.items)   setItems(data.items);
         if (data.news)    setNews(data.news);
         if (data.indexes) setIndexes(data.indexes);
+        triggerHistoryPopulationIfNeeded(data.items);
       }).catch(e => console.error('[GEnius] getData after fetch error:', e));
       toast('Prices updated','success');
     });
@@ -10459,7 +11192,7 @@ function App() {
   const stale = lastUpdate ? Math.floor((Date.now()-lastUpdate)/60000) : null;
   const statusType = !lastUpdate ? 'none' : stale < 20 ? 'live' : 'stale';
   const statusText = !lastUpdate ? 'No data' : stale < 1 ? 'Live' : `${stale}m ago`;
-  const showDetail = selected && !['alerts','settings'].includes(tab);
+  const showDetail = selected && !['settings'].includes(tab);
 
   const handleSelect = item => {
     if (selected && item && selected.id === item.id) { setSelected(null); return; }
@@ -10573,7 +11306,7 @@ function App() {
       h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
         h('div',{className:'content',style:{flex:1}},
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news}),
-          tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare}),
+          tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
           tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
@@ -10610,7 +11343,7 @@ function App() {
           tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {
-            items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,
+            items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
             onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id)),
             reminders,
@@ -10628,7 +11361,7 @@ function App() {
             style:{width:5, cursor:'col-resize', flexShrink:0, background:'transparent'},
             title:'Drag to resize',
           }),
-          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode}),
+          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect}),
         ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})
       )

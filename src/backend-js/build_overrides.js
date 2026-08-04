@@ -273,37 +273,86 @@ function isMetaCategory(catName) {
 async function fetchCategoriesBatch(titles) {
   // Query RS Wiki for page categories for a list of titles (max 50).
   // Returns: { lowercase_page_title: [category_name, ...] }. Follows redirects automatically.
-  const params = new URLSearchParams({
-    action: 'query',
-    titles: titles.join('|'),
-    prop: 'categories',
-    cllimit: '100',
-    redirects: '1',
-    format: 'json',
-    formatversion: '2',
-  });
-  let data;
-  try {
-    const res = await fetch(`${WIKI_API}?${params.toString()}`, { headers: HEADERS, signal: AbortSignal.timeout(20000) });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    data = await res.json();
-  } catch (e) {
-    console.log(`\n  [wiki] Request error: ${e.message}`);
-    return {};
+  //
+  // Requesting categories for MANY pages in one call can hit MediaWiki's
+  // own internal response-size limit even with cllimit=100 per page — when
+  // that happens the response includes a `continue` token and some pages
+  // come back with an EMPTY categories list, not an error and not
+  // page.missing, just silently truncated. Confirmed for real (Ben,
+  // 2026-08-02): a 50-title batch that happened to include several
+  // heavily-categorized pages returned Cannonball with 0 categories, even
+  // though it has 27 when queried alone — this single-shot version never
+  // checked for or followed that continuation, so anything cut off this
+  // way was wrongly reported as "not on wiki" downstream. Loops until the
+  // API stops sending a continue token, merging each round's categories
+  // into whichever pages they belong to (capped to avoid any theoretical
+  // infinite loop on a misbehaving response).
+  const rawCatsByTitle = {}; // page.title -> accumulated Category: entries
+  const missingTitles = new Set();
+  const redirects = {};
+  let continueParams = {};
+  let round = 0;
+  while (round < 25) {
+    round++;
+    const params = new URLSearchParams({
+      action: 'query',
+      titles: titles.join('|'),
+      prop: 'categories',
+      // 'max' (not a fixed number) — confirmed for real (Ben, 2026-08-02):
+      // with cllimit=100, a 50-title batch needing many categories per
+      // page (Adamant spear alone has 35+) legitimately needed MORE than
+      // 10 continuation rounds to ever reach every page's categories —
+      // the round cap below hit first and the batch gave up with several
+      // items (Adamant spear/claws/armoured boots) still un-fetched
+      // despite genuinely having the right wiki categories. 'max' lets
+      // MediaWiki return as much as a single response allows, cutting the
+      // same batch down to 4 rounds instead of never finishing in 10.
+      cllimit: 'max',
+      redirects: '1',
+      format: 'json',
+      formatversion: '2',
+      ...continueParams,
+    });
+    let data;
+    // One retry after a short backoff before giving up on this whole
+    // request — confirmed for real (Ben, 2026-08-02): a transient failure
+    // on 3 consecutive batches mid-run silently wiped every item in them
+    // (Adamant spear/claws/armoured boots included, despite genuinely
+    // having Melee weapons/Melee armour categories on the wiki) with no
+    // retry at all, so a single blip cost ~150 items their category.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const res = await fetch(`${WIKI_API}?${params.toString()}`, { headers: HEADERS, signal: AbortSignal.timeout(20000) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        data = await res.json();
+        if (data.error) throw new Error(data.error.info || data.error.code);
+        break;
+      } catch (e) {
+        if (attempt === 0) { await _sleep(1500); continue; }
+        console.log(`\n  [wiki] Request error (after retry): ${e.message}`);
+      }
+    }
+    if (!data) {
+      break;
+    }
+
+    for (const rd of data?.query?.redirects || []) {
+      redirects[rd.from.toLowerCase()] = rd.to.toLowerCase();
+    }
+    for (const page of data?.query?.pages || []) {
+      if (page.missing) { missingTitles.add(page.title); continue; }
+      const title = page.title;
+      if (!rawCatsByTitle[title]) rawCatsByTitle[title] = [];
+      rawCatsByTitle[title].push(...(page.categories || []));
+    }
+
+    if (!data.continue) break;
+    continueParams = data.continue;
   }
 
   const result = {};
-  const pages = data?.query?.pages || [];
-  // Build redirect map: original title -> resolved title
-  const redirects = {};
-  for (const rd of data?.query?.redirects || []) {
-    redirects[rd.from.toLowerCase()] = rd.to.toLowerCase();
-  }
-
-  for (const page of pages) {
-    if (page.missing) continue;
-    const pageTitle = (page.title || '').toLowerCase();
-    const rawCats = page.categories || [];
+  for (const [title, rawCats] of Object.entries(rawCatsByTitle)) {
+    const pageTitle = title.toLowerCase();
     const cats = rawCats
       .map(c => c.title.replace('Category:', '').trim())
       .filter(c => !isMetaCategory(c));
@@ -396,7 +445,27 @@ async function buildOverrides(items, limit = 0) {
       }
     }
 
-    const wikiResults = await fetchCategoriesBatch(allTitles.slice(0, 50)); // API max is 50
+    // allTitles can run well past 50 even though this is a 50-ITEM batch —
+    // wikiNameCandidates() emits up to 3 title variants per item (dose-
+    // stripped "Attack potion (3)" -> also "Attack potion", letter-suffix-
+    // stripped "Rune sword (g)" -> also "Rune sword"), so a 50-item batch
+    // can produce 60-90+ candidate titles. The API's own per-request title
+    // cap is 50, but that's a request-size limit, not a "only look at the
+    // first 50 candidates" limit — silently slicing to the first 50 here
+    // meant every candidate past that cutoff was never even requested and
+    // got reported as "not found on wiki" despite the page existing.
+    // Confirmed for real (Ben, 2026-08-02): Cannonball, plain arrowheads,
+    // and unstrung bows all came back "not on wiki" this way. Chunk
+    // allTitles into 50-title API calls instead and merge every chunk's
+    // results, so nothing gets dropped just because of where it fell in
+    // the batch.
+    const wikiResults = {};
+    for (let t = 0; t < allTitles.length; t += 50) {
+      const chunk = allTitles.slice(t, t + 50);
+      const chunkResults = await fetchCategoriesBatch(chunk);
+      Object.assign(wikiResults, chunkResults);
+      if (t + 50 < allTitles.length) await _sleep(DELAY);
+    }
 
     let matchedCount = 0;
     for (const it of batch) {

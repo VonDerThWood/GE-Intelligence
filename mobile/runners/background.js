@@ -49,6 +49,8 @@ addEventListener('syncState', (resolve, reject, args) => {
     if (d.dxpEvents) setJSON('rb_dxpEvents', d.dxpEvents);
     if (d.dxpSettings) setJSON('rb_dxpSettings', d.dxpSettings);
     if (d.watchlistSettings) setJSON('rb_watchlistSettings', d.watchlistSettings);
+    if (d.portfolioPositions) setJSON('rb_portfolioPositions', d.portfolioPositions);
+    if (d.portfolioSettings) setJSON('rb_portfolioSettings', d.portfolioSettings);
     if (d.reminders) setJSON('rb_reminders', d.reminders);
     if (typeof d.notificationsEnabled === 'boolean') CapacitorKV.set('rb_notifEnabled', String(d.notificationsEnabled));
     resolve();
@@ -68,10 +70,13 @@ addEventListener('checkNotifications', async (resolve, reject) => {
     const dxpEvents = getJSON('rb_dxpEvents', []);
     const dxpSettings = getJSON('rb_dxpSettings', { enabled: false });
     const watchlistSettings = getJSON('rb_watchlistSettings', { enabled: false });
+    const portfolioPositions = getJSON('rb_portfolioPositions', []);
+    const portfolioSettings = getJSON('rb_portfolioSettings', { enabled: false, intervalHours: 0.25 });
     const reminders = getJSON('rb_reminders', []);
 
     const needsPrices = (watchlistSettings.enabled && watchlist.length) ||
-      (dxpSettings.enabled && dxpWatchlist.length);
+      (dxpSettings.enabled && dxpWatchlist.length) ||
+      (portfolioSettings.enabled && portfolioPositions.length);
 
     let dump = null;
     if (needsPrices) {
@@ -227,6 +232,34 @@ addEventListener('checkNotifications', async (resolve, reject) => {
           if (movers.length > top.length) lines.push(`+${movers.length - top.length} more`);
           queue(`Watchlist — ${movers.length} item${movers.length === 1 ? '' : 's'} moving`, lines.join('\n'));
           CapacitorKV.set('rb_watchlistDigestLastSent', String(now));
+        }
+      }
+    }
+
+    // --- Portfolio digest (GE price only — the runner has no access to
+    // the wiki's separate live buy/sell feed api.js's own version uses,
+    // just the raw gazbot dump it already fetched above for the watchlist
+    // digest) ---
+    if (portfolioSettings.enabled && portfolioPositions.length && dump) {
+      const intervalMs = (portfolioSettings.intervalHours || 0.25) * 3600000;
+      const lastSentMs = parseInt(CapacitorKV.get('rb_portfolioDigestLastSent').value || '0', 10);
+      if (Date.now() - lastSentMs >= intervalMs) {
+        let totalValue = 0, totalCost = 0, totalPL = 0;
+        const lines = [];
+        for (const pos of portfolioPositions) {
+          const entry = dump[String(pos.id)];
+          const price = entry && typeof entry === 'object' ? entry.price : (typeof entry === 'number' ? entry : null);
+          if (price == null) continue;
+          const value = price * pos.quantity;
+          const cost = pos.costBasis * pos.quantity;
+          const pl = value - cost;
+          totalValue += value; totalCost += cost; totalPL += pl;
+          lines.push(`${pos.name}: ${price.toLocaleString()}gp (${pl >= 0 ? '+' : ''}${Math.round(pl).toLocaleString()}gp)`);
+        }
+        if (lines.length) {
+          queue(`Portfolio digest — ${lines.length} open position${lines.length === 1 ? '' : 's'}`,
+            lines.join('\n') + `\n\nTotal: ${totalPL >= 0 ? '+' : ''}${Math.round(totalPL).toLocaleString()}gp (value ${Math.round(totalValue).toLocaleString()}gp)`);
+          CapacitorKV.set('rb_portfolioDigestLastSent', String(Date.now()));
         }
       }
     }

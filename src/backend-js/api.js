@@ -61,7 +61,25 @@ async function createGeniusApi({ dataDir, store }) {
   const overridesFile = path.join(dataDir, 'personal_overrides.json');
 
   // ─── In-memory state ────────────────────────────────────────────────────
-  let historyData = {};            // { itemId: [{timestamp, price, volume}] }
+  // historyData is now a LAZY, session-only cache — populated on-demand by
+  // getHistoryPoints() below (a real chart open, an active backfill fetch,
+  // getSignalTrend's bulk scan), and evicted again once saveHistory()
+  // confirms an item is safely on disk. It used to be eagerly fully loaded
+  // at startup (loadDirBatched over every per-item file) and NEVER evicted
+  // — confirmed for real (Ben, 2026-08-03) that a full real-device dataset
+  // is ~1.3GB of raw JSON on disk (7,346 items, ~180KB average, largest
+  // ~380KB); once parsed into JS objects and held resident for the WHOLE
+  // catalogue simultaneously, that's easily 2.5-5GB+ of live heap — far
+  // past any mobile WebView's V8 limit (repeated "Ineffective mark-
+  // compacts near heap limit" OOM crashes chasing HISTORY_FETCH_CONCURRENCY
+  // down from 12 all the way to 8 never fully fixed it, because
+  // concurrency was never the real bottleneck — the eager full-catalogue
+  // load and the backfill's own never-evicted accumulation were).
+  // historyPopulatedIds is the cheap replacement for "do we have this
+  // item's history at all" — built from a directory LISTING (filenames
+  // only, no file content read) instead of loading every file's content.
+  let historyData = {};            // { itemId: [{timestamp, price, volume}] } — sparse, session cache only
+  let historyPopulatedIds = new Set(); // authoritative "has history on disk" — cheap, always fully populated
   let dirtyHistoryIds = new Set(); // ids changed since the last saveHistory()
   let historyVersion = 0;          // bumped on every real history change — lets
                                     // cache checks below work without stat'ing a file
@@ -152,14 +170,80 @@ async function createGeniusApi({ dataDir, store }) {
       // present — a no-op on a fresh install (mobile always takes this
       // path harmlessly, since it never has a legacy file to find).
       await storage.migrateLegacyHistoryFile(historyFile, historyDir);
+      existingFiles = await storage.listJSONFiles(historyDir); // migration writes files directly; re-list to pick them up
     }
-    // Batched (see storage.loadDirBatched) so we don't fire thousands of
-    // concurrent file handles at once, and so the load doesn't block the
-    // single JS thread for its whole duration on desktop (confirmed for
-    // real via Windows Event Viewer AppHangTransient events).
-    historyData = await storage.loadDirBatched(historyDir, { batchSize: 200 });
-    console.log(`[history] Loaded ${Object.keys(historyData).length} items from per-item storage in ${Date.now()-loadStart}ms.`);
+    // A cheap directory LISTING (filenames only), not loadDirBatched's old
+    // full-content read of every file — see the historyData/
+    // historyPopulatedIds comment above for why. historyData itself starts
+    // empty and fills in lazily via getHistoryPoints() as items actually
+    // get used this session.
+    historyPopulatedIds = new Set(existingFiles.map(f => f.slice(0, -5)));
+    console.log(`[history] Found ${historyPopulatedIds.size} items on disk in ${Date.now()-loadStart}ms (loaded lazily, not held in memory).`);
     historyLoadDone();
+  }
+
+  // Central lazy accessor — the ONLY place that should read a single item's
+  // history off disk. Checks the in-memory cache first (already-touched
+  // this session), then historyPopulatedIds (cheap, always accurate) to
+  // decide whether it's even worth a disk read at all, avoiding a wasted
+  // read-miss for items that were never fetched.
+  async function getHistoryPoints(itemId) {
+    const key = String(itemId);
+    if (historyData[key]) return historyData[key];
+    if (!historyPopulatedIds.has(key)) return null;
+    const data = await storage.readDirItem(historyDir, key);
+    if (data) historyData[key] = data;
+    return data;
+  }
+
+  // Precomputes the two lightweight per-item summaries run.js's own price
+  // fetch cycle actually needs (a volume median, a previous-day price) —
+  // one item's full history read+processed+evicted at a time, same
+  // pattern as getSignalTrend's bulk scan above. This REPLACES passing
+  // the raw historyData object into run.js (main.js/bridge.js used to do
+  // `runJs(argv, api.historyData)`, which needed the FULL catalogue
+  // resident so run.js's own loop could compute these same summaries
+  // itself) — now that historyData is a lazy, mostly-empty session cache,
+  // handing it over directly would have silently reintroduced the exact
+  // "historyVolAvg/historyPrevPrice went empty" bug this codebase already
+  // fixed once (see run.js's fetchPrices comment). Mirrors that function's
+  // exact math (single O(n) pass for latest/second-latest + a 90-day
+  // volume window) so results are identical, just computed without ever
+  // holding more than one item's full array in memory at once.
+  async function computeHistoryStats() {
+    const historyVolAvg = {};
+    const historyPrevPrice = {};
+    const toSec = ts => (ts && ts > 1e12 ? ts / 1000 : ts);
+    const allIds = [...historyPopulatedIds];
+    let _processedSinceYield = 0;
+    const YIELD_BATCH = 25;
+    for (const itemId of allIds) {
+      const points = await getHistoryPoints(itemId);
+      delete historyData[itemId];
+      if (++_processedSinceYield >= YIELD_BATCH) {
+        _processedSinceYield = 0;
+        await new Promise(res => setTimeout(res, 0));
+      }
+      if (!points || points.length < 2) continue;
+      let latest = null, secondLatest = null;
+      const cutoff90d = Date.now() / 1000 - 90 * 86400;
+      const recentPts = [];
+      for (const p of points) {
+        const ts = p.timestamp || 0;
+        if (!latest || ts > (latest.timestamp || 0)) { secondLatest = latest; latest = p; }
+        else if (!secondLatest || ts > (secondLatest.timestamp || 0)) { secondLatest = p; }
+        if (toSec(ts) >= cutoff90d) recentPts.push(p);
+      }
+      const ptsForVol = recentPts.length >= 7 ? recentPts : points;
+      const vols = ptsForVol.map(p => p.volume).filter(v => v !== null && v !== undefined).sort((a, b) => a - b);
+      if (vols.length) {
+        const mid = Math.floor(vols.length / 2);
+        const medianVol = vols.length % 2 ? vols[mid] : Math.floor((vols[mid - 1] + vols[mid]) / 2);
+        historyVolAvg[String(itemId)] = medianVol;
+      }
+      if (secondLatest && secondLatest.price) historyPrevPrice[String(itemId)] = secondLatest.price;
+    }
+    return { historyVolAvg, historyPrevPrice };
   }
 
   async function saveHistory() {
@@ -173,6 +257,18 @@ async function createGeniusApi({ dataDir, store }) {
     await Promise.all(toSave.map(async id => {
       try {
         await storage.writeDirItem(historyDir, id, historyData[id]);
+        historyPopulatedIds.add(String(id));
+        // Evict from the live session cache once it's confirmed safely on
+        // disk — this is the other half of the lazy-load fix (see
+        // historyData's own comment): during a full-catalogue backfill,
+        // NOT doing this meant every single fetched item stayed resident
+        // forever, so memory grew linearly with how far the backfill got
+        // regardless of concurrency. getHistoryPoints() transparently
+        // re-reads from disk if something needs this item again later
+        // (a chart open, a re-scan) — itemHistoryCache (a separate, much
+        // smaller cache) still covers the "just opened this item's chart"
+        // fast path independently of this eviction.
+        delete historyData[id];
       } catch (e) {
         console.error(`[history] Save failed for item ${id}:`, e.message);
         dirtyHistoryIds.add(id); // retry on next save
@@ -209,6 +305,22 @@ async function createGeniusApi({ dataDir, store }) {
       }
       if (!res.ok) {
         console.warn(`[history] HTTP ${res.status} fetching item ${itemId} (timeout ${timeoutMs}ms)`);
+        if (res.status === 429) {
+          // Real rate limiting from WeirdGloop — confirmed for real (Ben,
+          // 2026-08-03) once a full sustained backfill finally ran long
+          // enough to actually reach it (every earlier attempt crashed
+          // from client-side memory pressure well before this point, so
+          // "no 429s ever seen" wasn't actually evidence the API had no
+          // limit — it just meant we'd never run long enough to find it).
+          // Previously this failed instantly with zero backoff, so
+          // fetchHistoryForItem's own immediate retry (and every other
+          // concurrent worker's very next 400ms-paced request) just
+          // hammered the same already-struggling endpoint again right
+          // away. A real pause here is the actual fix — self-throttles
+          // the whole run's aggregate request rate under sustained
+          // rate-limiting instead of concurrency tuning alone.
+          await new Promise(r => setTimeout(r, 4000));
+        }
         return false;
       }
       try {
@@ -223,7 +335,19 @@ async function createGeniusApi({ dataDir, store }) {
           historyData[String(itemId)] = points;
           dirtyHistoryIds.add(String(itemId));
           historyVersion++;
-          athCache[String(itemId)] = { data: points.map(p => ({timestamp:p.timestamp, high:p.price, low:p.price, volume:p.volume})) };
+          // athCache used to be eagerly built here too — a full duplicate
+          // copy of the SAME points array (just remapped field names) held
+          // in memory for every single item, whether its ATH/ATL chart is
+          // ever actually opened or not. getItemTimeseries() already
+          // builds this lazily from historyData on first real access (see
+          // its own cold-cache branch below), so during a full ~7000+ item
+          // backfill this was roughly DOUBLING peak memory for no benefit
+          // — a real contributor to the repeated V8 "heap limit" OOM
+          // crashes on Android's WebView (2026-08-02) that simply
+          // ratcheting HISTORY_FETCH_CONCURRENCY down kept not fully
+          // fixing. Removed; athCache still gets populated same as
+          // always, just on-demand instead of speculatively for every
+          // item up front.
         }
         return !!raw;
       } catch (e) {
@@ -249,54 +373,155 @@ async function createGeniusApi({ dataDir, store }) {
     return fetchHistoryForItemOnce(itemId, 20000);
   }
 
+  // Concurrent workers instead of one sequential fetch — each worker still
+  // paces itself at the same ~2.5/sec (400ms) the original single-threaded
+  // loop used, so per-connection request rate against WeirdGloop is
+  // unchanged; running HISTORY_FETCH_CONCURRENCY of them at once just
+  // overlaps their network wait time instead of one request blocking the
+  // next. Ben asked to speed up the ~20-45 min full-catalogue backfill
+  // (2026-08-02, mobile testing) — real wall-clock improvement without
+  // touching the actual per-connection pacing, which is the safer lever
+  // than just shortening the 400ms delay itself (that number was chosen
+  // as "well under limit" without ever pinning down the real ceiling, so
+  // multiplying request RATE felt riskier than multiplying request
+  // COUNT-in-flight).
+  //
+  // Ben explicitly asked to push this from an initial 4 up to 12, same
+  // session. That produced two genuine V8 "Ineffective mark-compacts near
+  // heap limit" OOM crashes on Android's WebView mid-backfill (confirmed
+  // via adb logcat both times) — the first coincided with also changing
+  // the UI scale setting mid-backfill (which forces a full app re-render;
+  // buildCSS() isn't memoized, reruns from scratch every render), but the
+  // second happened with no settings change at all, meaning 12 concurrent
+  // full multi-year history payloads in flight was genuinely too much for
+  // the WebView's V8 heap on its own during a full ~7000+ item backfill
+  // at the time. Ratcheted down to 10, then 8 chasing repeat crashes on
+  // the `kidsart` emulator AVD — but also found and fixed a real
+  // contributor along the way: fetchHistoryForItemOnce was eagerly
+  // duplicating every item's full history into athCache on top of
+  // historyData (see that function's own comment), roughly doubling peak
+  // memory for no reason. Separately, the emulator's own AVD config
+  // turned out to be quite constrained (hw.ramSize 2048MB, vm.heapSize
+  // 228MB) — bumped to 4096MB/512MB (2026-08-02) since Ben's actual
+  // Pixel 8 Pro had never shown this crash at all, strongly suggesting
+  // the emulator's low default allocation (not a fundamental app problem)
+  // was the real ceiling. Retested at 12 with BOTH real fixes in place
+  // (memory dedup + 4096MB/512MB emulator RAM) — crashed again, same V8
+  // OOM shape, right after a burst of ~25 items hitting their 17s
+  // fetchHistoryForItemOnce backstop almost simultaneously (consistent
+  // with the JS main thread stalling hard from GC pressure right as
+  // memory peaked). So 12 is genuinely too high for this environment even
+  // WITH both fixes — not purely an emulator-RAM artifact after all. Tried
+  // 10 as a middle ground next — also crashed, same shape, after running
+  // fine for several minutes first each time (this isn't an immediate
+  // failure at either number, it's a slow accumulation that finally tips
+  // over). Settled on 8 as the confirmed-stable value. Desktop has never
+  // shown any of this at any concurrency level tried (Node's heap has far
+  // more headroom regardless). Worth watching the console for repeated
+  // "[history] HTTP 429" (rate limit) or another V8 OOM if 8 ever crashes
+  // too — that would mean the real fix is reducing per-item memory
+  // footprint further, not concurrency at all.
+  const HISTORY_FETCH_CONCURRENCY = 8;
+
   async function runHistoryQueue(onProgress) {
     if (historyFetchActive) return;
     historyFetchActive = true;
     historyFetchStop = false;
     let done = 0;
     const total = historyFetchQueue.length;
+    let failedIds = [];
 
-    while (historyFetchQueue.length > 0 && !historyFetchStop) {
-      const id = historyFetchQueue.shift();
-      if (historyData[String(id)]) {
-        // Already have it (loaded from disk on a previous session, most
-        // items on an established install) — still report progress so the
-        // renderer's populatedHistoryIds stays in sync. Previously this
-        // `continue`d silently, so on an install where most items were
-        // already fetched, onProgress could go the entire queue without
-        // firing even once — leaving the renderer's populated-ids snapshot
-        // stuck at whatever it captured right after get-data (often taken
-        // before loadHistory()'s disk read had even finished), wrongly
-        // showing "price history still loading" for items that had been
-        // fully loaded the whole time. Confirmed for real: Gold Bar, which
-        // has 2011-2024 history on disk, still showed the message.
+    async function worker() {
+      while (historyFetchQueue.length > 0 && !historyFetchStop) {
+        const id = historyFetchQueue.shift();
+        if (id === undefined) break; // another worker just took the last one
+        if (historyPopulatedIds.has(String(id))) {
+          // Already have it (loaded from disk on a previous session, most
+          // items on an established install) — still report progress so
+          // the renderer's populatedHistoryIds stays in sync. Previously
+          // this `continue`d silently, so on an install where most items
+          // were already fetched, onProgress could go the entire queue
+          // without firing even once — leaving the renderer's populated-
+          // ids snapshot stuck at whatever it captured right after
+          // get-data (often taken before loadHistory()'s disk read had
+          // even finished), wrongly showing "price history still loading"
+          // for items that had been fully loaded the whole time.
+          // Confirmed for real: Gold Bar, which has 2011-2024 history on
+          // disk, still showed the message.
+          done++;
+          if (onProgress) onProgress(done, total);
+          continue;
+        }
+        const ok = await fetchHistoryForItem(id);
+        if (!ok) failedIds.push(id);
         done++;
+        if (!historyInitial300Done && historyPopulatedIds.size >= 300) {
+          historyInitial300Done = true;
+          store.set('historyInitial300Done', true);
+        }
         if (onProgress) onProgress(done, total);
-        continue;
+        if (done % 20 === 0) await saveHistory();
+        await new Promise(r => setTimeout(r, 400)); // ~2.5/sec PER WORKER, same pacing as before concurrency was added
       }
-      await fetchHistoryForItem(id);
-      done++;
-      if (!historyInitial300Done && Object.keys(historyData).length >= 300) {
-        historyInitial300Done = true;
-        store.set('historyInitial300Done', true);
+    }
+
+    await Promise.all(Array.from({length: HISTORY_FETCH_CONCURRENCY}, worker));
+
+    // In-session retry for items that failed via fetchHistoryForItemOnce's
+    // hard backstop — confirmed for real (Ben, 2026-08-03) that these
+    // failures land in one tight burst right near the end of a big
+    // backfill (a main-thread GC stall causing a pile of already-running
+    // timers to all expire together, not a hard per-item failure), and
+    // previously just sat unfetched until the NEXT app launch re-ran the
+    // whole "trigger history population if needed" check — meaning a full
+    // catalogue backfill routinely needed 2-3 manual kill-and-reopen
+    // cycles to actually finish (confirmed on a real Motorola Edge 5G UW:
+    // pass 1 got 4,427/7,308, pass 2 needed a restart to pick up the
+    // rest). Retrying automatically here, once the main queue has fully
+    // drained (so total in-memory history has stopped growing and
+    // whatever GC pressure caused the stall has had a chance to ease),
+    // catches the vast majority in the same sitting.
+    //
+    // Still calls onProgress on every attempt, even though `done`/`total`
+    // themselves don't move any further here (these items were already
+    // counted as "done" from the main pass) — confirmed for real (Ben,
+    // 2026-08-03) that skipping this made the renderer's "Building
+    // history" popup visibly freeze for the whole retry phase, which with
+    // real HTTP 429 backoff (4s per hit) plus this being where most of
+    // the backstop failures land, could be a genuinely long silent
+    // stretch. startHistoryPopulation's wrapper recomputes
+    // stored: historyPopulatedIds.size fresh on every call regardless of
+    // whether done/total changed, so calling it here still gets real,
+    // live progress ticks to the UI as retries actually succeed.
+    async function retryWorker() {
+      while (historyFetchQueue.length > 0 && !historyFetchStop) {
+        const id = historyFetchQueue.shift();
+        if (id === undefined) break;
+        const ok = await fetchHistoryForItem(id);
+        if (!ok) failedIds.push(id);
+        if (onProgress) onProgress(done, total);
+        await new Promise(r => setTimeout(r, 400));
       }
-      if (onProgress) onProgress(done, total);
-      if (done % 20 === 0) await saveHistory();
-      await new Promise(r => setTimeout(r, 400)); // ~2.5/sec, well under limit
+    }
+    for (let attempt = 0; attempt < 2 && failedIds.length && !historyFetchStop; attempt++) {
+      historyFetchQueue = failedIds;
+      failedIds = [];
+      await Promise.all(Array.from({length: HISTORY_FETCH_CONCURRENCY}, retryWorker));
     }
 
     await saveHistory();
     historyFetchActive = false;
-    console.log(`[history] Queue complete. ${Object.keys(historyData).length} items stored.`);
+    console.log(`[history] Queue complete. ${historyPopulatedIds.size} items stored.`
+      + (failedIds.length ? ` ${failedIds.length} still unfetched after retries.` : ''));
   }
 
   async function getHistoryStatus() {
     await historyLoadedPromise;
     return {
-      stored: Object.keys(historyData).length,
+      stored: historyPopulatedIds.size,
       queued: historyFetchQueue.length,
       active: historyFetchActive,
-      isFirstRun: Object.keys(historyData).length === 0,
+      isFirstRun: historyPopulatedIds.size === 0,
       initial300Done: historyInitial300Done,
     };
   }
@@ -309,11 +534,11 @@ async function createGeniusApi({ dataDir, store }) {
     // the rest of the session (see runHistoryQueue's onProgress fix above
     // for the other half of this bug).
     await historyLoadedPromise;
-    return Object.keys(historyData).map(Number);
+    return [...historyPopulatedIds].map(Number);
   }
 
   async function getItemHistoryLocal(itemId) {
-    return historyData[String(itemId)] || null;
+    return getHistoryPoints(itemId);
   }
 
   // `onProgress` is the caller's hook for relaying progress to the UI
@@ -321,14 +546,14 @@ async function createGeniusApi({ dataDir, store }) {
   // an event emitter so this stays dependency-free.
   async function startHistoryPopulation(itemIds, onProgress) {
     await historyLoadedPromise;
-    const newIds = itemIds.filter(id => !historyData[String(id)]);
+    const newIds = itemIds.filter(id => !historyPopulatedIds.has(String(id)));
     historyFetchQueue = [...new Set([...historyFetchQueue, ...newIds])];
     console.log(`[history] Queue set: ${historyFetchQueue.length} items to fetch`);
 
     runHistoryQueue((done, total) => {
       onProgress && onProgress({
         done, total,
-        stored: Object.keys(historyData).length,
+        stored: historyPopulatedIds.size,
         queueRemaining: historyFetchQueue.length,
         initial300Done: historyInitial300Done,
       });
@@ -343,9 +568,16 @@ async function createGeniusApi({ dataDir, store }) {
   }
 
   async function getItemHistory(itemId) {
+    // Untradeable items (Invention components, combo potions — see
+    // untradeable.js) never touch the Grand Exchange, so there's no
+    // WeirdGloop history to fetch — every attempt would fail after two
+    // full backstop timeouts (~32s) for nothing. Their only real chart
+    // data is GEnius's own daily price snapshots (getPriceSnapshots),
+    // which the renderer already merges in separately.
+    if (String(itemId).startsWith('untradeable_')) return null;
     if (itemHistoryCache.has(itemId)) return itemHistoryCache.get(itemId);
 
-    const existing = historyData[String(itemId)];
+    const existing = await getHistoryPoints(itemId);
     if (existing && existing.length) {
       const sorted = [...existing].sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
       const latestTs = sorted[0].timestamp || 0;
@@ -359,7 +591,7 @@ async function createGeniusApi({ dataDir, store }) {
     }
 
     await fetchHistoryForItem(itemId);
-    const result = historyData[String(itemId)] || null;
+    const result = await getHistoryPoints(itemId);
     if (result) {
       itemHistoryCache.set(itemId, result);
       await saveHistory();
@@ -369,9 +601,34 @@ async function createGeniusApi({ dataDir, store }) {
 
   async function getItemTimeseries(itemId) {
     const key = String(itemId);
-    if (athCache[key]) return athCache[key].data;
-    if (historyData[key] && historyData[key].length) {
-      const data = historyData[key].map(p => ({timestamp:p.timestamp, high:p.price||p.high, low:p.price||p.low, volume:p.volume||0}));
+    // Same reasoning as getItemHistory above — no WeirdGloop all-time
+    // series can ever exist for an untradeable item.
+    if (key.startsWith('untradeable_')) return null;
+    const hist = await getHistoryPoints(itemId);
+    if (athCache[key]) {
+      // Used to be treated as permanently complete once built, so any
+      // daily price point added by the regular fetch cycle AFTER an item
+      // was first cached here never made it in — All-Time Low/High could
+      // silently go stale indefinitely. Confirmed for real (Ben,
+      // 2026-08-02): Dragon bones' cache hadn't been touched since June
+      // 16, missing a genuine new all-time low set on July 27 — the app
+      // then displayed a LATER, higher price as "new all-time low"
+      // simply because it beat that stale (too-high) cached minimum.
+      // Merges in anything historyData has gained since, keyed off
+      // timestamp so this only ever appends, never rewrites history.
+      if (hist && hist.length) {
+        const cached = athCache[key].data;
+        const lastCachedTs = cached.length ? cached[cached.length - 1].timestamp : 0;
+        const newer = hist.filter(p => p.timestamp > lastCachedTs);
+        if (newer.length) {
+          athCache[key] = { data: [...cached, ...newer.map(p => ({timestamp:p.timestamp, high:p.price||p.high, low:p.price||p.low, volume:p.volume||0}))] };
+          try { await storage.writeJSON(athCacheFile, athCache); } catch {}
+        }
+      }
+      return athCache[key].data;
+    }
+    if (hist && hist.length) {
+      const data = hist.map(p => ({timestamp:p.timestamp, high:p.price||p.high, low:p.price||p.low, volume:p.volume||0}));
       athCache[key] = { data };
       return data;
     }
@@ -487,7 +744,11 @@ async function createGeniusApi({ dataDir, store }) {
         // of this measurement. The gap is real mobile JS engine cost, not
         // something this disk-serve/background-refresh strategy can hide —
         // it only keeps the Almanac tab itself from blocking on it.
-        const out = await computeDxpData(historyData, itemLimits, itemNames, true, events);
+        const out = await computeDxpData(
+          [...historyPopulatedIds],
+          async id => { const p = await getHistoryPoints(id); delete historyData[id]; return p; },
+          itemLimits, itemNames, true, events
+        );
         await storage.writeJSON(path.join(dataDir, 'dxp_intelligence.json'), out);
         dxpIntelCache = { historyVersion, data: out };
         return out;
@@ -538,11 +799,17 @@ async function createGeniusApi({ dataDir, store }) {
     const itemDays = {SURGE:{}, DUMP:{}, ACCUMULATION:{}, DISTRIBUTION:{}, FRENZY:{}, HIGH_VOL:{}, MANIPULATED:{}};
 
     const usedHistoryVersion = historyVersion;
-    const allIds = Object.keys(historyData);
+    // Every item's history, one at a time via getHistoryPoints — evicted
+    // again immediately after reading (this function only needs to LOOK
+    // at each item's points once to tally signal counts, not hold all
+    // ~7000 of them resident simultaneously, which would recreate the
+    // exact memory problem the lazy-load rework above exists to avoid).
+    const allIds = [...historyPopulatedIds];
     const BATCH = 40;
     for (let b = 0; b < allIds.length; b += BATCH) {
       for (const itemId of allIds.slice(b, b + BATCH)) {
-        const points = historyData[itemId];
+        const points = await getHistoryPoints(itemId);
+        delete historyData[itemId];
         if (!points || points.length < 8) continue;
         const byDay = {};
         for (const p of points) {
@@ -613,7 +880,7 @@ async function createGeniusApi({ dataDir, store }) {
   // closest at-or-before `now - days`. Returns null if there isn't enough
   // history to compare. Used by the watchlist digest check.
   async function pctChangeOverDays(itemId, days) {
-    const points = historyData[String(itemId)];
+    const points = await getHistoryPoints(itemId);
     if (!points || points.length < 2) return null;
     const toMs = ts => (ts && ts < 1e11 ? ts * 1000 : ts);
     const sorted = [...points].sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
@@ -912,6 +1179,12 @@ async function createGeniusApi({ dataDir, store }) {
   // drops", and "Charms" as three separate tables) — all of them are
   // aggregated together here, not just the first.
   const MONSTER_DROPS_CAP = 40;
+  // Lower than MONSTER_DROPS_CAP: each product here costs an EXTRA wiki
+  // fetch (its own Creation page), not just a regex pass over HTML
+  // already in hand, so an item feeding dozens of recipes (Incandescent
+  // energy, common bars/bolts/dyes, ...) would otherwise fire a burst of
+  // requests just to render a detail panel.
+  const ITEM_PRODUCTS_CAP = 15;
 
   function _parseAvgQuantity(text) {
     // Strip a trailing annotation like "(noted)" or "(m)" before matching a
@@ -991,11 +1264,11 @@ async function createGeniusApi({ dataDir, store }) {
     return html.slice(normalIdx, hardIdx);
   }
 
-  function parseMonsterDrops(html, mode = 'normal') {
+  function parseMonsterDrops(html, mode = 'normal', liveItemsByName = {}) {
     const hasHardMode = html.indexOf('id="Drops_(hard_mode)"') !== -1;
     const section = _extractModeSection(html, mode);
     if (section === null) {
-      return { drops: [], estimatedGpPerKill: 0, gpPerKillSource: 'none', untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode };
+      return { drops: [], estimatedGpPerKill: 0, estimatedGpPerKillLive: 0, gpPerKillSource: 'none', untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode };
     }
     const wikiStatedGpPerKill = _parseWikiStatedGpPerKill(section);
     const allTables = [...section.matchAll(/<table[^>]*class="[^"]*\bitem-drops\b[^"]*"[^>]*>([\s\S]*?)<\/table>/g)];
@@ -1013,7 +1286,7 @@ async function createGeniusApi({ dataDir, store }) {
     // entirely rather than guessed at.
     const tables = allTables.filter(t => !section.slice(Math.max(0, t.index - 600), t.index).includes('mw-collapsible'));
     if (tables.length === 0) {
-      return { drops: [], estimatedGpPerKill: wikiStatedGpPerKill || 0, gpPerKillSource: wikiStatedGpPerKill ? 'wiki' : 'none', untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode, unknownRarityCount: 0, unknownRarityValue: 0 };
+      return { drops: [], estimatedGpPerKill: wikiStatedGpPerKill || 0, estimatedGpPerKillLive: wikiStatedGpPerKill || 0, gpPerKillSource: wikiStatedGpPerKill ? 'wiki' : 'none', untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode, unknownRarityCount: 0, unknownRarityValue: 0, unknownRarityValueLive: 0, hasLiveData: false };
     }
 
     const drops = [];
@@ -1028,7 +1301,7 @@ async function createGeniusApi({ dataDir, store }) {
     // (which is "no GE price at all") so the UI can be honest that this
     // specific estimate is a floor, not a complete figure — inventing a
     // guessed rate would be worse than flagging the gap outright.
-    let unknownRarityCount = 0, unknownRarityValue = 0;
+    let unknownRarityCount = 0, unknownRarityValue = 0, unknownRarityValueLive = 0;
 
     for (const table of tables) {
       const rowRe = /<tr([^>]*)>([\s\S]*?)<\/tr>/g;
@@ -1082,17 +1355,33 @@ async function createGeniusApi({ dataDir, store }) {
         const gePricePerUnit = perUnitMatch
           ? parseFloat(perUnitMatch[1].replace(/,/g, ''))
           : (geValueText === quantity ? 1 : (Number.isFinite(parseFloat(geValueText.replace(/,/g, ''))) ? parseFloat(geValueText.replace(/,/g, '')) : null));
+        // Cross-reference against GEnius's own live buy/sell catalogue by
+        // exact (case-insensitive) item name, same lookup the row's
+        // clickable-name link uses — falls back to the wiki's own GE price
+        // whenever the item isn't tracked live or has no live price yet, so
+        // the total is never missing a row just because live data is thin.
+        const liveItem = liveItemsByName[item.toLowerCase()];
+        const livePricePerUnit = liveItem ? (liveItem.liveBuy ?? liveItem.liveSell ?? null) : null;
+        const effectivePricePerUnit = livePricePerUnit != null ? livePricePerUnit : gePricePerUnit;
+
         if (gePricePerUnit === null) untradeableDropCount++;
-        else if (probability == null) { unknownRarityCount++; unknownRarityValue += gePricePerUnit; }
+        else if (probability == null) {
+          unknownRarityCount++;
+          unknownRarityValue += gePricePerUnit;
+          unknownRarityValueLive += effectivePricePerUnit;
+        }
 
         const contribution = (probability != null && gePricePerUnit != null) ? avgQuantity * gePricePerUnit * probability : 0;
+        const liveContribution = (probability != null && effectivePricePerUnit != null) ? avgQuantity * effectivePricePerUnit * probability : 0;
         // gePrice: per-unit price, used for sorting/contribution — comparable
         // across rows regardless of quantity. geValueText: the wiki's own
         // displayed total-value text (a range like "13,530–18,040" whenever
         // quantity is a range, or a single number when it's fixed) — shown
         // as-is in the UI rather than an "average" that loses the range Ben
-        // specifically wanted kept visible.
-        drops.push({ item, quantity, rarity, gePrice: gePricePerUnit, geValueText, contribution, probability });
+        // specifically wanted kept visible. livePrice is null whenever
+        // GEnius has no live price for this item, in which case the UI falls
+        // back to displaying/summing the GE price instead.
+        drops.push({ item, quantity, rarity, gePrice: gePricePerUnit, livePrice: livePricePerUnit, geValueText, contribution, liveContribution, probability });
       }
     }
 
@@ -1121,6 +1410,8 @@ async function createGeniusApi({ dataDir, store }) {
     drops.push(...deduped);
 
     const computedGpPerKill = drops.reduce((sum, d) => sum + d.contribution, 0);
+    const computedGpPerKillLive = drops.reduce((sum, d) => sum + d.liveContribution, 0);
+    const hasLiveData = drops.some(d => d.livePrice != null);
     // Default order is by per-unit GE price, highest first — NOT by gp
     // contribution. Contribution factors in rarity/quantity too, so a common
     // cheap item can outrank a genuinely expensive rare one; since the list
@@ -1138,10 +1429,15 @@ async function createGeniusApi({ dataDir, store }) {
 
     return {
       drops, untradeableDropCount, totalCount, hadAnyTable: true, hasHardMode,
-      unknownRarityCount, unknownRarityValue,
+      unknownRarityCount, unknownRarityValue, unknownRarityValueLive, hasLiveData,
       estimatedGpPerKill: wikiStatedGpPerKill != null ? wikiStatedGpPerKill : computedGpPerKill,
+      // When the wiki states its own gp/kill figure directly, that number
+      // isn't built from these per-row prices at all, so there's no separate
+      // "live" version of it to compute — both fields report the same wiki
+      // total in that case, and the UI's GE/Live toggle has no effect on it.
+      estimatedGpPerKillLive: wikiStatedGpPerKill != null ? wikiStatedGpPerKill : computedGpPerKillLive,
       gpPerKillSource: wikiStatedGpPerKill != null ? 'wiki' : 'computed',
-      computedGpPerKill,
+      computedGpPerKill, computedGpPerKillLive,
     };
   }
 
@@ -1200,13 +1496,227 @@ async function createGeniusApi({ dataDir, store }) {
         html = await res.text();
         monsterHtmlCache.set(monsterName, html);
       }
-      result = { monsterName, mode, ...parseMonsterDrops(html, mode) };
+      const liveItemsByName = Object.fromEntries(
+        ((await getData()).items || []).map(i => [i.name.toLowerCase(), i])
+      );
+      result = { monsterName, mode, ...parseMonsterDrops(html, mode, liveItemsByName) };
     } catch (e) {
-      result = { monsterName, mode, drops: [], estimatedGpPerKill: 0, untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode: false, error: e.message };
+      result = { monsterName, mode, drops: [], estimatedGpPerKill: 0, estimatedGpPerKillLive: 0, untradeableDropCount: 0, totalCount: 0, hadAnyTable: false, hasHardMode: false, error: e.message };
     }
 
     monsterDropsCache.set(resultKey, result);
     return result;
+  }
+
+  // Item detail panel's "Turns into" block — reuses the wiki's own
+  // "Products" table (same one shown on e.g. Dark Shard of Leng's page:
+  // Augmented/dyed/Third Age variants alongside genuinely separate
+  // items). Only surfaces rows whose output is (a) a distinct tradeable
+  // item GEnius already tracks and (b) not a purely cosmetic reskin of
+  // the same base item — Augmentor and "<Style> dye" materials are the
+  // wiki's own signal for that, since every recolor/augment row's only
+  // OTHER material besides the source item itself is one of those two.
+  // The materials list (name + qty) lives inline in this same table as a
+  // nested <table class="products-materials">, so no second page fetch
+  // is needed for ingredient data.
+  function _extractProductsSection(html) {
+    const idx = html.indexOf('id="Products"');
+    if (idx === -1) return null;
+    const after = html.slice(idx);
+    const closeIdx = after.indexOf('</h2>');
+    const nextH2Idx = closeIdx === -1 ? -1 : after.indexOf('mw-heading2', closeIdx + 5);
+    return nextH2Idx === -1 ? after : after.slice(0, nextH2Idx);
+  }
+
+  // Each row of the products-list table has a NESTED <table
+  // class="products-materials"> inside its Materials cell, with its own
+  // <tr> tags — a naive non-greedy <tr>...</tr> regex over the whole table
+  // matches the FIRST </tr> it finds, which is one of THOSE inner rows,
+  // silently truncating every outer row before the materials data (or
+  // even the closing </table>) is ever reached. Confirmed for real
+  // against Grimy marrentill: every row's materials table matched as
+  // "not found" even though the raw HTML plainly had one. This walks the
+  // table/tr tags with a nesting-depth counter instead, only treating a
+  // <tr>/</tr> pair as a row boundary while depth is 0 (i.e. not inside
+  // any nested table).
+  function _splitTopLevelRows(tbodyHtml) {
+    const rows = [];
+    const re = /<table\b[^>]*>|<\/table>|<tr\b[^>]*>|<\/tr>/gi;
+    let depth = 0, rowStart = -1, m;
+    while ((m = re.exec(tbodyHtml)) !== null) {
+      const tag = m[0].toLowerCase();
+      if (tag.startsWith('<table')) depth++;
+      else if (tag.startsWith('</table')) depth--;
+      else if (tag.startsWith('<tr') && depth === 0 && rowStart === -1) rowStart = m.index;
+      else if (tag === '</tr>' && depth === 0 && rowStart !== -1) {
+        rows.push(tbodyHtml.slice(rowStart, re.lastIndex));
+        rowStart = -1;
+      }
+    }
+    return rows;
+  }
+
+  function parseItemProducts(html, itemName) {
+    const section = _extractProductsSection(html);
+    if (section === null) return { products: [], hadAnyTable: false };
+    const tableMatch = section.match(/<table[^>]*class="[^"]*\bproducts-list\b[^"]*"[^>]*>([\s\S]*?)<\/table>\s*(?=<table|<div class="mw-heading|$)/);
+    if (!tableMatch) return { products: [], hadAnyTable: false };
+
+    const rows = _splitTopLevelRows(tableMatch[1]).slice(1); // drop the header row
+    const byName = new Map();
+    for (const rowHtml of rows) {
+      const nameMatch = rowHtml.match(/<td data-sort-value="[^"]*">\s*[\d,]+\s*×\s*<a href="\/w\/[^"]+" title="([^"]+)">/);
+      if (!nameMatch) continue;
+      const productName = nameMatch[1];
+
+      const matTableMatch = rowHtml.match(/<table class="products-materials"[^>]*>([\s\S]*?)<\/table>/);
+      if (!matTableMatch) continue;
+      const materials = [];
+      for (const mr of matTableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+        const qtyMatch = mr[1].match(/([\d,]+)\s*×/);
+        const matNameMatch = mr[1].match(/<a[^>]*>([^<]+)<\/a>/);
+        if (!matNameMatch) continue;
+        materials.push({
+          name: matNameMatch[1].trim(),
+          qty: qtyMatch ? parseFloat(qtyMatch[1].replace(/,/g, '')) : 1,
+        });
+      }
+      if (!materials.length) continue;
+
+      // Cosmetic reskin check: every OTHER material (besides the source
+      // item itself) is Augmentor or a "<X> dye" — confirmed for real
+      // against Dark Shard of Leng's own Products table, where every
+      // dyed/Third Age/augmented row has exactly one such material and
+      // nothing else alongside the source item.
+      const others = materials.filter(m => m.name.toLowerCase() !== itemName.toLowerCase());
+      const isCosmetic = others.length > 0 && others.every(m => m.name === 'Augmentor' || /\bdye$/i.test(m.name));
+      if (isCosmetic) continue;
+
+      // Some items have more than one row producing the SAME output (e.g.
+      // Grimy marrentill -> Clean marrentill both by cleaning it yourself
+      // via Herblore AND by paying an NPC 200gp to do it) — keep whichever
+      // variant needs fewer materials, since that's the cheaper/simpler
+      // path and there's no reason to show the same destination twice.
+      const existing = byName.get(productName);
+      if (!existing || materials.length < existing.materials.length) {
+        byName.set(productName, { name: productName, materials });
+      }
+    }
+    return { products: [...byName.values()], hadAnyTable: true };
+  }
+
+  const itemProductsHtmlCache = new Map();
+  async function _fetchItemHtml(name) {
+    let html = itemProductsHtmlCache.get(name);
+    if (html) return html;
+    const url = `https://runescape.wiki/w/${encodeURIComponent(name.replace(/ /g, '_'))}`;
+    const res = await fetch(url, {
+      headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+      signal: AbortSignal.timeout(10000),
+    });
+    html = await res.text();
+    itemProductsHtmlCache.set(name, html);
+    return html;
+  }
+
+  // A product's full ingredient list is only reliably complete on the
+  // PRODUCT's own page (its "Creation" section's recipe-table infobox) —
+  // confirmed for real (Ben, 2026-08-02): Dark Shard of Leng's own
+  // Products-table row (on whichever single fragment item's page you're
+  // looking at, e.g. Dark ice shard) only lists that ONE fragment as a
+  // material, even though the real recipe needs THREE more (Glacor
+  // remnants ×7500, Dark nilas ×10, Frozen core of Leng ×1 alongside it)
+  // — those only show up in Dark Shard of Leng's own Creation section.
+  // A page can have more than one method (e.g. Clean marrentill via
+  // Herblore vs. paying Zahur) — takes the first, same "cheapest/
+  // simplest wins" reasoning as the dedupe in parseItemProducts above.
+  function _parseCreationMaterials(html) {
+    const idx = html.indexOf('id="Creation"');
+    if (idx === -1) return null;
+    const tableMatch = html.slice(idx).match(/<table[^>]*class="[^"]*\binfobox-recipe\b[^"]*"[^>]*>([\s\S]*?)<\/table>/);
+    if (!tableMatch) return null;
+    const tbl = tableMatch[1];
+    const matStart = tbl.indexOf('Material</th><th>Quantity</th><th>Cost</th>');
+    if (matStart === -1) return null;
+    const totalIdx = tbl.indexOf('Total cost', matStart);
+    const matSection = totalIdx === -1 ? tbl.slice(matStart) : tbl.slice(matStart, totalIdx);
+    const materials = [];
+    for (const m of matSection.matchAll(/<a href="\/w\/[^"]+" title="([^"]+)">[^<]*<\/a>\s*<\/td>\s*<td class="ref-left"[^>]*>([\d,]+)<\/td>/g)) {
+      materials.push({ name: m[1], qty: parseFloat(m[2].replace(/,/g, '')) });
+    }
+    return materials.length ? materials : null;
+  }
+
+  async function getItemProducts(itemName) {
+    if (!itemName) return null;
+    try {
+      const html = await _fetchItemHtml(itemName);
+      const { products, hadAnyTable } = parseItemProducts(html, itemName);
+
+      // Prices are cross-referenced against GEnius's own live catalogue
+      // fresh on every call rather than cached alongside the parsed
+      // product/material structure above — the recipes themselves are
+      // stable (worth caching the HTML for), but prices change
+      // constantly, so baking them into a cached result would go stale
+      // immediately.
+      const liveItemsByName = Object.fromEntries(
+        ((await getData()).items || []).map(i => [i.name.toLowerCase(), i])
+      );
+      const priceOf = name => {
+        const it = liveItemsByName[name.toLowerCase()];
+        if (!it) return null;
+        return it.liveBuy ?? it.liveSell ?? it.high ?? it.low ?? null;
+      };
+
+      // Only tradeable, GEnius-tracked outputs are shown at all — filtered
+      // (cheap: no extra fetch) before the cap below, so items with LOTS
+      // of products (e.g. Incandescent energy, a Divination charge used
+      // across dozens of recipes) don't get capped down to mostly
+      // untradeable junk instead of the real tradeable ones.
+      const tradeable = products.filter(p => liveItemsByName[p.name.toLowerCase()]);
+      const totalCount = tradeable.length;
+      const capped = tradeable.slice(0, ITEM_PRODUCTS_CAP);
+
+      const priced = [];
+      for (const p of capped) {
+        // Prefer the product's own page's full recipe; fall back to the
+        // single-row materials list from the source item's own Products
+        // table (still correct for simple 1-material conversions like
+        // Grimy -> Clean, just not guaranteed complete for multi-material
+        // recipes) if the product's page has no parseable Creation table
+        // OR that table's recipe doesn't actually consume the source item
+        // at all — confirmed for real (Ben, 2026-08-02) on Compost: its
+        // own Creation section documents ONE representative/generic
+        // recipe (whatever herb the wiki editor happened to use as the
+        // example), since compost bins accept almost any raw ingredient,
+        // so grabbing it unconditionally attached a totally unrelated
+        // (and much cheaper) cost to every herb's "turns into Compost"
+        // row instead of that herb's own actual cost.
+        let materialsList = p.materials;
+        try {
+          const prodHtml = await _fetchItemHtml(p.name);
+          const full = _parseCreationMaterials(prodHtml);
+          if (full && full.some(m => m.name.toLowerCase() === itemName.toLowerCase())) materialsList = full;
+        } catch { /* fall back to p.materials below */ }
+
+        const sellPrice = priceOf(p.name);
+        let cost = 0, hasUnknownCost = false;
+        const materials = materialsList.map(m => {
+          const unitPrice = priceOf(m.name);
+          if (unitPrice == null) hasUnknownCost = true;
+          else cost += unitPrice * m.qty;
+          return { ...m, unitPrice };
+        });
+        const profit = (sellPrice != null && !hasUnknownCost)
+          ? Math.floor(sellPrice <= 50 ? sellPrice : sellPrice * 0.98) - cost
+          : null;
+        priced.push({ name: p.name, materials, sellPrice, cost, hasUnknownCost, profit });
+      }
+
+      return { itemName, products: priced, hadAnyTable, totalCount };
+    } catch (e) {
+      return { itemName, products: [], hadAnyTable: false, totalCount: 0, error: e.message };
+    }
   }
 
   // Combat stats (combat level, HP, weakness, poison/stun/deflect/drain
@@ -1851,9 +2361,8 @@ async function createGeniusApi({ dataDir, store }) {
     loadHistory, saveHistory, fetchHistoryForItem,
     getHistoryStatus, getHistoryPopulatedIds, getItemHistoryLocal,
     startHistoryPopulation, stopHistoryPopulation,
-    getItemHistory, getItemTimeseries,
+    getItemHistory, getItemTimeseries, computeHistoryStats,
     historyLoadedPromise,
-    get historyData() { return historyData; },        // read-only view for main.js's runPython/notifications
     get historyVersion() { return historyVersion; },
     // dxp / signals
     getDxpIntelligence, getDxpEvents, getSignalTrend, pctChangeOverDays,
@@ -1866,6 +2375,8 @@ async function createGeniusApi({ dataDir, store }) {
     getItemLiveTimeseries,
     // monster lookup
     searchMonsters, getMonsterDrops, getMonsterInfo,
+    // item detail panel — "turns into"
+    getItemProducts,
     // portfolio
     getPortfolio, savePosition, deletePosition, sellPosition, reopenPosition,
     // alerts

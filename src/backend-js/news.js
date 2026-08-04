@@ -158,12 +158,33 @@ function _pyTitle(s) {
 
 const _GENERIC_SHORT_WORDS = new Set(['ore', 'log', 'bar', 'axe', 'bow', 'kit', 'dye', 'tar', 'oil', 'ash', 'wax']);
 
+// Plain .includes() matched an item name ANYWHERE in the text, including
+// mid-word — confirmed for real (Ben, 2026-08-03): the "Gin" item was
+// matching inside "begin"/"beginning"/"imagine" on every article
+// containing those ordinary English words. _GENERIC_SHORT_WORDS was a
+// denylist for exactly this shape of false positive, but it only covers
+// words someone happened to notice and add — it can't scale to every
+// short (or even long) item name that happens to be a substring of a
+// common word. This checks that the character immediately before/after
+// the match (if any) isn't itself alphanumeric, so "gin" only matches
+// as its own word, not embedded in a longer one.
+function _hasWordMatch(text, name) {
+  let idx = text.indexOf(name);
+  while (idx !== -1) {
+    const before = idx > 0 ? text[idx - 1] : '';
+    const after = idx + name.length < text.length ? text[idx + name.length] : '';
+    if (!/[a-z0-9]/i.test(before) && !/[a-z0-9]/i.test(after)) return true;
+    idx = text.indexOf(name, idx + 1);
+  }
+  return false;
+}
+
 function detectMentions(text, items = null) {
   const textLower = text.toLowerCase();
   const found = [];
   const seen = new Set();
   for (const name of _getIndex(items)) {
-    if (textLower.includes(name) && !seen.has(name)) {
+    if (_hasWordMatch(textLower, name) && !seen.has(name)) {
       // Skip overly generic single words that produce false positives
       if (name.length <= 3 && _GENERIC_SHORT_WORDS.has(name)) continue;
       seen.add(name);

@@ -81,31 +81,43 @@ async function fetchLivePrices() {
   }
 }
 
-async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, historyDataOverride = null) {
+async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, historyStatsOverride = null) {
   const HEADERS = { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' };
   const DUMP_URL = 'https://chisel.weirdgloop.org/gazproj/gazbot/rs_dump.json';
 
   // Real volume averages AND previous-day prices, used for change_1d and
-  // avgVolume below. historyDataOverride is the already-loaded in-memory
-  // historyData from main.js (passed in by runPython) — using it directly
-  // avoids a second read AND avoids a real bug that was here: this used
-  // to always read the OLD monolithic history.json, which the per-item
-  // storage migration renamed away earlier tonight. Since that file no
-  // longer existed, historyVolAvg/historyPrevPrice were SILENTLY EMPTY on
-  // every fetch since — meaning change_1d only ever populated from the
-  // live dump's own "last" field (245/7182 items, not the ~thousands
-  // expected), and avgVolume fell back to rough EMA estimates for nearly
-  // the whole catalogue instead of real history. Confirmed for real via
-  // a tester noticing the suspiciously low "with price data" count.
-  const historyVolAvg = {};
-  const historyPrevPrice = {};
-  let history = historyDataOverride;
-  if (!history) {
-    // No override (e.g. standalone CLI use) — fall back to reading the
-    // per-item storage directory directly.
-    const historyDir = path.join(dataDir, 'history');
-    history = await storage.loadDirBatched(historyDir);
-  }
+  // avgVolume below. historyStatsOverride is api.js's computeHistoryStats()
+  // result — precomputed {historyVolAvg, historyPrevPrice}, one item's
+  // full history read+processed+evicted at a time — passed in by main.js/
+  // bridge.js's runPython so this doesn't need a second read of its own.
+  // This USED to receive the raw, fully-loaded historyData object instead
+  // (computing these same two maps itself, inline, below) — changed
+  // 2026-08-03 when historyData stopped being eagerly held in memory for
+  // the whole catalogue (see api.js's own comment on that). Passing the
+  // old raw-object shape through unchanged after that switch would have
+  // silently reintroduced the exact "historyVolAvg/historyPrevPrice went
+  // empty" bug this function's history already includes one real instance
+  // of (see below) — receiving pre-summarized data sidesteps that
+  // entirely rather than relying on every caller remembering to keep
+  // historyData fully populated just for this.
+  let historyVolAvg = {};
+  let historyPrevPrice = {};
+  if (historyStatsOverride) {
+    ({ historyVolAvg, historyPrevPrice } = historyStatsOverride);
+  } else {
+  // No override (e.g. standalone CLI use, no api.js instance available) —
+  // fall back to reading the per-item storage directory directly and
+  // computing the same summaries inline. This used to always read the OLD
+  // monolithic history.json, which the per-item storage migration renamed
+  // away — since that file no longer existed, historyVolAvg/
+  // historyPrevPrice were SILENTLY EMPTY on every fetch, meaning change_1d
+  // only ever populated from the live dump's own "last" field (245/7182
+  // items, not the ~thousands expected), and avgVolume fell back to rough
+  // EMA estimates for nearly the whole catalogue instead of real history.
+  // Confirmed for real via a tester noticing the suspiciously low "with
+  // price data" count.
+  const historyDir = path.join(dataDir, 'history');
+  const history = await storage.loadDirBatched(historyDir);
   if (history && Object.keys(history).length) {
     try {
       // Measured directly: this loop alone took ~2.5s uninterrupted
@@ -163,6 +175,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       console.log(`[prices] Could not process history data: ${e.message}`);
     }
   }
+  } // end historyStatsOverride fallback branch
 
   // Build previous volume lookups from last fetch (EMA fallback for items without history)
   const EMA_ALPHA = 0.08;
@@ -750,7 +763,7 @@ function _pyTitle(s) {
 // below also only matters for the desktop CLI invocation; esbuild's
 // require() shim resolves require.main to undefined for a bundled module,
 // so that block already safely never runs on mobile.
-async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(2) : []), historyDataOverride = null) {
+async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(2) : []), historyStatsOverride = null) {
   const args = parseArgs(argv);
   const dataDir = await getDataDir(args.dataDir);
   const outFile = path.join(dataDir, 'latest.json');
@@ -765,7 +778,7 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
 
   if (args.mode === 'full' || args.mode === 'prices') {
     const existingItems = existing.items || [];
-    const fetched = await fetchPrices(dataDir, args.webhook, existingItems, historyDataOverride);
+    const fetched = await fetchPrices(dataDir, args.webhook, existingItems, historyStatsOverride);
     if (fetched.length === 0 && existingItems.length > 0) {
       console.log(`[run] fetchPrices returned 0 items but ${existingItems.length} existing items are on disk — keeping the existing data instead of overwriting it with an empty result.`);
       items = existingItems;

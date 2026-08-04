@@ -18,6 +18,7 @@ contextBridge.exposeInMainWorld('genius', {
   searchMonsters:        (query) => ipcRenderer.invoke('search-monsters', query),
   getMonsterDrops:       (name, mode) => ipcRenderer.invoke('get-monster-drops', name, mode),
   getMonsterInfo:        (name, mode) => ipcRenderer.invoke('get-monster-info', name, mode),
+  getItemProducts:       (name) => ipcRenderer.invoke('get-item-products', name),
   getItemHistory:        (id)   => ipcRenderer.invoke('get-item-history', id),
   getItemHistoryLocal:   (id)   => ipcRenderer.invoke('get-item-history-local', id),
   getHistoryStatus:      ()     => ipcRenderer.invoke('get-history-status'),

@@ -135,9 +135,10 @@ async function fireNotification(title, body) {
 async function syncRunnerState() {
   try {
     const a = await ensureApi();
-    const [data, dxpData] = await Promise.all([
+    const [data, dxpData, portfolio] = await Promise.all([
       a.getData().catch(() => ({ items: [] })),
       a.getDxpIntelligence().catch(() => ({})),
+      a.getPortfolio().catch(() => ({ positions: [] })),
     ]);
     const namesById = Object.fromEntries((data.items || []).map(i => [String(i.id), i.name]));
     const withNames = (ids) => ids.map(id => ({ id, name: namesById[String(id)] || String(id) }));
@@ -150,6 +151,20 @@ async function syncRunnerState() {
     }
 
     const events = await storage.readJSON(DATA_DIR + '/dxp_events.json', []).catch(() => []);
+
+    // Open positions only, and only the fields the background runner's own
+    // digest computation actually needs — it has no access to api.js's
+    // getPortfolioDigest() (see file comment), so it recomputes a simpler
+    // GE-price-only version itself from whatever's synced here. Positions
+    // are stored by item NAME, but the runner's own price fetch (the raw
+    // gazbot dump) is keyed by item ID — resolve the id here, once, using
+    // the same name lookup api.js's own getPortfolioDigest does, so the
+    // runner doesn't need the full item list just to find one price.
+    const idByName = Object.fromEntries((data.items || []).map(i => [i.name.toLowerCase(), i.id]));
+    const openPositions = (portfolio.positions || [])
+      .filter(p => p.status === 'open')
+      .map(p => ({ id: idByName[(p.item_name || '').toLowerCase()], name: p.item_name, quantity: p.quantity, costBasis: p.cost_basis }))
+      .filter(p => p.id != null);
 
     await BackgroundRunner.dispatchEvent({
       label: 'com.vonderthwood.genius.background.task',
@@ -165,6 +180,8 @@ async function syncRunnerState() {
         watchlistSettings: store.get('watchlistNotificationSettings', {
           enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
         }),
+        portfolioPositions: openPositions,
+        portfolioSettings: store.get('portfolioDigestSettings', { enabled: false, intervalHours: 0.25 }),
         reminders: store.get('reminders', []),
         notificationsEnabled: store.get('notifications', true),
       },
@@ -182,6 +199,8 @@ async function runNotificationChecks() {
   for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
   const digest = await a.getWatchlistDigest();
   if (digest) await fireNotification(digest.title, digest.body);
+  const portfolioDigest = await a.getPortfolioDigest();
+  if (portfolioDigest) await fireNotification(portfolioDigest.title, portfolioDigest.body);
   for (const r of await a.getDueReminders()) await fireNotification(r.title, r.body);
 }
 
@@ -194,7 +213,7 @@ async function runFetch(mode) {
   try {
     await a.historyLoadedPromise;
     const argv = [`--mode=${mode || 'prices'}`, `--data-dir=${DATA_DIR}`];
-    await runJs(argv, a.historyData);
+    await runJs(argv, await a.computeHistoryStats());
     emit('fetch-complete', { mode, timestamp: Date.now() });
     if (mode === 'prices' || !mode) await a.updateSnapshots();
   } catch (error) {
@@ -222,10 +241,16 @@ async function buildGenius() {
 
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
+    getLiveItemPrice:       (id) => a.getLiveItemPrice(id),
+    getItemLiveTimeseries:  (id, lookback) => a.getItemLiveTimeseries(id, lookback),
     getDropSources:         (name) => a.getDropSources(name),
     searchMonsters:         (query) => a.searchMonsters(query),
-    getMonsterDrops:        (name) => a.getMonsterDrops(name),
-    getMonsterInfo:         (name) => a.getMonsterInfo(name),
+    // mode wasn't being passed through at all — Hard Mode never worked on
+    // mobile's Monster Lookup, it silently always returned Normal mode's
+    // drops/info regardless of which button was tapped.
+    getMonsterDrops:        (name, mode) => a.getMonsterDrops(name, mode),
+    getMonsterInfo:         (name, mode) => a.getMonsterInfo(name, mode),
+    getItemProducts:        (name) => a.getItemProducts(name),
     getItemHistory:          (id)  => a.getItemHistory(id),
     getItemHistoryLocal:     (id)  => a.getItemHistoryLocal(id),
     getHistoryStatus:        ()    => a.getHistoryStatus(),
@@ -276,6 +301,8 @@ async function buildGenius() {
       enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
     }),
     setWatchlistNotificationSettings: (s) => { store.set('watchlistNotificationSettings', s); syncRunnerState(); return { success: true }; },
+    getPortfolioDigestSettings: () => store.get('portfolioDigestSettings', { enabled: false, intervalHours: 0.25 }),
+    setPortfolioDigestSettings: (s) => { store.set('portfolioDigestSettings', s); syncRunnerState(); return { success: true }; },
 
     // Date-based reminders
     getReminders: () => store.get('reminders', []),
@@ -298,12 +325,14 @@ async function buildGenius() {
     saveAlert: (alert) => a.saveAlert(alert),
     deleteAlert: (id) => a.deleteAlert(id),
 
-    // Portfolio
+    // Portfolio — each mutation re-syncs the background runner's own copy
+    // of open positions (see syncRunnerState) so a closed-app portfolio
+    // digest never fires against stale/deleted/already-sold positions.
     getPortfolio:   () => a.getPortfolio(),
-    savePosition:   (pos) => a.savePosition(pos),
-    deletePosition: (id) => a.deletePosition(id),
-    sellPosition:   (opts) => a.sellPosition(opts),
-    reopenPosition: (id) => a.reopenPosition(id),
+    savePosition:   (pos) => a.savePosition(pos).then(r => { syncRunnerState(); return r; }),
+    deletePosition: (id) => a.deletePosition(id).then(r => { syncRunnerState(); return r; }),
+    sellPosition:   (opts) => a.sellPosition(opts).then(r => { syncRunnerState(); return r; }),
+    reopenPosition: (id) => a.reopenPosition(id).then(r => { syncRunnerState(); return r; }),
 
     // Full timeseries (ATH/ATL + date lookup)
     getItemTimeseries: (id) => a.getItemTimeseries(id),

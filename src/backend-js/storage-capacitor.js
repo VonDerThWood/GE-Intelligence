@@ -156,8 +156,22 @@ async function createKVStore() {
   };
 }
 
+// storage.js's real resolveWritable remaps a path through Electron's
+// app.asar.unpacked mirror — a packaging quirk that doesn't exist on
+// Capacitor at all (there's no asar archive; writes go through the
+// Filesystem plugin against Directory.Data, always writable). A plain
+// passthrough matches storage.js's own behavior for any path that
+// doesn't contain "app.asar" in the first place. Confirmed for real
+// (Ben, 2026-08-02): this function was simply missing here entirely —
+// untradeable.js calls storage.resolveWritable(...) at MODULE LOAD TIME
+// (not inside a function), so requiring it crashed the whole bridge
+// bundle before the app ever got off the ground, on every launch — "0gp,
+// 0 items, refreshing forever" with no fetch ever able to succeed, since
+// the crash happened before api.js even finished initializing.
+function resolveWritable(filePath) { return filePath; }
+
 module.exports = {
   atomicWrite, readJSON, writeJSON, ensureDir, pathExists,
   listJSONFiles, loadDirBatched, writeDirItem, readDirItem,
-  migrateLegacyHistoryFile, createKVStore, setDataDirPrefix,
+  migrateLegacyHistoryFile, createKVStore, setDataDirPrefix, resolveWritable,
 };

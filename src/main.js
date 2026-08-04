@@ -161,8 +161,8 @@ function runPython(mode = 'prices') {
     console.log('[run.js] Running with args:', argv.join(' '));
 
     try {
-      await api.historyLoadedPromise; // don't pass a still-loading, partial historyData
-      await runJs(argv, api.historyData);
+      await api.historyLoadedPromise; // don't compute stats off a still-loading, partial historyPopulatedIds
+      await runJs(argv, await api.computeHistoryStats());
       notifyRenderer('fetch-complete', { mode, timestamp: Date.now() });
       if (mode === 'prices' || !mode) await api.updateSnapshots();
     } catch (error) {
@@ -398,6 +398,7 @@ ipcMain.handle('get-drop-sources', async (_, itemName) => api.getDropSources(ite
 ipcMain.handle('search-monsters', async (_, query) => api.searchMonsters(query));
 ipcMain.handle('get-monster-drops', async (_, monsterName, mode) => api.getMonsterDrops(monsterName, mode));
 ipcMain.handle('get-monster-info', async (_, monsterName, mode) => api.getMonsterInfo(monsterName, mode));
+ipcMain.handle('get-item-products', async (_, itemName) => api.getItemProducts(itemName));
 
 ipcMain.handle('show-notification', (_, { title, body }) => {
   if (store.get('notifications', true)) {

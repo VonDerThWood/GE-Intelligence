@@ -405,13 +405,22 @@ function mergeEntry(live, seed) {
 // (7184 items, most with deep history). Yielding between batches keeps
 // the main process responsive while this runs instead of blocking it
 // for the whole computation.
-async function computeDxpData(historyData, itemLimits = null, itemNames = null, useSeed = true, events = null) {
-  // historyData: {item_id_str: [{timestamp, price, volume}, ...]}
+// getHistoryPointsFn: async (itemId) => points | null — a lazy per-item
+// accessor rather than a pre-loaded {itemId: points} object. Changed
+// 2026-08-03: this used to receive the full historyData object directly,
+// which needed EVERY item's full multi-year history resident in memory
+// simultaneously just to call this function — a real contributor to the
+// mobile WebView OOM crashes chasing HISTORY_FETCH_CONCURRENCY down from
+// 12 to 8 never fully fixed (see api.js's historyData comment for the
+// full story). The caller now supplies a lazy accessor (api.js's
+// getHistoryPoints, evicted again immediately after each item here) so
+// this function's own peak memory stays bounded to ~BATCH items in
+// flight, not the whole catalogue.
+async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null, itemNames = null, useSeed = true, events = null) {
   if (events === null) events = EVENTS;
   itemLimits = itemLimits || {};
   itemNames = itemNames || {};
   const live = {};
-  const allItemIds = Object.keys(historyData);
   // Confirmed for real on a Pixel 8 Pro (2026-06-29): this whole computation
   // took 146.7s on-device vs 7.8s on a desktop dev machine — a ~19x gap, not
   // explained by yielding alone, but the OLD batch size of 250 meant each
@@ -427,7 +436,7 @@ async function computeDxpData(historyData, itemLimits = null, itemNames = null, 
   const BATCH = 25;
   for (let b = 0; b < allItemIds.length; b += BATCH) {
     for (const itemId of allItemIds.slice(b, b + BATCH)) {
-      const points = historyData[itemId];
+      const points = await getHistoryPointsFn(itemId);
       if (!points || points.length < 20) continue;
       const parsed = parsePoints(points);
       const tally = classifyItem(points, parsed, events);
@@ -506,7 +515,7 @@ if (require.main === module) {
       }
     }
     const events = await loadEvents(dataDir);
-    const result = await computeDxpData(history, itemLimits, itemNames, true, events);
+    const result = await computeDxpData(Object.keys(history), async id => history[id], itemLimits, itemNames, true, events);
     const outFile = path.join(dataDir, 'dxp_intelligence.json');
     await storage.writeJSON(outFile, result);
     const itemCount = Object.keys(result).length - ('_meta' in result ? 1 : 0);
