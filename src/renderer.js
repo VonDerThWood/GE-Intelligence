@@ -2374,7 +2374,13 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   useEffect(() => {
     if (!item?.id) return;
     setSparkHistory([]);
-    window.genius?.getItemHistory(item.id).then(hist => {
+    // No WeirdGloop history exists for untradeable items — getItemHistory
+    // returns null for these immediately (see api.js) instead of ever
+    // trying and failing. Fall back to GEnius's own daily price
+    // snapshots, same source the full chart modal already uses.
+    (item.untradeable ? Promise.resolve(null) : window.genius?.getItemHistory(item.id))
+      .then(hist => (hist && hist.length) ? hist : window.genius?.getPriceSnapshots(item.id))
+      .then(hist => {
       if (!hist || !hist.length) return;
       const cutoff = Date.now() - 30 * 86400000;
       const pts = hist
@@ -2386,7 +2392,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         .filter(Boolean);
       setSparkHistory(pts);
     }).catch(() => {});
-  }, [item.id]);
+  }, [item.id, item.untradeable]);
 
   const sortedProducts = (() => {
     if (!products || !products.products) return [];
@@ -2486,8 +2492,21 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       ),
         item.untradeable
           ? h('div', {style:{marginTop:4}},
-              h('span', {style:{fontSize:11, padding:'2px 7px', borderRadius:3, background:'rgba(255,180,0,0.15)', color:T.gold, border:`1px solid ${T.gold}`, fontWeight:600, letterSpacing:'0.04em'}}, 'UNTRADEABLE'),
-              h('span', {style:{fontSize:11, color:T.textDim, marginLeft:8}}, 'Calculated production cost')
+              h('div', null,
+                h('span', {style:{fontSize:11, padding:'2px 7px', borderRadius:3, background:'rgba(255,180,0,0.15)', color:T.gold, border:`1px solid ${T.gold}`, fontWeight:600, letterSpacing:'0.04em'}}, 'UNTRADEABLE'),
+                h('span', {style:{fontSize:11, color:T.textDim, marginLeft:8}}, 'Calculated production cost')
+              ),
+              // Untradeable items have no real GE change_1d (they're never
+              // traded), but api.js's getData() computes an equivalent from
+              // GEnius's own daily price snapshots — the same source the
+              // chart already uses — so this can populate too, just derived
+              // differently than a tradeable item's.
+              item.change_1d != null && h('div', {className:pctClass(item.change_1d), style:{fontSize:12,marginTop:4}},
+                fmt.pct(item.change_1d),
+                item.high && h('span', {style:{fontSize:11, marginLeft:6, opacity:0.85}},
+                  '(' + (item.change_1d > 0 ? '+' : '') + gpFmt(Math.round(item.high - (item.high / (1 + item.change_1d / 100)))) + 'gp)'
+                )
+              )
             )
           : item.change_1d != null && h('div', {className:pctClass(item.change_1d), style:{fontSize:12,marginTop:2}},
               fmt.pct(item.change_1d),

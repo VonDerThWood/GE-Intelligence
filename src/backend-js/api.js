@@ -927,6 +927,27 @@ async function createGeniusApi({ dataDir, store }) {
     return (snapshotData[String(itemId)] || []).map(s => ({timestamp: s.t, price: s.p, volume: s.v}));
   }
 
+  // Untradeable items (Invention components, combo potions) never get a
+  // real change_1d — untradeable.js always sets it null, since they never
+  // touch the Grand Exchange and have no WeirdGloop history to diff
+  // against. But their production cost DOES genuinely move day to day
+  // (component/nature-rune prices shift), and GEnius already records that
+  // in the same daily snapshotData every tradeable item uses — this just
+  // reads back roughly a day-old snapshot and diffs it against the
+  // current price, same "1d" semantics as a tradeable item's change_1d.
+  function computeUntradeableChange1d(itemId, currentPrice) {
+    const points = snapshotData[String(itemId)];
+    if (!points || !points.length || !currentPrice) return null;
+    const targetTs = Math.floor(Date.now() / 1000) - 20 * 3600; // ~20h ago — comfortably past today's own snapshot, short of a full 24h to tolerate fetch-cycle jitter
+    const sorted = [...points].sort((a, b) => a.t - b.t);
+    let ref = null;
+    for (const p of sorted) {
+      if (p.t <= targetTs) ref = p; else break;
+    }
+    if (!ref || !ref.p) return null;
+    return ((currentPrice - ref.p) / ref.p) * 100;
+  }
+
   // ─── Wiki item stats ─────────────────────────────────────────────────────
   function parseItemStats(wikitext) {
     const get = (key) => {
@@ -1997,6 +2018,14 @@ async function createGeniusApi({ dataDir, store }) {
   async function getData() {
     try {
       const parsed = await storage.readJSON(dataFile, { items: [], timestamp: null });
+      if (parsed.items) {
+        for (const it of parsed.items) {
+          if (it.untradeable && it.change_1d == null) {
+            const price = it.high || it.low;
+            if (price) it.change_1d = computeUntradeableChange1d(it.id, price);
+          }
+        }
+      }
       console.log(`[get-data] Loaded ${parsed.items?.length ?? 0} items`);
       return parsed;
     } catch (e) {
