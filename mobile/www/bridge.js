@@ -19159,6 +19159,381 @@
         ],
         "augmentation dissolver": [
           "invention"
+        ],
+        "crude wooden chair": [
+          "artisan"
+        ],
+        "wooden bookcase": [
+          "artisan"
+        ],
+        "wooden armchair": [
+          "artisan"
+        ],
+        "wooden bench": [
+          "artisan"
+        ],
+        "wooden small table": [
+          "artisan"
+        ],
+        "wooden table": [
+          "artisan"
+        ],
+        "wooden round table": [
+          "artisan"
+        ],
+        "oak chair": [
+          "artisan"
+        ],
+        "wooden long table": [
+          "artisan"
+        ],
+        "shoe box": [
+          "artisan"
+        ],
+        "wooden bed": [
+          "artisan"
+        ],
+        "oak bench": [
+          "artisan"
+        ],
+        "oak clock": [
+          "artisan"
+        ],
+        "oak armchair": [
+          "artisan"
+        ],
+        "oak drawers": [
+          "artisan"
+        ],
+        "oak bookcase": [
+          "artisan"
+        ],
+        "oak bed": [
+          "artisan"
+        ],
+        "oak small table": [
+          "artisan"
+        ],
+        "oak table": [
+          "artisan"
+        ],
+        "oak large bed": [
+          "artisan"
+        ],
+        "oak round table": [
+          "artisan"
+        ],
+        "teak chair": [
+          "artisan"
+        ],
+        "oak long table": [
+          "artisan"
+        ],
+        "oak dresser": [
+          "artisan"
+        ],
+        "teak bench": [
+          "artisan"
+        ],
+        "oak wardrobe": [
+          "artisan"
+        ],
+        "teak bed": [
+          "artisan"
+        ],
+        "teak bookcase": [
+          "artisan"
+        ],
+        "oak magic wardrobe": [
+          "artisan"
+        ],
+        "teak armchair": [
+          "artisan"
+        ],
+        "oak fancy dress box": [
+          "artisan"
+        ],
+        "teak large bed": [
+          "artisan"
+        ],
+        "oak armour case": [
+          "artisan"
+        ],
+        "teak dresser": [
+          "artisan"
+        ],
+        "oak treasure chest": [
+          "artisan"
+        ],
+        "mahogany chair": [
+          "artisan"
+        ],
+        "oak toy box": [
+          "artisan"
+        ],
+        "teak small table": [
+          "artisan"
+        ],
+        "teak drawers": [
+          "artisan"
+        ],
+        "teak table": [
+          "artisan"
+        ],
+        "mahogany bed": [
+          "artisan"
+        ],
+        "oak cape store": [
+          "artisan"
+        ],
+        "teak round table": [
+          "artisan"
+        ],
+        "teak clock": [
+          "artisan"
+        ],
+        "teak long table": [
+          "artisan"
+        ],
+        "mahogany armchair": [
+          "artisan"
+        ],
+        "mahogany bench": [
+          "artisan"
+        ],
+        "mahogany large bed": [
+          "artisan"
+        ],
+        "mahogany small table": [
+          "artisan"
+        ],
+        "teak magic wardrobe": [
+          "artisan"
+        ],
+        "teak fancy dress box": [
+          "artisan"
+        ],
+        "teak cape store": [
+          "artisan"
+        ],
+        "teak wardrobe": [
+          "artisan"
+        ],
+        "mahogany bookcase": [
+          "artisan"
+        ],
+        "mahogany dresser": [
+          "artisan"
+        ],
+        "mahogany table": [
+          "artisan"
+        ],
+        "teak armour case": [
+          "artisan"
+        ],
+        "teak treasure chest": [
+          "artisan"
+        ],
+        "mahogany round table": [
+          "artisan"
+        ],
+        "teak toy box": [
+          "artisan"
+        ],
+        "mahogany clock": [
+          "artisan"
+        ],
+        "mahogany cape store": [
+          "artisan"
+        ],
+        "mahogany long table": [
+          "artisan"
+        ],
+        "mahogany drawers": [
+          "artisan"
+        ],
+        "mahogany wardrobe": [
+          "artisan"
+        ],
+        "mahogany magic wardrobe": [
+          "artisan"
+        ],
+        "mahogany fancy dress box": [
+          "artisan"
+        ],
+        "mahogany armour case": [
+          "artisan"
+        ],
+        "mahogany treasure chest": [
+          "artisan"
+        ],
+        "mahogany toy box": [
+          "artisan"
+        ],
+        "marble cape store": [
+          "artisan"
+        ],
+        "eternal chair": [
+          "artisan"
+        ],
+        "marble magic wardrobe": [
+          "artisan"
+        ],
+        "eternal small table": [
+          "artisan"
+        ],
+        "eternal armchair": [
+          "artisan"
+        ],
+        "eternal bookcase": [
+          "artisan"
+        ],
+        "magical cape store": [
+          "artisan"
+        ],
+        "eternal drawers": [
+          "artisan"
+        ],
+        "eternal table": [
+          "artisan"
+        ],
+        "eternal toy box": [
+          "artisan"
+        ],
+        "eternal treasure chest": [
+          "artisan"
+        ],
+        "eternal dresser": [
+          "artisan"
+        ],
+        "eternal fancy dress box": [
+          "artisan"
+        ],
+        "eternal armour case": [
+          "artisan"
+        ],
+        "eternal bed": [
+          "artisan"
+        ],
+        "eternal clock": [
+          "artisan"
+        ],
+        "eternal bench": [
+          "artisan"
+        ],
+        "eternal large bed": [
+          "artisan"
+        ],
+        "eternal wardrobe": [
+          "artisan"
+        ],
+        "eternal magic wardrobe": [
+          "artisan"
+        ],
+        "eternal round table": [
+          "artisan"
+        ],
+        "eternal long table": [
+          "artisan"
+        ],
+        "furniture plans: decorative dragon and unicorn rug": [
+          "artisan"
+        ],
+        "furniture plans: decorative blue rug": [
+          "artisan"
+        ],
+        "furniture plans: decorative green rug": [
+          "artisan"
+        ],
+        "furniture plans: decorative black rug": [
+          "artisan"
+        ],
+        "furniture plans: decorative red rug": [
+          "artisan"
+        ],
+        "furniture plans: decorative purple rug": [
+          "artisan"
+        ],
+        "furniture plans: decorative yellow rug": [
+          "artisan"
+        ],
+        "furniture plans: tiny gold pile": [
+          "artisan"
+        ],
+        "furniture plans: small gold pile": [
+          "artisan"
+        ],
+        "furniture plans: medium gold pile": [
+          "artisan"
+        ],
+        "furniture plans: large gold pile": [
+          "artisan"
+        ],
+        "furniture plans: huge gold pile": [
+          "artisan"
+        ],
+        "furniture plans: armadyl altar": [
+          "artisan"
+        ],
+        "furniture plans: bandos altar": [
+          "artisan"
+        ],
+        "furniture plans: guthix altar": [
+          "artisan"
+        ],
+        "furniture plans: saradomin altar": [
+          "artisan"
+        ],
+        "furniture plans: seren altar": [
+          "artisan"
+        ],
+        "furniture plans: zamorak altar": [
+          "artisan"
+        ],
+        "furniture plans: zaros altar": [
+          "artisan"
+        ],
+        "furniture plans: guthix rug": [
+          "artisan"
+        ],
+        "furniture plans: bandos rug": [
+          "artisan"
+        ],
+        "furniture plans: seren rug": [
+          "artisan"
+        ],
+        "furniture plans: zaros rug": [
+          "artisan"
+        ],
+        "furniture plans: saradomin rug": [
+          "artisan"
+        ],
+        "furniture plans: armadyl rug": [
+          "artisan"
+        ],
+        "furniture plans: zamorak rug": [
+          "artisan"
+        ],
+        "furniture plans: lumbridge sandcastle": [
+          "artisan"
+        ],
+        "furniture plans: grand exchange sandcastle": [
+          "artisan"
+        ],
+        "furniture plans: wizard's tower sandcastle": [
+          "artisan"
+        ],
+        "furniture plans: pyramid sandcastle": [
+          "artisan"
+        ],
+        "furniture plans: safe": [
+          "artisan"
+        ],
+        "furniture plans: vault door": [
+          "artisan"
+        ],
+        "furniture plans: beehive": [
+          "artisan"
         ]
       };
     }
@@ -21983,6 +22358,102 @@
           await storage2.writeJSON(alertsFile, alerts, { pretty: true });
           return { success: true };
         }
+        function _fmtGpAlert(n) {
+          n = Math.trunc(n || 0);
+          if (n >= 1e9) return `${(n / 1e9).toFixed(1)}b`;
+          if (n >= 1e6) return `${(n / 1e6).toFixed(1)}m`;
+          if (n >= 1e3) return `${(n / 1e3).toFixed(1)}k`;
+          return String(n);
+        }
+        function _alertConditionHit(alert, item) {
+          const condition = alert.condition || "above";
+          const price = item.high || item.low || 0;
+          const liveRef = item.liveBuy ?? item.liveSell;
+          const chg = item.change_1d;
+          const signals = item.signals || [];
+          const threshold = alert.price || 0;
+          const pct = alert.pct || 0;
+          if (condition === "above") return price > threshold;
+          if (condition === "below") return price < threshold;
+          if (condition === "live_above") return liveRef != null && liveRef > threshold;
+          if (condition === "live_below") return liveRef != null && liveRef < threshold;
+          if (condition === "pct_up") return chg != null && chg >= pct;
+          if (condition === "pct_down") return chg != null && chg <= -Math.abs(pct);
+          if (condition === "signal") return signals.includes(alert.signal_type || "");
+          if (condition === "alch") return signals.includes("ALCH");
+          return false;
+        }
+        function _alertMessage(alert, item) {
+          const condition = alert.condition || "above";
+          const name = alert.item_name;
+          const price = item.high || item.low || 0;
+          const liveRef = item.liveBuy ?? item.liveSell;
+          const chg = item.change_1d;
+          switch (condition) {
+            case "above":
+              return `${name} rose above ${_fmtGpAlert(alert.price)}gp \u2014 now ${_fmtGpAlert(price)}gp`;
+            case "below":
+              return `${name} fell below ${_fmtGpAlert(alert.price)}gp \u2014 now ${_fmtGpAlert(price)}gp`;
+            case "live_above":
+              return `${name} live price rose above ${_fmtGpAlert(alert.price)}gp \u2014 now ${_fmtGpAlert(liveRef)}gp`;
+            case "live_below":
+              return `${name} live price fell below ${_fmtGpAlert(alert.price)}gp \u2014 now ${_fmtGpAlert(liveRef)}gp`;
+            case "pct_up":
+              return `${name} up +${(chg || 0).toFixed(2)}% today (threshold: +${alert.pct || 0}%)`;
+            case "pct_down":
+              return `${name} down ${(chg || 0).toFixed(2)}% today (threshold: -${alert.pct || 0}%)`;
+            case "signal":
+              return `${name} triggered signal ${alert.signal_type || ""} \u2014 price: ${_fmtGpAlert(price)}gp`;
+            case "alch":
+              return `${name} is now alch-profitable \u2014 price: ${_fmtGpAlert(price)}gp`;
+            default:
+              return `${name} alert triggered`;
+          }
+        }
+        async function getTriggeredAlerts() {
+          const alerts = await storage2.readJSON(alertsFile, []);
+          if (!alerts.length) return [];
+          const data = await getData();
+          const priceMap = {};
+          for (const it of data.items || []) priceMap[it.name.toLowerCase()] = it;
+          const triggered = [];
+          let changed = false;
+          for (const a of alerts) {
+            const item = priceMap[(a.item_name || "").toLowerCase()];
+            if (!item) continue;
+            const hit = _alertConditionHit(a, item);
+            const wasActive = !!a.active;
+            if (hit && !wasActive) {
+              triggered.push({ key: `alert_${a.id}_${Date.now()}`, title: `Alert: ${a.item_name}`, body: _alertMessage(a, item) });
+              a.firedAt = Date.now();
+              changed = true;
+            }
+            if (hit !== wasActive) {
+              a.active = hit;
+              changed = true;
+            }
+          }
+          if (changed) await storage2.writeJSON(alertsFile, alerts, { pretty: true });
+          if (triggered.length) {
+            const webhookUrl = store2.get("discordWebhook", "");
+            if (webhookUrl) {
+              try {
+                await fetch(webhookUrl, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({
+                    username: "GEnius Alert",
+                    content: "\u26A0\uFE0F **GE Price Alert**\n" + triggered.map((t) => t.body).join("\n")
+                  }),
+                  signal: AbortSignal.timeout(5e3)
+                });
+              } catch (e) {
+                console.log(`[alerts] Discord error: ${e.message}`);
+              }
+            }
+          }
+          return triggered;
+        }
         async function getOverrides() {
           return storage2.readJSON(overridesFile, {});
         }
@@ -22355,6 +22826,7 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
           getAlerts,
           saveAlert,
           deleteAlert,
+          getTriggeredAlerts,
           // overrides
           getOverrides,
           saveOverrides,
@@ -23505,7 +23977,6 @@ ${data.length} indexes:
         const changed = itemsOut.filter((it) => it.change_1d !== null && it.change_1d !== void 0).length;
         console.log(`[prices] Items with price change data: ${changed}/${itemsOut.length}`);
         const signaled = runSignals(itemsOut);
-        if (webhookUrl) await checkAlerts(signaled, dataDir, webhookUrl);
         try {
           const snapshots = await updateIntradaySnapshots(dataDir, signaled);
           for (const it of signaled) {
@@ -23570,6 +24041,7 @@ ${data.length} indexes:
       var VOL_ACTIVE_MIN = 1.1;
       var VOL_QUIET_MAX = 0.9;
       var VOL_THIN_MAX = 0.5;
+      var MANIPULATED_MIN_AVG_VOL = 20;
       var DISCREPANCY_PCT_MIN = 20;
       var DISCREPANCY_MIN_GP = 1e3;
       function runSignals(items) {
@@ -23603,7 +24075,7 @@ ${data.length} indexes:
             else if (volRatio >= ACCUM_VOL_MIN) signals.push("ACCUMULATION");
           }
           const limit = item.limit || 0;
-          if (hasAvg && volRatio >= 2.5 && Math.abs(chg) >= 8 && limit > 0 && limit <= 100) {
+          if (hasAvg && avgVol >= MANIPULATED_MIN_AVG_VOL && volRatio >= 2.5 && Math.abs(chg) >= 8 && limit > 0 && limit <= 100) {
             signals.push("MANIPULATED");
           }
           if (item.liveBuy != null || item.liveSell != null) {
@@ -23665,85 +24137,6 @@ ${data.length} indexes:
         for (const s of sigNames) counts[s] = items.filter((it) => (it.signals || []).includes(s)).length;
         console.log("[signals]", counts);
         return items;
-      }
-      async function checkAlerts(items, dataDir, webhookUrl) {
-        const alertsFile = path.join(dataDir, "alerts.json");
-        const alerts = await storage2.readJSON(alertsFile, null);
-        if (!alerts) return;
-        const priceMap = {};
-        for (const it of items) priceMap[it.name.toLowerCase()] = it;
-        const triggered = [];
-        for (const alert of alerts) {
-          const name = (alert.item_name || "").toLowerCase();
-          const item = priceMap[name];
-          if (!item) continue;
-          const condition = alert.condition || "above";
-          const price = item.high || item.low || 0;
-          const liveRef = item.liveBuy ?? item.liveSell;
-          const changeOneDay = item.change_1d;
-          const signals = item.signals || [];
-          const threshold = alert.price || 0;
-          const pct = alert.pct || 0;
-          const sigType = alert.signal_type || "";
-          let hit = false;
-          if (condition === "above" && price > threshold) hit = true;
-          else if (condition === "below" && price < threshold) hit = true;
-          else if (condition === "live_above" && liveRef != null && liveRef > threshold) hit = true;
-          else if (condition === "live_below" && liveRef != null && liveRef < threshold) hit = true;
-          else if (condition === "pct_up" && changeOneDay !== null && changeOneDay !== void 0 && changeOneDay >= pct) hit = true;
-          else if (condition === "pct_down" && changeOneDay !== null && changeOneDay !== void 0 && changeOneDay <= -Math.abs(pct)) hit = true;
-          else if (condition === "signal" && signals.includes(sigType)) hit = true;
-          else if (condition === "alch" && signals.includes("ALCH")) hit = true;
-          if (hit) triggered.push([alert, item]);
-        }
-        if (triggered.length && webhookUrl) await sendDiscord(triggered, webhookUrl);
-      }
-      async function sendDiscord(triggered, webhookUrl) {
-        const lines = [];
-        for (const [alert, item] of triggered) {
-          const condition = alert.condition || "above";
-          const name = alert.item_name;
-          const price = item.high || item.low || 0;
-          const liveRef = item.liveBuy ?? item.liveSell;
-          const changeOneDay = item.change_1d;
-          const signals = item.signals || [];
-          let msg;
-          if (condition === "above") {
-            msg = `\u{1F4C8} **${name}** rose above **${fmtGp(alert.price)}gp** \u2014 now **${fmtGp(price)}gp**`;
-          } else if (condition === "below") {
-            msg = `\u{1F4C9} **${name}** fell below **${fmtGp(alert.price)}gp** \u2014 now **${fmtGp(price)}gp**`;
-          } else if (condition === "live_above") {
-            msg = `\u{1F4C8} **${name}** live price rose above **${fmtGp(alert.price)}gp** \u2014 now **${fmtGp(liveRef)}gp**`;
-          } else if (condition === "live_below") {
-            msg = `\u{1F4C9} **${name}** live price fell below **${fmtGp(alert.price)}gp** \u2014 now **${fmtGp(liveRef)}gp**`;
-          } else if (condition === "pct_up") {
-            msg = `\u{1F4C8} **${name}** up **+${changeOneDay.toFixed(2)}%** today (threshold: +${alert.pct || 0}%)`;
-          } else if (condition === "pct_down") {
-            msg = `\u{1F4C9} **${name}** down **${changeOneDay.toFixed(2)}%** today (threshold: -${alert.pct || 0}%)`;
-          } else if (condition === "signal") {
-            msg = `\u26A1 **${name}** triggered signal **${alert.signal_type || ""}** \u2014 price: **${fmtGp(price)}gp**`;
-          } else if (condition === "alch") {
-            msg = `\u{1F525} **${name}** is now alch-profitable \u2014 price: **${fmtGp(price)}gp**`;
-          } else {
-            msg = `\u26A0\uFE0F **${name}** alert triggered`;
-          }
-          lines.push(msg);
-        }
-        const payload = {
-          username: "GEnius Alert",
-          content: "\u26A0\uFE0F **GE Price Alert**\n" + lines.join("\n")
-        };
-        try {
-          await fetch(webhookUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(payload),
-            signal: AbortSignal.timeout(5e3)
-          });
-          console.log(`[alerts] Sent ${triggered.length} alert(s) to Discord`);
-        } catch (e) {
-          console.log(`[alerts] Discord error: ${e.message}`);
-        }
       }
       function fmtGp(n) {
         n = Math.trunc(n || 0);
@@ -23877,8 +24270,6 @@ ${data.length} indexes:
         getDataDir,
         fetchPrices,
         runSignals,
-        checkAlerts,
-        sendDiscord,
         fmtGp,
         fetchNewsData,
         updateNewsSnapshots,
@@ -24132,6 +24523,7 @@ ${data.length} indexes:
     const portfolioDigest = await a.getPortfolioDigest();
     if (portfolioDigest) await fireNotification(portfolioDigest.title, portfolioDigest.body);
     for (const r of await a.getDueReminders()) await fireNotification(r.title, r.body);
+    for (const al of await a.getTriggeredAlerts()) await fireNotification(al.title, al.body);
   }
   async function runFetch(mode) {
     const a = await ensureApi();

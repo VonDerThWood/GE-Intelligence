@@ -73,6 +73,31 @@ async function fetchLivePrices() {
         low: v.low ?? null, lowTime: v.lowTime ? v.lowTime * 1000 : null,
       };
     }
+
+    // 24h trade volume/turnover, used only to judge whether a live price
+    // is backed by enough real trading to trust (see liveUnits/liveTurnover
+    // below and isLiveTrusted) — best-effort on top of best-effort, a
+    // failure here just means every live price gets treated as untrusted
+    // by the liquidity gate, never blocks the /latest data above.
+    try {
+      const res24h = await fetch('https://prices.runescape.wiki/api/v2/rs/24h', {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res24h.ok) {
+        const json24h = await res24h.json();
+        for (const [id, v] of Object.entries(json24h.data || {})) {
+          if (!out[id]) continue;
+          const hv = v.highPriceVolume || 0, lv = v.lowPriceVolume || 0;
+          const hp = v.avgHighPrice || 0, lp = v.avgLowPrice || 0;
+          out[id].units = hv + lv;
+          out[id].turnover = hv * hp + lv * lp;
+        }
+      }
+    } catch (e) {
+      console.log(`[prices] 24h volume fetch failed (non-fatal): ${e.message}`);
+    }
+
     console.log(`[prices] Got live buy/sell for ${Object.keys(out).length} items`);
     return out;
   } catch (e) {
@@ -331,6 +356,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       avgVolume, change_1d: changeOneDay, examine, members,
       liveBuy: live?.high ?? null, liveBuyTime: live?.highTime ?? null,
       liveSell: live?.low ?? null, liveSellTime: live?.lowTime ?? null,
+      liveUnits: live?.units ?? 0, liveTurnover: live?.turnover ?? 0,
     });
   }
 
@@ -339,8 +365,6 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   console.log(`[prices] Items with price change data: ${changed}/${itemsOut.length}`);
 
   const signaled = runSignals(itemsOut);
-
-  if (webhookUrl) await checkAlerts(signaled, dataDir, webhookUrl);
 
   // Real intraday change — see updateIntradaySnapshots/computeLiveChange1d
   // below. Additive only: change_1d (the existing gazbot-"last"-based
@@ -446,6 +470,16 @@ const VOL_HIGH_MIN = 1.5;
 const VOL_ACTIVE_MIN = 1.1;
 const VOL_QUIET_MAX = 0.9;
 const VOL_THIN_MAX = 0.5;
+// MANIPULATED-specific floor, separate from the general hasAvg/turnover
+// gate — a volume RATIO computed from a tiny baseline is just noise, not
+// evidence of manipulation. Confirmed for real (Ben, 2026-08-06): of 43
+// items flagged MANIPULATED, ~27 had avgVolume under 20 — e.g. "Dragon
+// ring token" (avgVol 1, vol 8, ratio 8.0x) — going from 1 trade/day to
+// 8 isn't manipulation, it's just what a 1-unit average looks like on a
+// slightly busier day. Items at avgVol 20+ (Heart of the Seer, Steel
+// longsword, Beer glass, etc.) look like genuinely meaningful flags by
+// comparison. Picked directly from that real distribution, not guessed.
+const MANIPULATED_MIN_AVG_VOL = 20;
 // Ben, 2026-07-27: 20% swing between the listed GE price and real live
 // buy/sell (the wiki's real-time prices API — see fetchLivePrices above),
 // gated on a minimum absolute gp gap so it doesn't fire on cheap items
@@ -453,6 +487,49 @@ const VOL_THIN_MAX = 0.5;
 // absChgGp >= 1000 check above.
 const DISCREPANCY_PCT_MIN = 20;
 const DISCREPANCY_MIN_GP = 1000;
+// Ben, 2026-08-06: OVERPRICED/UNDERPRICED was firing on ~40% of the
+// catalogue. Root cause confirmed directly from real data — a single
+// isolated trade (an impatient buyer throwing a wildly over/under offer
+// on something nobody really trades, Ben's own real example: a bronze
+// longsword instabought for 1m by someone who didn't want to wait) can
+// itself make the live price look "backed" by real gp turnover, so
+// turnover alone doesn't catch it. Requires BOTH real trade count and
+// real turnover in the last 24h before trusting a live price for this
+// comparison — thresholds picked from the actual distribution, not
+// guessed: 25,000gp is the 10th percentile of live turnover among items
+// with any live activity at all, and 3 units is enough to rule out a
+// single-fluke-trade while still passing genuinely rare-but-real gear
+// that trades in real (if infrequent) chunks — confirmed Fractured Staff
+// of Armadyl (28 units/24h), Noxious scythe (47), Staff of Sliske (13)
+// all clear it easily.
+const LIVE_LIQUID_MIN_UNITS = 3;
+const LIVE_LIQUID_MIN_TURNOVER_GP = 25000;
+// For items that don't clear the liquidity floor above, still trust the
+// live price if it's within a sane multiple of the GE price — a thin
+// market can be genuinely quiet without being fake. 5x is the 75th
+// percentile of live-vs-GE ratio among illiquid items (checked directly):
+// the bulk of real thin-market noise sits under that, then the
+// distribution explodes into obvious nonsense (90th pct 54x, 99th pct
+// 7576x) — matches the same elbow as Ben's bronze longsword example.
+const LIVE_SANITY_BAND = 5;
+// Ben, 2026-08-06: exempted from both checks above — extremely rare,
+// high-value gear (his examples: Infinity robes, Demonic title scrolls)
+// legitimately trades at prices wildly divergent from GE with 0-2 units
+// in 24h, because almost nobody does the content that drops them. A
+// liquidity/sanity-band filter can't tell that apart from a fluke by
+// price pattern alone, so items already worth 1m+ GE are trusted as-is.
+const LIVE_PRICE_EXEMPT_GP = 1000000;
+
+function isLiveTrusted(item, gePrice0) {
+  if (gePrice0 >= LIVE_PRICE_EXEMPT_GP) return true;
+  const liveRef = (item.liveBuy != null && item.liveSell != null)
+    ? (item.liveBuy + item.liveSell) / 2
+    : (item.liveBuy ?? item.liveSell);
+  if (!liveRef || liveRef <= 0) return false;
+  if ((item.liveUnits || 0) >= LIVE_LIQUID_MIN_UNITS && (item.liveTurnover || 0) >= LIVE_LIQUID_MIN_TURNOVER_GP) return true;
+  const ratio = Math.max(gePrice0, liveRef) / Math.min(gePrice0, liveRef);
+  return ratio <= LIVE_SANITY_BAND;
+}
 
 function runSignals(items) {
   // Tag items with market signals based on price change and volume behavior.
@@ -504,7 +581,7 @@ function runSignals(items) {
 
     // MANIPULATED: extreme volume + large price move + tiny buy limit
     const limit = item.limit || 0;
-    if (hasAvg && volRatio >= 2.5 && Math.abs(chg) >= 8.0 && limit > 0 && limit <= 100) {
+    if (hasAvg && avgVol >= MANIPULATED_MIN_AVG_VOL && volRatio >= 2.5 && Math.abs(chg) >= 8.0 && limit > 0 && limit <= 100) {
       signals.push('MANIPULATED');
     }
 
@@ -515,11 +592,11 @@ function runSignals(items) {
     // Ben's real example that prompted this: some rare-drop "Furniture
     // plans" items are listed at a stale ~3-5M gp GE default while real
     // live trades show them worth a fraction of that.
-    if (item.liveBuy != null || item.liveSell != null) {
+    if ((item.liveBuy != null || item.liveSell != null) && gePrice0 > 0 && isLiveTrusted(item, gePrice0)) {
       const liveRef = (item.liveBuy != null && item.liveSell != null)
         ? (item.liveBuy + item.liveSell) / 2
         : (item.liveBuy ?? item.liveSell);
-      if (liveRef > 0 && gePrice0 > 0) {
+      if (liveRef > 0) {
         const gapGp = Math.abs(gePrice0 - liveRef);
         const gapPct = ((gePrice0 - liveRef) / liveRef) * 100;
         if (gapGp >= DISCREPANCY_MIN_GP) {
@@ -601,100 +678,16 @@ function runSignals(items) {
   return items;
 }
 
-// ── Alert checker ─────────────────────────────────────────────────────────────
-async function checkAlerts(items, dataDir, webhookUrl) {
-  const alertsFile = path.join(dataDir, 'alerts.json');
-  const alerts = await storage.readJSON(alertsFile, null);
-  if (!alerts) return;
-
-  const priceMap = {};
-  for (const it of items) priceMap[it.name.toLowerCase()] = it;
-  const triggered = [];
-
-  for (const alert of alerts) {
-    const name = (alert.item_name || '').toLowerCase();
-    const item = priceMap[name];
-    if (!item) continue;
-
-    const condition = alert.condition || 'above';
-    const price = item.high || item.low || 0;
-    const liveRef = item.liveBuy ?? item.liveSell;
-    const changeOneDay = item.change_1d;
-    const signals = item.signals || [];
-    const threshold = alert.price || 0;
-    const pct = alert.pct || 0;
-    const sigType = alert.signal_type || '';
-
-    let hit = false;
-    if (condition === 'above' && price > threshold) hit = true;
-    else if (condition === 'below' && price < threshold) hit = true;
-    // live_above/live_below check the real instant-buy/instant-sell price
-    // from the wiki's live prices API (item.liveBuy/liveSell, refreshed
-    // the same 15-min cycle as everything else) instead of the regular
-    // gazbot-dump price — still evaluated once per refresh, not a
-    // separate faster poll, but against the fresher of the two fields.
-    else if (condition === 'live_above' && liveRef != null && liveRef > threshold) hit = true;
-    else if (condition === 'live_below' && liveRef != null && liveRef < threshold) hit = true;
-    else if (condition === 'pct_up' && changeOneDay !== null && changeOneDay !== undefined && changeOneDay >= pct) hit = true;
-    else if (condition === 'pct_down' && changeOneDay !== null && changeOneDay !== undefined && changeOneDay <= -Math.abs(pct)) hit = true;
-    else if (condition === 'signal' && signals.includes(sigType)) hit = true;
-    else if (condition === 'alch' && signals.includes('ALCH')) hit = true;
-
-    if (hit) triggered.push([alert, item]);
-  }
-
-  if (triggered.length && webhookUrl) await sendDiscord(triggered, webhookUrl);
-}
-
-async function sendDiscord(triggered, webhookUrl) {
-  const lines = [];
-  for (const [alert, item] of triggered) {
-    const condition = alert.condition || 'above';
-    const name = alert.item_name;
-    const price = item.high || item.low || 0;
-    const liveRef = item.liveBuy ?? item.liveSell;
-    const changeOneDay = item.change_1d;
-    const signals = item.signals || [];
-
-    let msg;
-    if (condition === 'above') {
-      msg = `📈 **${name}** rose above **${fmtGp(alert.price)}gp** — now **${fmtGp(price)}gp**`;
-    } else if (condition === 'below') {
-      msg = `📉 **${name}** fell below **${fmtGp(alert.price)}gp** — now **${fmtGp(price)}gp**`;
-    } else if (condition === 'live_above') {
-      msg = `📈 **${name}** live price rose above **${fmtGp(alert.price)}gp** — now **${fmtGp(liveRef)}gp**`;
-    } else if (condition === 'live_below') {
-      msg = `📉 **${name}** live price fell below **${fmtGp(alert.price)}gp** — now **${fmtGp(liveRef)}gp**`;
-    } else if (condition === 'pct_up') {
-      msg = `📈 **${name}** up **+${changeOneDay.toFixed(2)}%** today (threshold: +${alert.pct || 0}%)`;
-    } else if (condition === 'pct_down') {
-      msg = `📉 **${name}** down **${changeOneDay.toFixed(2)}%** today (threshold: -${alert.pct || 0}%)`;
-    } else if (condition === 'signal') {
-      msg = `⚡ **${name}** triggered signal **${alert.signal_type || ''}** — price: **${fmtGp(price)}gp**`;
-    } else if (condition === 'alch') {
-      msg = `🔥 **${name}** is now alch-profitable — price: **${fmtGp(price)}gp**`;
-    } else {
-      msg = `⚠️ **${name}** alert triggered`;
-    }
-    lines.push(msg);
-  }
-
-  const payload = {
-    username: 'GEnius Alert',
-    content: '⚠️ **GE Price Alert**\n' + lines.join('\n'),
-  };
-  try {
-    await fetch(webhookUrl, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload),
-      signal: AbortSignal.timeout(5000),
-    });
-    console.log(`[alerts] Sent ${triggered.length} alert(s) to Discord`);
-  } catch (e) {
-    console.log(`[alerts] Discord error: ${e.message}`);
-  }
-}
+// checkAlerts/sendDiscord removed 2026-08-05 — this was the ONLY thing
+// that ever evaluated price/%/signal alerts, and its only action was a
+// Discord webhook call with no fallback: no webhook configured (the
+// common case) meant a triggered alert was silently discarded, no
+// desktop notification, no record that it ever fired. Replaced by
+// api.js's getTriggeredAlerts() — a single unified path with real
+// one-shot fired-state tracking, a desktop notification, AND still
+// sends to Discord if a webhook is configured. Called from main.js's
+// notification-check cycle alongside DXP/Watchlist/Portfolio/Reminders,
+// not from here — this file no longer touches alerts at all.
 
 function fmtGp(n) {
   n = Math.trunc(n || 0);
@@ -869,7 +862,7 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
 }
 
 module.exports = {
-  parseArgs, getDataDir, fetchPrices, runSignals, checkAlerts, sendDiscord,
+  parseArgs, getDataDir, fetchPrices, runSignals,
   fmtGp, fetchNewsData, updateNewsSnapshots, main,
 };
 

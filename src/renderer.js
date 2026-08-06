@@ -568,7 +568,7 @@ function getMarketWeather(items) {
   const net = surgeRatio - dumpRatio;
 
   if (frenzyRatio > 0.06 && net > 0.02)  return { emoji:'🌪️', label:'Tornado Warning',  tip:'Frenzy signals widespread — high volume and sharp moves across the board. Anything can happen.' };
-  if (frenzyRatio > 0.06 && net < -0.02) return { emoji:'⛈️',  label:'Storm Warning',    tip:'Heavy selling on high volume. Volatile conditions — prices may shift rapidly.' };
+  if (frenzyRatio > 0.06 && net < -0.02) return { emoji:'⛈️',  label:'Severe Storm Warning', tip:'Heavy selling on high volume. Volatile conditions — prices may shift rapidly.' };
   if (frenzyRatio > 0.04)                return { emoji:'🌩️', label:'Thunderstorms',    tip:'Elevated activity and volume spikes. The market is unsettled.' };
   if (net > 0.04)                         return { emoji:'☀️',  label:'Clear Skies',      tip:'Mostly positive movement across the market. A good day for buyers.' };
   if (net < -0.04)                        return { emoji:'🌧️', label:'Rainy Day',        tip:'More items falling than rising. Broad selling pressure — proceed carefully.' };
@@ -582,7 +582,7 @@ function getMarketWeather(items) {
 // sync with the labels/tips above if those ever change.
 const MARKET_WEATHER_LEGEND = [
   { emoji:'🌪️', label:'Tornado Warning',  tip:'Frenzy signals widespread — high volume and sharp moves across the board. Anything can happen.' },
-  { emoji:'⛈️',  label:'Storm Warning',    tip:'Heavy selling on high volume. Volatile conditions — prices may shift rapidly.' },
+  { emoji:'⛈️',  label:'Severe Storm Warning', tip:'Heavy selling on high volume. Volatile conditions — prices may shift rapidly.' },
   { emoji:'🌩️', label:'Thunderstorms',    tip:'Elevated activity and volume spikes. The market is unsettled.' },
   { emoji:'☀️',  label:'Clear Skies',      tip:'Mostly positive movement across the market. A good day for buyers.' },
   { emoji:'🌧️', label:'Rainy Day',        tip:'More items falling than rising. Broad selling pressure — proceed carefully.' },
@@ -5503,12 +5503,19 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
       id: editId || Date.now().toString(),
       price:  needsPrice  ? Number(form.price) : 0,
       pct:    needsPct    ? Number(form.pct)   : 0,
+      // Alerts are edge-triggered (fires on false→true, auto-resets once
+      // the condition goes false again — no manual re-arming needed for
+      // normal use). Still reset `active` here on every save: startEdit
+      // spreads the full existing alert into form state, and an edited
+      // threshold shouldn't inherit active-state computed against the
+      // OLD threshold value.
+      active: false,
     };
     await window.genius?.saveAlert(a);
     onSave(a);
     setForm(BLANK);
     setEditId(null);
-    toast('Alert saved','success');
+    toast(editId ? 'Alert updated' : 'Alert saved','success');
   };
 
   const startEdit = a => {
@@ -5586,6 +5593,14 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
                 fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
                 background:'rgba(201,168,76,0.1)', border:`1px solid ${T.borderDim}`, color:T.textDim
               }}, alertSummary(a)),
+              a.firedAt && h('span',{
+                className:'alert-cond',
+                title: `Last fired ${new Date(a.firedAt).toLocaleString()}${a.active ? ' — condition still active, will fire again once it resets and re-triggers' : ' — condition has since reset, will fire again if it re-triggers'}`,
+                style:{
+                  fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
+                  background:'rgba(76,175,80,0.1)', border:`1px solid ${T.borderDim}`, color:T.green
+                }
+              }, a.active ? '● Active' : '✓ Last fired'),
               h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:11},onClick:()=>startEdit(a)},'Edit'),
               h('button',{className:'ge-btn danger',style:{padding:'2px 8px',fontSize:11},
                 onClick:async()=>{await window.genius?.deleteAlert(a.id);onDelete(a.id);toast('Deleted','info')}},'Del')
@@ -10063,7 +10078,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
             h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Price'),h('th',null,'Change'))),
             h('tbody',null, risers.map(it=>h('tr',{key:it.id,className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},
               h('td',null,it.name),
-              h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+              h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
               h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low}))
             )))
           ) : h('div',{style:{color:T.textDim,fontSize:11,padding:'8px 0'}},'No rising items detected.')
@@ -10074,7 +10089,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
             h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Price'),h('th',null,'Change'))),
             h('tbody',null, fallers.map(it=>h('tr',{key:it.id,className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},
               h('td',null,it.name),
-              h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+              h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
               h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low}))
             )))
           ) : h('div',{style:{color:T.textDim,fontSize:11,padding:'8px 0'}},'No falling items detected.')
@@ -10090,7 +10105,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
-        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         signalCells(it),
@@ -10105,7 +10120,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
-        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         signalCells(it),
@@ -10120,7 +10135,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
-        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#4dd0e1'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
         signalCells(it),
@@ -10135,7 +10150,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
-        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ffb74d'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
         signalCells(it),
@@ -10146,12 +10161,13 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Volume Frenzy', icon:'🔥', color:'#ff80ab',
       desc:'— 250%+ above average volume',
       rows:frenzy,
-      headers:['Item','Price','Change','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Change','Vol / Avg','Vol Ratio','Signals'],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
       renderRow: it => [
         h('td',{key:'n'},it.name),
-        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
+        h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ff80ab'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
         signalCells(it),
       ],
@@ -10167,7 +10183,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
         const profit = Math.round((it.alch||0) - (it.high||it.low||0)*0.98 - (it.natureRunePrice||0));
         return [
           h('td',{key:'n'},it.name),
-          h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+          h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
           h('td',{key:'a',style:{color:'#ce93d8'}},fmt.gp(it.alch)+'gp'),
           h('td',{key:'pr',style:{color:T.green}},'+'+fmt.gp(profit)+'gp'),
           h('td',{key:'l',style:{color:T.textDim}},it.limit?it.limit.toLocaleString():'—'),

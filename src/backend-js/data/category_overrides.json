@@ -17354,5 +17354,380 @@
   ],
   "augmentation dissolver": [
     "invention"
+  ],
+  "crude wooden chair": [
+    "artisan"
+  ],
+  "wooden bookcase": [
+    "artisan"
+  ],
+  "wooden armchair": [
+    "artisan"
+  ],
+  "wooden bench": [
+    "artisan"
+  ],
+  "wooden small table": [
+    "artisan"
+  ],
+  "wooden table": [
+    "artisan"
+  ],
+  "wooden round table": [
+    "artisan"
+  ],
+  "oak chair": [
+    "artisan"
+  ],
+  "wooden long table": [
+    "artisan"
+  ],
+  "shoe box": [
+    "artisan"
+  ],
+  "wooden bed": [
+    "artisan"
+  ],
+  "oak bench": [
+    "artisan"
+  ],
+  "oak clock": [
+    "artisan"
+  ],
+  "oak armchair": [
+    "artisan"
+  ],
+  "oak drawers": [
+    "artisan"
+  ],
+  "oak bookcase": [
+    "artisan"
+  ],
+  "oak bed": [
+    "artisan"
+  ],
+  "oak small table": [
+    "artisan"
+  ],
+  "oak table": [
+    "artisan"
+  ],
+  "oak large bed": [
+    "artisan"
+  ],
+  "oak round table": [
+    "artisan"
+  ],
+  "teak chair": [
+    "artisan"
+  ],
+  "oak long table": [
+    "artisan"
+  ],
+  "oak dresser": [
+    "artisan"
+  ],
+  "teak bench": [
+    "artisan"
+  ],
+  "oak wardrobe": [
+    "artisan"
+  ],
+  "teak bed": [
+    "artisan"
+  ],
+  "teak bookcase": [
+    "artisan"
+  ],
+  "oak magic wardrobe": [
+    "artisan"
+  ],
+  "teak armchair": [
+    "artisan"
+  ],
+  "oak fancy dress box": [
+    "artisan"
+  ],
+  "teak large bed": [
+    "artisan"
+  ],
+  "oak armour case": [
+    "artisan"
+  ],
+  "teak dresser": [
+    "artisan"
+  ],
+  "oak treasure chest": [
+    "artisan"
+  ],
+  "mahogany chair": [
+    "artisan"
+  ],
+  "oak toy box": [
+    "artisan"
+  ],
+  "teak small table": [
+    "artisan"
+  ],
+  "teak drawers": [
+    "artisan"
+  ],
+  "teak table": [
+    "artisan"
+  ],
+  "mahogany bed": [
+    "artisan"
+  ],
+  "oak cape store": [
+    "artisan"
+  ],
+  "teak round table": [
+    "artisan"
+  ],
+  "teak clock": [
+    "artisan"
+  ],
+  "teak long table": [
+    "artisan"
+  ],
+  "mahogany armchair": [
+    "artisan"
+  ],
+  "mahogany bench": [
+    "artisan"
+  ],
+  "mahogany large bed": [
+    "artisan"
+  ],
+  "mahogany small table": [
+    "artisan"
+  ],
+  "teak magic wardrobe": [
+    "artisan"
+  ],
+  "teak fancy dress box": [
+    "artisan"
+  ],
+  "teak cape store": [
+    "artisan"
+  ],
+  "teak wardrobe": [
+    "artisan"
+  ],
+  "mahogany bookcase": [
+    "artisan"
+  ],
+  "mahogany dresser": [
+    "artisan"
+  ],
+  "mahogany table": [
+    "artisan"
+  ],
+  "teak armour case": [
+    "artisan"
+  ],
+  "teak treasure chest": [
+    "artisan"
+  ],
+  "mahogany round table": [
+    "artisan"
+  ],
+  "teak toy box": [
+    "artisan"
+  ],
+  "mahogany clock": [
+    "artisan"
+  ],
+  "mahogany cape store": [
+    "artisan"
+  ],
+  "mahogany long table": [
+    "artisan"
+  ],
+  "mahogany drawers": [
+    "artisan"
+  ],
+  "mahogany wardrobe": [
+    "artisan"
+  ],
+  "mahogany magic wardrobe": [
+    "artisan"
+  ],
+  "mahogany fancy dress box": [
+    "artisan"
+  ],
+  "mahogany armour case": [
+    "artisan"
+  ],
+  "mahogany treasure chest": [
+    "artisan"
+  ],
+  "mahogany toy box": [
+    "artisan"
+  ],
+  "marble cape store": [
+    "artisan"
+  ],
+  "eternal chair": [
+    "artisan"
+  ],
+  "marble magic wardrobe": [
+    "artisan"
+  ],
+  "eternal small table": [
+    "artisan"
+  ],
+  "eternal armchair": [
+    "artisan"
+  ],
+  "eternal bookcase": [
+    "artisan"
+  ],
+  "magical cape store": [
+    "artisan"
+  ],
+  "eternal drawers": [
+    "artisan"
+  ],
+  "eternal table": [
+    "artisan"
+  ],
+  "eternal toy box": [
+    "artisan"
+  ],
+  "eternal treasure chest": [
+    "artisan"
+  ],
+  "eternal dresser": [
+    "artisan"
+  ],
+  "eternal fancy dress box": [
+    "artisan"
+  ],
+  "eternal armour case": [
+    "artisan"
+  ],
+  "eternal bed": [
+    "artisan"
+  ],
+  "eternal clock": [
+    "artisan"
+  ],
+  "eternal bench": [
+    "artisan"
+  ],
+  "eternal large bed": [
+    "artisan"
+  ],
+  "eternal wardrobe": [
+    "artisan"
+  ],
+  "eternal magic wardrobe": [
+    "artisan"
+  ],
+  "eternal round table": [
+    "artisan"
+  ],
+  "eternal long table": [
+    "artisan"
+  ],
+  "furniture plans: decorative dragon and unicorn rug": [
+    "artisan"
+  ],
+  "furniture plans: decorative blue rug": [
+    "artisan"
+  ],
+  "furniture plans: decorative green rug": [
+    "artisan"
+  ],
+  "furniture plans: decorative black rug": [
+    "artisan"
+  ],
+  "furniture plans: decorative red rug": [
+    "artisan"
+  ],
+  "furniture plans: decorative purple rug": [
+    "artisan"
+  ],
+  "furniture plans: decorative yellow rug": [
+    "artisan"
+  ],
+  "furniture plans: tiny gold pile": [
+    "artisan"
+  ],
+  "furniture plans: small gold pile": [
+    "artisan"
+  ],
+  "furniture plans: medium gold pile": [
+    "artisan"
+  ],
+  "furniture plans: large gold pile": [
+    "artisan"
+  ],
+  "furniture plans: huge gold pile": [
+    "artisan"
+  ],
+  "furniture plans: armadyl altar": [
+    "artisan"
+  ],
+  "furniture plans: bandos altar": [
+    "artisan"
+  ],
+  "furniture plans: guthix altar": [
+    "artisan"
+  ],
+  "furniture plans: saradomin altar": [
+    "artisan"
+  ],
+  "furniture plans: seren altar": [
+    "artisan"
+  ],
+  "furniture plans: zamorak altar": [
+    "artisan"
+  ],
+  "furniture plans: zaros altar": [
+    "artisan"
+  ],
+  "furniture plans: guthix rug": [
+    "artisan"
+  ],
+  "furniture plans: bandos rug": [
+    "artisan"
+  ],
+  "furniture plans: seren rug": [
+    "artisan"
+  ],
+  "furniture plans: zaros rug": [
+    "artisan"
+  ],
+  "furniture plans: saradomin rug": [
+    "artisan"
+  ],
+  "furniture plans: armadyl rug": [
+    "artisan"
+  ],
+  "furniture plans: zamorak rug": [
+    "artisan"
+  ],
+  "furniture plans: lumbridge sandcastle": [
+    "artisan"
+  ],
+  "furniture plans: grand exchange sandcastle": [
+    "artisan"
+  ],
+  "furniture plans: wizard's tower sandcastle": [
+    "artisan"
+  ],
+  "furniture plans: pyramid sandcastle": [
+    "artisan"
+  ],
+  "furniture plans: safe": [
+    "artisan"
+  ],
+  "furniture plans: vault door": [
+    "artisan"
+  ],
+  "furniture plans: beehive": [
+    "artisan"
   ]
 }

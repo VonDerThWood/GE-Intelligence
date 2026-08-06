@@ -1995,6 +1995,116 @@ async function createGeniusApi({ dataDir, store }) {
     return { success: true };
   }
 
+  function _fmtGpAlert(n) {
+    n = Math.trunc(n || 0);
+    if (n >= 1_000_000_000) return `${(n / 1_000_000_000).toFixed(1)}b`;
+    if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}m`;
+    if (n >= 1_000) return `${(n / 1_000).toFixed(1)}k`;
+    return String(n);
+  }
+
+  function _alertConditionHit(alert, item) {
+    const condition = alert.condition || 'above';
+    const price = item.high || item.low || 0;
+    const liveRef = item.liveBuy ?? item.liveSell;
+    const chg = item.change_1d;
+    const signals = item.signals || [];
+    const threshold = alert.price || 0;
+    const pct = alert.pct || 0;
+    if (condition === 'above') return price > threshold;
+    if (condition === 'below') return price < threshold;
+    if (condition === 'live_above') return liveRef != null && liveRef > threshold;
+    if (condition === 'live_below') return liveRef != null && liveRef < threshold;
+    if (condition === 'pct_up') return chg != null && chg >= pct;
+    if (condition === 'pct_down') return chg != null && chg <= -Math.abs(pct);
+    if (condition === 'signal') return signals.includes(alert.signal_type || '');
+    if (condition === 'alch') return signals.includes('ALCH');
+    return false;
+  }
+
+  function _alertMessage(alert, item) {
+    const condition = alert.condition || 'above';
+    const name = alert.item_name;
+    const price = item.high || item.low || 0;
+    const liveRef = item.liveBuy ?? item.liveSell;
+    const chg = item.change_1d;
+    switch (condition) {
+      case 'above':      return `${name} rose above ${_fmtGpAlert(alert.price)}gp — now ${_fmtGpAlert(price)}gp`;
+      case 'below':      return `${name} fell below ${_fmtGpAlert(alert.price)}gp — now ${_fmtGpAlert(price)}gp`;
+      case 'live_above': return `${name} live price rose above ${_fmtGpAlert(alert.price)}gp — now ${_fmtGpAlert(liveRef)}gp`;
+      case 'live_below': return `${name} live price fell below ${_fmtGpAlert(alert.price)}gp — now ${_fmtGpAlert(liveRef)}gp`;
+      case 'pct_up':     return `${name} up +${(chg||0).toFixed(2)}% today (threshold: +${alert.pct||0}%)`;
+      case 'pct_down':   return `${name} down ${(chg||0).toFixed(2)}% today (threshold: -${alert.pct||0}%)`;
+      case 'signal':     return `${name} triggered signal ${alert.signal_type||''} — price: ${_fmtGpAlert(price)}gp`;
+      case 'alch':       return `${name} is now alch-profitable — price: ${_fmtGpAlert(price)}gp`;
+      default:           return `${name} alert triggered`;
+    }
+  }
+
+  // Single unified evaluation path for price/%/signal alerts — previously
+  // this ONLY existed in run.js's checkAlerts(), which sent to Discord and
+  // nothing else: no desktop notification, no fired-state tracking, and if
+  // no webhook was configured (the common case), a triggered alert was
+  // silently discarded with zero observable effect. Caught for real (Ben,
+  // 2026-08-05): a genuine "Dragon bones below 950gp" alert existed in
+  // alerts.json but produced nothing when forced to evaluate, confirming
+  // the gap.
+  //
+  // Edge-triggered, not one-shot (corrected same session — Ben: "the
+  // alerts should stay active regardless if they fire or not"). `active`
+  // tracks whether the condition was true as of the LAST check — a
+  // notification only fires on the false→true transition, not on every
+  // check while it stays true (that would spam a notification every 15
+  // min for as long as, say, a price stayed below threshold). Once the
+  // condition goes false again, `active` resets on its own — no editing,
+  // no manual re-arm, it just fires again next time it actually crosses.
+  // `firedAt` is kept purely as a "last fired" record for the UI badge,
+  // not a gate on whether it can fire again.
+  async function getTriggeredAlerts() {
+    const alerts = await storage.readJSON(alertsFile, []);
+    if (!alerts.length) return [];
+    const data = await getData();
+    const priceMap = {};
+    for (const it of (data.items || [])) priceMap[it.name.toLowerCase()] = it;
+
+    const triggered = [];
+    let changed = false;
+    for (const a of alerts) {
+      const item = priceMap[(a.item_name || '').toLowerCase()];
+      if (!item) continue;
+      const hit = _alertConditionHit(a, item);
+      const wasActive = !!a.active;
+      if (hit && !wasActive) {
+        triggered.push({ key: `alert_${a.id}_${Date.now()}`, title: `Alert: ${a.item_name}`, body: _alertMessage(a, item) });
+        a.firedAt = Date.now();
+        changed = true;
+      }
+      if (hit !== wasActive) {
+        a.active = hit;
+        changed = true;
+      }
+    }
+    if (changed) await storage.writeJSON(alertsFile, alerts, { pretty: true });
+
+    if (triggered.length) {
+      const webhookUrl = store.get('discordWebhook', '');
+      if (webhookUrl) {
+        try {
+          await fetch(webhookUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              username: 'GEnius Alert',
+              content: '⚠️ **GE Price Alert**\n' + triggered.map(t => t.body).join('\n'),
+            }),
+            signal: AbortSignal.timeout(5000),
+          });
+        } catch (e) { console.log(`[alerts] Discord error: ${e.message}`); }
+      }
+    }
+    return triggered;
+  }
+
   // ─── Category overrides editor ──────────────────────────────────────────
   async function getOverrides() {
     return storage.readJSON(overridesFile, {});
@@ -2409,7 +2519,7 @@ async function createGeniusApi({ dataDir, store }) {
     // portfolio
     getPortfolio, savePosition, deletePosition, sellPosition, reopenPosition,
     // alerts
-    getAlerts, saveAlert, deleteAlert,
+    getAlerts, saveAlert, deleteAlert, getTriggeredAlerts,
     // overrides
     getOverrides, saveOverrides,
     // misc

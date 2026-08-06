@@ -210,6 +210,12 @@ async function checkReminders() {
   }
 }
 
+async function checkPriceAlerts() {
+  for (const a of await api.getTriggeredAlerts()) {
+    new Notification({ title: a.title, body: a.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
 // ─── Scheduler ────────────────────────────────────────────────────────────────
 function startScheduler() {
   stopScheduler();
@@ -225,7 +231,7 @@ function startScheduler() {
     } else {
       runPython('prices');
     }
-    checkDxpNotifications(); checkWatchlistDigest(); checkPortfolioDigest(); checkReminders();
+    checkDxpNotifications(); checkWatchlistDigest(); checkPortfolioDigest(); checkReminders(); checkPriceAlerts();
   }, ms);
 }
 
@@ -501,6 +507,7 @@ app.whenReady().then(async () => {
   setTimeout(() => checkDxpNotifications(), 5000);
   setTimeout(() => checkWatchlistDigest(), 6000);
   setTimeout(() => checkReminders(), 7000);
+  setTimeout(() => checkPriceAlerts(), 8000);
   setTimeout(() => checkForUpdate(), 8000);
 });
 

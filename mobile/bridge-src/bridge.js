@@ -202,6 +202,7 @@ async function runNotificationChecks() {
   const portfolioDigest = await a.getPortfolioDigest();
   if (portfolioDigest) await fireNotification(portfolioDigest.title, portfolioDigest.body);
   for (const r of await a.getDueReminders()) await fireNotification(r.title, r.body);
+  for (const al of await a.getTriggeredAlerts()) await fireNotification(al.title, al.body);
 }
 
 // Mirrors main.js's runPython() — runs run.js's main() in-process and emits
