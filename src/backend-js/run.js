@@ -420,7 +420,27 @@ const FLAT_CHG_MIN = -3.0;
 const FLAT_CHG_MAX = 3.0;
 const ACCUM_VOL_MIN = 1.3;
 const DISTRIB_VOL_MIN = 2.5;
-const MIN_VOL_ABS = 5000;
+// Gp-turnover floor (price * volume), not a raw unit-count floor — see
+// removed-2026-08-05 comment below for why. A flat unit-count floor
+// (formerly MIN_VOL_ABS = 5000) systematically excluded every high-value
+// item from volume-based signals/scoring regardless of real trading
+// activity: confirmed for real (Ben, 2026-08-05) that Fractured Staff of
+// Armadyl, Noxious scythe, Ascension crossbow, Seismic wand, and Staff of
+// Sliske all NEVER cleared 5000 units/day despite each moving hundreds of
+// millions to tens of billions of gp/day (Fractured Staff of Armadyl:
+// just 28 units, but 30.8 BILLION gp turnover). 100,000gp was picked from
+// the real turnover distribution across the catalogue (not guessed) —
+// sits between the 10th (21,137gp) and 25th (279,672gp) percentile of
+// real per-item turnover, excludes roughly the bottom ~18% (genuinely
+// thin markets — checked directly: the highest-priced items below this
+// line all sell only 1 unit/day, and the highest-volume items below it
+// are 1-2gp bulk items like Waterskin/Plant pot where even tens of
+// thousands of units still doesn't add up to real money), while
+// including both extremes: cheap-but-liquid items (Law rune, ~300-400gp
+// but millions of units/day) and expensive-but-rare items (the BiS gear
+// above) that a single-metric floor (either price alone or volume alone)
+// would have excluded.
+const MIN_TURNOVER_GP = 100000;
 const VOL_FRENZY_MIN = 2.5;
 const VOL_HIGH_MIN = 1.5;
 const VOL_ACTIVE_MIN = 1.1;
@@ -455,17 +475,22 @@ function runSignals(items) {
     const vol = item.volume || 0;
     const avgVol = item.avgVolume || 0;
 
-    const hasAvg = !!(avgVol && vol >= MIN_VOL_ABS);
+    const gePrice0 = high || low;
+    const hasAvg = !!(avgVol && (gePrice0 * vol) >= MIN_TURNOVER_GP);
     const volRatio = hasAvg ? (vol / avgVol) : 0;
 
-    const gePrice0 = high || low;
-
-    // Skip all signals for items under 900gp — not actionable
-    if (gePrice0 < 900) {
-      item.signals = [];
-      item.natureRunePrice = natureRunePrice;
-      continue;
-    }
+    // No price floor here anymore — removed 2026-08-05 after confirming
+    // for real (Law rune, mid-July 2026: volume spiked ~38x normal
+    // overnight — 976K to 37.5M — with price running 310gp to 466gp over
+    // the following week, tied to 120 Construction's release) that cheap
+    // items can have genuinely huge, actionable relative volume/price
+    // moves that a flat gp price cutoff excluded wholesale regardless of
+    // how liquid the item actually was. Liquidity (not price) is the
+    // real thing that should gate "is this actionable" — MIN_TURNOVER_GP
+    // above already does that properly (gp turnover, not raw price or
+    // raw volume alone), and SURGE/DUMP's own absChgGp >= 1000 floor
+    // already protects against trivial-in-absolute-terms swings
+    // independently.
 
     const absChgGp = Math.abs(chg / 100 * gePrice0);
     if (chg >= SURGE_CHG_MIN && absChgGp >= 1000 && (!hasAvg || volRatio >= DIR_VOL_RATIO)) {
@@ -528,7 +553,7 @@ function runSignals(items) {
     }
 
     // Volume tier badge
-    if (vol >= MIN_VOL_ABS && avgVol) {
+    if (hasAvg) {
       if (volRatio >= VOL_FRENZY_MIN) signals.push('FRENZY');
       else if (volRatio >= VOL_HIGH_MIN) signals.push('HIGH_VOL');
       else if (volRatio >= VOL_ACTIVE_MIN) signals.push('ACTIVE');

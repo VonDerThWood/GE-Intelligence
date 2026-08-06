@@ -11738,8 +11738,7 @@
         ],
         "dragon rider lance": [
           "boss",
-          "melee",
-          "low_tier"
+          "melee"
         ],
         "shadow glaive": [
           "ranged"
@@ -21054,6 +21053,7 @@
           return { success: true };
         }
         async function getItemHistory(itemId) {
+          if (String(itemId).startsWith("untradeable_")) return null;
           if (itemHistoryCache.has(itemId)) return itemHistoryCache.get(itemId);
           const existing = await getHistoryPoints(itemId);
           if (existing && existing.length) {
@@ -21077,6 +21077,7 @@
         }
         async function getItemTimeseries(itemId) {
           const key = String(itemId);
+          if (key.startsWith("untradeable_")) return null;
           const hist = await getHistoryPoints(itemId);
           if (athCache[key]) {
             if (hist && hist.length) {
@@ -21297,6 +21298,19 @@
         }
         async function getPriceSnapshots(itemId) {
           return (snapshotData[String(itemId)] || []).map((s) => ({ timestamp: s.t, price: s.p, volume: s.v }));
+        }
+        function computeUntradeableChange1d(itemId, currentPrice) {
+          const points = snapshotData[String(itemId)];
+          if (!points || !points.length || !currentPrice) return null;
+          const targetTs = Math.floor(Date.now() / 1e3) - 20 * 3600;
+          const sorted = [...points].sort((a, b) => a.t - b.t);
+          let ref = null;
+          for (const p of sorted) {
+            if (p.t <= targetTs) ref = p;
+            else break;
+          }
+          if (!ref || !ref.p) return null;
+          return (currentPrice - ref.p) / ref.p * 100;
         }
         function parseItemStats(wikitext) {
           const get = (key) => {
@@ -21984,6 +21998,14 @@
         async function getData() {
           try {
             const parsed = await storage2.readJSON(dataFile, { items: [], timestamp: null });
+            if (parsed.items) {
+              for (const it of parsed.items) {
+                if (it.untradeable && it.change_1d == null) {
+                  const price = it.high || it.low;
+                  if (price) it.change_1d = computeUntradeableChange1d(it.id, price);
+                }
+              }
+            }
             console.log(`[get-data] Loaded ${parsed.items?.length ?? 0} items`);
             return parsed;
           } catch (e) {
@@ -23542,7 +23564,7 @@ ${data.length} indexes:
       var FLAT_CHG_MAX = 3;
       var ACCUM_VOL_MIN = 1.3;
       var DISTRIB_VOL_MIN = 2.5;
-      var MIN_VOL_ABS = 5e3;
+      var MIN_TURNOVER_GP = 1e5;
       var VOL_FRENZY_MIN = 2.5;
       var VOL_HIGH_MIN = 1.5;
       var VOL_ACTIVE_MIN = 1.1;
@@ -23568,14 +23590,9 @@ ${data.length} indexes:
           const chg = item.change_1d || 0;
           const vol = item.volume || 0;
           const avgVol = item.avgVolume || 0;
-          const hasAvg = !!(avgVol && vol >= MIN_VOL_ABS);
-          const volRatio = hasAvg ? vol / avgVol : 0;
           const gePrice0 = high || low;
-          if (gePrice0 < 900) {
-            item.signals = [];
-            item.natureRunePrice = natureRunePrice;
-            continue;
-          }
+          const hasAvg = !!(avgVol && gePrice0 * vol >= MIN_TURNOVER_GP);
+          const volRatio = hasAvg ? vol / avgVol : 0;
           const absChgGp = Math.abs(chg / 100 * gePrice0);
           if (chg >= SURGE_CHG_MIN && absChgGp >= 1e3 && (!hasAvg || volRatio >= DIR_VOL_RATIO)) {
             signals.push("SURGE");
@@ -23608,7 +23625,7 @@ ${data.length} indexes:
             const spreadPct = spreadGp / item.liveSell * 100;
             if (spreadGp >= SPREAD_MIN_GP && spreadPct >= SPREAD_PCT_MIN) signals.push("WIDE_SPREAD");
           }
-          if (vol >= MIN_VOL_ABS && avgVol) {
+          if (hasAvg) {
             if (volRatio >= VOL_FRENZY_MIN) signals.push("FRENZY");
             else if (volRatio >= VOL_HIGH_MIN) signals.push("HIGH_VOL");
             else if (volRatio >= VOL_ACTIVE_MIN) signals.push("ACTIVE");
@@ -23879,7 +23896,7 @@ ${data.length} indexes:
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "2.3.1",
+        version: "2.4.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",

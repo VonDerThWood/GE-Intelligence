@@ -1017,14 +1017,25 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   useEffect(() => {
     if (!item?.id) return;
     setLoading(true); setError(false); setHistory(null); setTimeseries(null); setTimeseriesLoading(true); setDateLookup(null); setDateQuery(''); setChartView('recent'); setSnapshots([]);
-    window.genius?.getItemHistory(item.id).then(hist => {
-      if (hist && hist.length) setHistory(hist); else setError(true);
+    if (item.untradeable) {
+      // No WeirdGloop GE history exists for untradeable items (Invention
+      // components, combo potions — they never touch the Grand Exchange),
+      // so skip that fetch entirely rather than let it fail into `error`
+      // and block the chart — the recent-range view below already merges
+      // in GEnius's own daily price snapshots (fetched separately below),
+      // which is the only real history these items ever get.
       setLoading(false);
-    }).catch(() => { setError(true); setLoading(false); });
-    window.genius?.getItemTimeseries(item.id).then(ts => {
-      setTimeseries(ts && ts.length ? ts : null);
       setTimeseriesLoading(false);
-    }).catch(() => setTimeseriesLoading(false));
+    } else {
+      window.genius?.getItemHistory(item.id).then(hist => {
+        if (hist && hist.length) setHistory(hist); else setError(true);
+        setLoading(false);
+      }).catch(() => { setError(true); setLoading(false); });
+      window.genius?.getItemTimeseries(item.id).then(ts => {
+        setTimeseries(ts && ts.length ? ts : null);
+        setTimeseriesLoading(false);
+      }).catch(() => setTimeseriesLoading(false));
+    }
     window.genius?.getPriceSnapshots(item.id).then(snaps => {
       setSnapshots(snaps && snaps.length ? snaps : []);
     }).catch(() => {});
@@ -2035,12 +2046,20 @@ function GESearchBar({items, onSelect, userShorthands}) {
 }
 
 /* ─── Price trend badges ─────────────────────────────────────── */
-function PriceTrendBadges({itemId, currentPrice, onOpenChart}) {
+function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
   const [trends, setTrends] = useState(null);
 
   useEffect(() => {
     if (!itemId || !currentPrice) return;
-    window.genius?.getItemHistory(itemId).then(history => {
+    // Untradeable items (Invention components, combo potions) have no
+    // WeirdGloop GE history — getItemHistory returns null for these
+    // immediately (see api.js). Fall back to GEnius's own daily price
+    // snapshots, the only real history these items ever get. Also used
+    // as a fallback for tradeable items still mid-backfill, same merge
+    // philosophy as ChartModal's recent-range view.
+    (untradeable ? Promise.resolve(null) : window.genius?.getItemHistory(itemId))
+      .then(history => (history && history.length >= 2) ? history : window.genius?.getPriceSnapshots(itemId))
+      .then(history => {
       if (!history || history.length < 2) return;
       const getTs = p => typeof p.timestamp==='number' ? p.timestamp*(p.timestamp<1e12?1000:1) : new Date(p.timestamp).getTime();
       const sorted = [...history].sort((a,b) => getTs(a) - getTs(b));
@@ -2056,7 +2075,7 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart}) {
       };
       setTrends({d7:calc(7), d30:calc(30), d90:calc(90)});
     });
-  }, [itemId, currentPrice]);
+  }, [itemId, currentPrice, untradeable]);
 
   if (!trends) return null;
   const entries = [
@@ -2260,6 +2279,75 @@ function FlipCalculator({item, onAddToPortfolio, livePrice}) {
   );
 }
 
+// Same breakdown math as ScoreBreakdown (Opportunities tab) — duplicated
+// rather than shared since that component renders as a <tr> (meant to sit
+// inside the score table) and this one is a floating popup anchored off a
+// click, same interaction pattern as the Dashboard's Market Weather/
+// Sector Heat Map info popups. Keep the actual point math in sync with
+// run.js's real score calculation if that ever changes.
+function ScoreInfoPopup({item, onClose, pos}) {
+  const price   = item.high || item.low || 0;
+  const chg     = item.change_1d;
+  const vol     = item.volume || 0;
+  const avg     = item.avgVolume || 0;
+  const sigs    = item.signals || [];
+  const alch    = item.alch || 0;
+  const nature  = item.natureRunePrice || 0;
+
+  const pctFactor = chg != null ? Math.min(1, Math.abs(chg) / 20) : 0;
+  const gpFactor  = chg != null ? Math.min(1, (Math.abs(chg) / 100 * price) / 100000) : 0;
+  const momPts    = chg != null ? Math.round(40 * Math.sqrt(pctFactor * gpFactor) * 10) / 10 : 0;
+
+  const volRatio  = avg > 0 ? vol / avg : 0;
+  const volPts    = avg > 0 && volRatio > 0 ? Math.round(Math.min(30, (volRatio - 1) / 2 * 30) * 10) / 10 : 0;
+
+  let sigPts = 0;
+  if (sigs.includes('SURGE') || sigs.includes('DUMP')) sigPts += 20;
+  if (sigs.includes('ACCUMULATION') || sigs.includes('DISTRIBUTION')) sigPts += 10;
+  if (sigs.includes('FRENZY')) sigPts += 10;
+
+  const alchProfit = alch && price && nature ? alch - (price * 0.98) - nature : 0;
+  const alchPts    = alchProfit > 0 ? Math.round(Math.min(10, alchProfit / price * 100) * 10) / 10 : 0;
+
+  const rowStyle = {display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'3px 0', gap:10};
+  const ptsStyle = pts => ({fontSize:12, fontWeight:'bold', color: pts > 0 ? T.green : T.textDim, flexShrink:0});
+
+  return h('div', {
+    onClick: e => e.stopPropagation(),
+    style:{
+      position:'fixed', left:pos.left, zIndex:9999, width:300,
+      // bottom-anchored (grows upward) when flipped above the click
+      // point, top-anchored (grows downward) otherwise — either way,
+      // maxHeight + overflowY:auto guarantees it fits on screen without
+      // needing to predict the real content height in advance.
+      ...(pos.bottom != null ? {bottom:pos.bottom} : {top:pos.top}),
+      maxHeight:pos.maxHeight, overflowY:'auto',
+      background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:6,
+      boxShadow:'0 4px 16px rgba(0,0,0,0.6)', padding:'10px 12px',
+    },
+  },
+    h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6}},
+      h('div', {style:{fontSize:11, color:T.gold, textTransform:'uppercase', letterSpacing:'0.06em'}}, 'Opportunity Score'),
+      h('span', {onClick:onClose, style:{cursor:'pointer', color:T.textDim, fontSize:13}}, '✕'),
+    ),
+    h('div', {style:{fontSize:11, color:T.textDim, lineHeight:1.5, marginBottom:8}},
+      'A 0-100 ranking of how much is happening with this item right now — combines price momentum, trading volume vs. its own average, active signals, and alch profit margin.'
+    ),
+    [
+      ['Price momentum', momPts, chg != null ? `${chg > 0 ? '+' : ''}${chg.toFixed(2)}%` : 'No price data'],
+      ['Volume', volPts, avg > 0 ? `${volRatio.toFixed(1)}× average` : 'No avg volume yet'],
+      ['Signal bonus', sigPts, sigPts > 0 ? sigs.filter(s => ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY'].includes(s)).join(', ') : 'No qualifying signals'],
+      ['Alch profit', alchPts, alchProfit > 0 ? `+${fmt.gp(Math.round(alchProfit))}gp margin` : 'No alch profit'],
+    ].map(([label, pts, sub]) => h('div', {key:label, style:rowStyle},
+      h('div', null,
+        h('div', {style:{fontSize:11}}, label),
+        h('div', {style:{fontSize:10, color:T.textDim}}, sub),
+      ),
+      h('div', {style:ptsStyle(pts)}, pts > 0 ? `+${pts}` : '0')
+    ))
+  );
+}
+
 function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem}) {
   const [chartOpen, setChartOpen]     = useState(false);
   const [chartDxpMode, setChartDxpMode] = useState(false);
@@ -2282,6 +2370,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const [productSort, setProductSort] = useState(null); // null = backend's own order; {key, dir} once a header's clicked
   const toggleProductSort = key => setProductSort(s => ({key, dir: s && s.key===key ? -s.dir : -1}));
   const productSortArrow = key => productSort && productSort.key===key ? (productSort.dir>0?' ↑':' ↓') : '';
+  const [scoreInfoPos, setScoreInfoPos] = useState(null); // null = closed, {left,top} once open
   const [iconUrl, setIconUrl]         = useState(null);
   const [livePrice, setLivePrice]     = useState(null); // null = not loaded yet, {} = loaded but no data
   const [editingCats, setEditingCats] = useState(false);
@@ -2355,7 +2444,13 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   useEffect(() => {
     if (!item?.id) return;
     setSparkHistory([]);
-    window.genius?.getItemHistory(item.id).then(hist => {
+    // No WeirdGloop history exists for untradeable items — getItemHistory
+    // returns null for these immediately (see api.js) instead of ever
+    // trying and failing. Fall back to GEnius's own daily price
+    // snapshots, same source the full chart modal already uses.
+    (item.untradeable ? Promise.resolve(null) : window.genius?.getItemHistory(item.id))
+      .then(hist => (hist && hist.length) ? hist : window.genius?.getPriceSnapshots(item.id))
+      .then(hist => {
       if (!hist || !hist.length) return;
       const cutoff = Date.now() - 30 * 86400000;
       const pts = hist
@@ -2367,7 +2462,23 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         .filter(Boolean);
       setSparkHistory(pts);
     }).catch(() => {});
-  }, [item.id]);
+  }, [item.id, item.untradeable]);
+
+  // Same outside-click/Escape dismiss pattern as the Dashboard's Market
+  // Weather / Sector Heat Map info popups — both already stopPropagation
+  // on clicks inside themselves, so a plain document-level listener only
+  // ever fires for genuine outside clicks.
+  useEffect(() => {
+    if (!scoreInfoPos) return;
+    const onClick = () => setScoreInfoPos(null);
+    const onKey = e => { if (e.key === 'Escape') setScoreInfoPos(null); };
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [scoreInfoPos]);
 
   const sortedProducts = (() => {
     if (!products || !products.products) return [];
@@ -2467,8 +2578,21 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       ),
         item.untradeable
           ? h('div', {style:{marginTop:4}},
-              h('span', {style:{fontSize:11, padding:'2px 7px', borderRadius:3, background:'rgba(255,180,0,0.15)', color:T.gold, border:`1px solid ${T.gold}`, fontWeight:600, letterSpacing:'0.04em'}}, 'UNTRADEABLE'),
-              h('span', {style:{fontSize:11, color:T.textDim, marginLeft:8}}, 'Calculated production cost')
+              h('div', null,
+                h('span', {style:{fontSize:11, padding:'2px 7px', borderRadius:3, background:'rgba(255,180,0,0.15)', color:T.gold, border:`1px solid ${T.gold}`, fontWeight:600, letterSpacing:'0.04em'}}, 'UNTRADEABLE'),
+                h('span', {style:{fontSize:11, color:T.textDim, marginLeft:8}}, 'Calculated production cost')
+              ),
+              // Untradeable items have no real GE change_1d (they're never
+              // traded), but api.js's getData() computes an equivalent from
+              // GEnius's own daily price snapshots — the same source the
+              // chart already uses — so this can populate too, just derived
+              // differently than a tradeable item's.
+              item.change_1d != null && h('div', {className:pctClass(item.change_1d), style:{fontSize:12,marginTop:4}},
+                fmt.pct(item.change_1d),
+                item.high && h('span', {style:{fontSize:11, marginLeft:6, opacity:0.85}},
+                  '(' + (item.change_1d > 0 ? '+' : '') + gpFmt(Math.round(item.high - (item.high / (1 + item.change_1d / 100)))) + 'gp)'
+                )
+              )
             )
           : item.change_1d != null && h('div', {className:pctClass(item.change_1d), style:{fontSize:12,marginTop:2}},
               fmt.pct(item.change_1d),
@@ -2549,6 +2673,48 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         h('span',{className:'stat-lbl'},'Volume'),
         h('span',{className:'stat-val'}, h(VolDisplay,{volume:item.volume, avgVolume:item.avgVolume}))
       ),
+      !item.untradeable && h('div', {className:'stat-row'},
+        h('span',{className:'stat-lbl', style:{display:'flex', alignItems:'center', gap:5}},
+          'Opportunity Score',
+          h('span', {
+            onClick: e => {
+              e.stopPropagation();
+              const POPUP_WIDTH = 300;
+              const MARGIN = 8;
+              if (!scoreInfoPos) {
+                const r = e.currentTarget.getBoundingClientRect();
+                let left = r.left;
+                if (left + POPUP_WIDTH > window.innerWidth) left = Math.max(MARGIN, window.innerWidth - POPUP_WIDTH - MARGIN);
+                // Don't guess a fixed popup height (got this wrong once
+                // already — the real content, header + explanation +
+                // 4 breakdown rows, is taller than a guessed number).
+                // Instead pick whichever side has more room, and cap the
+                // popup's own maxHeight to whatever that side actually
+                // has (with internal scroll as a safety net) — this can
+                // never run off-screen regardless of exact content height.
+                const spaceBelow = window.innerHeight - r.bottom - MARGIN;
+                const spaceAbove = r.top - MARGIN;
+                const openUpward = spaceBelow < 260 && spaceAbove > spaceBelow;
+                const maxHeight = Math.max(150, openUpward ? spaceAbove : spaceBelow);
+                setScoreInfoPos({
+                  left,
+                  top: openUpward ? MARGIN : r.bottom + 6,
+                  bottom: openUpward ? (window.innerHeight - r.top + 6) : null,
+                  maxHeight,
+                });
+              } else {
+                setScoreInfoPos(null);
+              }
+            },
+            title:'What does this score mean?',
+            style:{cursor:'pointer', fontSize:9, color:T.textDim, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:12, height:12, display:'inline-flex', alignItems:'center', justifyContent:'center', flexShrink:0},
+          }, '?'),
+        ),
+        h('span',{className:'stat-val'}, item.score != null
+          ? h('span', null, item.score.toFixed(1), h('span',{style:{color:T.textDim,fontSize:10}}, '/100'))
+          : '—')
+      ),
+      scoreInfoPos && createPortal(h(ScoreInfoPopup, {item, onClose:()=>setScoreInfoPos(null), pos:scoreInfoPos}), document.body),
       !item.untradeable && populatedHistoryIds && !populatedHistoryIds.has(item.id) && h('div',{
         style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:2, marginBottom:4}
       }, '📊 Price history still loading for this item — Volume avg and Daily Change will firm up once it finishes.'),
@@ -2557,7 +2723,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       ),
 
       // Price trend badges from history
-      item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true)}),
+      item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true), untradeable: item.untradeable}),
 
       // Big Mac price conversion
       !item.untradeable && h(BigMacLine, {
@@ -3538,7 +3704,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       const active = members.filter(it => (it.change_1d||0) !== 0).length;
 
       const avgChg = members.reduce((s,it) => s + (it.change_1d||0), 0) / members.length;
-      const avgOpp = members.reduce((s,it) => s + (it.opportunity_score||0), 0) / members.length;
+      const avgOpp = members.reduce((s,it) => s + (it.score||0), 0) / members.length;
 
       // Heat score: blend momentum + opportunity + signal activity
       const momentumScore = Math.max(0, Math.min(100, 50 + avgChg * 4));
@@ -4876,6 +5042,22 @@ const APP_NEWS = [
     // TODO.txt's "POST vX.X.X" section instead, and gets folded into a
     // brand-new entry here only when Ben actually cuts the next
     // release — never edited into this array ahead of time.
+    version: 'v2.4.0',
+    items: [
+      'Untradeable items (Invention components, combo potions) now show a real price chart and change badges — they were always silently blank before, since the chart tried a Grand Exchange history lookup first (which can never work for something that never touches the GE) and gave up instead of falling back to GEnius\'s own daily price snapshots.',
+      'New "Turns Into" section on the item detail panel — shows what a tradeable item can become (auto-fetched from the wiki), with cost/profit cross-referenced against GEnius\'s own live buy/sell prices, not the wiki\'s often-stale GE price. Filters out cosmetic reskins and untracked outputs, capped at 15 products. Click a product to open it in the detail panel.',
+      'Portfolio, Alch tab, and Monster Lookup\'s drop-table gp/kill estimate all now have the same GE/Live price toggle already used elsewhere in the app — profit, value, and P&L figures recompute off whichever price you pick instead of only ever using the GE reference price.',
+      'Flips: removed the flat price ceiling that could wrongly reject a legitimate demand-driven price spike (a real, high-volume rush now gets through instead of being treated the same as a single junk listing); added detection for coordinated wash-trading on cheap, barely-traded items via a sudden volume spike; staleness tolerance now scales with an item\'s own trading volume instead of one fixed cutoff for every item; the alch-value price ceiling no longer applies to cheap items nobody actually price-anchors off alching.',
+      'Fixed the item chart\'s All-Time Low/High never actually refreshing once first built — could silently show a stale, wrong record price indefinitely.',
+      'Live prices (GE price, plus Buy/Sell straight from the wiki\'s real-time feed) now show up everywhere a price does, not just the item detail panel: the search dropdown, Dashboard\'s watchlist section, Watchlist tab, Opportunity Score table, Compare tab, and Hall of Shame/Glory.',
+      'Compare tab search now supports item shorthands, same as the main search bar — it only ever did a plain name match before.',
+      'Split Hall of Shame into two sections: Hall of Shame (Biggest Crash, Heaviest Dump, Most Overpriced, Probably Manipulated) and a new Hall of Glory (Best Gainer, Wildest Ride, Hidden Gem) — a big price swing isn\'t automatically a bad thing, so genuine spikes/gainers now get their own home instead of being lumped in as "shameful."',
+      'Fixed the News tab flagging items as mentioned in an article just because their name appeared as a substring of an unrelated word — e.g. the item "Gin" was matching inside ordinary words like "begin."',
+      'Major overhaul of the category system behind every tab that filters or groups items — several hundred items that were silently falling into a generic "Misc" bucket (armour sets, potions, clue pages, ores, farming goods, and more) now show their real category, sourced fresh from the wiki.',
+      'Startup and history refresh are substantially faster — the full price-history cache now loads on demand instead of all at once every launch.',
+    ]
+  },
+  {
     version: 'v2.3.1',
     items: [
       'Removed the Dev Mode gate from two features that were leftover from before the Almanac itself went public (v2.0.0): the "DXP" button on the item Detail Panel (opens the price chart with DXP event windows overlaid) and Portfolio\'s diversification suggestions (flags over-concentrated categories using the same Almanac trade-idea data as Recommendations).',
@@ -7335,7 +7517,7 @@ function AboutTab() {
   );
 }
 
-function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands, monsterShorthands, onSaveMonsterShorthands}) {
+function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands, monsterShorthands, onSaveMonsterShorthands, onReplayTour}) {
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
   useEffect(() => { window.genius?.getAppVersion?.().then(setAppVersion); }, []);
@@ -7453,6 +7635,11 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
           className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
           onClick:()=>window.genius?.openExternal('https://discord.gg/WFbJt9cDpP'),
         }, '💬 Discord'),
+        onReplayTour && h('button',{
+          className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
+          title:'Replay the first-run welcome tour',
+          onClick:onReplayTour,
+        }, '👋 Replay Tour'),
       ),
     ),
     h('div',{style:{maxWidth:500}},
@@ -9254,6 +9441,101 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   );
 }
 
+/* ─── First-run welcome tour ─────────────────────────────────── */
+// Content drafted in TODO.txt (2026-08-05) — deliberately short (7 steps)
+// since a tour that tries to cover everything just trains people to mash
+// "skip". Picks non-obvious AND high-value things a new user could easily
+// never stumble onto (feature-discovery problem), not things that are
+// already self-evident from clicking around (tab navigation, opening an
+// item's detail panel, etc).
+const WELCOME_TOUR_STEPS = [
+  {
+    icon: '🔍',
+    title: 'Shorthand search',
+    body: "Type a few letters or an acronym — FSOA, AGS, and 40+ others are built in — instead of a full item name. Add your own custom shorthands anytime in Settings.",
+  },
+  {
+    icon: '📊',
+    title: 'GE vs Live prices',
+    body: "Most price columns show two numbers: GE (the 15-minute snapshot) and Live (the wiki's real-time buy/sell feed) — look for the toggle wherever you see a price.",
+  },
+  {
+    icon: '🔔',
+    title: 'Watchlist & Alerts',
+    body: "Star any item to add it to your Watchlist, then set alerts on price thresholds, percent moves, or market signals — with optional Discord notifications.",
+  },
+  {
+    icon: '⚡',
+    title: 'Signal badges',
+    body: "Badges like Surge, Dump, Frenzy, and Manipulated appear automatically on items showing unusual activity. Click one to see what triggered it.",
+  },
+  {
+    icon: '🌦️',
+    title: 'The GEnius Almanac',
+    body: "Not just current prices — historical DXP-event intelligence, showing how items have actually moved across past Double XP Weekends.",
+  },
+  {
+    icon: '💰',
+    title: 'Portfolio is a real trade log',
+    body: "Log actual positions, not just a watchlist — GE tax is handled automatically, and your full closed-trade history is kept.",
+  },
+  {
+    icon: '🎯',
+    title: 'Opportunity Score',
+    body: "Not sure what to look at? Every item gets a 0–100 score from momentum, volume behavior, active signals, and alch profitability — ranked for you.",
+  },
+];
+
+function WelcomeTour({onDone}) {
+  const [step, setStep] = useState(0);
+  const total = WELCOME_TOUR_STEPS.length;
+  const s = WELCOME_TOUR_STEPS[step];
+  const isLast = step === total - 1;
+
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'Escape') onDone();
+      else if (e.key === 'ArrowRight') setStep(v => Math.min(total - 1, v + 1));
+      else if (e.key === 'ArrowLeft') setStep(v => Math.max(0, v - 1));
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [total, onDone]);
+
+  return h('div', {className:'chart-modal-overlay', onClick:onDone},
+    h('div', {className:'chart-modal', style:{width:440, padding:'22px 24px 18px'}, onClick:e=>e.stopPropagation()},
+      h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:18}},
+        h('div', {style:{fontSize:10, color:T.textDim, letterSpacing:'0.08em', textTransform:'uppercase'}},
+          `Welcome to GEnius — ${step+1} of ${total}`),
+        h('button', {className:'ge-btn', style:{padding:'2px 9px', fontSize:11}, onClick:onDone}, 'Skip')
+      ),
+      h('div', {style:{textAlign:'center', marginBottom:20}},
+        h('div', {style:{fontSize:38, marginBottom:10}}, s.icon),
+        h('div', {style:{fontSize:16, fontWeight:'bold', color:T.goldBright, marginBottom:10}}, s.title),
+        h('div', {style:{fontSize:13, color:T.text, lineHeight:1.6}}, s.body)
+      ),
+      h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center'}},
+        h('div', {style:{display:'flex', gap:5}},
+          WELCOME_TOUR_STEPS.map((_, i) => h('div', {key:i, style:{
+            width:6, height:6, borderRadius:'50%',
+            background: i===step ? T.gold : T.border,
+          }}))
+        ),
+        h('div', {style:{display:'flex', gap:8}},
+          step > 0 && h('button', {
+            className:'ge-btn', style:{padding:'5px 14px', fontSize:12},
+            onClick:()=>setStep(v=>v-1)
+          }, 'Back'),
+          h('button', {
+            className:'ge-btn gold', style:{padding:'5px 14px', fontSize:12},
+            onClick:()=> isLast ? onDone() : setStep(v=>v+1)
+          }, isLast ? 'Get Started' : 'Next')
+        )
+      )
+    )
+  );
+}
+
 /* ─── History population popup ───────────────────────────────── */
 function HistoryPopup({state, onDismiss}) {
   if (!state) return null;
@@ -10827,6 +11109,17 @@ function App() {
   const [monsterShorthands, setMonsterShorthands] = useState({});
   const [updateInfo, setUpdateInfo]         = useState(null);
   const [historyPopup, setHistoryPopup] = useState(null); // null | {done, total, complete}
+  // First-run welcome tour — shown once automatically (localStorage flag,
+  // this is purely a "have they seen it" UI toggle, no reason to involve
+  // the backend store), and replayable anytime from Settings regardless
+  // of whether the flag is set.
+  const [showTour, setShowTour] = useState(() => {
+    try { return localStorage.getItem('genius_seen_welcome_tour') !== '1'; } catch { return false; }
+  });
+  const dismissTour = useCallback(() => {
+    try { localStorage.setItem('genius_seen_welcome_tour', '1'); } catch {}
+    setShowTour(false);
+  }, []);
   const [populatedHistoryIds, setPopulatedHistoryIds] = useState(null); // null = not loaded yet | Set<number>
   const refreshPopulatedHistoryIds = useCallback(() => {
     window.genius?.getHistoryPopulatedIds?.().then(ids => setPopulatedHistoryIds(new Set(ids)));
@@ -11315,7 +11608,7 @@ function App() {
             onSaveReminder: r =>setReminders(rl=>{const i=rl.findIndex(x=>x.id===r.id);return i>=0?rl.map((x,j)=>j===i?r:x):[...rl,r];}),
             onDeleteReminder: id=>setReminders(rl=>rl.filter(r=>r.id!==id)),
           }),
-          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);}}),
+          tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);},onReplayTour:()=>setShowTour(true)}),
           tab==='about'&&h(AboutTab),
           tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})
         ),
@@ -11328,7 +11621,8 @@ function App() {
           }),
           h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect}),
         ),
-      h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)})
+      h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)}),
+      showTour && h(WelcomeTour, {onDone:dismissTour})
       )
     ),
 
