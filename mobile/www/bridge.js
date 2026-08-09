@@ -1845,11 +1845,13 @@
         ],
         "longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         shaft: [
           "ammo",
@@ -1861,43 +1863,53 @@
         ],
         "oak shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "oak longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "willow longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "willow shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "maple longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "maple shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "yew longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "yew shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "magic longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "magic shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "guam potion (unfinished)": [
           "herblore"
@@ -2409,7 +2421,8 @@
           "low_tier"
         ],
         "wizard hat": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "black wizard robe top": [
           "magic",
@@ -2543,7 +2556,8 @@
         ],
         longbow: [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         shortbow: [
           "ranged",
@@ -2555,11 +2569,13 @@
         ],
         "oak longbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "willow longbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "willow shortbow": [
           "ranged",
@@ -2567,27 +2583,33 @@
         ],
         "maple longbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "maple shortbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "yew longbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "yew shortbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "magic longbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "magic shortbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "iron knife": [
           "ranged",
@@ -2674,10 +2696,12 @@
         ],
         machete: [
           "melee",
-          "mining"
+          "mining",
+          "low_tier"
         ],
         "wizard robe skirt": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "black wizard robe skirt": [
           "magic",
@@ -2928,12 +2952,12 @@
           "low_tier"
         ],
         "bronze pickaxe": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "iron pickaxe": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "bronze sword": [
           "melee",
@@ -3000,32 +3024,32 @@
           "low_tier"
         ],
         "iron hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "bronze hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "steel hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "mithril hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "adamant hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "rune hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "black hatchet": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "iron battleaxe": [
           "melee",
@@ -3044,7 +3068,8 @@
           "low_tier"
         ],
         staff: [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "staff of air": [
           "magic",
@@ -3063,7 +3088,8 @@
           "low_tier"
         ],
         "magic staff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         battlestaff: [
           "magic",
@@ -3074,13 +3100,16 @@
           "low_tier"
         ],
         "water battlestaff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "air battlestaff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "earth battlestaff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mystic fire staff": [
           "magic",
@@ -3865,25 +3894,32 @@
           "herblore"
         ],
         "flowers (pastel)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "red flowers": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "blue flowers": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "yellow flowers": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "purple flowers": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orange flowers": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "flowers (mixed)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "white flowers": [
           "melee",
@@ -4204,7 +4240,8 @@
           "food"
         ],
         "silver sickle": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "pirate hook (left)": [
           "rares"
@@ -4291,7 +4328,8 @@
           "food"
         ],
         "lava battlestaff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mystic lava staff": [
           "magic",
@@ -4605,7 +4643,8 @@
           "low_tier"
         ],
         "dark mystic robe top": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "dark mystic robe bottom": [
           "low_tier"
@@ -4620,7 +4659,8 @@
           "low_tier"
         ],
         "light mystic robe top": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "light mystic robe bottom": [
           "low_tier"
@@ -4837,7 +4877,8 @@
           "food"
         ],
         "spiny helmet": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "black spear": [
           "melee",
@@ -4852,7 +4893,8 @@
           "low_tier"
         ],
         "willow-blackjack": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "super kebab": [
           "food"
@@ -5011,11 +5053,13 @@
         ],
         "unstrung ogre composite bow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "ogre composite bow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "fayrg bones": [
           "prayer"
@@ -5135,10 +5179,12 @@
           "food"
         ],
         "bone spear": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bone club": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bird's nest (empty)": [
           "food"
@@ -5318,60 +5364,55 @@
           "artisan"
         ],
         "air tiara": [
-          "magic",
           "artisan"
         ],
         "mind tiara": [
-          "magic",
           "artisan"
         ],
         "water tiara": [
-          "magic",
           "artisan"
         ],
         "body tiara": [
-          "magic",
           "artisan"
         ],
         "earth tiara": [
-          "magic",
           "artisan"
         ],
         "fire tiara": [
-          "materials"
+          "artisan"
         ],
         "cosmic tiara": [
-          "materials"
+          "artisan"
         ],
         "nature tiara": [
-          "materials"
+          "artisan"
         ],
         "chaos tiara": [
-          "magic",
           "artisan"
         ],
         "law tiara": [
-          "magic",
           "artisan"
         ],
         "death tiara": [
-          "materials"
+          "artisan"
         ],
         "blood tiara": [
-          "materials"
+          "artisan"
         ],
         "soul tiara": [
-          "magic",
           "artisan"
         ],
         "initiate sallet": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "initiate hauberk": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "initiate cuisse": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "asgarnian ale (m)": [
           "food"
@@ -5800,16 +5841,20 @@
           "food"
         ],
         "rock-shell helm": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "rock-shell plate": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "rock-shell legs": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "spined helm": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "spined body": [
           "ranged",
@@ -5823,30 +5868,36 @@
           "low_tier"
         ],
         "skeletal top": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "skeletal bottoms": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spined boots": [
           "ranged",
           "low_tier"
         ],
         "rock-shell boots": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "skeletal boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spined gloves": [
           "ranged",
           "low_tier"
         ],
         "rock-shell gloves": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "skeletal gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "dagannoth hide": [
           "artisan"
@@ -5867,22 +5918,28 @@
           "mining"
         ],
         "broodoo shield (10) (green)": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "broodoo shield (green)": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "broodoo shield (10) (orange)": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "broodoo shield (orange)": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "broodoo shield (10) (blue)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "broodoo shield (blue)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "snake hide": [
           "artisan"
@@ -5907,15 +5964,18 @@
         ],
         "opal machete": [
           "melee",
-          "mining"
+          "mining",
+          "low_tier"
         ],
         "jade machete": [
           "melee",
-          "mining"
+          "mining",
+          "low_tier"
         ],
         "red topaz machete": [
           "melee",
-          "mining"
+          "mining",
+          "low_tier"
         ],
         "snakeskin body": [
           "ranged",
@@ -5944,37 +6004,48 @@
           "mining"
         ],
         "villager armband (brown)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "villager armband (blue)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "villager armband (yellow)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "villager armband (pink)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "oak blackjack (o)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "oak blackjack (d)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "willow blackjack (o)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "willow blackjack (d)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "maple blackjack": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "maple blackjack (o)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "maple blackjack (d)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "compost potion (4)": [
           "herblore"
@@ -5989,28 +6060,36 @@
           "herblore"
         ],
         "toktz-xil-ul": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "toktz-xil-ak": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "toktz-ket-xil": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "toktz-xil-ek": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "toktz-mej-tal": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "tzhaar-ket-em": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "tzhaar-ket-om": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "mud battlestaff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mystic mud staff": [
           "magic",
@@ -6169,20 +6248,23 @@
         ],
         "berserker ring": [
           "boss",
-          "melee"
+          "hybrid"
         ],
         "dragon hatchet": [
+          "low_tier",
+          "mining"
+        ],
+        "guthix mjolnir": [
           "melee",
           "low_tier"
         ],
-        "guthix mjolnir": [
-          "melee"
-        ],
         "saradomin mjolnir": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "zamorak mjolnir": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "choc ice": [
           "food"
@@ -6198,7 +6280,8 @@
           "low_tier"
         ],
         "beginner wand": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "apprentice wand": [
           "low_tier"
@@ -6321,7 +6404,8 @@
         ],
         "mud pie": [
           "ranged",
-          "food"
+          "food",
+          "low_tier"
         ],
         "raw garden pie": [
           "food"
@@ -6528,13 +6612,16 @@
           "treasure_trails"
         ],
         "wooden spoon": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "egg whisk": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         spork: [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         spatula: [
           "materials"
@@ -6549,13 +6636,15 @@
           "materials"
         ],
         "kitchen knife": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "meat tenderiser": [
           "materials"
         ],
         cleaver: [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "cooked crab meat": [
           "food"
@@ -6609,7 +6698,8 @@
           "food"
         ],
         "bone dagger": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "dorgeshuun crossbow": [
           "ranged",
@@ -6625,10 +6715,12 @@
           "low_tier"
         ],
         "pharaoh's sceptre (3)": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "pharaoh's sceptre": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "locust meat": [
           "food"
@@ -6914,28 +7006,35 @@
           "food"
         ],
         "tyras helm": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "proselyte sallet": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "proselyte hauberk": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "proselyte cuisse": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "proselyte tasset": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "elemental helmet": [
           "materials"
         ],
         "mind shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mind helmet": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "combat potion (4)": [
           "herblore"
@@ -6986,27 +7085,33 @@
           "herblore"
         ],
         "butterfly net": [
-          "magic"
+          "mining"
         ],
         chinchompa: [
           "ranged",
-          "ammo"
+          "ammo",
+          "low_tier"
         ],
         "red chinchompa": [
           "ranged",
-          "ammo"
+          "ammo",
+          "low_tier"
         ],
         "spiky vambraces": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "green spiky vambraces": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "blue spiky vambraces": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "red spiky vambraces": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "black spiky vambraces": [
           "ranged",
@@ -7054,20 +7159,23 @@
           "ammo"
         ],
         "orange salamander": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "red salamander": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "black salamander": [
           "ranged",
           "low_tier"
         ],
         "green salamander": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "noose wand": [
-          "gathering"
+          "mining"
         ],
         "hunters' crossbow": [
           "ranged",
@@ -7182,13 +7290,16 @@
           "treasure_trails"
         ],
         "third age platelegs": [
-          "treasure_trails"
+          "treasure_trails",
+          "low_tier"
         ],
         "third age platebody": [
-          "treasure_trails"
+          "treasure_trails",
+          "low_tier"
         ],
         "third age full helmet": [
-          "treasure_trails"
+          "treasure_trails",
+          "low_tier"
         ],
         "third age kiteshield": [
           "treasure_trails"
@@ -7396,16 +7507,19 @@
           "mining"
         ],
         "yak-hide armour (top)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "yak-hide armour (legs)": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "fremennik round shield": [
           "low_tier"
         ],
         "helm of neitiznot": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "mixture - step 1 (4)": [
           "herblore"
@@ -7444,23 +7558,26 @@
           "herblore"
         ],
         "frog-leather body": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "frog-leather chaps": [
           "ranged",
           "low_tier"
         ],
         "frog-leather boots": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "swamp weed": [
           "food"
         ],
         "brine sabre": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "ancient mace": [
-          "melee"
+          "low_tier"
         ],
         "gold bracelet": [
           "artisan"
@@ -7523,7 +7640,8 @@
           "artisan"
         ],
         "dwarven helmet": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "dragon arrow": [
           "ammo",
@@ -7786,7 +7904,8 @@
           "low_tier"
         ],
         "steam battlestaff": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mystic steam staff": [
           "magic",
@@ -8166,7 +8285,8 @@
           "food"
         ],
         "ogre club": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         lavender: [
           "food"
@@ -8322,7 +8442,8 @@
           "summoning"
         ],
         "battle hood 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "battle robe top 0": [
           "magic",
@@ -8333,13 +8454,16 @@
           "low_tier"
         ],
         "druidic mage hood 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "druidic mage top 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "druidic mage bottom 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "adamant spikeshield 0": [
           "melee",
@@ -8374,13 +8498,16 @@
           "low_tier"
         ],
         "combat hood 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "combat robe top 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "combat robe bottom 0": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "black gauntlets": [
           "melee",
@@ -8440,7 +8567,8 @@
           "artisan"
         ],
         "leaf-bladed sword": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "crayfish cage": [
           "mining"
@@ -8455,7 +8583,8 @@
           "food"
         ],
         "spirit shield": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "blessed spirit shield": [
           "boss"
@@ -8624,13 +8753,13 @@
           "low_tier"
         ],
         "ruined dragon armour lump": [
-          "melee"
+          "artisan"
         ],
         "ruined dragon armour slice": [
-          "melee"
+          "artisan"
         ],
         "ruined dragon armour shard": [
-          "melee"
+          "artisan"
         ],
         "dragon platebody": [
           "low_tier"
@@ -8640,22 +8769,28 @@
           "low_tier"
         ],
         "elite black platelegs": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "elite black platebody": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "elite black full helm": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "dagon'hai robe top": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "dagon'hai hat": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "dagon'hai robe bottom": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "phoenix scroll (rise from the ashes)": [
           "summoning"
@@ -8721,7 +8856,7 @@
           "ammo"
         ],
         "dragon pickaxe": [
-          "gathering"
+          "mining"
         ],
         "living minerals": [
           "food",
@@ -8827,25 +8962,31 @@
           "magic"
         ],
         hexcrest: [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "focus sight": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "royal sceptre": [
-          "melee"
+          "mining"
         ],
         "body shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "body helmet": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "body body": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mind body": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "elemental body": [
           "materials"
@@ -9124,10 +9265,12 @@
           "treasure_trails"
         ],
         "bandos mitre": [
-          "treasure_trails"
+          "treasure_trails",
+          "low_tier"
         ],
         "ancient mitre": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "armadyl robe top": [
           "treasure_trails"
@@ -9136,13 +9279,15 @@
           "treasure_trails"
         ],
         "bandos robe top": [
-          "treasure_trails"
+          "treasure_trails",
+          "low_tier"
         ],
         "armadyl robe legs": [
           "treasure_trails"
         ],
         "bandos robe legs": [
-          "treasure_trails"
+          "treasure_trails",
+          "low_tier"
         ],
         "ancient robe legs": [
           "treasure_trails"
@@ -9300,7 +9445,8 @@
           "treasure_trails"
         ],
         chargebow: [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "red blossom seed": [
           "farming"
@@ -9499,58 +9645,75 @@
           "prayer"
         ],
         "cosmic shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "chaos shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "cosmic helmet": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "chaos helmet": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "cosmic body": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "chaos body": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "elemental boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mind boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "body boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "cosmic boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "chaos boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "elemental gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mind gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "body gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "cosmic gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "chaos gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "ring of wealth (4)": [
           "artisan"
         ],
         "brackish blade": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         sagaie: [
           "ranged",
@@ -9649,25 +9812,32 @@
           "magic"
         ],
         "mycelium visor web": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mycelium leggings web": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mycelium poncho web": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "fungal visor": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "fungal leggings": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "fungal poncho": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "grifolic visor": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "grifolic leggings": [
           "low_tier"
@@ -9688,16 +9858,20 @@
           "low_tier"
         ],
         "polypore stick": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "bladestorm drape": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "arrowstorm drape": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "spellstorm drape": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "raw wolf meat": [
           "food"
@@ -9712,7 +9886,8 @@
           "food"
         ],
         "initiate tasset": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "juju mining flask (6)": [
           "herblore"
@@ -9860,16 +10035,20 @@
           "mining"
         ],
         "royal dragonhide vambraces": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "royal dragonhide chaps": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "royal dragonhide body": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "royal dragonhide coif": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "hood of subjugation": [
           "magic"
@@ -9958,7 +10137,8 @@
         ],
         "magic stock": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "weapon poison (4)": [
           "herblore"
@@ -10063,7 +10243,8 @@
           "artisan"
         ],
         "royal spiky vambraces": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand dragon claw": [
           "melee",
@@ -10076,31 +10257,36 @@
           "ranged"
         ],
         "off-hand leaf-bladed sword": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "grifolic wand": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "splitbark wand": [
           "magic",
           "low_tier"
         ],
         "imp horn wand": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mystic wand": [
           "magic",
           "low_tier"
         ],
         "wizard wand": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "batwing wand": [
           "magic",
           "low_tier"
         ],
         "spider wand": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "ahrim's wand": [
           "magic",
@@ -10110,23 +10296,27 @@
           "magic"
         ],
         "wizard book": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spider orb": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "batwing book": [
           "magic",
           "low_tier"
         ],
         "imphide book": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "virtus book": [
           "magic"
         ],
         "grifolic orb": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "mystic orb": [
           "magic",
@@ -10149,10 +10339,12 @@
           "low_tier"
         ],
         "off-hand black mace": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand dragon mace": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bronze off hand dagger": [
           "melee",
@@ -10163,10 +10355,12 @@
           "low_tier"
         ],
         "off-hand black dagger": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand dragon dagger": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bronze off hand sword": [
           "melee",
@@ -10177,7 +10371,8 @@
           "low_tier"
         ],
         "off-hand black sword": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bronze off hand longsword": [
           "melee",
@@ -10188,10 +10383,12 @@
           "low_tier"
         ],
         "off-hand black longsword": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand dragon longsword": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bronze off hand scimitar": [
           "melee",
@@ -10202,10 +10399,12 @@
           "low_tier"
         ],
         "off-hand black scimitar": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand dragon scimitar": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bronze off hand battleaxe": [
           "melee",
@@ -10216,10 +10415,12 @@
           "low_tier"
         ],
         "off-hand black battleaxe": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand dragon battleaxe": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "bronze off hand warhammer": [
           "melee",
@@ -10230,7 +10431,8 @@
           "low_tier"
         ],
         "off-hand black warhammer": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "green dragonhide shield": [
           "ranged",
@@ -10261,7 +10463,8 @@
           "low_tier"
         ],
         "hard leather shield": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "studded leather shield": [
           "ranged",
@@ -10272,10 +10475,12 @@
           "low_tier"
         ],
         "grifolic shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "hard leather boots": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "studded leather boots": [
           "ranged",
@@ -10302,37 +10507,48 @@
           "low_tier"
         ],
         "spider silk hood": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spider silk robe top": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spider silk robe bottom": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spider silk boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "spider silk gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "imphide hood": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "imphide robe top": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "imphide robe bottom": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "imphide gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "imphide boots": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "imphide shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "carapace helm": [
           "ranged",
@@ -10355,7 +10571,8 @@
           "low_tier"
         ],
         "wizard gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "hard leather gloves": [
           "ranged",
@@ -10366,7 +10583,8 @@
           "low_tier"
         ],
         "grifolic gloves": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "off-hand bronze crossbow": [
           "ranged",
@@ -10401,82 +10619,103 @@
           "ammo"
         ],
         "off-hand iron knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand bronze knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand steel knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand mithril knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand adamant knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand rune knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand black knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand bronze throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand iron throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand steel throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand mithril throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand adamant throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand rune throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand bronze dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "off-hand iron dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "off-hand steel dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "off-hand black dart": [
           "ranged",
-          "ammo"
+          "ammo",
+          "low_tier"
         ],
         "off-hand mithril dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "off-hand adamant dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "off-hand rune dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "off-hand dragon dart": [
           "ranged",
           "ammo",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "dragon crossbow": [
           "ranged",
@@ -10531,10 +10770,12 @@
           "low_tier"
         ],
         "off-hand black claw": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand white claw": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "ganodermic gloves": [
           "magic"
@@ -10627,25 +10868,32 @@
           "melee"
         ],
         "demon slayer circlet": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "demon slayer skirt": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "demon slayer torso": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "demon slayer boots": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "demon slayer gloves": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "demon slayer crossbow": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "off-hand demon slayer crossbow": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "static gloves": [
           "magic"
@@ -10865,34 +11113,34 @@
           "food"
         ],
         "portent of restoration i": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration ii": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration iii": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration iv": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration v": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration vi": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration vii": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration viii": [
-          "archaeology"
+          "low_tier"
         ],
         "portent of restoration ix": [
-          "archaeology"
+          "supplies"
         ],
         "portent of restoration x": [
-          "archaeology"
+          "supplies"
         ],
         "sign of respite i": [
           "pocket"
@@ -10932,7 +11180,8 @@
           "low_tier"
         ],
         "off-hand dragon warhammer": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "dragon battlestaff": [
           "magic",
@@ -10943,7 +11192,8 @@
           "low_tier"
         ],
         "off-hand dragon throwing axe": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "elder logs": [
           "mining"
@@ -10974,11 +11224,13 @@
         ],
         "elder longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "elder shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "sirenic mask": [
           "ranged"
@@ -11098,7 +11350,8 @@
           "low_tier"
         ],
         "off-hand dragon knife": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "dragon hasta": [
           "melee",
@@ -11123,20 +11376,16 @@
           "farming"
         ],
         "cobalt skillchompa": [
-          "melee",
-          "ammo"
+          "mining"
         ],
         "viridian skillchompa": [
-          "melee",
-          "ammo"
+          "mining"
         ],
         "azure skillchompa": [
-          "melee",
-          "ammo"
+          "mining"
         ],
         "crimson skillchompa": [
-          "melee",
-          "ammo"
+          "mining"
         ],
         "noxious scythe": [
           "melee"
@@ -11239,10 +11488,12 @@
           "rares"
         ],
         "basilisk boots": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "turoth boots": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "kurask boots": [
           "ranged"
@@ -11459,10 +11710,12 @@
           "treasure_trails"
         ],
         "rubber turkey": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "off-hand rubber turkey": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "christmas scythe": [
           "rares"
@@ -11544,7 +11797,8 @@
         ],
         "off-hand dragon javelin": [
           "ranged",
-          "ammo"
+          "ammo",
+          "low_tier"
         ],
         "abomination cape": [
           "boss",
@@ -11554,7 +11808,7 @@
           "food"
         ],
         "meditation rest animation token": [
-          "ranged"
+          "cosmetics"
         ],
         "crystal helm": [
           "hybrid"
@@ -11677,16 +11931,16 @@
           "boss"
         ],
         "zarosian essence": [
-          "melee"
+          "boss"
         ],
         "sliskean essence": [
-          "hybrid"
+          "boss"
         ],
         "zamorakian essence": [
           "boss"
         ],
         "serenic essence": [
-          "magic"
+          "boss"
         ],
         "anima core helm of zaros": [
           "boss",
@@ -12047,38 +12301,42 @@
           "boss"
         ],
         "crystal skillchompa": [
-          "melee",
-          "ammo"
+          "mining"
         ],
         "cinderbane gloves": [
           "hybrid"
         ],
         "royal dragonhide boots": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "carapace shield": [
           "ranged",
           "low_tier"
         ],
         "wizard shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "black wizard shield": [
           "magic",
           "low_tier"
         ],
         "spider silk shield": [
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "black wizard gloves": [
           "magic",
           "low_tier"
         ],
         "hard leather cowl": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "hard leather chaps": [
-          "ranged"
+          "ranged",
+          "low_tier"
         ],
         "green dragonhide boots": [
           "ranged",
@@ -12110,7 +12368,7 @@
           "artisan"
         ],
         "hexhunter bow": [
-          "boss"
+          "ranged"
         ],
         "stalker essence": [
           "ammo"
@@ -12455,7 +12713,7 @@
           "rares"
         ],
         "pirate hook (right)": [
-          "melee"
+          "cosmetics"
         ],
         "double pirate hooks": [
           "rares"
@@ -12637,7 +12895,7 @@
           "artisan"
         ],
         "grace of the elves": [
-          "gathering"
+          "mining"
         ],
         luminite: [
           "artisan",
@@ -12898,12 +13156,12 @@
           "low_tier"
         ],
         "adamant pickaxe + 1": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "adamant pickaxe + 2": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "bane longsword": [
           "melee"
@@ -12954,13 +13212,13 @@
           "mining"
         ],
         "bane pickaxe + 1": [
-          "melee"
+          "mining"
         ],
         "bane pickaxe + 2": [
-          "melee"
+          "mining"
         ],
         "bane pickaxe + 3": [
-          "melee"
+          "mining"
         ],
         "bane pickaxe + 4": [
           "mining"
@@ -13236,8 +13494,8 @@
           "low_tier"
         ],
         "steel pickaxe": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "mithril dagger": [
           "melee",
@@ -13344,8 +13602,8 @@
           "low_tier"
         ],
         "mithril pickaxe": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "adamant dagger": [
           "melee",
@@ -13444,8 +13702,8 @@
           "low_tier"
         ],
         "adamant pickaxe": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "rune dagger": [
           "melee",
@@ -13552,8 +13810,8 @@
           "low_tier"
         ],
         "rune pickaxe": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "elder rune longsword": [
           "low_tier"
@@ -13610,22 +13868,22 @@
           "melee"
         ],
         "elder rune pickaxe": [
-          "gathering"
+          "mining"
         ],
         "elder rune pickaxe + 1": [
-          "gathering"
+          "mining"
         ],
         "elder rune pickaxe + 2": [
-          "gathering"
+          "mining"
         ],
         "elder rune pickaxe + 3": [
-          "gathering"
+          "mining"
         ],
         "elder rune pickaxe + 4": [
-          "gathering"
+          "mining"
         ],
         "elder rune pickaxe + 5": [
-          "gathering"
+          "mining"
         ],
         "elder rune full helm": [
           "melee"
@@ -13848,8 +14106,8 @@
           "low_tier"
         ],
         "iron pickaxe + 1": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "masterwork melee helm": [
           "melee"
@@ -14132,12 +14390,12 @@
           "low_tier"
         ],
         "mithril pickaxe + 1": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "mithril pickaxe + 2": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "necronium battleaxe": [
           "melee"
@@ -14185,19 +14443,19 @@
           "melee"
         ],
         "necronium pickaxe": [
-          "melee"
+          "mining"
         ],
         "necronium pickaxe + 1": [
-          "melee"
+          "mining"
         ],
         "necronium pickaxe + 2": [
-          "melee"
+          "mining"
         ],
         "necronium pickaxe + 3": [
-          "melee"
+          "mining"
         ],
         "necronium pickaxe + 4": [
-          "melee"
+          "mining"
         ],
         "necronium full helm": [
           "melee"
@@ -14290,7 +14548,8 @@
           "melee"
         ],
         "orikalkum warhammer": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum warhammer + 1": [
           "melee"
@@ -14302,7 +14561,8 @@
           "melee"
         ],
         "orikalkum off hand warhammer": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum off hand warhammer + 1": [
           "melee"
@@ -14314,7 +14574,8 @@
           "melee"
         ],
         "orikalkum 2h warhammer": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum 2h warhammer + 1": [
           "melee"
@@ -14326,52 +14587,65 @@
           "melee"
         ],
         "orikalkum pickaxe": [
-          "melee"
+          "low_tier",
+          "mining"
         ],
         "orikalkum pickaxe + 1": [
-          "melee"
+          "mining"
         ],
         "orikalkum pickaxe + 2": [
-          "melee"
+          "mining"
         ],
         "orikalkum pickaxe + 3": [
-          "melee"
+          "mining"
         ],
         "orikalkum full helm": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum full helm + 1": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum full helm + 2": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum full helm + 3": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platelegs": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platelegs + 1": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platelegs + 2": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platelegs + 3": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platebody": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platebody + 1": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platebody + 2": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum platebody + 3": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum kiteshield": [
           "melee"
@@ -14386,28 +14660,36 @@
           "melee"
         ],
         "orikalkum armoured boots": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum armoured boots + 1": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum armoured boots + 2": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum armoured boots + 3": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum gauntlets": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum gauntlets + 1": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum gauntlets + 2": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "orikalkum gauntlets + 3": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "rune dagger + 1": [
           "melee",
@@ -14738,16 +15020,16 @@
           "low_tier"
         ],
         "rune pickaxe + 1": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "rune pickaxe + 2": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "rune pickaxe + 3": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "steel dagger + 1": [
           "melee",
@@ -14862,8 +15144,8 @@
           "low_tier"
         ],
         "steel pickaxe + 1": [
-          "melee",
-          "low_tier"
+          "low_tier",
+          "mining"
         ],
         "armour spikes": [
           "ammo"
@@ -15042,7 +15324,6 @@
           "food"
         ],
         "terrasaur maul": [
-          "boss",
           "melee"
         ],
         "dinosaur hide": [
@@ -15288,16 +15569,16 @@
           "herblore"
         ],
         "powerburst of acceleration (4)": [
-          "archaeology"
+          "herblore"
         ],
         "powerburst of acceleration (3)": [
-          "archaeology"
+          "herblore"
         ],
         "powerburst of acceleration (2)": [
-          "archaeology"
+          "herblore"
         ],
         "powerburst of acceleration (1)": [
-          "archaeology"
+          "herblore"
         ],
         "powerburst of sorcery (4)": [
           "herblore"
@@ -15522,40 +15803,44 @@
           "archaeology"
         ],
         "bronze mattock": [
-          "melee",
+          "archaeology",
           "low_tier"
         ],
         "iron mattock": [
-          "melee",
+          "archaeology",
           "low_tier"
         ],
         "steel mattock": [
-          "melee",
+          "archaeology",
           "low_tier"
         ],
         "mithril mattock": [
-          "melee",
+          "archaeology",
           "low_tier"
         ],
         "adamant mattock": [
-          "melee",
+          "archaeology",
           "low_tier"
         ],
         "rune mattock": [
-          "melee",
+          "archaeology",
           "low_tier"
         ],
         "orikalkum mattock": [
-          "melee"
+          "archaeology",
+          "low_tier"
         ],
         "necronium mattock": [
-          "melee"
+          "archaeology",
+          "low_tier"
         ],
         "bane mattock": [
-          "melee"
+          "archaeology",
+          "low_tier"
         ],
         "elder rune mattock": [
-          "melee"
+          "archaeology",
+          "low_tier"
         ],
         "dragon mattock": [
           "archaeology",
@@ -15899,7 +16184,6 @@
           "melee"
         ],
         "abyssal scourge": [
-          "boss",
           "melee"
         ],
         "abyssal armour spikes": [
@@ -15909,13 +16193,13 @@
           "ammo"
         ],
         "emerald cane": [
-          "melee"
+          "cosmetics"
         ],
         "ruby cane": [
-          "melee"
+          "cosmetics"
         ],
         "diamond cane": [
-          "melee"
+          "treasure_trails"
         ],
         "headless dinarrow": [
           "ammo",
@@ -16023,7 +16307,8 @@
           "rares"
         ],
         "deathstorm drape": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "dragonfire shroud": [
           "necromancy"
@@ -16089,79 +16374,104 @@
           "runes"
         ],
         "deathwarden hood (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe top (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe bottom (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden gloves (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden boots (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden hood (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe top (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe bottom (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden gloves (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden boots (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden hood (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe top (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe bottom (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden gloves (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden boots (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden hood (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe top (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe bottom (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden gloves (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden boots (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden hood (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe top (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden robe bottom (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden gloves (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden boots (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "deathwarden hood (tier 70)": [
           "necromancy"
@@ -16280,34 +16590,44 @@
           "necromancy"
         ],
         "death guard (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "skull lantern (tier 20)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "death guard (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "skull lantern (tier 30)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "death guard (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "skull lantern (tier 40)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "death guard (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "skull lantern (tier 50)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "death guard (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "skull lantern (tier 60)": [
-          "necromancy"
+          "necromancy",
+          "low_tier"
         ],
         "death guard (tier 70)": [
           "necromancy"
@@ -16604,22 +16924,22 @@
           "melee"
         ],
         "primal pickaxe": [
-          "gathering"
+          "mining"
         ],
         "primal pickaxe + 1": [
-          "gathering"
+          "mining"
         ],
         "primal pickaxe + 2": [
-          "gathering"
+          "mining"
         ],
         "primal pickaxe + 3": [
-          "gathering"
+          "mining"
         ],
         "primal pickaxe + 4": [
-          "gathering"
+          "mining"
         ],
         "primal pickaxe + 5": [
-          "gathering"
+          "mining"
         ],
         "primal 2h sword": [
           "artisan"
@@ -16697,19 +17017,19 @@
           "artisan"
         ],
         "orikalkum hatchet": [
-          "melee"
+          "mining"
         ],
         "necronium hatchet": [
-          "melee"
+          "mining"
         ],
         "bane hatchet": [
-          "melee"
+          "mining"
         ],
         "elder rune hatchet": [
-          "gathering"
+          "mining"
         ],
         "primal hatchet": [
-          "gathering"
+          "mining"
         ],
         "primal bolts (unf)": [
           "ammo"
@@ -16719,7 +17039,8 @@
         ],
         "eternal magic stock": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "primal crossbow (unstrung)": [
           "artisan"
@@ -16729,7 +17050,8 @@
         ],
         "eternal magic shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "eternal magic shaft": [
           "ammo",
@@ -17106,11 +17428,13 @@
         ],
         "bonecrusher maul": [
           "prayer",
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "magic skull mask": [
           "prayer",
-          "magic"
+          "magic",
+          "low_tier"
         ],
         "cream tea": [
           "food"
@@ -17412,7 +17736,8 @@
         ],
         "acadia longbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "eternal magic longbow": [
           "ranged",
@@ -17436,7 +17761,8 @@
         ],
         "acadia shortbow": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "elder rune bolts (unf)": [
           "ammo"
@@ -17446,11 +17772,13 @@
         ],
         "acadia stock": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "elder stock": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "orikalkum crossbow (unstrung)": [
           "artisan"
@@ -17463,7 +17791,8 @@
         ],
         "elder crossbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "orikalkum arrowheads": [
           "ammo"
@@ -17479,15 +17808,18 @@
         ],
         "acadia longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "eternal magic longbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "acadia shortbow (unstrung)": [
           "ranged",
-          "artisan"
+          "artisan",
+          "low_tier"
         ],
         "super prayer renewal potion": [
           "herblore"
@@ -17704,19 +18036,19 @@
         ],
         "waterfiend binding": [
           "summoning",
-          "gathering"
+          "mining"
         ],
         "waterfiend scroll": [
           "summoning",
-          "gathering"
+          "mining"
         ],
         "gargoyle binding": [
           "summoning",
-          "gathering"
+          "mining"
         ],
         "gargoyle scroll": [
           "summoning",
-          "gathering"
+          "mining"
         ],
         "binding contract": [
           "summoning"
@@ -17725,20 +18057,16 @@
           "boss"
         ],
         "heart of the berserker": [
-          "boss",
-          "melee"
+          "boss"
         ],
         "heart of the archer": [
-          "boss",
-          "ranged"
+          "boss"
         ],
         "heart of the seer": [
-          "boss",
-          "magic"
+          "boss"
         ],
         "heart of the warrior": [
-          "boss",
-          "melee"
+          "boss"
         ],
         "tumeken's resplendence": [
           "magic"
@@ -18022,13 +18350,16 @@
           "boss"
         ],
         "godsword shard 1": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "godsword shard 2": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "godsword shard 3": [
-          "melee"
+          "melee",
+          "low_tier"
         ],
         "fragment of pernix's quiver": [
           "ranged"
@@ -18180,7 +18511,7 @@
           "artisan"
         ],
         "fragments of pernix's quiver": [
-          "boss"
+          "artisan"
         ],
         "bloated leech": [
           "summoning"
@@ -18231,22 +18562,22 @@
           "supplies"
         ],
         "guam incense sticks": [
-          "gathering"
+          "mining"
         ],
         "bloodweed incense sticks": [
-          "gathering"
+          "mining"
         ],
         "cadantine incense sticks": [
-          "gathering"
+          "mining"
         ],
         "dwarf weed incense sticks": [
-          "gathering"
+          "mining"
         ],
         "avantoe incense sticks": [
-          "gathering"
+          "mining"
         ],
         "tarromin incense sticks": [
-          "gathering"
+          "mining"
         ],
         "wergali incense sticks": [
           "artisan"
@@ -18285,7 +18616,8 @@
           "boss"
         ],
         "memory dowser": [
-          "boss"
+          "boss",
+          "mining"
         ],
         "fractured stabilisation gem": [
           "boss"
@@ -18345,13 +18677,13 @@
           "boss"
         ],
         "volcanic fragments": [
-          "boss"
+          "mining"
         ],
         "tribal fin": [
-          "boss"
+          "mining"
         ],
         "superior long bone": [
-          "boss"
+          "mining"
         ],
         "vorkath's scale": [
           "boss"
@@ -18372,7 +18704,7 @@
           "boss"
         ],
         "masterwork melee armour trim": [
-          "melee"
+          "artisan"
         ],
         "trimmed masterwork melee": [
           "melee"
@@ -18384,7 +18716,7 @@
           "artisan"
         ],
         "skeka's hypnowand": [
-          "gathering"
+          "mining"
         ],
         "balarak's sash brush": [
           "archaeology"
@@ -18432,7 +18764,8 @@
           "boss"
         ],
         "runic attuner": [
-          "boss"
+          "boss",
+          "artisan"
         ],
         "warped stone": [
           "boss"
@@ -19534,6 +19867,40 @@
         ],
         "furniture plans: beehive": [
           "artisan"
+        ],
+        "berserker ring shard": [
+          "hybrid"
+        ],
+        "dragon hatchet shard": [
+          "mining"
+        ],
+        "heart of the archer shard": [
+          "boss"
+        ],
+        "heart of the seer shard": [
+          "boss"
+        ],
+        "heart of the warrior shard": [
+          "boss"
+        ],
+        "heart of the berserker shard": [
+          "boss"
+        ],
+        "part mud pie (water)": [
+          "food",
+          "artisan"
+        ],
+        "death lotus extract": [
+          "artisan"
+        ],
+        "dark facet of grace": [
+          "artisan"
+        ],
+        "dark facet of luck": [
+          "artisan"
+        ],
+        "dark facet of passage": [
+          "artisan"
         ]
       };
     }
@@ -20467,6 +20834,7 @@
         "steel ",
         "black ",
         "white ",
+        "bone ",
         "leather ",
         "hardleather",
         "hard leather",
@@ -20521,8 +20889,7 @@
         }
         const hasLowTier = catsSet.has("low_tier") || !skipLowTierHeuristic && cats.some((c) => _LOW_TIER_STRIP.has(c)) && (checkName && _LOW_TIER_PREFIXES.some((p) => checkName.startsWith(p)) || tierIsLow);
         if (hasLowTier) {
-          const strip = catsSet.has("treasure_trails") ? /* @__PURE__ */ new Set() : _LOW_TIER_STRIP;
-          const result = cats.filter((c) => !strip.has(c));
+          const result = cats.filter((c) => !_LOW_TIER_STRIP.has(c));
           if (!result.includes("low_tier")) result.push("low_tier");
           return result;
         }
@@ -20553,6 +20920,7 @@
         const assigned = [];
         for (const category of CATEGORY_PRIORITY) {
           if (category === "artisan" && assigned.includes("treasure_trails")) continue;
+          if (category === "archaeology" && nameLower.includes("title scroll")) continue;
           if (category === "cosmetics" && assigned.includes("treasure_trails")) continue;
           const keywords = CATEGORY_RULES[category] || [];
           let matchedThisCategory = false;
@@ -23799,6 +24167,24 @@ ${data.length} indexes:
               lowTime: v.lowTime ? v.lowTime * 1e3 : null
             };
           }
+          try {
+            const res24h = await fetch("https://prices.runescape.wiki/api/v2/rs/24h", {
+              headers: { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" },
+              signal: AbortSignal.timeout(15e3)
+            });
+            if (res24h.ok) {
+              const json24h = await res24h.json();
+              for (const [id, v] of Object.entries(json24h.data || {})) {
+                if (!out[id]) continue;
+                const hv = v.highPriceVolume || 0, lv = v.lowPriceVolume || 0;
+                const hp = v.avgHighPrice || 0, lp = v.avgLowPrice || 0;
+                out[id].units = hv + lv;
+                out[id].turnover = hv * hp + lv * lp;
+              }
+            }
+          } catch (e) {
+            console.log(`[prices] 24h volume fetch failed (non-fatal): ${e.message}`);
+          }
           console.log(`[prices] Got live buy/sell for ${Object.keys(out).length} items`);
           return out;
         } catch (e) {
@@ -23970,7 +24356,9 @@ ${data.length} indexes:
             liveBuy: live?.high ?? null,
             liveBuyTime: live?.highTime ?? null,
             liveSell: live?.low ?? null,
-            liveSellTime: live?.lowTime ?? null
+            liveSellTime: live?.lowTime ?? null,
+            liveUnits: live?.units ?? 0,
+            liveTurnover: live?.turnover ?? 0
           });
         }
         console.log(`[prices] Processed ${itemsOut.length} tradeable items`);
@@ -24044,6 +24432,18 @@ ${data.length} indexes:
       var MANIPULATED_MIN_AVG_VOL = 20;
       var DISCREPANCY_PCT_MIN = 20;
       var DISCREPANCY_MIN_GP = 1e3;
+      var LIVE_LIQUID_MIN_UNITS = 3;
+      var LIVE_LIQUID_MIN_TURNOVER_GP = 25e3;
+      var LIVE_SANITY_BAND = 5;
+      var LIVE_PRICE_EXEMPT_GP = 1e6;
+      function isLiveTrusted(item, gePrice0) {
+        if (gePrice0 >= LIVE_PRICE_EXEMPT_GP) return true;
+        const liveRef = item.liveBuy != null && item.liveSell != null ? (item.liveBuy + item.liveSell) / 2 : item.liveBuy ?? item.liveSell;
+        if (!liveRef || liveRef <= 0) return false;
+        if ((item.liveUnits || 0) >= LIVE_LIQUID_MIN_UNITS && (item.liveTurnover || 0) >= LIVE_LIQUID_MIN_TURNOVER_GP) return true;
+        const ratio = Math.max(gePrice0, liveRef) / Math.min(gePrice0, liveRef);
+        return ratio <= LIVE_SANITY_BAND;
+      }
       function runSignals(items) {
         let natureRunePrice = 0;
         for (const item of items) {
@@ -24078,9 +24478,9 @@ ${data.length} indexes:
           if (hasAvg && avgVol >= MANIPULATED_MIN_AVG_VOL && volRatio >= 2.5 && Math.abs(chg) >= 8 && limit > 0 && limit <= 100) {
             signals.push("MANIPULATED");
           }
-          if (item.liveBuy != null || item.liveSell != null) {
+          if ((item.liveBuy != null || item.liveSell != null) && gePrice0 > 0 && isLiveTrusted(item, gePrice0)) {
             const liveRef = item.liveBuy != null && item.liveSell != null ? (item.liveBuy + item.liveSell) / 2 : item.liveBuy ?? item.liveSell;
-            if (liveRef > 0 && gePrice0 > 0) {
+            if (liveRef > 0) {
               const gapGp = Math.abs(gePrice0 - liveRef);
               const gapPct = (gePrice0 - liveRef) / liveRef * 100;
               if (gapGp >= DISCREPANCY_MIN_GP) {

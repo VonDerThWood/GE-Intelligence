@@ -2348,7 +2348,91 @@ function ScoreInfoPopup({item, onClose, pos}) {
   );
 }
 
-function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem}) {
+// One button in the item panel instead of separate Alert/Remind buttons —
+// Ben: the two-button header row was overflowing/getting cut off on
+// narrower panel widths. A single button opening a pill-tab popup (default
+// Alert, switch to Reminder) fits the same functionality into far less
+// header-row space.
+function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast}) {
+  const [mode, setMode] = useState('alert');
+  const [condition, setCondition] = useState('above');
+  const [price, setPrice] = useState('');
+  const [pct, setPct] = useState('');
+  const [signalType, setSignalType] = useState('SURGE');
+  const [dueDate, setDueDate] = useState('');
+  const [message, setMessage] = useState('');
+
+  const needsPrice  = ['above','below','live_above','live_below'].includes(condition);
+  const needsPct    = ['pct_up','pct_down'].includes(condition);
+  const needsSignal = condition === 'signal';
+
+  const saveAlert = async () => {
+    if (needsPrice  && !price)  { toast('Enter a price','error'); return; }
+    if (needsPct    && !pct)    { toast('Enter a % value','error'); return; }
+    const a = {
+      id: Date.now().toString(), item_name: item.name, condition,
+      price: needsPrice ? Number(price) : 0, pct: needsPct ? Number(pct) : 0,
+      signal_type: signalType, active: false,
+    };
+    await window.genius?.saveAlert(a);
+    onSaveAlert(a);
+    toast('Alert saved','success');
+    onClose();
+  };
+  const saveReminder = async () => {
+    if (!dueDate) { toast('Pick a date','error'); return; }
+    if (!message)  { toast('Enter a reminder message','error'); return; }
+    const r = { id: Date.now().toString(), itemName: item.name, dueDate, message, fired: false };
+    await window.genius?.saveReminder(r);
+    onSaveReminder(r);
+    toast('Reminder saved','success');
+    onClose();
+  };
+
+  const pillStyle = active => ({
+    flex:1, textAlign:'center', padding:'5px 0', fontSize:12, cursor:'pointer', borderRadius:4,
+    background: active ? 'rgba(201,168,76,0.15)' : 'transparent',
+    color: active ? T.gold : T.textDim,
+    border: `1px solid ${active ? T.borderGold : T.border}`,
+  });
+
+  return h('div', {
+    onClick: e => e.stopPropagation(),
+    style:{
+      position:'fixed', left:pos.left, zIndex:9999, width:260,
+      ...(pos.bottom != null ? {bottom:pos.bottom} : {top:pos.top}),
+      maxHeight:pos.maxHeight, overflowY:'auto',
+      background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:6,
+      boxShadow:'0 4px 16px rgba(0,0,0,0.6)', padding:'10px 12px',
+    },
+  },
+    h('div',{style:{display:'flex',gap:4,marginBottom:10}},
+      h('div',{style:pillStyle(mode==='alert'),   onClick:()=>setMode('alert')},   '🔔 Alert'),
+      h('div',{style:pillStyle(mode==='reminder'),onClick:()=>setMode('reminder')},'◷ Reminder'),
+    ),
+    mode==='alert' ? h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+      h('select',{className:'ge-input',value:condition,onChange:e=>setCondition(e.target.value)},
+        ALERT_CONDITIONS.map(c => h('option',{key:c.value,value:c.value},c.label))
+      ),
+      needsPrice && h(GpInput,{value:price, placeholder:'e.g. 500m', onChange:setPrice}),
+      needsPct && h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+        h('input',{className:'ge-input',type:'number',min:0,step:0.1,value:pct,
+          onChange:e=>setPct(e.target.value),placeholder:'e.g. 5', style:{width:80}}),
+        h('span',{style:{color:T.textDim,fontSize:12}},'%')
+      ),
+      needsSignal && h('select',{className:'ge-input',value:signalType,onChange:e=>setSignalType(e.target.value)},
+        ALERT_SIGNALS.map(s => h('option',{key:s,value:s},s))
+      ),
+      h('button',{className:'ge-btn gold',onClick:saveAlert},'Add alert')
+    ) : h('div',{style:{display:'flex',flexDirection:'column',gap:8}},
+      h('input',{className:'ge-input', type:'date', value:dueDate, onChange:e=>setDueDate(e.target.value)}),
+      h('textarea',{className:'ge-input', rows:2, value:message, onChange:e=>setMessage(e.target.value), placeholder:'e.g. Buy before the event ends'}),
+      h('button',{className:'ge-btn gold',onClick:saveReminder},'Add reminder')
+    )
+  );
+}
+
+function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem, onSaveAlert, onSaveReminder, toast}) {
   const [chartOpen, setChartOpen]     = useState(false);
   const [chartDxpMode, setChartDxpMode] = useState(false);
   const [imageOpen, setImageOpen]     = useState(false);
@@ -2358,6 +2442,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   // Ben: this is a click-to-check lookup for unusual items, not something
   // that should fire a wiki request on every item click.
   const [dropSources, setDropSources] = useState(null); // null = not fetched, {sources:[...]} once loaded
+  const [quickAlertPos, setQuickAlertPos] = useState(null); // null = closed, {left,top,...} once open
   const [dropSourcesLoading, setDropSourcesLoading] = useState(false);
   // "Turns into" — unlike Drop sources above, this IS auto-fetched on open
   // (Ben's ask, 2026-08-02): a much lighter page than a full drop table, and
@@ -2479,6 +2564,17 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       document.removeEventListener('keydown', onKey);
     };
   }, [scoreInfoPos]);
+  useEffect(() => {
+    if (!quickAlertPos) return;
+    const onClick = () => setQuickAlertPos(null);
+    const onKey = e => { if (e.key === 'Escape') setQuickAlertPos(null); };
+    document.addEventListener('click', onClick);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('click', onClick);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [quickAlertPos]);
 
   const sortedProducts = (() => {
     if (!products || !products.products) return [];
@@ -2536,6 +2632,29 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             style:{padding:'3px 8px', fontSize:12, color:T.textDim},
             onClick: () => onToggleHide && onToggleHide(item.id)
           }, '🚫 Hide'),
+          onSaveAlert && h('button', {
+            className:'ge-btn',
+            title: 'Set an alert or reminder for this item',
+            style:{padding:'3px 8px', fontSize:12},
+            onClick: e => {
+              e.stopPropagation();
+              if (quickAlertPos) { setQuickAlertPos(null); return; }
+              const r = e.currentTarget.getBoundingClientRect();
+              const POPUP_WIDTH = 260, MARGIN = 8;
+              let left = r.left;
+              if (left + POPUP_WIDTH > window.innerWidth) left = Math.max(MARGIN, window.innerWidth - POPUP_WIDTH - MARGIN);
+              const spaceBelow = window.innerHeight - r.bottom - MARGIN;
+              const spaceAbove = r.top - MARGIN;
+              const openUpward = spaceBelow < 260 && spaceAbove > spaceBelow;
+              const maxHeight = Math.max(150, openUpward ? spaceAbove : spaceBelow);
+              setQuickAlertPos({
+                left,
+                top: openUpward ? MARGIN : r.bottom + 6,
+                bottom: openUpward ? (window.innerHeight - r.top + 6) : null,
+                maxHeight,
+              });
+            }
+          }, '🔔 Alert'),
           h('button', {className:'ge-btn', style:{padding:'3px 8px',fontSize:12}, onClick:onClose}, 'X')
         )
       ),
@@ -2715,6 +2834,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           : '—')
       ),
       scoreInfoPos && createPortal(h(ScoreInfoPopup, {item, onClose:()=>setScoreInfoPos(null), pos:scoreInfoPos}), document.body),
+      quickAlertPos && createPortal(h(QuickAlertPopup, {item, pos:quickAlertPos, onClose:()=>setQuickAlertPos(null), onSaveAlert, onSaveReminder, toast}), document.body),
       !item.untradeable && populatedHistoryIds && !populatedHistoryIds.has(item.id) && h('div',{
         style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:2, marginBottom:4}
       }, '📊 Price history still loading for this item — Volume avg and Daily Change will firm up once it finishes.'),
@@ -5456,6 +5576,57 @@ function alertSummary(a) {
   }
 }
 
+// Alerts grouped by status rather than a flat list — Active now (currently
+// past threshold) surfaces first with a green edge, Armed (has fired
+// before, currently quiet, will fire again on the next crossing) with a
+// gold edge, Never fired (brand new, no history yet) with a neutral edge.
+// Ben: the flat list "feels chaotic" — grouping by what actually matters
+// right now (is this thing making noise or not) fixes that more than any
+// amount of per-row polish would.
+const ALERT_GROUPS = [
+  {key:'active',    label:'Active now',   color:'#4caf50', test:a => !!a.active},
+  {key:'armed',     label:'Armed',        color:'#c9a84c', test:a => !a.active && !!a.firedAt},
+  {key:'neverFired',label:'Never fired',  color:'rgba(255,255,255,0.15)', test:a => !a.active && !a.firedAt},
+];
+function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toast}) {
+  return ALERT_GROUPS.map(group => {
+    const rows = alerts.filter(group.test);
+    if (!rows.length) return null;
+    return h('div',{key:group.key, style:{marginBottom:14}},
+      h('div',{style:{fontSize:11, fontWeight:600, color: group.key==='neverFired' ? T.textDim : group.color, marginBottom:6, textTransform:'uppercase', letterSpacing:'0.05em'}},
+        `${group.label} (${rows.length})`
+      ),
+      h('div',{style:{display:'flex',flexDirection:'column',gap:6}},
+        rows.map(a => h('div',{
+          key:a.id,
+          style:{
+            display:'flex', alignItems:'center', gap:8, padding:'6px 10px',
+            borderLeft:`3px solid ${group.color}`, background:'rgba(255,255,255,0.03)',
+            borderRadius:'0 4px 4px 0',
+          }
+        },
+          h('div',{style:{flex:1, minWidth:0}},
+            h('div',{
+              style:{color: onSelect ? T.gold : T.text, fontSize:12, fontWeight:500, cursor: onSelect ? 'pointer' : 'default', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'},
+              onClick: onSelect ? () => {
+                const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+                if (it) onSelect(it);
+              } : undefined,
+            }, a.item_name),
+            h('div',{style:{fontSize:11, color:T.textDim, marginTop:1}},
+              alertSummary(a),
+              a.firedAt && ` — ${group.key==='active' ? 'fired' : 'last fired'} ${new Date(a.firedAt).toLocaleDateString()}`
+            )
+          ),
+          h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:11},onClick:()=>startEdit(a)},'Edit'),
+          h('button',{className:'ge-btn danger',style:{padding:'2px 8px',fontSize:11},
+            onClick:async()=>{await window.genius?.deleteAlert(a.id);onDelete(a.id);toast('Deleted','info')}},'Del')
+        ))
+      )
+    );
+  });
+}
+
 function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands, onSelect}) {
   const BLANK = {item_name:'', condition:'above', price:'', pct:'', signal_type:'SURGE'};
   const [form, setForm] = useState(BLANK);
@@ -5526,7 +5697,7 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
 
   return h('div',null,
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
-    h('div',{className:'two-col'},
+    h('div',{className:'two-col',style:{alignItems:'start'}},
       h('div',null,
         h('div',{className:'ge-section-head'}, editId ? 'Edit alert' : 'New alert'),
         h('div',{style:{display:'flex',flexDirection:'column',gap:10}},
@@ -5581,34 +5752,11 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
                 'Alerts can optionally ping a Discord webhook when they trigger.'
               )
             )
-          : alerts.map(a => h('div',{key:a.id,className:'alert-row'},
-              h('span',{
-                style:{flex:1,color: onSelect ? T.gold : T.text, fontSize:12, cursor: onSelect ? 'pointer' : 'default'},
-                onClick: onSelect ? () => {
-                  const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
-                  if (it) onSelect(it);
-                } : undefined,
-              }, a.item_name),
-              h('span',{className:'alert-cond',style:{
-                fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
-                background:'rgba(201,168,76,0.1)', border:`1px solid ${T.borderDim}`, color:T.textDim
-              }}, alertSummary(a)),
-              a.firedAt && h('span',{
-                className:'alert-cond',
-                title: `Last fired ${new Date(a.firedAt).toLocaleString()}${a.active ? ' — condition still active, will fire again once it resets and re-triggers' : ' — condition has since reset, will fire again if it re-triggers'}`,
-                style:{
-                  fontSize:10, padding:'1px 6px', borderRadius:3, whiteSpace:'nowrap',
-                  background:'rgba(76,175,80,0.1)', border:`1px solid ${T.borderDim}`, color:T.green
-                }
-              }, a.active ? '● Active' : '✓ Last fired'),
-              h('button',{className:'ge-btn',style:{padding:'2px 8px',fontSize:11},onClick:()=>startEdit(a)},'Edit'),
-              h('button',{className:'ge-btn danger',style:{padding:'2px 8px',fontSize:11},
-                onClick:async()=>{await window.genius?.deleteAlert(a.id);onDelete(a.id);toast('Deleted','info')}},'Del')
-            ))
+          : renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toast})
       )
     ),
     h('div',{style:{marginTop:24, paddingTop:18, borderTop:`1px solid ${T.border}`}},
-      h('div',{className:'two-col'},
+      h('div',{className:'two-col',style:{alignItems:'start'}},
         h('div',null,
           h('div',{className:'ge-section-head'}, remEditId ? 'Edit reminder' : 'New reminder'),
           h('div',{style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10}},
@@ -11117,6 +11265,10 @@ function App() {
   const [hiddenItems, setHiddenItems] = useState([]);
   const [alerts, setAlerts] = useState([]);
   const [reminders, setReminders] = useState([]);
+  // Shared by AlertsTab's own form and the item panel's quick-add popup —
+  // both just need "here's a saved alert/reminder object, merge it in."
+  const upsertAlert = a => setAlerts(al => { const i = al.findIndex(x=>x.id===a.id); return i>=0 ? al.map((x,j)=>j===i?a:x) : [...al,a]; });
+  const upsertReminder = r => setReminders(rl => { const i = rl.findIndex(x=>x.id===r.id); return i>=0 ? rl.map((x,j)=>j===i?r:x) : [...rl,r]; });
   const [settings, setSettings] = useState({});
   applyAccentColor(settings.accentColor);
   const [portfolio, setPortfolio] = useState({positions:[], tax_stats:{}});
@@ -11618,10 +11770,10 @@ function App() {
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
-            onSave: a  =>setAlerts(al=>{const i=al.findIndex(x=>x.id===a.id);return i>=0?al.map((x,j)=>j===i?a:x):[...al,a];}),
+            onSave: upsertAlert,
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id)),
             reminders,
-            onSaveReminder: r =>setReminders(rl=>{const i=rl.findIndex(x=>x.id===r.id);return i>=0?rl.map((x,j)=>j===i?r:x):[...rl,r];}),
+            onSaveReminder: upsertReminder,
             onDeleteReminder: id=>setReminders(rl=>rl.filter(r=>r.id!==id)),
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);},onReplayTour:()=>setShowTour(true)}),
@@ -11635,7 +11787,8 @@ function App() {
             style:{width:5, cursor:'col-resize', flexShrink:0, background:'transparent'},
             title:'Drag to resize',
           }),
-          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect}),
+          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect,
+            onSaveAlert:upsertAlert, onSaveReminder:upsertReminder, toast}),
         ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)}),
       showTour && h(WelcomeTour, {onDone:dismissTour})

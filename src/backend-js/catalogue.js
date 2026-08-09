@@ -553,7 +553,7 @@ const EXCLUSIVE_CATEGORIES = new Set(["rares", "cosmetics", "codex"]);
 const _LOW_TIER_STRIP = new Set(["melee", "magic", "ranged", "necromancy", "ammo", "pocket"]);
 
 const _LOW_TIER_PREFIXES = [
-  'bronze ', 'iron ', 'steel ', 'black ', 'white ',
+  'bronze ', 'iron ', 'steel ', 'black ', 'white ', 'bone ',
   'leather ', 'hardleather', 'hard leather', 'studded ', 'snakeskin ',
   'frog-leather', 'spined ',
   'mithril ', 'batwing ', 'ghostly ', 'splitbark ', 'mystic ',
@@ -604,9 +604,13 @@ function _applyExclusive(cats, nameLower = "", skipLowTierHeuristic = false) {
     )
   );
   if (hasLowTier) {
-    // Keep combat categories for TT items so they show in both tabs
-    const strip = catsSet.has("treasure_trails") ? new Set() : _LOW_TIER_STRIP;
-    const result = cats.filter(c => !strip.has(c));
+    // Ben, 2026-08-06: TT items should NOT retain their base combat
+    // category once low_tier applies — they should show as Treasure
+    // Trails only, same as every other low-tier item (e.g. Robin Hood
+    // hat should be treasure_trails+low_tier, not
+    // treasure_trails+ranged+low_tier). Cosmetics is unaffected either
+    // way since it was never in _LOW_TIER_STRIP to begin with.
+    const result = cats.filter(c => !_LOW_TIER_STRIP.has(c));
     if (!result.includes("low_tier")) result.push("low_tier");
     return result;
   }
@@ -670,6 +674,17 @@ function assignCategories(name) {
     // intentional/useful, not reported as wrong, so this is scoped to
     // just the one pairing that was actually flagged.
     if (category === "artisan" && assigned.includes("treasure_trails")) continue;
+    // Ben, 2026-08-06: "Zamorakian title scroll (X)" etc. were showing up
+    // in Archaeology — archaeology's god-name keywords ("zamorakian",
+    // "saradominist", "kharidian") are meant to catch actual dig relics,
+    // but they also match the god-name PREFIX on unrelated title scrolls
+    // since archaeology is checked before cosmetics in CATEGORY_PRIORITY.
+    // Checked the real catalogue: these keywords currently match nothing
+    // else at all (every other "zamorakian"/"kharidian" item is a combat
+    // weapon routed through a manual override instead), so this is a
+    // clean, scoped guard rather than a real god-name/archaeology
+    // ambiguity.
+    if (category === "archaeology" && nameLower.includes("title scroll")) continue;
     // Same idea for Cosmetics: its keyword list is intentionally broad
     // (tokens/titles/makeover/"blessed"/etc, kept as-is per Ben — "all
     // of those tokens and stuff were fine before"). But a TT reward
