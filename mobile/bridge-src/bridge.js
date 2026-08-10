@@ -43,7 +43,7 @@ async function ensureApi() {
   if (!apiReady) {
     apiReady = (async () => {
       store = await storage.createKVStore(DATA_DIR + '/config.json');
-      api = await createGeniusApi({ dataDir: DATA_DIR, store });
+      api = await createGeniusApi({ dataDir: DATA_DIR, store, platform: 'mobile' });
       api.loadHistory(); // background, same as desktop — window/UI doesn't wait on it
       return api;
     })();
@@ -233,7 +233,13 @@ async function buildGenius() {
   return {
     // Data
     getData: () => a.getData(),
-    fetchNow: (mode) => runFetch(mode).then(() => ({ success: true })).catch(e => ({ success: false, error: e.message })),
+    // Mirrors main.js's fetch-now fix — a manual refresh should re-check
+    // alerts/reminders against the fresh data it just pulled, not just
+    // whatever the periodic notification check happens to run next.
+    fetchNow: (mode) => runFetch(mode).then(() => {
+      runNotificationChecks().catch(e => console.error('[GEnius] Notification check failed:', e.message));
+      return { success: true };
+    }).catch(e => ({ success: false, error: e.message })),
     getDataDir: () => DATA_DIR,
     quitApp: () => ({ success: true }), // no desktop-style "quit" concept on mobile; Android handles backgrounding itself
     getAppVersion: () => require('../../package.json').version,
@@ -333,6 +339,7 @@ async function buildGenius() {
     savePosition:   (pos) => a.savePosition(pos).then(r => { syncRunnerState(); return r; }),
     deletePosition: (id) => a.deletePosition(id).then(r => { syncRunnerState(); return r; }),
     sellPosition:   (opts) => a.sellPosition(opts).then(r => { syncRunnerState(); return r; }),
+    convertPosition:(opts) => a.convertPosition(opts).then(r => { syncRunnerState(); return r; }),
     reopenPosition: (id) => a.reopenPosition(id).then(r => { syncRunnerState(); return r; }),
 
     // Full timeseries (ATH/ATL + date lookup)

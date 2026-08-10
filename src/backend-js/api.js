@@ -34,7 +34,7 @@ const catalogue = require('./catalogue.js');
 
 const SIGNAL_TREND_DAYS = 7;
 
-async function createGeniusApi({ dataDir, store }) {
+async function createGeniusApi({ dataDir, store, platform = 'desktop' }) {
   // ─── Paths ──────────────────────────────────────────────────────────────
   const dataFile      = path.join(dataDir, 'latest.json');
   const alertsFile     = path.join(dataDir, 'alerts.json');
@@ -434,7 +434,12 @@ async function createGeniusApi({ dataDir, store }) {
   // "[history] HTTP 429" (rate limit) or another V8 OOM if 8 ever crashes
   // too — that would mean the real fix is reducing per-item memory
   // footprint further, not concurrency at all.
-  const HISTORY_FETCH_CONCURRENCY = 8;
+  // Ben, 2026-08-09: 8 was settled on chasing MOBILE-specific crashes (see
+  // the investigation above) — desktop itself never showed any memory
+  // ceiling at any concurrency tested, so it doesn't need to stay this
+  // conservative. Bumped desktop to 12; mobile stays at the
+  // confirmed-stable 8.
+  const HISTORY_FETCH_CONCURRENCY = platform === 'mobile' ? 8 : 12;
 
   async function runHistoryQueue(onProgress) {
     if (historyFetchActive) return;
@@ -1962,6 +1967,54 @@ async function createGeniusApi({ dataDir, store }) {
     return { success:true, tax, realized_pl };
   }
 
+  // Item-A-becomes-item-B tracking (Ben, 2026-08-09) — distinct from
+  // sellPosition on purpose: no GE tax, no realized P&L, since no cash
+  // actually changes hands in a conversion. The converted-away quantity
+  // gets its own closed-out entry (status 'converted', same split-on-
+  // partial-close pattern sellPosition uses for partial sells) so
+  // there's a real record of what happened to it, and a new open
+  // position is created for the output item with its cost basis computed
+  // as (converted input's cost + any extra conversion cost) / output
+  // quantity — the exact division Ben was doing by hand before.
+  async function convertPosition({ id, quantity, outputItemName, outputQuantity, extraCost = 0 }) {
+    const p = await readPortfolio();
+    const pos = p.positions.find(x => x.id === id);
+    if (!pos) return { success: false, error: 'Position not found' };
+    if (!outputItemName || !outputQuantity || outputQuantity <= 0) {
+      return { success: false, error: 'Output item and quantity are required' };
+    }
+
+    const qty = Math.min(quantity, pos.quantity);
+    if (qty <= 0) return { success: false, error: 'Invalid quantity' };
+
+    const inputCostUsed = pos.cost_basis * qty;
+    const totalCost = inputCostUsed + (Number(extraCost) || 0);
+    const newCostBasis = Math.round(totalCost / outputQuantity);
+
+    const now = new Date().toISOString();
+    if (qty >= pos.quantity) {
+      pos.status = 'converted'; pos.converted_to = outputItemName;
+      pos.converted_quantity = pos.quantity; pos.converted_at = now;
+    } else {
+      p.positions.push({ ...pos, id: Date.now().toString(), quantity: qty, status:'converted',
+        converted_to: outputItemName, converted_quantity: qty, converted_at: now });
+      pos.quantity -= qty;
+    }
+
+    p.positions.push({
+      id: (Date.now() + 1).toString(),
+      item_name: outputItemName,
+      quantity: outputQuantity,
+      cost_basis: newCostBasis,
+      status: 'open',
+      date_opened: now,
+      converted_from: pos.item_name,
+    });
+
+    await writePortfolio(p);
+    return { success: true, newCostBasis };
+  }
+
   // Undoes a sale — puts a closed position back into open positions exactly
   // as it was before selling (status, sold_price/sold_quantity/realized_pl/
   // sold_at cleared). For a partial sell, the sold portion was originally
@@ -1976,14 +2029,21 @@ async function createGeniusApi({ dataDir, store }) {
   async function reopenPosition(id) {
     const p = await readPortfolio();
     const pos = p.positions.find(x => x.id === id);
-    if (!pos || pos.status !== 'sold') return { success: false };
+    if (!pos || (pos.status !== 'sold' && pos.status !== 'converted')) return { success: false };
 
-    const tax = Math.round((pos.sold_price || 0) * (pos.sold_quantity || 0) * 0.02);
-    p.tax_stats = p.tax_stats || defaultTaxStats();
-    p.tax_stats.lifetime_tax = Math.max(0, (p.tax_stats.lifetime_tax || 0) - tax);
-
-    pos.status = 'open';
-    delete pos.sold_price; delete pos.sold_quantity; delete pos.realized_pl; delete pos.sold_at;
+    if (pos.status === 'sold') {
+      const tax = Math.round((pos.sold_price || 0) * (pos.sold_quantity || 0) * 0.02);
+      p.tax_stats = p.tax_stats || defaultTaxStats();
+      p.tax_stats.lifetime_tax = Math.max(0, (p.tax_stats.lifetime_tax || 0) - tax);
+      pos.status = 'open';
+      delete pos.sold_price; delete pos.sold_quantity; delete pos.realized_pl; delete pos.sold_at;
+    } else {
+      // Reopening the converted-away side only — doesn't touch the output
+      // position convertPosition created, same as it doesn't get deleted
+      // by anything else either. No tax to refund; none was charged.
+      pos.status = 'open';
+      delete pos.converted_to; delete pos.converted_quantity; delete pos.converted_at;
+    }
 
     await writePortfolio(p);
     return { success: true };
@@ -2032,6 +2092,7 @@ async function createGeniusApi({ dataDir, store }) {
     if (condition === 'pct_down') return chg != null && chg <= -Math.abs(pct);
     if (condition === 'signal') return signals.includes(alert.signal_type || '');
     if (condition === 'alch') return signals.includes('ALCH');
+    if (condition === 'score_above') return item.score != null && item.score >= pct;
     return false;
   }
 
@@ -2050,6 +2111,7 @@ async function createGeniusApi({ dataDir, store }) {
       case 'pct_down':   return `${name} down ${(chg||0).toFixed(2)}% today (threshold: -${alert.pct||0}%)`;
       case 'signal':     return `${name} triggered signal ${alert.signal_type||''} — price: ${_fmtGpAlert(price)}gp`;
       case 'alch':       return `${name} is now alch-profitable — price: ${_fmtGpAlert(price)}gp`;
+      case 'score_above': return `${name} Opportunity Score rose above ${alert.pct||0} — now ${item.score ?? '—'}`;
       default:           return `${name} alert triggered`;
     }
   }
@@ -2532,7 +2594,7 @@ async function createGeniusApi({ dataDir, store }) {
     // item detail panel — "turns into"
     getItemProducts,
     // portfolio
-    getPortfolio, savePosition, deletePosition, sellPosition, reopenPosition,
+    getPortfolio, savePosition, deletePosition, sellPosition, convertPosition, reopenPosition,
     // alerts
     getAlerts, saveAlert, deleteAlert, getTriggeredAlerts,
     // overrides

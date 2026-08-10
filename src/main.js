@@ -263,6 +263,15 @@ ipcMain.handle('fetch-now', async (_, mode) => {
   try {
     await runPython(mode || 'prices');
     if (!mode || mode === 'full') store.set('lastNewsFetch', Date.now());
+    // Ben, 2026-08-09: a manual Fetch Now never re-checked alerts/reminders/
+    // digests against the fresh data it just pulled — only the scheduler's
+    // own interval tick and the 8s post-launch timer did. Confirmed for
+    // real: a score-based alert whose condition was already true sat
+    // unfired across two manual Fetch Now clicks, only firing once the
+    // exact same check was run directly outside the app. Running the same
+    // checks the scheduler runs here too, so a manual refresh behaves the
+    // same way as waiting for the next automatic one.
+    checkDxpNotifications(); checkWatchlistDigest(); checkPortfolioDigest(); checkReminders(); checkPriceAlerts();
     return { success: true };
   }
   catch (e) { return { success: false, error: e.message }; }
@@ -395,6 +404,7 @@ ipcMain.handle('get-portfolio', () => api.getPortfolio());
 ipcMain.handle('save-position', (_, position) => api.savePosition(position));
 ipcMain.handle('delete-position', (_, id) => api.deletePosition(id));
 ipcMain.handle('sell-position', (_, payload) => api.sellPosition(payload));
+ipcMain.handle('convert-position', (_, payload) => api.convertPosition(payload));
 ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
@@ -493,7 +503,7 @@ app.whenReady().then(async () => {
   store   = await storage.createKVStore(path.join(app.getPath('userData'), 'config.json'));
   dataDir = path.join(app.getPath('userData'), 'data');
   await storage.ensureDir(dataDir);
-  api = await createGeniusApi({ dataDir, store });
+  api = await createGeniusApi({ dataDir, store, platform: 'desktop' });
 
   createWindow();
   createTray();

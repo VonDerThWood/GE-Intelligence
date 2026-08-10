@@ -2363,7 +2363,7 @@ function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast
   const [message, setMessage] = useState('');
 
   const needsPrice  = ['above','below','live_above','live_below'].includes(condition);
-  const needsPct    = ['pct_up','pct_down'].includes(condition);
+  const needsPct    = ['pct_up','pct_down','score_above'].includes(condition);
   const needsSignal = condition === 'signal';
 
   const saveAlert = async () => {
@@ -2416,9 +2416,9 @@ function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast
       ),
       needsPrice && h(GpInput,{value:price, placeholder:'e.g. 500m', onChange:setPrice}),
       needsPct && h('div',{style:{display:'flex',alignItems:'center',gap:6}},
-        h('input',{className:'ge-input',type:'number',min:0,step:0.1,value:pct,
-          onChange:e=>setPct(e.target.value),placeholder:'e.g. 5', style:{width:80}}),
-        h('span',{style:{color:T.textDim,fontSize:12}},'%')
+        h('input',{className:'ge-input',type:'number',min:0,max:condition==='score_above'?100:undefined,step:condition==='score_above'?1:0.1,value:pct,
+          onChange:e=>setPct(e.target.value),placeholder: condition==='score_above' ? 'e.g. 70' : 'e.g. 5', style:{width:80}}),
+        condition!=='score_above' && h('span',{style:{color:T.textDim,fontSize:12}},'%')
       ),
       needsSignal && h('select',{className:'ge-input',value:signalType,onChange:e=>setSignalType(e.target.value)},
         ALERT_SIGNALS.map(s => h('option',{key:s,value:s},s))
@@ -5229,7 +5229,7 @@ function MarketTab({items, selected, onSelect, description}) {
         h('tbody',null, filteredItems.map(it=>
           h('tr',{key:it.id, style:{cursor:'pointer'}, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it)},
             h('td',null,it.name),
-            h('td',{style:{color:T.gold}},fmt.gp(it.high)+'gp'),
+            h('td',{style:{color:T.gold}},fmt.gp(it.high)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
             h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
             h('td',null,h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
             filter==='signals'&&h('td',null,
@@ -5247,7 +5247,7 @@ function MarketTab({items, selected, onSelect, description}) {
         h('table',{className:'ge-table'},
           h('thead',null,h('tr',null,h('th',null,'Item'),h('th',null,'Change'),h('th',null,'Price'))),
           h('tbody',null,movers.length
-            ? movers.map(it=>h('tr',{key:it.id,style:{cursor:'pointer'},className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},h('td',null,it.name),h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp')))
+            ? movers.map(it=>h('tr',{key:it.id,style:{cursor:'pointer'},className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},h('td',null,it.name),h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}))))
             : h('tr',null,h('td',{colSpan:3,style:{color:T.textDim,textAlign:'center',padding:'12px'}},'No significant price movement detected.'))
           )
         )
@@ -5261,7 +5261,7 @@ function MarketTab({items, selected, onSelect, description}) {
             ? volTop.map(it=>h('tr',{key:it.id,style:{cursor:'pointer'},className:selected?.id===it.id?'selected':'',onClick:()=>onSelect&&onSelect(it)},
                 h('td',null,it.name),
                 h('td',null,h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-                h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp')
+                h('td',{style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}))
               ))
             : h('tr',null,h('td',{colSpan:3,style:{color:T.textDim,textAlign:'center',padding:'12px'}},'No unusual volume detected.'))
           )
@@ -5677,6 +5677,7 @@ const ALERT_CONDITIONS = [
   {value:'pct_down',   label:'Price change % falls below'},
   {value:'signal',     label:'Signal triggers'},
   {value:'alch',       label:'Becomes alch-profitable'},
+  {value:'score_above',label:'Opportunity Score rises above'},
 ];
 const ALERT_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL','OVERPRICED','UNDERPRICED','WIDE_SPREAD'];
 
@@ -5690,6 +5691,7 @@ function alertSummary(a) {
     case 'pct_down': return `change < -${a.pct}%`;
     case 'signal':   return `signal: ${a.signal_type||''}`;
     case 'alch':     return 'alch profit';
+    case 'score_above': return `score > ${a.pct}`;
     default:         return a.condition;
   }
 }
@@ -5779,7 +5781,7 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
   const cancelEditReminder = () => { setRemEditId(null); setRemForm(REM_BLANK); };
 
   const needsPrice  = ['above','below','live_above','live_below'].includes(form.condition);
-  const needsPct    = ['pct_up','pct_down'].includes(form.condition);
+  const needsPct    = ['pct_up','pct_down','score_above'].includes(form.condition);
   const needsSignal = form.condition === 'signal';
 
   const submit = async () => {
@@ -5834,11 +5836,11 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
             h(GpInput,{value:form.price, placeholder:'e.g. 500m', onChange:v=>setForm(f=>({...f,price:v}))})
           ),
           needsPct && h('div',null,
-            h('label',{className:'form-lbl'},'% threshold'),
+            h('label',{className:'form-lbl'}, form.condition==='score_above' ? 'Score threshold' : '% threshold'),
             h('div',{style:{display:'flex',alignItems:'center',gap:6}},
-              h('input',{className:'ge-input',type:'number',min:0,step:0.1,value:form.pct,
-                onChange:set('pct'),placeholder:'e.g. 5', style:{width:80}}),
-              h('span',{style:{color:T.textDim,fontSize:12}},'%')
+              h('input',{className:'ge-input',type:'number',min:0,max:form.condition==='score_above'?100:undefined,step:form.condition==='score_above'?1:0.1,value:form.pct,
+                onChange:set('pct'),placeholder: form.condition==='score_above' ? 'e.g. 70' : 'e.g. 5', style:{width:80}}),
+              form.condition!=='score_above' && h('span',{style:{color:T.textDim,fontSize:12}},'%')
             )
           ),
           needsSignal && h('div',null,
@@ -9046,6 +9048,122 @@ function SellModal({position, onSell, onClose}) {
   );
 }
 
+// Looks up a known 1:1 Invention machine conversion (Plank Maker/Hide
+// Tanner/Partial Potion Producer — see INVENTION_MACHINES above) for a
+// given input item name, if one exists. Used by ConvertModal to auto-fill
+// the output item and a real machine-charge cost instead of leaving Ben
+// to type both in and compute the charge cost by hand — the exact
+// reliability gap the Portfolio Convert action was built to close.
+function findConversionRecipe(inputItemName) {
+  const nameLower = (inputItemName || '').toLowerCase().trim();
+  for (const machine of INVENTION_MACHINES) {
+    const conv = machine.conversions.find(c => c.input.toLowerCase() === nameLower);
+    if (conv) {
+      return {
+        machineLabel: machine.label,
+        output: conv.output,
+        costPerUnit: Math.round(machine.chargePerItem * GP_PER_MACHINE_CHARGE),
+      };
+    }
+  }
+  return null;
+}
+
+function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) {
+  const [qty, setQty] = useState(position.quantity);
+  const [outputName, setOutputName] = useState('');
+  const [outputQty, setOutputQty] = useState('');
+  const [extraCosts, setExtraCosts] = useState([{label:'', amount:''}]);
+  // GpInput only reads its `value` prop into its own display state on
+  // initial mount, not on every re-render (by design — otherwise it'd
+  // stomp on whatever the user's actively typing). That means
+  // useRecipe() setting extraCosts programmatically after the fields
+  // already exist wouldn't visibly update the amount field even though
+  // the real state was correct underneath. Bumping this on every
+  // recipe-fill forces the GpInput row to remount and pick up the new
+  // value fresh, same fix pattern as any other "controlled input needs a
+  // hard reset" case.
+  const [fillVersion, setFillVersion] = useState(0);
+
+  const recipe = useMemo(() => findConversionRecipe(position.item_name), [position.item_name]);
+
+  const useRecipe = () => {
+    if (!recipe) return;
+    setOutputName(recipe.output);
+    setOutputQty(String(qty));
+    setExtraCosts([{label: `${recipe.machineLabel} charge cost`, amount: String(recipe.costPerUnit * Number(qty || 0))}]);
+    setFillVersion(v => v + 1);
+  };
+
+  const addCostRow = () => setExtraCosts(rows => [...rows, {label:'', amount:''}]);
+  const removeCostRow = i => setExtraCosts(rows => rows.filter((_,j)=>j!==i));
+  const setCostRow = (i, field, val) => setExtraCosts(rows => rows.map((r,j) => j===i ? {...r, [field]:val} : r));
+
+  const q = Number(qty) || 0;
+  const oq = Number(outputQty) || 0;
+  const totalExtraCost = extraCosts.reduce((s,r) => s + (Number(r.amount) || 0), 0);
+  const inputCostUsed = position.cost_basis * q;
+  const totalCost = inputCostUsed + totalExtraCost;
+  const newCostBasis = oq > 0 ? Math.round(totalCost / oq) : 0;
+
+  useEffect(() => {
+    const onKey = e => { if (e.key === 'Escape') onClose(); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+
+  return h('div', {className:'modal-overlay'},
+    h('div', {className:'modal'},
+      h('div', {className:'modal-header'},
+        h('div', {className:'detail-name', style:{fontSize:15}}, `Convert: ${position.item_name}`),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:onClose}, 'X')
+      ),
+      h('div', {className:'modal-body'},
+        recipe && h('div', {style:{marginBottom:12, padding:'8px 10px', background:'rgba(201,168,76,0.08)', border:`1px solid ${T.borderDim}`, borderRadius:4, display:'flex', alignItems:'center', justifyContent:'space-between', gap:10}},
+          h('span', {style:{fontSize:11, color:T.textDim}}, `Known recipe: ${recipe.machineLabel} → ${recipe.output} (${fmt.gp(recipe.costPerUnit)}gp/item charge)`),
+          h('button', {className:'ge-btn', style:{padding:'2px 8px', fontSize:11}, onClick:useRecipe}, 'Use this')
+        ),
+        h('div', {className:'form-grid-2'},
+          h('div', null, h('label',{className:'form-lbl'},`Quantity to convert (max ${position.quantity})`),
+            h(QtyInput,{value:qty, min:1, max:position.quantity, onChange:v=>setQty(v)})),
+          h('div', null, h('label',{className:'form-lbl'},'Output item'),
+            h(ItemAutocomplete,{items:allItems, value:outputName, onChange:setOutputName, placeholder:'Search item...', userShorthands}))
+        ),
+        h('div', {style:{marginBottom:12}},
+          h('label',{className:'form-lbl'},'Output quantity'),
+          h('input',{className:'ge-input', type:'number', min:1, value:outputQty, onChange:e=>setOutputQty(e.target.value), placeholder:'e.g. '+q, style:{width:120}})
+        ),
+        h('div', {style:{marginBottom:12}},
+          h('label',{className:'form-lbl'},'Extra costs (machine charges, secondary ingredients, etc.)'),
+          extraCosts.map((row,i) => h('div',{key:i, style:{display:'flex', gap:6, marginBottom:6, alignItems:'center'}},
+            h('input',{className:'ge-input', style:{flex:1}, placeholder:'Label (optional)', value:row.label, onChange:e=>setCostRow(i,'label',e.target.value)}),
+            h(GpInput,{key:`${i}-${fillVersion}`, value:row.amount, placeholder:'0gp', onChange:v=>setCostRow(i,'amount',v), style:{width:120}}),
+            extraCosts.length>1 && h('button',{className:'ge-btn danger', style:{padding:'2px 8px', fontSize:11}, onClick:()=>removeCostRow(i)},'×')
+          )),
+          h('button',{className:'ge-btn', style:{fontSize:11, padding:'3px 10px'}, onClick:addCostRow}, '+ Add cost')
+        ),
+
+        oq > 0 && h('div', {style:{background:'rgba(0,0,0,0.25)',borderRadius:4,padding:'10px',marginBottom:12}},
+          h('div', {className:'ge-section-head', style:{fontSize:10,marginBottom:6}}, 'Resulting position'),
+          [['Input value used', fmt.gp(inputCostUsed)+'gp', null],
+           ['Extra costs', fmt.gp(totalExtraCost)+'gp', null],
+           ['New cost basis', fmt.gp(newCostBasis)+'gp / '+outputName, T.goldBright],
+          ].map(([label,val,color],i) => h('div',{key:i,style:{display:'flex',justifyContent:'space-between',fontSize:12,marginBottom:i<2?4:0,color:color||T.text}},
+            h('span',{style:{color:T.textDim}},label), h('span',null,val)
+          ))
+        ),
+
+        h('div', {style:{display:'flex',gap:8,justifyContent:'flex-end'}},
+          h('button',{className:'ge-btn',onClick:onClose},'Cancel'),
+          h('button',{className:'ge-btn gold',disabled:!outputName||oq<=0||q<=0,
+            onClick:()=>onConvert({id:position.id, quantity:q, outputItemName:outputName, outputQuantity:oq, extraCost:totalExtraCost})
+          },'Confirm Conversion')
+        )
+      )
+    )
+  );
+}
+
 // Shows every tier in a ladder (Investor Tier / Trade Count), not just
 // next/current/earned — the inline row only ever showed one tier ahead,
 // with no way to see the full climb (Ben, 2026-07-30). `tiers` is in the
@@ -9092,7 +9210,7 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onReopenPosition, onSelect, toast, devMode, userShorthands}) {
+function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands}) {
   // Diversification suggestions pull real picks from the Almanac's
   // trade-idea engine — public since the Almanac itself went public
   // (v2.0.0). Fetches its own copy of the DXP intelligence data
@@ -9108,6 +9226,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const [showModal,   setShowModal]   = useState(false);
   const [editPos,     setEditPos]     = useState(null);
   const [sellModal,   setSellModal]   = useState(null);
+  const [convertModal, setConvertModal] = useState(null);
   const [showClosed,  setShowClosed]  = useState(true);
   const [ctxMenu,     setCtxMenu]     = useState(null); // {x, y, pos}
   const [allocView,   setAllocView]   = useState('item'); // 'item' | 'category'
@@ -9146,8 +9265,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category};
   }), [positions, items, priceMode]);
 
-  const openPos   = enriched.filter(p => p.status !== 'sold');
-  const closedPos = enriched.filter(p => p.status === 'sold');
+  const openPos   = enriched.filter(p => p.status !== 'sold' && p.status !== 'converted');
+  const closedPos = enriched.filter(p => p.status === 'sold' || p.status === 'converted');
 
   const totalInvested = openPos.reduce((s,p) => s+p.costValue, 0);
   const totalCurrent  = openPos.reduce((s,p) => s+p.currentValue, 0);
@@ -9447,6 +9566,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
                     onClick:()=>{setEditPos(pos);setShowModal(true);}},'Edit'),
                   h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
                     onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
+                  h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10,borderColor:T.blue},
+                    onClick:()=>setConvertModal(pos)},'Convert'),
                   h('button',{className:'ge-btn danger',style:{padding:'2px 6px',fontSize:10},
                     onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'Del')
                 )
@@ -9696,8 +9817,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       showClosed && h('table',{className:'ge-table'},
         h('thead',null,h('tr',null,
           h('th',null,'Item'),h('th',null,'Qty'),h('th',null,'Cost/ea'),
-          h('th',null,'Sold At'),
-          h('th',{title:'Profit & Loss already locked in on this sale, after GE tax.'},'Realized P&L')
+          h('th',null,'Sold At / Converted'),
+          h('th',{title:'Profit & Loss already locked in on this sale, after GE tax. Conversions have no realized P&L — no cash changed hands, the cost basis just carried forward to the new item.'},'Realized P&L')
         )),
         h('tbody',null, closedPos.map(pos=>
           h('tr',{key:pos.id,
@@ -9706,11 +9827,15 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             style:{cursor:'pointer'},
           },
             h('td',null,pos.item_name),
-            h('td',null,(pos.sold_quantity||pos.quantity).toLocaleString()),
+            h('td',null,(pos.status==='converted' ? pos.converted_quantity : pos.sold_quantity||pos.quantity).toLocaleString()),
             h('td',null,fmt.gp(pos.cost_basis)+'gp'),
-            h('td',{style:{color:T.gold}},fmt.gp(pos.sold_price||0)+'gp'),
-            h('td',{className:(pos.realized_pl||0)>=0?'pct-up':'pct-down'},
-              (pos.realized_pl>=0?'+':'')+fmt.gp(pos.realized_pl||0)+'gp')
+            pos.status==='converted'
+              ? h('td',{style:{color:T.blue}},`→ ${pos.converted_to}`)
+              : h('td',{style:{color:T.gold}},fmt.gp(pos.sold_price||0)+'gp'),
+            pos.status==='converted'
+              ? h('td',{style:{color:T.textDim}},'—')
+              : h('td',{className:(pos.realized_pl||0)>=0?'pct-up':'pct-down'},
+                  (pos.realized_pl>=0?'+':'')+fmt.gp(pos.realized_pl||0)+'gp')
           )
         ))
       )
@@ -9764,6 +9889,14 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
         const res = await onSellPosition(opts);
         setSellModal(null);
         if (res?.success) toast(`Sold! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
+      }
+    }),
+    convertModal && h(ConvertModal, {position:convertModal, allItems:items, userShorthands, onClose:()=>setConvertModal(null),
+      onConvert: async (opts) => {
+        const res = await onConvertPosition(opts);
+        setConvertModal(null);
+        if (res?.success) toast(`Converted! New cost basis: ${fmt.gp(res.newCostBasis)}gp`, 'success');
+        else toast(res?.error || 'Conversion failed', 'error');
       }
     }),
     tierModal === 'investor'   && h(TierLadderModal, {title:'Investor Tier — all tiers', tiers:PORTFOLIO_TIERS, achievedIndex:tierIndex, onClose:()=>setTierModal(null)}),
@@ -10066,7 +10199,8 @@ function IndexesTab({items, selected, onSelect, onToggleWatch, watchlist, onTogg
           },
             h('span', {style:{flex:1, fontSize:13, color:T.text}}, it.name),
             h('span', {style:{fontSize:13, color:T.gold, minWidth:90, textAlign:'right'}},
-              fmt.gp(it.high || it.low) + 'gp'),
+              fmt.gp(it.high || it.low) + 'gp',
+              h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
             it.change_1d != null && h('span', {
               style:{fontSize:12, minWidth:72, textAlign:'right',
                 color: it.change_1d > 0 ? T.green : it.change_1d < 0 ? T.red : T.textDim},
@@ -11662,6 +11796,15 @@ function App() {
         if (data.indexes) setIndexes(data.indexes);
         triggerHistoryPopulationIfNeeded(data.items);
       }).catch(e => console.error('[GEnius] getData after fetch error:', e));
+      // Ben, 2026-08-09: checkPriceAlerts()/checkReminders() run server-side
+      // right after every fetch (scheduler tick or a manual Fetch Now) and
+      // can flip an alert's active/firedAt state on disk — but the Alerts
+      // tab's in-memory list was only ever loaded once at startup, so a
+      // fired-in-the-background alert wouldn't show as Active until the
+      // next full app restart. Re-pulling both here keeps the UI in sync
+      // with whatever the backend just did.
+      window.genius.getAlerts().then(a => a && setAlerts(a)).catch(()=>{});
+      window.genius.getReminders().then(r => r && setReminders(r)).catch(()=>{});
       toast('Prices updated','success');
     });
     window.genius.onFetchError(d => { setFetching(false); toast('Fetch error: '+(d.error||'unknown'),'error'); console.error('[GEnius] fetch-error:', d); });
@@ -11963,6 +12106,7 @@ function App() {
             },
             onDeletePosition: async id => { await window.genius?.deletePosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); },
             onSellPosition: async opts => { const r = await window.genius?.sellPosition(opts); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
+            onConvertPosition: async opts => { const r = await window.genius?.convertPosition(opts); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
             onReopenPosition: async id => { const r = await window.genius?.reopenPosition(id); const p = await window.genius?.getPortfolio(); if(p) setPortfolio(p); return r; },
             onSelect: handleSelect,
             devMode: settings.devMode,

@@ -66,6 +66,7 @@ contextBridge.exposeInMainWorld('genius', {
   savePosition:    (pos) => ipcRenderer.invoke('save-position', pos),
   deletePosition:  (id)  => ipcRenderer.invoke('delete-position', id),
   sellPosition:    (opts)=> ipcRenderer.invoke('sell-position', opts),
+  convertPosition: (opts)=> ipcRenderer.invoke('convert-position', opts),
   reopenPosition:  (id)  => ipcRenderer.invoke('reopen-position', id),
 
   // Full timeseries (ATH/ATL + date lookup)

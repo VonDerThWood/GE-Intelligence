@@ -21517,7 +21517,7 @@
       var storage2 = require_storage_capacitor();
       var catalogue = require_catalogue();
       var SIGNAL_TREND_DAYS = 7;
-      async function createGeniusApi2({ dataDir, store: store2 }) {
+      async function createGeniusApi2({ dataDir, store: store2, platform = "desktop" }) {
         const dataFile = path.join(dataDir, "latest.json");
         const alertsFile = path.join(dataDir, "alerts.json");
         const portfolioFile = path.join(dataDir, "portfolio.json");
@@ -21711,7 +21711,7 @@
           if (await fetchHistoryForItemOnce(itemId, 12e3)) return true;
           return fetchHistoryForItemOnce(itemId, 2e4);
         }
-        const HISTORY_FETCH_CONCURRENCY = 8;
+        const HISTORY_FETCH_CONCURRENCY = platform === "mobile" ? 8 : 12;
         async function runHistoryQueue(onProgress) {
           if (historyFetchActive) return;
           historyFetchActive = true;
@@ -22697,18 +22697,67 @@
           await writePortfolio(p);
           return { success: true, tax, realized_pl };
         }
+        async function convertPosition({ id, quantity, outputItemName, outputQuantity, extraCost = 0 }) {
+          const p = await readPortfolio();
+          const pos = p.positions.find((x) => x.id === id);
+          if (!pos) return { success: false, error: "Position not found" };
+          if (!outputItemName || !outputQuantity || outputQuantity <= 0) {
+            return { success: false, error: "Output item and quantity are required" };
+          }
+          const qty = Math.min(quantity, pos.quantity);
+          if (qty <= 0) return { success: false, error: "Invalid quantity" };
+          const inputCostUsed = pos.cost_basis * qty;
+          const totalCost = inputCostUsed + (Number(extraCost) || 0);
+          const newCostBasis = Math.round(totalCost / outputQuantity);
+          const now = (/* @__PURE__ */ new Date()).toISOString();
+          if (qty >= pos.quantity) {
+            pos.status = "converted";
+            pos.converted_to = outputItemName;
+            pos.converted_quantity = pos.quantity;
+            pos.converted_at = now;
+          } else {
+            p.positions.push({
+              ...pos,
+              id: Date.now().toString(),
+              quantity: qty,
+              status: "converted",
+              converted_to: outputItemName,
+              converted_quantity: qty,
+              converted_at: now
+            });
+            pos.quantity -= qty;
+          }
+          p.positions.push({
+            id: (Date.now() + 1).toString(),
+            item_name: outputItemName,
+            quantity: outputQuantity,
+            cost_basis: newCostBasis,
+            status: "open",
+            date_opened: now,
+            converted_from: pos.item_name
+          });
+          await writePortfolio(p);
+          return { success: true, newCostBasis };
+        }
         async function reopenPosition(id) {
           const p = await readPortfolio();
           const pos = p.positions.find((x) => x.id === id);
-          if (!pos || pos.status !== "sold") return { success: false };
-          const tax = Math.round((pos.sold_price || 0) * (pos.sold_quantity || 0) * 0.02);
-          p.tax_stats = p.tax_stats || defaultTaxStats();
-          p.tax_stats.lifetime_tax = Math.max(0, (p.tax_stats.lifetime_tax || 0) - tax);
-          pos.status = "open";
-          delete pos.sold_price;
-          delete pos.sold_quantity;
-          delete pos.realized_pl;
-          delete pos.sold_at;
+          if (!pos || pos.status !== "sold" && pos.status !== "converted") return { success: false };
+          if (pos.status === "sold") {
+            const tax = Math.round((pos.sold_price || 0) * (pos.sold_quantity || 0) * 0.02);
+            p.tax_stats = p.tax_stats || defaultTaxStats();
+            p.tax_stats.lifetime_tax = Math.max(0, (p.tax_stats.lifetime_tax || 0) - tax);
+            pos.status = "open";
+            delete pos.sold_price;
+            delete pos.sold_quantity;
+            delete pos.realized_pl;
+            delete pos.sold_at;
+          } else {
+            pos.status = "open";
+            delete pos.converted_to;
+            delete pos.converted_quantity;
+            delete pos.converted_at;
+          }
           await writePortfolio(p);
           return { success: true };
         }
@@ -22751,6 +22800,7 @@
           if (condition === "pct_down") return chg != null && chg <= -Math.abs(pct);
           if (condition === "signal") return signals.includes(alert.signal_type || "");
           if (condition === "alch") return signals.includes("ALCH");
+          if (condition === "score_above") return item.score != null && item.score >= pct;
           return false;
         }
         function _alertMessage(alert, item) {
@@ -22776,6 +22826,8 @@
               return `${name} triggered signal ${alert.signal_type || ""} \u2014 price: ${_fmtGpAlert(price)}gp`;
             case "alch":
               return `${name} is now alch-profitable \u2014 price: ${_fmtGpAlert(price)}gp`;
+            case "score_above":
+              return `${name} Opportunity Score rose above ${alert.pct || 0} \u2014 now ${item.score ?? "\u2014"}`;
             default:
               return `${name} alert triggered`;
           }
@@ -23193,6 +23245,7 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
           savePosition,
           deletePosition,
           sellPosition,
+          convertPosition,
           reopenPosition,
           // alerts
           getAlerts,
@@ -24807,7 +24860,7 @@ ${data.length} indexes:
     if (!apiReady) {
       apiReady = (async () => {
         store = await storage.createKVStore(DATA_DIR + "/config.json");
-        api = await createGeniusApi({ dataDir: DATA_DIR, store });
+        api = await createGeniusApi({ dataDir: DATA_DIR, store, platform: "mobile" });
         api.loadHistory();
         return api;
       })();
@@ -24959,7 +25012,13 @@ ${data.length} indexes:
     return {
       // Data
       getData: () => a.getData(),
-      fetchNow: (mode) => runFetch(mode).then(() => ({ success: true })).catch((e) => ({ success: false, error: e.message })),
+      // Mirrors main.js's fetch-now fix — a manual refresh should re-check
+      // alerts/reminders against the fresh data it just pulled, not just
+      // whatever the periodic notification check happens to run next.
+      fetchNow: (mode) => runFetch(mode).then(() => {
+        runNotificationChecks().catch((e) => console.error("[GEnius] Notification check failed:", e.message));
+        return { success: true };
+      }).catch((e) => ({ success: false, error: e.message })),
       getDataDir: () => DATA_DIR,
       quitApp: () => ({ success: true }),
       // no desktop-style "quit" concept on mobile; Android handles backgrounding itself
@@ -25087,6 +25146,10 @@ ${data.length} indexes:
         return r;
       }),
       sellPosition: (opts) => a.sellPosition(opts).then((r) => {
+        syncRunnerState();
+        return r;
+      }),
+      convertPosition: (opts) => a.convertPosition(opts).then((r) => {
         syncRunnerState();
         return r;
       }),
