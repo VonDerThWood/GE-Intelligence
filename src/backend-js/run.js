@@ -127,8 +127,9 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   // historyData fully populated just for this.
   let historyVolAvg = {};
   let historyPrevPrice = {};
+  let historyPrevPriceTs = {};
   if (historyStatsOverride) {
-    ({ historyVolAvg, historyPrevPrice } = historyStatsOverride);
+    ({ historyVolAvg, historyPrevPrice, historyPrevPriceTs = {} } = historyStatsOverride);
   } else {
   // No override (e.g. standalone CLI use, no api.js instance available) —
   // fall back to reading the per-item storage directory directly and
@@ -194,6 +195,9 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
           historyVolAvg[String(itemId)] = medianVol;
         }
         if (secondLatest && secondLatest.price) historyPrevPrice[String(itemId)] = secondLatest.price;
+        if (latest && latest.timestamp) {
+          historyPrevPriceTs[String(itemId)] = latest.timestamp > 1e12 ? latest.timestamp : latest.timestamp * 1000;
+        }
       }
       console.log(`[prices] Loaded history for ${Object.keys(historyVolAvg).length} items (vol) / ${Object.keys(historyPrevPrice).length} items (price)`);
     } catch (e) {
@@ -319,13 +323,36 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       examine = itemData.examine ?? '';
       members = itemData.members ?? false;
 
-      // Price change — dump's last field first, then history fallback
+      // Price change — dump's last field first, then history fallback.
+      // Ben, 2026-08-09: caught for real on Water rune — dump's "last" said
+      // 52gp (implying -50% change_1d) while both our own tracked history
+      // AND the live-price feed agreed the real recent price never left
+      // 25-28gp. The dump's "last" field can go stale on cheap,
+      // low-movement items in a way that isn't a real single-day move.
+      //
+      // BUT our own historyPrevPrice is itself just a CACHE of an item's
+      // price history — it only refreshes when something actually
+      // re-fetches that item (a chart open, a backfill run), not every
+      // cycle. Caught for real on Saradomin's hum: its cache hadn't moved
+      // since June 26 (6+ weeks), so blindly preferring it over the dump's
+      // "last" field would have swapped one bad number for a worse one.
+      // Only trust the cached history as an override when its own latest
+      // point is itself recent (<=2 days old) — otherwise it's not a
+      // trustworthy "yesterday" reference either, and the dump's field
+      // (even if occasionally wrong) is the more current source available.
+      const CHANGE_SANITY_RATIO = 1.3;
+      const HISTORY_FRESH_MS = 2 * 24 * 60 * 60 * 1000;
       const lastPrice = itemData.last;
+      const ownPrevTs = (itemId && String(itemId) in historyPrevPriceTs) ? historyPrevPriceTs[String(itemId)] : null;
+      const ownPrevFresh = ownPrevTs && (Date.now() - ownPrevTs) <= HISTORY_FRESH_MS;
+      const ownPrev = ownPrevFresh && itemId && String(itemId) in historyPrevPrice ? historyPrevPrice[String(itemId)] : null;
       if (lastPrice && lastPrice > 0 && price !== lastPrice) {
-        changeOneDay = pyRound(((price - lastPrice) / lastPrice) * 100, 2);
-      } else if (itemId && String(itemId) in historyPrevPrice) {
-        const prev = historyPrevPrice[String(itemId)];
-        changeOneDay = (prev && prev > 0) ? pyRound(((price - prev) / prev) * 100, 2) : null;
+        const disagreesWithHistory = ownPrev && ownPrev > 0 &&
+          Math.max(lastPrice, ownPrev) / Math.min(lastPrice, ownPrev) > CHANGE_SANITY_RATIO;
+        const trustedPrev = disagreesWithHistory ? ownPrev : lastPrice;
+        changeOneDay = pyRound(((price - trustedPrev) / trustedPrev) * 100, 2);
+      } else if (ownPrev) {
+        changeOneDay = ownPrev > 0 ? pyRound(((price - ownPrev) / ownPrev) * 100, 2) : null;
       } else {
         changeOneDay = null;
       }
@@ -668,7 +695,18 @@ function runSignals(items) {
       const profit = alch - (gePrice1 * 0.98) - natureRunePrice;
       if (profit > 0) score += Math.min(10, profit / gePrice1 * 100);
     }
-    item.score = pyRound(Math.min(100, score), 1);
+    // Ben, 2026-08-09: an OVERPRICED item (GE price diverged significantly
+    // above the real live price) could still hit 100/100 here — the
+    // momentum/DUMP points above are measured off change_1d, which is
+    // itself derived from that same untrustworthy GE price, so a "great
+    // opportunity" score built on a possibly-fake price isn't trustworthy
+    // either. Capped at 50 rather than zeroed out, since the item might
+    // still be worth a look — just not a top-of-list one. UNDERPRICED is
+    // deliberately NOT capped the same way: it means the real price is
+    // HIGHER than GE shows, which is a genuine opportunity rather than a
+    // red flag, so no reason to undersell it the same way.
+    const scoreCap = signals.includes('OVERPRICED') ? 50 : 100;
+    item.score = pyRound(Math.min(scoreCap, score), 1);
   }
 
   const sigNames = ['SURGE', 'DUMP', 'ACCUMULATION', 'DISTRIBUTION', 'FRENZY', 'HIGH_VOL', 'ACTIVE', 'QUIET', 'THIN', 'ALCH'];

@@ -16651,19 +16651,19 @@
           "food"
         ],
         "broken memento": [
-          "prayer"
+          "necromancy"
         ],
         "fragile memento": [
-          "prayer"
+          "necromancy"
         ],
         "spirit memento": [
-          "prayer"
+          "necromancy"
         ],
         "robust memento": [
-          "prayer"
+          "necromancy"
         ],
         "powerful memento": [
-          "prayer"
+          "necromancy"
         ],
         "undead dragonhide": [
           "artisan",
@@ -17432,8 +17432,6 @@
           "low_tier"
         ],
         "magic skull mask": [
-          "prayer",
-          "magic",
           "low_tier"
         ],
         "cream tea": [
@@ -21607,6 +21605,7 @@
         async function computeHistoryStats() {
           const historyVolAvg = {};
           const historyPrevPrice = {};
+          const historyPrevPriceTs = {};
           const toSec = (ts) => ts && ts > 1e12 ? ts / 1e3 : ts;
           const allIds = [...historyPopulatedIds];
           let _processedSinceYield = 0;
@@ -21640,8 +21639,11 @@
               historyVolAvg[String(itemId)] = medianVol;
             }
             if (secondLatest && secondLatest.price) historyPrevPrice[String(itemId)] = secondLatest.price;
+            if (latest && latest.timestamp) {
+              historyPrevPriceTs[String(itemId)] = latest.timestamp > 1e12 ? latest.timestamp : latest.timestamp * 1e3;
+            }
           }
-          return { historyVolAvg, historyPrevPrice };
+          return { historyVolAvg, historyPrevPrice, historyPrevPriceTs };
         }
         async function saveHistory() {
           if (dirtyHistoryIds.size === 0) return;
@@ -22879,6 +22881,7 @@
               theme: store2.get("theme", "dark"),
               notifications: store2.get("notifications", true),
               expensiveThreshold: store2.get("expensiveThreshold", 5e8),
+              overpricedThreshold: store2.get("overpricedThreshold", 30),
               navOrder: store2.get("navOrder", []),
               uiScale: store2.get("uiScale", 100),
               devMode: store2.get("devMode", false),
@@ -22909,6 +22912,7 @@
               fetchInterval: store2.get("fetchInterval", 15),
               notifications: store2.get("notifications", true),
               expensiveThreshold: store2.get("expensiveThreshold", 5e8),
+              overpricedThreshold: store2.get("overpricedThreshold", 30),
               navOrder: store2.get("navOrder", []),
               dxpNotificationSettings: store2.get("dxpNotificationSettings", {
                 enabled: false,
@@ -22937,7 +22941,7 @@
           if (Array.isArray(bundle.reminders)) store2.set("reminders", bundle.reminders);
           if (bundle.userShorthands && typeof bundle.userShorthands === "object") store2.set("userShorthands", bundle.userShorthands);
           if (bundle.settings && typeof bundle.settings === "object") {
-            const ALLOWED_SETTINGS = ["discordWebhook", "fetchInterval", "notifications", "expensiveThreshold", "navOrder", "theme", "dateFormat", "dxpNotificationSettings", "watchlistNotificationSettings"];
+            const ALLOWED_SETTINGS = ["discordWebhook", "fetchInterval", "notifications", "expensiveThreshold", "overpricedThreshold", "navOrder", "theme", "dateFormat", "dxpNotificationSettings", "watchlistNotificationSettings"];
             ALLOWED_SETTINGS.forEach((k) => {
               if (k in bundle.settings) store2.set(k, bundle.settings[k]);
             });
@@ -24197,8 +24201,9 @@ ${data.length} indexes:
         const DUMP_URL = "https://chisel.weirdgloop.org/gazproj/gazbot/rs_dump.json";
         let historyVolAvg = {};
         let historyPrevPrice = {};
+        let historyPrevPriceTs = {};
         if (historyStatsOverride) {
-          ({ historyVolAvg, historyPrevPrice } = historyStatsOverride);
+          ({ historyVolAvg, historyPrevPrice, historyPrevPriceTs = {} } = historyStatsOverride);
         } else {
           const historyDir = path.join(dataDir, "history");
           const history = await storage2.loadDirBatched(historyDir);
@@ -24235,6 +24240,9 @@ ${data.length} indexes:
                   historyVolAvg[String(itemId)] = medianVol;
                 }
                 if (secondLatest && secondLatest.price) historyPrevPrice[String(itemId)] = secondLatest.price;
+                if (latest && latest.timestamp) {
+                  historyPrevPriceTs[String(itemId)] = latest.timestamp > 1e12 ? latest.timestamp : latest.timestamp * 1e3;
+                }
               }
               console.log(`[prices] Loaded history for ${Object.keys(historyVolAvg).length} items (vol) / ${Object.keys(historyPrevPrice).length} items (price)`);
             } catch (e) {
@@ -24313,12 +24321,18 @@ ${data.length} indexes:
             limit = itemData.limit ?? null;
             examine = itemData.examine ?? "";
             members = itemData.members ?? false;
+            const CHANGE_SANITY_RATIO = 1.3;
+            const HISTORY_FRESH_MS = 2 * 24 * 60 * 60 * 1e3;
             const lastPrice = itemData.last;
+            const ownPrevTs = itemId && String(itemId) in historyPrevPriceTs ? historyPrevPriceTs[String(itemId)] : null;
+            const ownPrevFresh = ownPrevTs && Date.now() - ownPrevTs <= HISTORY_FRESH_MS;
+            const ownPrev = ownPrevFresh && itemId && String(itemId) in historyPrevPrice ? historyPrevPrice[String(itemId)] : null;
             if (lastPrice && lastPrice > 0 && price !== lastPrice) {
-              changeOneDay = pyRound((price - lastPrice) / lastPrice * 100, 2);
-            } else if (itemId && String(itemId) in historyPrevPrice) {
-              const prev = historyPrevPrice[String(itemId)];
-              changeOneDay = prev && prev > 0 ? pyRound((price - prev) / prev * 100, 2) : null;
+              const disagreesWithHistory = ownPrev && ownPrev > 0 && Math.max(lastPrice, ownPrev) / Math.min(lastPrice, ownPrev) > CHANGE_SANITY_RATIO;
+              const trustedPrev = disagreesWithHistory ? ownPrev : lastPrice;
+              changeOneDay = pyRound((price - trustedPrev) / trustedPrev * 100, 2);
+            } else if (ownPrev) {
+              changeOneDay = ownPrev > 0 ? pyRound((price - ownPrev) / ownPrev * 100, 2) : null;
             } else {
               changeOneDay = null;
             }
@@ -24530,7 +24544,8 @@ ${data.length} indexes:
             const profit = alch - gePrice1 * 0.98 - natureRunePrice;
             if (profit > 0) score += Math.min(10, profit / gePrice1 * 100);
           }
-          item.score = pyRound(Math.min(100, score), 1);
+          const scoreCap = signals.includes("OVERPRICED") ? 50 : 100;
+          item.score = pyRound(Math.min(scoreCap, score), 1);
         }
         const sigNames = ["SURGE", "DUMP", "ACCUMULATION", "DISTRIBUTION", "FRENZY", "HIGH_VOL", "ACTIVE", "QUIET", "THIN", "ALCH"];
         const counts = {};

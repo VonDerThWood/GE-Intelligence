@@ -14846,19 +14846,19 @@
     "food"
   ],
   "broken memento": [
-    "prayer"
+    "necromancy"
   ],
   "fragile memento": [
-    "prayer"
+    "necromancy"
   ],
   "spirit memento": [
-    "prayer"
+    "necromancy"
   ],
   "robust memento": [
-    "prayer"
+    "necromancy"
   ],
   "powerful memento": [
-    "prayer"
+    "necromancy"
   ],
   "undead dragonhide": [
     "artisan",
@@ -15627,8 +15627,6 @@
     "low_tier"
   ],
   "magic skull mask": [
-    "prayer",
-    "magic",
     "low_tier"
   ],
   "cream tea": [

@@ -393,8 +393,8 @@ const SIGNAL_INFO = {
   THIN:         'Volume is 50%+ below average — very few trades. This market is illiquid; prices may be unreliable.',
   ALCH:         'High alchemy yields more than selling on the GE after the 2% tax and the cost of a nature rune. Profitable to alch.',
   MANIPULATED:  'Extreme volume spike on an item with a tiny GE buy limit and a large price move — a classic sign of coordinated buying to inflate the price. Trade with caution.',
-  OVERPRICED:   'The listed GE price is 20%+ higher than real live buy/sell — the displayed price may be a stale or fake default. Verify the live price before trusting it.',
-  UNDERPRICED:  'Real live buy/sell is 20%+ higher than the listed GE price — the item may be worth more than the displayed price shows.',
+  OVERPRICED:   'The listed GE price is significantly higher than real live buy/sell (threshold set in Settings) — the displayed price may be a stale or fake default. Verify the live price before trusting it.',
+  UNDERPRICED:  'Real live buy/sell is significantly higher than the listed GE price (threshold set in Settings) — the item may be worth more than the displayed price shows.',
   WIDE_SPREAD:  'Live instant-buy and instant-sell prices are 40%+ apart — a thin, two-sided market. What looks like a flip margin here is often just illiquidity, not a real opportunity.',
 };
 
@@ -2604,8 +2604,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     chartOpen && h(ChartModal, {item, onClose:()=>{setChartOpen(false);setChartDxpMode(false);}, dateFormat, populatedHistoryIds, showDxpOverlay:chartDxpMode}),
     imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
-      h('div', {className:'row-between', style:{marginBottom:6}},
-        h('div', {className:'row', style:{gap:8, alignItems:'center', minWidth:0, overflow:'hidden'}},
+      h('div', {className:'row-between', style:{marginBottom:6, flexWrap:'wrap', rowGap:6}},
+        h('div', {className:'row', style:{gap:8, alignItems:'center', minWidth:0, overflow:'hidden', flex:'1 1 140px'}},
           iconUrl && h('img', {
             src: iconUrl,
             alt: '',
@@ -3244,11 +3244,65 @@ function useTableColumns(storageKey, defaultWidths, visibleCols) {
 const useResizableColumns = useTableColumns;
 
 /* ─── Item table ─────────────────────────────────────────────── */
-const DEFAULT_COL_WIDTHS = {name:340, high:110, change_1d:110, volume:140, signals:160, star:30};
+const DEFAULT_COL_WIDTHS = {name:340, high:110, gapPct:90, spread:110, change_1d:110, volume:140, signals:160, star:30};
 const ITEM_TABLE_VISIBLE = ['name','high','change_1d','volume','signals','star'];
 const ITEM_TABLE_VISIBLE_NO_SIGNALS = ITEM_TABLE_VISIBLE.filter(k => k !== 'signals');
+// Same gap% math as the backend's OVERPRICED/UNDERPRICED check and the
+// Opportunities tab's dedicated tables — recomputed client-side so this
+// column can sort by exact magnitude, not persisted on the item.
+function itemGapPct(it) {
+  const ge = it.high || it.low || 0;
+  const liveRef = (it.liveBuy != null && it.liveSell != null) ? (it.liveBuy + it.liveSell) / 2 : (it.liveBuy ?? it.liveSell);
+  if (!ge || !liveRef) return 0;
+  return ((ge - liveRef) / liveRef) * 100;
+}
+// Same math as the backend's WIDE_SPREAD check (run.js) — instabuy minus
+// instasell, as both a flat gp amount and a % of instasell. Ben: the
+// WIDE_SPREAD drill-down showed B:/S: prices but made you do the
+// subtraction yourself to see the actual spread that triggered the flag.
+function itemSpreadGp(it) {
+  if (it.liveBuy == null || it.liveSell == null) return 0;
+  return it.liveBuy - it.liveSell;
+}
+function itemSpreadPct(it) {
+  if (it.liveBuy == null || it.liveSell == null || !it.liveSell) return 0;
+  return (itemSpreadGp(it) / it.liveSell) * 100;
+}
+// Mirrors run.js's isLiveTrusted (same constants) — the liquidity gate
+// still applies no matter what % threshold the user picks below, since it
+// exists to filter out single-fluke-trade noise, not to control
+// selectivity. Only the % cutoff itself is user-adjustable.
+const LIVE_LIQUID_MIN_UNITS = 3, LIVE_LIQUID_MIN_TURNOVER_GP = 25000, LIVE_SANITY_BAND = 5, LIVE_PRICE_EXEMPT_GP = 1000000;
+function isLiveTrustedClient(it, ge) {
+  if (ge >= LIVE_PRICE_EXEMPT_GP) return true;
+  const liveRef = (it.liveBuy != null && it.liveSell != null) ? (it.liveBuy + it.liveSell) / 2 : (it.liveBuy ?? it.liveSell);
+  if (!liveRef || liveRef <= 0) return false;
+  if ((it.liveUnits || 0) >= LIVE_LIQUID_MIN_UNITS && (it.liveTurnover || 0) >= LIVE_LIQUID_MIN_TURNOVER_GP) return true;
+  const ratio = Math.max(ge, liveRef) / Math.min(ge, liveRef);
+  return ratio <= LIVE_SANITY_BAND;
+}
+const DISCREPANCY_MIN_GP = 1000; // same absolute-gp floor as the backend, not user-adjustable
+function overpricedUnderpricedLists(items, thresholdPct) {
+  const overpriced = [], underpriced = [];
+  for (const it of items) {
+    const ge = it.high || it.low || 0;
+    if (!ge) continue;
+    if (it.liveBuy == null && it.liveSell == null) continue;
+    if (!isLiveTrustedClient(it, ge)) continue;
+    const liveRef = (it.liveBuy != null && it.liveSell != null) ? (it.liveBuy + it.liveSell) / 2 : (it.liveBuy ?? it.liveSell);
+    if (!liveRef || liveRef <= 0) continue;
+    const gapGp = Math.abs(ge - liveRef);
+    if (gapGp < DISCREPANCY_MIN_GP) continue;
+    const pct = itemGapPct(it);
+    if (pct >= thresholdPct) overpriced.push(it);
+    else if (pct <= -thresholdPct) underpriced.push(it);
+  }
+  overpriced.sort((a,b) => itemGapPct(b) - itemGapPct(a));
+  underpriced.sort((a,b) => itemGapPct(a) - itemGapPct(b));
+  return {overpriced, underpriced};
+}
 
-function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals}) {
+function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals, showGapPct, showSpread}) {
   // watchlist/onToggleWatch are read unconditionally below (star column
   // renders for every row, no matter the call site) — Opportunities'
   // signal-filtered table called this without passing either, so
@@ -3257,10 +3311,16 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
   // page with no way to get back"). Defaulting here means a call site
   // that forgets these props degrades to an inert star instead of a
   // crash, regardless of which tab calls it next.
-  const [sort, setSort] = useState({key:'name',dir:1});
+  const [sort, setSort] = useState({key: showGapPct ? 'gapPct' : showSpread ? 'spread' : 'name', dir: (showGapPct || showSpread) ? -1 : 1});
   const [ctxMenu, setCtxMenu] = useState(null); // {x, y, item}
-  const cols = useTableColumns('genius_col_widths', DEFAULT_COL_WIDTHS,
-    showSignals ? ITEM_TABLE_VISIBLE : ITEM_TABLE_VISIBLE_NO_SIGNALS);
+  const visibleCols = useMemo(() => {
+    const base = showSignals ? ITEM_TABLE_VISIBLE : ITEM_TABLE_VISIBLE_NO_SIGNALS;
+    if (!showGapPct && !showSpread) return base;
+    const i = base.indexOf('high');
+    const extra = showGapPct ? 'gapPct' : 'spread';
+    return [...base.slice(0, i+1), extra, ...base.slice(i+1)];
+  }, [showSignals, showGapPct, showSpread]);
+  const cols = useTableColumns('genius_col_widths', DEFAULT_COL_WIDTHS, visibleCols);
 
   const openCtx = (e, it) => {
     e.preventDefault();
@@ -3357,6 +3417,8 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
   // showing and labeled "Live Price."
   const sortValue = (it, key) => {
     if (key === 'high' && priceMode === 'live') return it.liveBuy ?? it.liveSell ?? it.high ?? it.low ?? 0;
+    if (key === 'gapPct') return itemGapPct(it);
+    if (key === 'spread') return itemSpreadPct(it);
     return it[key] ?? 0;
   };
   const sorted = useMemo(() => {
@@ -3384,6 +3446,8 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
       case 'volume':    return cols.th(k, {onClick:()=>tog('volume')}, 'Volume'+arr('volume'));
       case 'signals':   return cols.th(k, null, 'Signals');
       case 'star':      return cols.th(k, {style:{width:30}}, null);
+      case 'gapPct':    return cols.th(k, {onClick:()=>tog('gapPct')}, 'Gap %'+arr('gapPct'));
+      case 'spread':    return cols.th(k, {onClick:()=>tog('spread')}, 'Spread'+arr('spread'));
       default:          return cols.th(k, null, null);
     }
   };
@@ -3393,6 +3457,17 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
         h('span',null, it.name),
         SHOW_THUMBNAILS && h(ItemThumb,{name:it.name}),
       ));
+      case 'gapPct': {
+        const g = itemGapPct(it);
+        return h('td', {key:k, style:{color: g >= 0 ? '#ef9a9a' : '#81c784'}}, (g >= 0 ? '+' : '') + g.toFixed(1) + '%');
+      }
+      case 'spread': {
+        if (it.liveBuy == null || it.liveSell == null) return h('td', {key:k, style:{color:T.textDim}}, '—');
+        return h('td', {key:k, style:{color:'#bdbdbd'}},
+          fmt.gp(itemSpreadGp(it))+'gp',
+          h('div',{className:'vol-avg'}, itemSpreadPct(it).toFixed(1)+'%')
+        );
+      }
       case 'high': {
         const hasLive = it.liveBuy != null || it.liveSell != null;
         if (priceMode === 'live' && hasLive) {
@@ -3603,7 +3678,7 @@ function SectorCard({sector, onClick}) {
 }
 
 /* ─── Dashboard tab ──────────────────────────────────────────── */
-function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news}) {
+function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news, overpricedThreshold=30}) {
   const [activeSignal, setActiveSignal] = useState(null);
   const [activeIndexId, setActiveIndexId] = useState(null);
   const [activeSector, setActiveSector] = useState(null);
@@ -3646,13 +3721,23 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       return rb - ra;
     }).slice(0,6), [tradeableItems]);
 
+  // OVERPRICED/UNDERPRICED are recomputed client-side against the user's
+  // threshold setting (Settings > Overpriced/Underpriced threshold) rather
+  // than read off the backend's fixed-20% signal tag — everywhere these
+  // two show up (this pill count, the drill-down list, Hall of Shame/Glory
+  // below) stays consistent with whatever the user has it set to.
+  const {overpriced: opList, underpriced: upList} = useMemo(
+    () => overpricedUnderpricedLists(tradeableItems, overpricedThreshold), [tradeableItems, overpricedThreshold]);
+
   const signalCounts = useMemo(() => {
     const counts = {SURGE:0,DUMP:0,ACCUMULATION:0,DISTRIBUTION:0,FRENZY:0,HIGH_VOL:0,MANIPULATED:0,OVERPRICED:0,UNDERPRICED:0,WIDE_SPREAD:0};
     for (const it of tradeableItems) {
-      for (const s of (it.signals||[])) { if (s in counts) counts[s]++; }
+      for (const s of (it.signals||[])) { if (s in counts && s !== 'OVERPRICED' && s !== 'UNDERPRICED') counts[s]++; }
     }
+    counts.OVERPRICED = opList.length;
+    counts.UNDERPRICED = upList.length;
     return counts;
-  }, [tradeableItems]);
+  }, [tradeableItems, opList, upList]);
 
   const rising  = tradeableItems.filter(it => (it.change_1d||0) > 0).length;
   const falling = tradeableItems.filter(it => (it.change_1d||0) < 0).length;
@@ -3749,49 +3834,76 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   // genuinely-positive entries; Shame gets "Most Overpriced" in its
   // place — a real warning (GE-listed price sitting 20%+ above live),
   // not just a big number.
+  // Ben, 2026-08-09: change_1d% alone stopped being a useful "how dramatic
+  // was this" ranking once the stale-data bug got fixed — real daily
+  // moves cluster tight against Jagex's own GE price-cap (checked
+  // directly: 95th percentile 4.99%, 99th 5.19%, most items never clear
+  // 5% at all), so "Biggest Crash" was just picking whichever item
+  // happened to sit at that same ~5% ceiling, not anything actually
+  // notable. Ranking by real gp lost/gained instead — a 5% move on a
+  // 100M item is a real story, a 5% move on a 50gp item isn't, same
+  // logic SURGE/DUMP's own absChgGp floor already uses.
+  const gpChange = it => (it.change_1d||0) / 100 * (it.high || it.low || 0);
+  // Ben, 2026-08-09: "for thoroughness" — show the live buy/sell-based
+  // daily change alongside the GE-price one, since they can genuinely
+  // diverge (that's the whole point of OVERPRICED/UNDERPRICED). null
+  // until ~20h of live snapshots have accumulated for that item.
+  const liveChangeStat = it => {
+    if (it.change_1d_live == null) return null;
+    // Same price basis run.js's computeLiveChange1d itself used (liveBuy,
+    // falling back to GE price) — matches the % exactly instead of
+    // guessing at a different reference point for the gp figure.
+    const liveRefPrice = it.liveBuy ?? it.high ?? it.low ?? 0;
+    const liveGpChange = it.change_1d_live / 100 * liveRefPrice;
+    const sign = it.change_1d_live >= 0 ? '+' : '';
+    return `Live: ${sign}${fmt.gp(liveGpChange)}gp (${sign}${it.change_1d_live.toFixed(2)}%)`;
+  };
   const hallOfShame = useMemo(() => {
     const priced = tradeableItems.filter(it => (it.high || it.low) > 10000 && it.change_1d != null);
-    const biggestCrash = [...priced].sort((a,b) => (a.change_1d||0) - (b.change_1d||0))[0];
+    const biggestCrash = [...priced].sort((a,b) => gpChange(a) - gpChange(b))[0];
     const biggestDump  = [...priced].filter(it => (it.signals||[]).includes('DUMP'))
       .sort((a,b) => {
         const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
         const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
         return rb - ra;
       })[0];
-    const overpriced  = [...priced].filter(it => (it.signals||[]).includes('OVERPRICED'))
-      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
+    const overpriced  = opList[0];
     const manipulated  = [...priced].filter(it => (it.signals||[]).includes('MANIPULATED'))
       .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
 
+    // 90th percentile of real gp swings among priced items (checked
+    // directly), same "evidence not a guess" approach as the % floor this
+    // replaced — below this it's not really worth calling out.
+    const GP_CHANGE_NOTABLE_FLOOR = 500000;
     const entries = [];
-    if (biggestCrash && (biggestCrash.change_1d||0) < -3)
-      entries.push({ icon:'📉', title:'Biggest Crash', item: biggestCrash, stat: (biggestCrash.change_1d).toFixed(2)+'% today' });
+    if (biggestCrash && gpChange(biggestCrash) < -GP_CHANGE_NOTABLE_FLOOR)
+      entries.push({ icon:'📉', title:'Biggest Crash', item: biggestCrash, stat: fmt.gp(gpChange(biggestCrash))+'gp ('+(biggestCrash.change_1d).toFixed(2)+'%) today', liveStat: liveChangeStat(biggestCrash) });
     if (biggestDump && biggestDump !== biggestCrash)
-      entries.push({ icon:'🚮', title:'Heaviest Dump', item: biggestDump,  stat: (biggestDump.change_1d||0).toFixed(2)+'% on '+(biggestDump.volume&&biggestDump.avgVolume?(biggestDump.volume/biggestDump.avgVolume).toFixed(1)+'x avg vol':'high volume') });
+      entries.push({ icon:'🚮', title:'Heaviest Dump', item: biggestDump,  stat: (biggestDump.change_1d||0).toFixed(2)+'% on '+(biggestDump.volume&&biggestDump.avgVolume?(biggestDump.volume/biggestDump.avgVolume).toFixed(1)+'x avg vol':'high volume'), liveStat: liveChangeStat(biggestDump) });
     if (overpriced)
-      entries.push({ icon:'🏷️', title:'Most Overpriced', item: overpriced, stat: 'GE price 20%+ above real live buy/sell' });
+      entries.push({ icon:'🏷️', title:'Most Overpriced', item: overpriced, stat: `GE price ${overpricedThreshold}%+ above real live buy/sell` });
     if (manipulated)
       entries.push({ icon:'🎭', title:'Probably Manipulated', item: manipulated, stat: Math.abs(manipulated.change_1d||0).toFixed(2)+'% move on tiny buy limit' });
     return entries;
-  }, [tradeableItems]);
+  }, [tradeableItems, opList, overpricedThreshold]);
 
   const hallOfGlory = useMemo(() => {
     const priced = tradeableItems.filter(it => (it.high || it.low) > 10000 && it.change_1d != null);
-    const bestGainer = [...priced].sort((a,b) => (b.change_1d||0) - (a.change_1d||0))[0];
+    const bestGainer = [...priced].sort((a,b) => gpChange(b) - gpChange(a))[0];
     const wildestRide = [...priced].filter(it => (it.signals||[]).includes('FRENZY'))
       .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
-    const hiddenGem = [...priced].filter(it => (it.signals||[]).includes('UNDERPRICED'))
-      .sort((a,b) => Math.abs(b.change_1d||0) - Math.abs(a.change_1d||0))[0];
+    const hiddenGem = upList[0];
 
+    const GP_CHANGE_NOTABLE_FLOOR = 500000;
     const entries = [];
-    if (bestGainer && (bestGainer.change_1d||0) > 3)
-      entries.push({ icon:'📈', title:'Best Gainer', item: bestGainer, stat: '+'+(bestGainer.change_1d).toFixed(2)+'% today' });
+    if (bestGainer && gpChange(bestGainer) > GP_CHANGE_NOTABLE_FLOOR)
+      entries.push({ icon:'📈', title:'Best Gainer', item: bestGainer, stat: '+'+fmt.gp(gpChange(bestGainer))+'gp (+'+(bestGainer.change_1d).toFixed(2)+'%) today', liveStat: liveChangeStat(bestGainer) });
     if (wildestRide && wildestRide !== bestGainer)
-      entries.push({ icon:'🎢', title:'Wildest Ride', item: wildestRide, stat: Math.abs(wildestRide.change_1d||0).toFixed(2)+'% swing today' });
+      entries.push({ icon:'🎢', title:'Wildest Ride', item: wildestRide, stat: Math.abs(wildestRide.change_1d||0).toFixed(2)+'% swing today', liveStat: liveChangeStat(wildestRide) });
     if (hiddenGem)
       entries.push({ icon:'💎', title:'Hidden Gem', item: hiddenGem, stat: 'Real live price well above the GE listing' });
     return entries;
-  }, [tradeableItems]);
+  }, [tradeableItems, upList]);
 
   // Sector Heat Map
   const SECTORS = [
@@ -3932,7 +4044,9 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
   // Signal drill-down view
   if (activeSignal) {
-    const todayItems = tradeableItems.filter(it => (it.signals||[]).includes(activeSignal));
+    const todayItems = activeSignal === 'OVERPRICED' ? opList
+      : activeSignal === 'UNDERPRICED' ? upList
+      : tradeableItems.filter(it => (it.signals||[]).includes(activeSignal));
     const weekEntries = signalTrend?.itemIds?.[activeSignal] || [];
     const lastDayIdx = signalTrend ? signalTrend.days.length - 1 : 0;
     const weekItems = signalWindow === '7d'
@@ -3982,7 +4096,9 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
         borderBottom:`1px solid ${T.borderDim}`, flexShrink:0,
       }}, SIGNAL_INFO[activeSignal] + (signalWindow==='7d' ? ' Showing any item that triggered this in the last 7 days.' : '')),
       h('div', {style:{flex:1, overflowY:'auto'}},
-        h(ItemTable, {items:sigItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+        h(ItemTable, {items:sigItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare,
+          showGapPct: activeSignal === 'OVERPRICED' || activeSignal === 'UNDERPRICED',
+          showSpread: activeSignal === 'WIDE_SPREAD'})
 
       )
     );
@@ -4404,6 +4520,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
               h('div', {style:{fontSize:10, color:T.red, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2}}, entry.title),
               h('div', {style:{fontSize:12, color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, entry.item.name),
               h('div', {style:{fontSize:11, color:T.textDim}}, entry.stat),
+              entry.liveStat && h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic'}}, entry.liveStat),
             ),
             h('div', {style:{flexShrink:0, textAlign:'right'}},
               h('div', {style:{fontSize:12, color:T.red, fontWeight:'bold'}}, fmt.gp(entry.item.high || entry.item.low)+'gp'),
@@ -4437,6 +4554,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
               h('div', {style:{fontSize:10, color:T.green, fontWeight:'bold', textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2}}, entry.title),
               h('div', {style:{fontSize:12, color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, entry.item.name),
               h('div', {style:{fontSize:11, color:T.textDim}}, entry.stat),
+              entry.liveStat && h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic'}}, entry.liveStat),
             ),
             h('div', {style:{flexShrink:0, textAlign:'right'}},
               h('div', {style:{fontSize:12, color:T.green, fontWeight:'bold'}}, fmt.gp(entry.item.high || entry.item.low)+'gp'),
@@ -7909,6 +8027,20 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         `Currently: ${fmt.gp(s.expensiveThreshold || 500000000)}gp`
       )
     ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Overpriced/Underpriced threshold'),
+      h('label',{className:'form-lbl'},'How far the GE price has to diverge from the real live price (as a %) before an item counts as Overpriced/Underpriced'),
+      h('div',{style:{display:'flex',alignItems:'center',gap:6}},
+        h('input',{className:'ge-input',type:'number',min:1,max:200,step:1,
+          value: s.overpricedThreshold ?? 30,
+          onChange: e => { const v = Number(e.target.value); if (!isNaN(v) && v > 0) update({overpricedThreshold: v}); },
+          style:{width:80}}),
+        h('span',{style:{color:T.textDim,fontSize:12}},'%')
+      ),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:4}},
+        'Lower = more items flagged (catches routine GE price lag too). Higher = only the most extreme gaps. Applies to the Opportunities tab\'s Overpriced/Underpriced tables and their drill-down views.'
+      )
+    ),
 
     h('div',{className:'ge-section-head', style:{fontSize:13}},'Notifications'),
     h('div',{style:{marginBottom:20}},
@@ -8172,20 +8304,38 @@ const CAT_GROUPS = [
 function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, threshold, description}) {
   const [sort, setSort] = useState({key:'high', dir:-1});
 
+  // Same localStorage key ItemTable uses for its own GE/Live price toggle —
+  // shared state, so flipping it here (or anywhere else) stays consistent
+  // across the whole app instead of each table remembering its own mode.
+  const [priceMode, setPriceMode] = useState(() => {
+    try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
+  });
+  const togglePriceMode = e => {
+    e.stopPropagation();
+    setPriceMode(m => {
+      const next = m === 'ge' ? 'live' : 'ge';
+      try { localStorage.setItem('genius_price_col_mode', next); } catch {}
+      return next;
+    });
+  };
+
   const expThreshold = Number(threshold) || 500000000;
 
   const expItems = useMemo(() => {
     return items.filter(it => (it.high || it.low || 0) >= expThreshold);
   }, [items, expThreshold]);
 
+  const sortValue = (it, key) => {
+    if (key === 'high' && priceMode === 'live') return it.liveBuy ?? it.liveSell ?? it.high ?? it.low ?? 0;
+    return it[key] ?? 0;
+  };
   const sorted = useMemo(() => {
     return [...expItems].sort((a,b) => {
       if (sort.key === 'name') return sort.dir * a.name.localeCompare(b.name);
-      const av = a[sort.key] ?? 0;
-      const bv = b[sort.key] ?? 0;
+      const av = sortValue(a, sort.key), bv = sortValue(b, sort.key);
       return sort.dir * (av < bv ? -1 : av > bv ? 1 : 0);
     });
-  }, [expItems, sort]);
+  }, [expItems, sort, priceMode]);
 
   const Th = ({k, label}) => h('th', {
     style:{cursor:'pointer', userSelect:'none'},
@@ -8208,19 +8358,36 @@ function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, thre
       h('thead', null,
         h('tr', null,
           h(Th, {k:'name',      label:'Item'}),
-          h(Th, {k:'high',      label:'Price'}),
+          h('th', {style:{cursor:'pointer', userSelect:'none'}, onClick: () => setSort(s => ({key:'high', dir: s.key==='high' ? -s.dir : -1}))},
+            (priceMode==='ge' ? 'GE Price' : 'Live Price') + (sort.key==='high' ? (sort.dir>0 ? ' ↑' : ' ↓') : ''),
+            h('button', {
+              onClick: togglePriceMode,
+              title: priceMode==='ge' ? 'Showing GE (listed) price — click to show live buy/sell instead' : 'Showing live buy/sell — click to show GE (listed) price instead',
+              style: {marginLeft:6, fontSize:9, padding:'1px 5px', cursor:'pointer', borderRadius:3, border:`1px solid ${T.border}`, background:'rgba(255,255,255,0.05)', color:T.textDim}
+            }, '⇄')
+          ),
           h(Th, {k:'change_1d', label:'24h'}),
           h(Th, {k:'volume',    label:'Volume'}),
           h('th', null, '')
         )
       ),
-      h('tbody', null, sorted.map(it =>
-        h('tr', {key:it.id, 'data-item-id':it.id,
+      h('tbody', null, sorted.map(it => {
+        const hasLive = it.liveBuy != null || it.liveSell != null;
+        const priceCell = (priceMode === 'live' && hasLive)
+          ? h('td', {key:'p'},
+              h('div', {style:{display:'flex', gap:6, fontSize:11}},
+                it.liveBuy  != null && h('span', null, h('span',{style:{color:T.green}},'B '), fmt.gp(it.liveBuy)+'gp'),
+                it.liveSell != null && h('span', null, h('span',{style:{color:'#e08030'}},'S '), fmt.gp(it.liveSell)+'gp'),
+              ),
+              h('div', {className:'vol-avg'}, 'GE '+fmt.gp(it.high||it.low)+'gp'),
+            )
+          : h('td', {key:'p', style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}));
+        return h('tr', {key:it.id, 'data-item-id':it.id,
           className: selected?.id===it.id ? 'selected' : '',
           onClick: () => onSelect(it)
         },
           h('td', null, it.name),
-          h('td', {style:{color:T.gold}}, fmt.gp(it.high||it.low)+'gp'),
+          priceCell,
           h('td',null,h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
           h('td', null, h(VolDisplay, {volume:it.volume, avgVolume:it.avgVolume})),
           h('td', null,
@@ -8231,8 +8398,8 @@ function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, thre
               watchlist.includes(it.id)?'★':'☆'
             ))
           )
-        )
-      ))
+        );
+      }))
     )
   );
 }
@@ -10091,7 +10258,7 @@ function ScoreTable({rows, selected, onSelect}) {
   );
 }
 
-function OpportunitiesTab({items, selected, onSelect, description, watchlist, onToggleWatch, onToggleHide, onAddCompare}) {
+function OpportunitiesTab({items, selected, onSelect, description, watchlist, onToggleWatch, onToggleHide, onAddCompare, overpricedThreshold=30}) {
   const [signalFilter, setSignalFilter] = useState(null);
 
   const withSignal = useCallback((sig) =>
@@ -10107,6 +10274,15 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
   }).slice(0,20), [items]);
   const frenzy   = useMemo(() => withSignal('FRENZY').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,15), [items]);
   const topScored = useMemo(() => [...items].filter(it=>it.score>0&&!it.untradeable).sort((a,b)=>(b.score||0)-(a.score||0)).slice(0,20), [items]);
+
+  // OVERPRICED/UNDERPRICED are computed against the user's threshold
+  // setting (Settings > Overpriced/Underpriced threshold), not the
+  // backend's fixed-20% signal tag — see overpricedUnderpricedLists/
+  // itemGapPct above. Lets people pick where "normal GE lag" stops
+  // mattering instead of one hardcoded global cutoff.
+  const gapPct = itemGapPct;
+  const {overpriced, underpriced} = useMemo(
+    () => overpricedUnderpricedLists(items, overpricedThreshold), [items, overpricedThreshold]);
 
   const risers  = useMemo(() => [...items].filter(it=>it.change_1d!=null&&it.change_1d>0).sort((a,b)=>(b.change_1d||0)-(a.change_1d||0)).slice(0,8), [items]);
   const fallers = useMemo(() => [...items].filter(it=>it.change_1d!=null&&it.change_1d<0).sort((a,b)=>(a.change_1d||0)-(b.change_1d||0)).slice(0,8), [items]);
@@ -10317,6 +10493,36 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ff80ab'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
+        signalCells(it),
+      ],
+    }),
+
+    !signalFilter && h(SectionTable, {
+      title:'Overpriced', icon:'🏷️', color:'#ef9a9a',
+      desc:`— GE price ${overpricedThreshold}%+ above real live buy/sell (adjustable in Settings)`,
+      rows:overpriced,
+      headers:['Item','GE Price','Live Price','Gap %','Signals'],
+      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),gapPct,null],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'lp'},h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
+        h('td',{key:'g',style:{color:'#ef9a9a'}},'+'+gapPct(it).toFixed(1)+'%'),
+        signalCells(it),
+      ],
+    }),
+
+    !signalFilter && h(SectionTable, {
+      title:'Underpriced', icon:'💎', color:'#81c784',
+      desc:`— real live buy/sell ${overpricedThreshold}%+ above GE price (adjustable in Settings)`,
+      rows:underpriced,
+      headers:['Item','GE Price','Live Price','Gap %','Signals'],
+      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),it=>-gapPct(it),null],
+      renderRow: it => [
+        h('td',{key:'n'},it.name),
+        h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
+        h('td',{key:'lp'},h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
+        h('td',{key:'g',style:{color:'#81c784'}},gapPct(it).toFixed(1)+'%'),
         signalCells(it),
       ],
     }),
@@ -11731,7 +11937,7 @@ function App() {
       ),
       h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
         h('div',{className:'content',style:{flex:1}},
-          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news}),
+          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
           tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems}),
@@ -11763,7 +11969,7 @@ function App() {
             userShorthands,
           }),
           tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
-          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities}),
+          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities,overpricedThreshold:settings.overpricedThreshold||30}),
           tab==='flips' &&h(FlipsTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,description:TAB_DESCRIPTIONS.flips}),
           tab==='money_makers' &&h(MoneyMakersTab, {items:visibleItems,onSelect:handleSelect}),
           tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),

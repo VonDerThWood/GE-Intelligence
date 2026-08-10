@@ -213,6 +213,16 @@ async function createGeniusApi({ dataDir, store }) {
   async function computeHistoryStats() {
     const historyVolAvg = {};
     const historyPrevPrice = {};
+    // Ben, 2026-08-09: historyPrevPrice is a CACHED copy of an item's price
+    // history — it only refreshes when something actually re-fetches that
+    // item (a chart open, a backfill run), not every cycle. For an item
+    // nobody's looked at in a while it can be weeks stale (confirmed for
+    // real: Saradomin's hum's cache hadn't moved since June 26), in which
+    // case it's a worse "yesterday" reference than the live dump's own
+    // "last" field, not a better one. Tracking the latest point's own
+    // timestamp per item so run.js's change_1d logic can gate on it —
+    // only override the dump's field when this cache is actually recent.
+    const historyPrevPriceTs = {};
     const toSec = ts => (ts && ts > 1e12 ? ts / 1000 : ts);
     const allIds = [...historyPopulatedIds];
     let _processedSinceYield = 0;
@@ -242,8 +252,11 @@ async function createGeniusApi({ dataDir, store }) {
         historyVolAvg[String(itemId)] = medianVol;
       }
       if (secondLatest && secondLatest.price) historyPrevPrice[String(itemId)] = secondLatest.price;
+      if (latest && latest.timestamp) {
+        historyPrevPriceTs[String(itemId)] = latest.timestamp > 1e12 ? latest.timestamp : latest.timestamp * 1000;
+      }
     }
-    return { historyVolAvg, historyPrevPrice };
+    return { historyVolAvg, historyPrevPrice, historyPrevPriceTs };
   }
 
   async function saveHistory() {
@@ -2186,6 +2199,7 @@ async function createGeniusApi({ dataDir, store }) {
         theme:          store.get('theme', 'dark'),
         notifications:  store.get('notifications', true),
         expensiveThreshold: store.get('expensiveThreshold', 500000000),
+        overpricedThreshold: store.get('overpricedThreshold', 30),
         navOrder:       store.get('navOrder', []),
         uiScale:        store.get('uiScale', 100),
         devMode:        store.get('devMode', false),
@@ -2221,6 +2235,7 @@ async function createGeniusApi({ dataDir, store }) {
         fetchInterval:      store.get('fetchInterval', 15),
         notifications:      store.get('notifications', true),
         expensiveThreshold: store.get('expensiveThreshold', 500000000),
+        overpricedThreshold: store.get('overpricedThreshold', 30),
         navOrder:           store.get('navOrder', []),
         dxpNotificationSettings: store.get('dxpNotificationSettings', {
           enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
@@ -2245,7 +2260,7 @@ async function createGeniusApi({ dataDir, store }) {
     if (Array.isArray(bundle.reminders))     store.set('reminders',     bundle.reminders);
     if (bundle.userShorthands && typeof bundle.userShorthands === 'object') store.set('userShorthands', bundle.userShorthands);
     if (bundle.settings && typeof bundle.settings === 'object') {
-      const ALLOWED_SETTINGS = ['discordWebhook','fetchInterval','notifications','expensiveThreshold','navOrder','theme','dateFormat','dxpNotificationSettings','watchlistNotificationSettings'];
+      const ALLOWED_SETTINGS = ['discordWebhook','fetchInterval','notifications','expensiveThreshold','overpricedThreshold','navOrder','theme','dateFormat','dxpNotificationSettings','watchlistNotificationSettings'];
       ALLOWED_SETTINGS.forEach(k => { if (k in bundle.settings) store.set(k, bundle.settings[k]); });
     }
     if (bundle.alerts    != null) await storage.writeJSON(alertsFile,    bundle.alerts,    { pretty: true });
