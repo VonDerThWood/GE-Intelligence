@@ -21,15 +21,31 @@ Automatic flags applied to items based on market behaviour:
 |--------|---------|
 | `SURGE` | Price up 5%+ with above-average volume |
 | `DUMP` | Price down 5%+ with above-average volume |
-| `FRENZY` | Extreme price movement, very high volume |
-| `THIN` | Volume 50%+ below average — illiquid market |
+| `ACCUMULATION` / `DISTRIBUTION` | Sustained above-average volume without an extreme price move yet — quiet buying/selling pressure building |
+| `FRENZY` / `HIGH_VOL` / `ACTIVE` | Volume tiers from extreme to modestly elevated |
+| `QUIET` / `THIN` | Volume below average — the lower the tier, the more illiquid |
+| `WIDE_SPREAD` | Unusually large gap between live buy and sell price |
 | `ALCH` | High alchemy profit after GE tax + nature rune cost |
 | `MANIPULATED` | Extreme volume spike on a low buy-limit item with a large price move |
-| `OVERPRICED` | Listed GE price is 20%+ higher than real live buy/sell — the displayed price may be stale or fake |
-| `UNDERPRICED` | Real live buy/sell is 20%+ higher than the listed GE price |
+| `OVERPRICED` | Listed GE price is well above real live buy/sell — the displayed price may be stale or fake |
+| `UNDERPRICED` | Real live buy/sell is well above the listed GE price |
+
+The Overpriced/Underpriced divergence threshold is adjustable in Settings (default 30%).
 
 ### Opportunity Scoring
-Items are ranked by an opportunity score (0–100) based on momentum, volume behaviour, active signals, and alch value. Expand any score in the Opportunities tab to see a full breakdown.
+Items are ranked by an opportunity score (0–100) based on price momentum, volume behaviour, active signals, and alch profit — shown in the Opportunities tab and on the item detail panel, both with a click-to-expand breakdown. Items currently flagged OVERPRICED are capped at 50, since an item actively priced above its worth shouldn't read as a top opportunity.
+
+### Flips
+A live buy/sell margin leaderboard — ranks the catalogue by real, repeatable flip margin (instasell → instabuy spread, net of GE tax) × buy limit, filtered against fluke prints, stale isolated prices, and wash-trading. Flagged items that looked promising but got excluded are shown separately with the reason why.
+
+### Money Makers
+Other real, ongoing ways to make gp that aren't a straightforward flip — recipe-based profit calculators and the like.
+
+### GEnius Almanac
+Historical DXP (Double XP) event price signals — Confirmed/Speculative/Recommendations tables with confidence scores and trade timing, built from real event-to-event price behaviour, not guesswork. A separate Seasonal tab covers Christmas, Halloween, Summer, and Easter market patterns the same way.
+
+### News
+RS3 official news, wiki updates, and Reddit — with automatic item and category impact detection so you can see, at a glance, what an update is likely to move.
 
 ### Monster Lookup
 - Search any monster for its drop table and an estimated gp/kill, straight from the wiki
@@ -49,14 +65,14 @@ Items are ranked by an opportunity score (0–100) based on momentum, volume beh
 ### Portfolio Tracker
 - Log buy positions with quantity and price
 - Track unrealised P&L in real time
-- Record sells and track closed position history
-- GE tax applied automatically
+- Record sells and track closed position history, GE tax applied automatically
+- Convert a position into a different item (e.g. logs into planks via the Plank Maker) with a real computed cost basis instead of a manual fake sell price — auto-detects known Invention machine recipes and lets you add any extra conversion costs
 - Portfolio allocation breakdown
 
 ### Watchlist & Alerts
 - Star any item to add it to your watchlist
-- Set alerts on a price threshold, a percent change, or a specific market signal
-- Optional Discord webhook notifications
+- Set alerts on a price threshold, a percent change, a specific market signal, or an Opportunity Score threshold — edge-triggered (fires once when a condition first becomes true, stays quiet while it remains true, auto-rearms when it resets), with desktop notifications and an optional Discord webhook
+- Plain date-triggered reminders for anything that isn't about price at all
 
 ### Item Details
 - Full stat panel from the RS Wiki (combat stats, requirements, examine text)
@@ -73,6 +89,9 @@ Items are ranked by an opportunity score (0–100) based on momentum, volume beh
 ### Invention
 - Components and untradeable-item prices
 - Machine profit calculators — Plank Maker, Hide Tanner, Partial Potion Producer — with live prices, real charge costs, profit/item, ROI%, and hourly/daily projections
+
+### Compare
+Put up to a few items side-by-side and see their stats, prices, and signals lined up against each other.
 
 ### Search
 - Instant search-as-you-type across all 7,000+ tracked items
