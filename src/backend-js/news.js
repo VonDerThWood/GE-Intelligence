@@ -158,6 +158,26 @@ function _pyTitle(s) {
 
 const _GENERIC_SHORT_WORDS = new Set(['ore', 'log', 'bar', 'axe', 'bow', 'kit', 'dye', 'tar', 'oil', 'ash', 'wax']);
 
+// Ben, 2026-08-10: caught for real — "Extreme necromancy (1)" got
+// detected as a mention on a news article that was actually about the
+// API/plugin project, nothing to do with the potion. Same false-positive
+// shape as the Gin/begin bug above, just at the phrase level instead of
+// mid-word: both "extreme" and "necromancy" are completely ordinary
+// words in combat-update prose on their own, so an item name that's
+// just "Extreme" + a skill name is basically guaranteed to eventually
+// coincide with unrelated text. Denylisted the whole family (all 6
+// combat-skill potions, checked against the dose-stripped base name)
+// rather than necromancy alone, since attack/strength/defence/magic/
+// ranging share the exact same shape and would eventually hit the same
+// false positive given a different article.
+const _GENERIC_BASE_NAMES = new Set([
+  'extreme attack', 'extreme strength', 'extreme defence',
+  'extreme magic', 'extreme ranging', 'extreme necromancy',
+]);
+function _stripDose(name) {
+  return name.replace(/\s*\(\d+\)$/, '');
+}
+
 // Plain .includes() matched an item name ANYWHERE in the text, including
 // mid-word — confirmed for real (Ben, 2026-08-03): the "Gin" item was
 // matching inside "begin"/"beginning"/"imagine" on every article
@@ -187,6 +207,8 @@ function detectMentions(text, items = null) {
     if (_hasWordMatch(textLower, name) && !seen.has(name)) {
       // Skip overly generic single words that produce false positives
       if (name.length <= 3 && _GENERIC_SHORT_WORDS.has(name)) continue;
+      // Skip generic "Extreme <skill>" potions — see _GENERIC_BASE_NAMES
+      if (_GENERIC_BASE_NAMES.has(_stripDose(name))) continue;
       seen.add(name);
       found.push(_pyTitle(name));
       if (found.length >= 15) break;
@@ -250,6 +272,22 @@ async function fetchRs3News(limit = 20, allItems = null) {
         date = date.slice(0, 10);
       }
       const [updateType, cats] = detectUpdateType(title);
+      // Ben, 2026-08-10: caught for real — a "Quest / Lore Update" article
+      // about the API/plugin project (nothing to do with any specific
+      // skill) showed "Extreme Necromancy (1) -9.2%" as its "Market
+      // Reaction," just because that item happened to have a FRENZY
+      // signal and sits in one of the update type's broadly-defined
+      // affected categories (herblore). These "meta" update types don't
+      // map to any coherent set of categories the way Necromancy Update
+      // or Farming Update genuinely do — Quest/Lore, the generic Game
+      // Update catch-all, Seasonal Event, and Grand Exchange Update all
+      // have category lists broad enough to catch nearly any FRENZY item
+      // regardless of real relevance, so skip impact items for these
+      // entirely rather than surface a coincidental, misleading pairing.
+      const _NO_IMPACT_ITEMS_TYPES = new Set([
+        'Quest / Lore Update', 'Game Update', 'Seasonal Event', 'Grand Exchange Update',
+      ]);
+      const skipImpact = _NO_IMPACT_ITEMS_TYPES.has(updateType);
       results.push({
         source: 'RS3 News',
         title,
@@ -258,8 +296,8 @@ async function fetchRs3News(limit = 20, allItems = null) {
         mentions: detectMentions(title + ' ' + desc),
         description: desc ? desc.slice(0, 200) : '',
         update_type: updateType,
-        impact_categories: cats,
-        impact_items: allItems ? getImpactedItems(cats, allItems) : [],
+        impact_categories: skipImpact ? [] : cats,
+        impact_items: (allItems && !skipImpact) ? getImpactedItems(cats, allItems) : [],
       });
     }
   } catch (e) {
