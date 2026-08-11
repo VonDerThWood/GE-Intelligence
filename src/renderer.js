@@ -153,15 +153,20 @@ body {
 .ge-btn.gold:hover { background: linear-gradient(180deg, #ffd700 0%, #c9a84c 100%); }
 .ge-btn.danger { border-color: ${T.red}; color: ${T.red}; }
 .ge-btn.danger:hover { background: rgba(229,57,53,0.15); }
-.content { flex: 1; overflow-y: auto; padding: 14px 16px; }
-.ge-table-wrap { overflow-x: auto; width: 100%; }
+.content { flex: 1; overflow-y: auto; overflow-x: auto; padding: 14px 16px; }
+.scroll-jump-buttons { position: absolute; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 6px; z-index: 20; }
+.scroll-jump-btn { width: 34px; height: 34px; border-radius: 50%; border: 1px solid ${T.borderGold}; background: ${T.panel2}; color: ${T.gold}; font-size: 13px; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,0.5); opacity: 0.75; transition: opacity 0.15s, background 0.15s; }
+.scroll-jump-btn:hover { opacity: 1; background: ${T.panel}; color: ${T.goldBright}; }
+.ge-table-wrap { width: 100%; }
 .col-resize-handle::after { content: ''; position: absolute; right: 3px; top: 4px; bottom: 4px; width: 1px; background: ${T.borderDim}; }
 .col-resize-handle:hover::after { background: ${T.gold}; width: 2px; }
 th.col-drop-target { box-shadow: inset 3px 0 0 ${T.gold}; }
 thead th[draggable="true"] { cursor: grab; }
 thead th[draggable="true"]:active { cursor: grabbing; }
-.ge-table { width: 100%; border-collapse: collapse; font-size: 13px; }
-.ge-table th { padding: 6px 10px; font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: ${T.gold}; border-bottom: 2px solid ${T.border}; text-align: left; cursor: pointer; user-select: none; background: rgba(0,0,0,0.2); white-space: nowrap; }
+.ge-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
+.ge-table thead th { padding: 11px 10px; font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: ${T.gold}; border-bottom: 2px solid ${T.borderGold}; text-align: left; cursor: pointer; user-select: none; background: ${T.panel2}; white-space: nowrap; }
+.ge-sticky-header-clone { position: fixed; z-index: 50; overflow: hidden; pointer-events: none; }
+.ge-sticky-header-clone table { pointer-events: auto; }
 .ge-table th:hover { color: ${T.goldBright}; }
 .ge-table td { padding: 6px 10px; border-bottom: 1px solid ${T.borderDim}; color: ${T.text}; }
 .ge-table tr { cursor: pointer; }
@@ -3302,6 +3307,47 @@ function overpricedUnderpricedLists(items, thresholdPct) {
   return {overpriced, underpriced};
 }
 
+// Native `position: sticky` on <thead>/<th> renders reliably broken in this
+// Electron/Chromium build — verified extensively (per-cell sticky, whole-
+// thead sticky, opaque backgrounds, taller padding, will-change, paint
+// containment/isolation all still left stale row pixels ghosting through
+// the header on scroll, confirmed live on the user's own screen, not just
+// a screenshot-tool artifact). This hook drives a JS-synced clone instead:
+// track the real thead's viewport position and, once it would scroll above
+// the nearest `.content` scroll container's top edge, render a fixed-
+// position clone (see ItemTable's render) that tracks the real header's
+// left/width/top via getBoundingClientRect on every scroll/resize tick.
+function useStickyTableHeader(wrapRef, theadRef) {
+  const [state, setState] = useState({pinned:false, top:0, left:0, width:0});
+  useEffect(() => {
+    const wrap = wrapRef.current;
+    const thead = theadRef.current;
+    if (!wrap || !thead) return;
+    const scrollEl = wrap.closest('.content');
+    if (!scrollEl) return;
+    let raf = null;
+    const update = () => {
+      raf = null;
+      const contentRect = scrollEl.getBoundingClientRect();
+      const theadRect = thead.getBoundingClientRect();
+      const wrapRect = wrap.getBoundingClientRect();
+      const pinned = theadRect.top < contentRect.top;
+      setState(s => (s.pinned===pinned && s.top===contentRect.top && s.left===wrapRect.left && s.width===wrapRect.width)
+        ? s : {pinned, top:contentRect.top, left:wrapRect.left, width:wrapRect.width});
+    };
+    const onScroll = () => { if (raf==null) raf = requestAnimationFrame(update); };
+    update();
+    scrollEl.addEventListener('scroll', onScroll, {passive:true});
+    window.addEventListener('resize', onScroll);
+    return () => {
+      scrollEl.removeEventListener('scroll', onScroll);
+      window.removeEventListener('resize', onScroll);
+      if (raf!=null) cancelAnimationFrame(raf);
+    };
+  }, [wrapRef, theadRef]);
+  return state;
+}
+
 function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals, showGapPct, showSpread}) {
   // watchlist/onToggleWatch are read unconditionally below (star column
   // renders for every row, no matter the call site) — Opportunities'
@@ -3321,6 +3367,13 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
     return [...base.slice(0, i+1), extra, ...base.slice(i+1)];
   }, [showSignals, showGapPct, showSpread]);
   const cols = useTableColumns('genius_col_widths', DEFAULT_COL_WIDTHS, visibleCols);
+  const theadRef = useRef(null);
+  // cols.tableWrapRef is a callback ref (useCallback), not a useRef object —
+  // it has no .current to read, so the sticky-header hook needs its own
+  // real ref on the same DOM node, merged in via setWrapRefs below.
+  const wrapRef = useRef(null);
+  const setWrapRefs = node => { wrapRef.current = node; cols.tableWrapRef(node); };
+  const stickyHeader = useStickyTableHeader(wrapRef, theadRef);
 
   const openCtx = (e, it) => {
     e.preventDefault();
@@ -3439,7 +3492,7 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
         h('button', {
           onClick: togglePriceMode,
           title: priceMode==='ge' ? 'Showing GE (listed) price — click to show live buy/sell instead' : 'Showing live buy/sell — click to show GE (listed) price instead',
-          style: {marginLeft:6, fontSize:9, padding:'1px 5px', cursor:'pointer', borderRadius:3, border:`1px solid ${T.border}`, background:'rgba(255,255,255,0.05)', color:T.textDim, textTransform:'none', letterSpacing:0, fontWeight:'normal'}
+          style: {marginLeft:6, fontSize:9, padding:'1px 5px', cursor:'pointer', borderRadius:3, border:`1px solid ${T.border}`, background:T.panel, color:T.textDim, textTransform:'none', letterSpacing:0, fontWeight:'normal'}
         }, '⇄')
       );
       case 'change_1d': return cols.th(k, {onClick:()=>tog('change_1d')}, 'Change'+arr('change_1d'));
@@ -3496,7 +3549,16 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
     }
   };
 
-  return h('div',{className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef, onClick: ctxMenu ? closeCtx : undefined},
+  return h('div',{className:'ge-table-wrap', style:{position:'relative'}, ref:setWrapRefs, onClick: ctxMenu ? closeCtx : undefined},
+    stickyHeader.pinned && createPortal(
+      h('div', {className:'ge-sticky-header-clone', style:{top:stickyHeader.top, left:stickyHeader.left, width:stickyHeader.width}},
+        h('table',{className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
+          cols.colgroup(),
+          h('thead',null,h('tr',null, cols.colOrder.map(k => thFor(k))))
+        )
+      ),
+      document.body
+    ),
     cols.handles(),
     ctxMenu && createPortal(h('div', {
       style:{
@@ -3604,7 +3666,7 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
     ),
     h('table',{className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
       cols.colgroup(),
-      h('thead',null,h('tr',null, cols.colOrder.map(k => thFor(k)))),
+      h('thead',{ref:theadRef},h('tr',null, cols.colOrder.map(k => thFor(k)))),
       h('tbody',null, sorted.map(it =>
         h('tr',{
           key:it.id, 'data-item-id':it.id,
@@ -4157,7 +4219,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     );
   }
 
-  return h('div', {style:{padding:'12px 14px', overflowY:'auto', height:'100%'}},
+  return h('div', {style:{padding:'12px 14px'}},
     description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
 
     // ── Mood + Item of the Day ───────────────────────────────────
@@ -10698,6 +10760,12 @@ const FLIP_MIN_SELL_PRICE = 100; // floor so 2gp junk items don't dominate by %,
 // where "volume" is 0-1 trades ever, so any single print swings the
 // number wildly. Neither is a real, repeatable flip.
 const FLIP_MIN_VOLUME = 50; // real, if modest, day-to-day liquidity
+// Hard qualification floor, not just the UI's minProfit filter (which can be
+// set down to 'All') — a positive margin alone let absurd results through,
+// e.g. a 3gp margin on a 10,000 buy limit item (30,000gp total) "qualifying"
+// for the leaderboard once the UI filter was loosened. Ben's own number:
+// "at least 1m per buy limit" (Ben, 2026-08-10).
+const FLIP_MIN_PROFIT_FOR_LIMIT = 1000000;
 const FLIP_SANITY_LOW = 0.5;  // live sell price can't sit too far UNDER
                                // the item's own established GE price
                                // (catches a fluke/glitch dump), for any item
@@ -10833,6 +10901,7 @@ function computeFlipStats(it) {
   if (it.liveSell < FLIP_MIN_SELL_PRICE) return { ...base, qualifies:false, disqualifyReason:`Sell price is under the ${fmt.gp(FLIP_MIN_SELL_PRICE)}gp floor Flips uses to avoid junk items dominating by percentage.` };
   if (margin <= 0) return { ...base, qualifies:false, disqualifyReason:'No positive margin right now — instabuy (after tax) doesn\'t beat instasell.' };
   if (!limit) return { ...base, qualifies:false, disqualifyReason:'This item has no GE buy limit on record.' };
+  if (profitForLimit < FLIP_MIN_PROFIT_FOR_LIMIT) return { ...base, qualifies:false, disqualifyReason:`Profit for a full buy limit (${fmt.gp(profitForLimit)}gp) is under Flips' ${fmt.gp(FLIP_MIN_PROFIT_FOR_LIMIT)}gp floor — too small a margin to be worth the buy-limit slot.` };
   if ((it.volume||0) < FLIP_MIN_VOLUME) return { ...base, qualifies:false, disqualifyReason:`Daily volume (${(it.volume||0).toLocaleString()}) is below Flips' liquidity floor of ${FLIP_MIN_VOLUME} — too thin to trust a single live print.` };
   if (!(gePrice > 0 && it.liveSell >= gePrice*FLIP_SANITY_LOW)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live sell price is far under this item\'s established GE price — likely a one-off fluke/glitch dump rather than a real, repeatable margin.' };
   if (it.liveBuy > ceiling) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
@@ -11592,6 +11661,8 @@ const NAV = [
 /* ─── App ─────────────────────────────────────────────────────── */
 function App() {
   const [tab, setTab] = useState('dashboard');
+  const contentRef = useRef(null);
+  const scrollContentTo = pos => contentRef.current?.scrollTo({top: pos, behavior:'smooth'});
   // Sidebar starts closed — only actually matters on a narrow/mobile
   // screen (the CSS media query that turns .sidebar into an overlay drawer
   // only applies under ~700px; on desktop .sidebar ignores this entirely
@@ -12041,7 +12112,10 @@ function App() {
           : h('button',{
               key:entry.id,
               className:'nav-btn'+(tab===entry.id?' active':''),
-              onClick:()=>{setTab(entry.id);setSelected(null);setSidebarOpen(false);}
+              onClick:()=>{
+                if (tab===entry.id) { scrollContentTo(0); return; }
+                setTab(entry.id);setSelected(null);setSidebarOpen(false);
+              }
             },
             h('span',{className:'nav-icon'},entry.icon),
             entry.label
@@ -12078,8 +12152,12 @@ function App() {
           onClick:()=>{ if (window.confirm('Quit GEnius? Background price fetching will stop.')) window.genius?.quitApp(); }
         }, '⏻')
       ),
-      h('div',{style:{flex:1,display:'flex',overflow:'hidden'}},
-        h('div',{className:'content',style:{flex:1}},
+      h('div',{style:{flex:1,display:'flex',overflow:'hidden',position:'relative'}},
+        h('div',{className:'scroll-jump-buttons'},
+          h('button',{className:'scroll-jump-btn',title:'Scroll to top',onClick:()=>scrollContentTo(0)},'▲'),
+          h('button',{className:'scroll-jump-btn',title:'Scroll to bottom',onClick:()=>scrollContentTo(contentRef.current?.scrollHeight||0)},'▼')
+        ),
+        h('div',{className:'content',style:{flex:1},ref:contentRef},
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
