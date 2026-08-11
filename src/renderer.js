@@ -5335,6 +5335,30 @@ function MarketTab({items, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v2.5.0',
+    items: [
+      'New Portfolio "Convert" action — track turning one item into another (e.g. logs into planks) with a real cost basis instead of faking it with manual sell prices. Auto-detects known recipes (Plank Maker, etc.) and lets you add any extra conversion costs.',
+      'New score-based alerts — set an alert for when an item\'s Opportunity Score crosses a threshold, same pattern as existing price/%/signal alerts.',
+      'Fixed the Alerts tab never actually sending a desktop notification — it only ever had a Discord webhook path with no fallback. Alerts are now edge-triggered (fire once when a condition first becomes true, stay quiet while it remains true, automatically re-arm when it resets) and show a live "● Active" / "✓ Last fired" badge.',
+      'Fixed "Fetch Now" silently skipping alert, reminder, and digest checks — they only ever ran on the background scheduler\'s own timer, never on a manual fetch.',
+      'Added a first-run welcome tour covering shorthand search, the GE/Live price toggle, Watchlist + Alerts, signals, DXP intelligence, Portfolio, and Opportunity Score — replayable anytime from Settings.',
+      'Opportunity Score overhaul: fixed the Sector Heat Map reading a field that never existed (silently zeroing 20% of its formula), removed a flat price floor that excluded every item under 900gp from ever scoring, and replaced a raw-volume floor with a real gp-turnover floor (was excluding high-value, low-unit-count gear like Fractured Staff of Armadyl entirely). Score is now shown on the item detail panel too, with a click-to-explain breakdown popup. Also capped OVERPRICED items\' score at 50 so an item can\'t read as a great opportunity while actively priced above what it\'s worth.',
+      'Fixed untradeable items (Invention components, combo potions) never showing a price chart, daily % change, or trend badges — they always had the underlying snapshot data, the UI just never used it as a fallback.',
+      'Fixed a real daily-change bug that could show an impossible price swing (e.g. a rune "changing" 50% overnight when it hadn\'t moved in weeks) — caused by two opposite failure modes (a stale external data field, and separately, a stale local cache) now cross-checked against each other\'s freshness before either is trusted.',
+      'New Overpriced/Underpriced sensitivity setting — the 20%+ divergence threshold is now yours to adjust (Settings), default 30%.',
+      'Reworked Hall of Shame/Hall of Glory to rank by real gp magnitude instead of raw percentage (a 5% swing on a multi-billion gp item was getting buried under a 40% swing on pocket change) — now also shows the live-price gp swing alongside.',
+      'Added a Spread column to the Wide Spread drill-down so it shows the actual number instead of making you do the math yourself.',
+      'Fixed the item detail panel\'s name and icon collapsing to nothing when the panel was too narrow for its own buttons to fit.',
+      'Fixed live buy/sell prices missing from the Market tab\'s tables and Dashboard\'s sector drill-down.',
+      'Fixed the MANIPULATED signal firing on ordinary noise for barely-traded items (an item with 1 average daily trade "tripling" its volume with 3 trades isn\'t manipulation).',
+      'Fixed News flagging unrelated items under "Price Since Post"/"Market Reaction" on Quest, Game Update, Seasonal Event, and Grand Exchange Update articles.',
+      'Flips leaderboard now has a real minimum-profit floor, so a technically-positive but trivial margin (a few gp) can\'t qualify no matter how the profit filter is set.',
+      'Item table column headers now stay pinned (sticky) in view while scrolling, with sorting still fully working from the pinned header.',
+      'Clicking your current tab in the sidebar now scrolls back to the top; added floating scroll-to-top/bottom buttons.',
+      'Large category cleanup — several hundred more items moved out of the generic Misc bucket into their real categories (Invention salvage, urns, Hunter furs, Blowpipe components, moulds, orokami masks, and dozens more individually reviewed), plus fixes to Elder rune bar, Kinetic cyclone upgrade kit, and the log family\'s category consistency.',
+    ]
+  },
+  {
     // Convention (corrected Ben, 2026-07-27): APP_NEWS only ever holds
     // real, already-shipped versions — no "Post vX.X.X" placeholder
     // entry in here for unreleased work-in-progress. That bookkeeping
