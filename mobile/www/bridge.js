@@ -3186,27 +3186,21 @@
           "runes"
         ],
         logs: [
-          "artisan",
           "mining"
         ],
         "magic logs": [
-          "artisan",
           "mining"
         ],
         "yew logs": [
-          "artisan",
           "mining"
         ],
         "maple logs": [
-          "artisan",
           "mining"
         ],
         "willow logs": [
-          "artisan",
           "mining"
         ],
         "oak logs": [
-          "artisan",
           "mining"
         ],
         "anti-dragon shield": [
@@ -4212,7 +4206,6 @@
           "artisan"
         ],
         "achey tree logs": [
-          "artisan",
           "mining"
         ],
         "ogre arrow shaft": [
@@ -12249,7 +12242,6 @@
           "pocket"
         ],
         "acadia logs": [
-          "artisan",
           "mining"
         ],
         "raw desert sole": [
@@ -12284,7 +12276,6 @@
           "artisan"
         ],
         "corrupted magic logs": [
-          "artisan",
           "mining"
         ],
         "orb of the cywir elders": [
@@ -12925,7 +12916,7 @@
           "mining"
         ],
         "elder rune bar": [
-          "mining"
+          "artisan"
         ],
         "adamant dagger + 1": [
           "melee",
@@ -15370,7 +15361,8 @@
           "magic"
         ],
         "bone blowpipe": [
-          "low_tier"
+          "low_tier",
+          "artisan"
         ],
         "upgraded bone blowpipe": [
           "ranged"
@@ -18119,10 +18111,12 @@
           "food"
         ],
         "dinosaur claws": [
-          "materials"
+          "farming",
+          "herblore"
         ],
         "kebbit claws": [
-          "materials"
+          "artisan",
+          "mining"
         ],
         "kebbit teeth": [
           "materials"
@@ -18197,7 +18191,8 @@
           "necromancy"
         ],
         "draconic energy": [
-          "materials"
+          "boss",
+          "artisan"
         ],
         "tectonic energy": [
           "artisan"
@@ -18414,13 +18409,13 @@
           "materials"
         ],
         "crystal armour seed": [
-          "materials"
+          "artisan"
         ],
         "crystal weapon seed": [
-          "materials"
+          "artisan"
         ],
         "crystal tool seed": [
-          "materials"
+          "artisan"
         ],
         "croesus spore sack": [
           "boss"
@@ -18429,7 +18424,8 @@
           "boss"
         ],
         "purple mushroom": [
-          "boss"
+          "boss",
+          "cosmetics"
         ],
         "compost mound scroll": [
           "summoning"
@@ -19233,10 +19229,9 @@
           "artisan"
         ],
         "chitin scraps": [
-          "materials"
+          "artisan"
         ],
         "blowpipe feather": [
-          "materials",
           "artisan"
         ],
         "algarum thread": [
@@ -19899,6 +19894,1432 @@
         ],
         "dark facet of passage": [
           "artisan"
+        ],
+        "abyssal flesh": [
+          "artisan"
+        ],
+        "ancient gravel": [
+          "mining"
+        ],
+        "earthen clay": [
+          "mining"
+        ],
+        "saltwater mud": [
+          "mining"
+        ],
+        "volcanic ash": [
+          "mining"
+        ],
+        "fiery brimstone": [
+          "mining"
+        ],
+        "mossy peat": [
+          "mining"
+        ],
+        "common white hen (unchecked)": [
+          "farming"
+        ],
+        "varrockian red hen (unchecked)": [
+          "farming"
+        ],
+        "bandosian bantam hen (unchecked)": [
+          "farming"
+        ],
+        "oomlie hen (unchecked)": [
+          "farming"
+        ],
+        "rooster (unchecked)": [
+          "farming"
+        ],
+        "common brown rabbit (unchecked)": [
+          "farming"
+        ],
+        "piscatorian cottontail rabbit (unchecked)": [
+          "farming"
+        ],
+        "rellekkan cream rabbit (unchecked)": [
+          "farming"
+        ],
+        "grey chinchompa (unchecked)": [
+          "farming"
+        ],
+        "carnivorous chinchompa (unchecked)": [
+          "farming"
+        ],
+        "cobalt chinchompa (unchecked)": [
+          "farming"
+        ],
+        "viridian chinchompa (unchecked)": [
+          "farming"
+        ],
+        "azure chinchompa (unchecked)": [
+          "farming"
+        ],
+        "crimson chinchompa (unchecked)": [
+          "farming"
+        ],
+        "crystal chinchompa (unchecked)": [
+          "farming"
+        ],
+        "white ewe (unchecked)": [
+          "farming"
+        ],
+        "black ewe (unchecked)": [
+          "farming"
+        ],
+        "winterwold ewe (unchecked)": [
+          "farming"
+        ],
+        "fallfaced ewe (unchecked)": [
+          "farming"
+        ],
+        "springsheared ewe (unchecked)": [
+          "farming"
+        ],
+        "summerdown ewe (unchecked)": [
+          "farming"
+        ],
+        "white ram (unchecked)": [
+          "farming"
+        ],
+        "black ram (unchecked)": [
+          "farming"
+        ],
+        "winterwold ram (unchecked)": [
+          "farming"
+        ],
+        "fallfaced ram (unchecked)": [
+          "farming"
+        ],
+        "springsheared ram (unchecked)": [
+          "farming"
+        ],
+        "summerdown ram (unchecked)": [
+          "farming"
+        ],
+        "spider egg (unchecked)": [
+          "farming"
+        ],
+        "night spider egg (unchecked)": [
+          "farming"
+        ],
+        "ice spider egg (unchecked)": [
+          "farming"
+        ],
+        "fever spider egg (unchecked)": [
+          "farming"
+        ],
+        "corpse spider egg (unchecked)": [
+          "farming"
+        ],
+        "giant spider egg (unchecked)": [
+          "farming"
+        ],
+        "gloomshroom zygomite (unchecked)": [
+          "farming"
+        ],
+        "zanarian zygomite (unchecked)": [
+          "farming"
+        ],
+        "arcspore zygomite (unchecked)": [
+          "farming"
+        ],
+        "daemoncap zygomite (unchecked)": [
+          "farming"
+        ],
+        "kandarin cow (unchecked)": [
+          "farming"
+        ],
+        "strawberry cow (unchecked)": [
+          "farming"
+        ],
+        "chocolate cow (unchecked)": [
+          "farming"
+        ],
+        "vanilla cow (unchecked)": [
+          "farming"
+        ],
+        "bull (unchecked)": [
+          "farming"
+        ],
+        "fremennik yak (unchecked)": [
+          "farming"
+        ],
+        "spirit yak (unchecked)": [
+          "farming"
+        ],
+        "green dragon egg (unchecked)": [
+          "farming"
+        ],
+        "blue dragon egg (unchecked)": [
+          "farming"
+        ],
+        "red dragon egg (unchecked)": [
+          "farming"
+        ],
+        "black dragon egg (unchecked)": [
+          "farming"
+        ],
+        "chicken egg (unchecked)": [
+          "farming"
+        ],
+        "common jadinko (unchecked)": [
+          "farming"
+        ],
+        "igneous jadinko (unchecked)": [
+          "farming"
+        ],
+        "cannibal jadinko (unchecked)": [
+          "farming"
+        ],
+        "aquatic jadinko (unchecked)": [
+          "farming"
+        ],
+        "amphibious jadinko (unchecked)": [
+          "farming"
+        ],
+        "carrion jadinko (unchecked)": [
+          "farming"
+        ],
+        "draconic jadinko (unchecked)": [
+          "farming"
+        ],
+        "shadow jadinko (unchecked)": [
+          "farming"
+        ],
+        "diseased jadinko (unchecked)": [
+          "farming"
+        ],
+        "camouflaged jadinko (unchecked)": [
+          "farming"
+        ],
+        "feral dinosaur (unchecked)": [
+          "farming"
+        ],
+        "venomous dinosaur (unchecked)": [
+          "farming"
+        ],
+        "ripper dinosaur (unchecked)": [
+          "farming"
+        ],
+        "brutish dinosaur (unchecked)": [
+          "farming"
+        ],
+        "arcane apoterrasaur (unchecked)": [
+          "farming"
+        ],
+        "scimitops (unchecked)": [
+          "farming"
+        ],
+        "bagrada rex (unchecked)": [
+          "farming"
+        ],
+        "spicati apoterrasaur (unchecked)": [
+          "farming"
+        ],
+        "asciatops (unchecked)": [
+          "farming"
+        ],
+        "corbicula rex (unchecked)": [
+          "farming"
+        ],
+        "oculi apoterrasaur (unchecked)": [
+          "farming"
+        ],
+        "malletops (unchecked)": [
+          "farming"
+        ],
+        "pavosaurus rex (unchecked)": [
+          "farming"
+        ],
+        "common green frog (unchecked)": [
+          "farming"
+        ],
+        "phantasmal poison frog (unchecked)": [
+          "farming"
+        ],
+        "sky-blue poison frog (unchecked)": [
+          "farming"
+        ],
+        "golden poison frog (unchecked)": [
+          "farming"
+        ],
+        "beach dinosaur (unchecked)": [
+          "farming"
+        ],
+        "forest dinosaur (unchecked)": [
+          "farming"
+        ],
+        "arcane apoterrasaur natura (unchecked)": [
+          "farming"
+        ],
+        "arcane apoterrasaur iratum (unchecked)": [
+          "farming"
+        ],
+        "scimitops palus (unchecked)": [
+          "farming"
+        ],
+        "scimitops blavum (unchecked)": [
+          "farming"
+        ],
+        "bagrada nemus (unchecked)": [
+          "farming"
+        ],
+        "bagrada purpura (unchecked)": [
+          "farming"
+        ],
+        "spicati apoterrasaur tilia (unchecked)": [
+          "farming"
+        ],
+        "spicati apoterrasaur purpura (unchecked)": [
+          "farming"
+        ],
+        "asciatops acta (unchecked)": [
+          "farming"
+        ],
+        "asciatops aurum (unchecked)": [
+          "farming"
+        ],
+        "corbicula gelum (unchecked)": [
+          "farming"
+        ],
+        "corbicula malum (unchecked)": [
+          "farming"
+        ],
+        "oculi apoterrasaur oceanum (unchecked)": [
+          "farming"
+        ],
+        "oculi apoterrasaur glacies (unchecked)": [
+          "farming"
+        ],
+        "malletops palus (unchecked)": [
+          "farming"
+        ],
+        "malletops purpura (unchecked)": [
+          "farming"
+        ],
+        "pavosaurus nemus (unchecked)": [
+          "farming"
+        ],
+        "pavosaurus desertum (unchecked)": [
+          "farming"
+        ],
+        "green salamander (unchecked)": [
+          "farming"
+        ],
+        "orange salamander (unchecked)": [
+          "farming"
+        ],
+        "red salamander (unchecked)": [
+          "farming"
+        ],
+        "black salamander (unchecked)": [
+          "farming"
+        ],
+        "volatile chinchompa (unchecked)": [
+          "farming"
+        ],
+        "ascension keystone": [
+          "supplies"
+        ],
+        "key to the crossing": [
+          "supplies"
+        ],
+        "beak snot": [
+          "farming",
+          "herblore"
+        ],
+        "botanist's amulet (new)": [
+          "herblore"
+        ],
+        "bucket of sand": [
+          "artisan"
+        ],
+        "cactus spine": [
+          "herblore"
+        ],
+        honeycomb: [
+          "farming"
+        ],
+        "delicious honeycomb": [
+          "farming"
+        ],
+        "medicinal honeycomb": [
+          "farming"
+        ],
+        "dense honeycomb": [
+          "farming"
+        ],
+        "runny honeycomb": [
+          "farming"
+        ],
+        "sweet honeycomb": [
+          "farming"
+        ],
+        "candied honeycomb": [
+          "farming"
+        ],
+        "fertile honeycomb": [
+          "farming"
+        ],
+        "nutritious honeycomb": [
+          "farming"
+        ],
+        "moreish honeycomb": [
+          "farming"
+        ],
+        "shimmering honeycomb": [
+          "farming"
+        ],
+        "cockatrice egg": [
+          "summoning"
+        ],
+        "coraxatrice egg": [
+          "summoning"
+        ],
+        "zamatrice egg": [
+          "summoning"
+        ],
+        "guthatrice egg": [
+          "summoning"
+        ],
+        "saratrice egg": [
+          "summoning"
+        ],
+        "vulatrice egg": [
+          "summoning"
+        ],
+        "pengatrice egg": [
+          "summoning"
+        ],
+        "corrupted chain scroll": [
+          "cosmetics"
+        ],
+        "corrupted concentrated blast scroll": [
+          "cosmetics"
+        ],
+        "corrupted wild magic scroll": [
+          "cosmetics"
+        ],
+        "decorated fishing urn (no rune)": [
+          "artisan"
+        ],
+        "decorated cooking urn (no rune)": [
+          "artisan"
+        ],
+        "decorated mining urn (no rune)": [
+          "artisan"
+        ],
+        "decorated woodcutting urn (no rune)": [
+          "artisan"
+        ],
+        "decorated divination urn (no rune)": [
+          "artisan"
+        ],
+        "decorated farming urn (no rune)": [
+          "artisan"
+        ],
+        "decorated hunter urn (no rune)": [
+          "artisan"
+        ],
+        "decorated runecrafting urn (no rune)": [
+          "artisan"
+        ],
+        "decorated smithing urn (no rune)": [
+          "artisan"
+        ],
+        "dinosaur scale": [
+          "artisan"
+        ],
+        "dragon scale dust": [
+          "herblore"
+        ],
+        "dust of armadyl": [
+          "artisan"
+        ],
+        "earth orb": [
+          "artisan"
+        ],
+        "fire orb": [
+          "artisan"
+        ],
+        "unpowered orb": [
+          "artisan"
+        ],
+        "exquisite cooking urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite cooking urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite divination urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite divination urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite farming urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite farming urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite fishing urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite fishing urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite hunter urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite hunter urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite mining urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite mining urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite runecrafting urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite runecrafting urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite smithing urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite smithing urn (no rune)": [
+          "artisan"
+        ],
+        "exquisite woodcutting urn (no gem)": [
+          "artisan"
+        ],
+        "exquisite woodcutting urn (no rune)": [
+          "artisan"
+        ],
+        "extra fine sand": [
+          "artisan"
+        ],
+        "festive warrior (skeleton warrior) scroll": [
+          "cosmetics"
+        ],
+        "festive warrior (skeleton warrior) (set 2) scroll": [
+          "cosmetics"
+        ],
+        "fragile smithing urn (no rune)": [
+          "artisan"
+        ],
+        "fragile woodcutting urn (no rune)": [
+          "artisan"
+        ],
+        "fragile fishing urn (no rune)": [
+          "artisan"
+        ],
+        "fragile cooking urn (no rune)": [
+          "artisan"
+        ],
+        "fragile mining urn (no rune)": [
+          "artisan"
+        ],
+        "fragile divination urn (no rune)": [
+          "artisan"
+        ],
+        "fragile farming urn (no rune)": [
+          "artisan"
+        ],
+        "fragile hunter urn (no rune)": [
+          "artisan"
+        ],
+        "fragile runecrafting urn (no rune)": [
+          "artisan"
+        ],
+        "goat horn dust": [
+          "herblore"
+        ],
+        grapes: [
+          "artisan"
+        ],
+        "greater flaming skull": [
+          "necromancy"
+        ],
+        "regular ritual candle": [
+          "necromancy"
+        ],
+        "greater ritual candle": [
+          "necromancy"
+        ],
+        "harmony moss": [
+          "herblore"
+        ],
+        "plain whirligig shell": [
+          "artisan",
+          "mining"
+        ],
+        "gliding whirligig shell": [
+          "artisan",
+          "mining"
+        ],
+        "swift whirligig shell": [
+          "artisan",
+          "mining"
+        ],
+        "hasty whirligig shell": [
+          "artisan",
+          "mining"
+        ],
+        "speedy whirligig shell": [
+          "artisan",
+          "mining"
+        ],
+        "dazzling whirligig shell": [
+          "artisan",
+          "mining"
+        ],
+        "cracked smithing urn (no rune)": [
+          "artisan"
+        ],
+        "plain smithing urn (no rune)": [
+          "artisan"
+        ],
+        "strong smithing urn (no rune)": [
+          "artisan"
+        ],
+        "cracked woodcutting urn (no rune)": [
+          "artisan"
+        ],
+        "plain woodcutting urn (no rune)": [
+          "artisan"
+        ],
+        "strong woodcutting urn (no rune)": [
+          "artisan"
+        ],
+        "cracked fishing urn (no rune)": [
+          "artisan"
+        ],
+        "plain fishing urn (no rune)": [
+          "artisan"
+        ],
+        "strong fishing urn (no rune)": [
+          "artisan"
+        ],
+        "cracked cooking urn (no rune)": [
+          "artisan"
+        ],
+        "plain cooking urn (no rune)": [
+          "artisan"
+        ],
+        "strong cooking urn (no rune)": [
+          "artisan"
+        ],
+        "cracked mining urn (no rune)": [
+          "artisan"
+        ],
+        "plain mining urn (no rune)": [
+          "artisan"
+        ],
+        "strong mining urn (no rune)": [
+          "artisan"
+        ],
+        "impious urn (no rune)": [
+          "artisan"
+        ],
+        "accursed urn (no rune)": [
+          "artisan"
+        ],
+        "infernal urn (no rune)": [
+          "artisan"
+        ],
+        "cracked divination urn (no rune)": [
+          "artisan"
+        ],
+        "plain divination urn (no rune)": [
+          "artisan"
+        ],
+        "strong divination urn (no rune)": [
+          "artisan"
+        ],
+        "cracked farming urn (no rune)": [
+          "artisan"
+        ],
+        "plain farming urn (no rune)": [
+          "artisan"
+        ],
+        "strong farming urn (no rune)": [
+          "artisan"
+        ],
+        "cracked hunter urn (no rune)": [
+          "artisan"
+        ],
+        "plain hunter urn (no rune)": [
+          "artisan"
+        ],
+        "strong hunter urn (no rune)": [
+          "artisan"
+        ],
+        "cracked runecrafting urn (no rune)": [
+          "artisan"
+        ],
+        "plain runecrafting urn (no rune)": [
+          "artisan"
+        ],
+        "strong runecrafting urn (no rune)": [
+          "artisan"
+        ],
+        "furniture plans: guthixian grandmaster portal nexus": [
+          "artisan"
+        ],
+        "furniture plans: guthixian house portal": [
+          "artisan"
+        ],
+        "furniture plans: guthixian torch": [
+          "artisan"
+        ],
+        "tiny bladed rune salvage": [
+          "invention"
+        ],
+        "small bladed rune salvage": [
+          "invention"
+        ],
+        "medium bladed rune salvage": [
+          "invention"
+        ],
+        "large bladed rune salvage": [
+          "invention"
+        ],
+        "huge bladed rune salvage": [
+          "invention"
+        ],
+        "tiny spiky rune salvage": [
+          "invention"
+        ],
+        "small spiky rune salvage": [
+          "invention"
+        ],
+        "medium spiky rune salvage": [
+          "invention"
+        ],
+        "large spiky rune salvage": [
+          "invention"
+        ],
+        "huge spiky rune salvage": [
+          "invention"
+        ],
+        "tiny blunt rune salvage": [
+          "invention"
+        ],
+        "small blunt rune salvage": [
+          "invention"
+        ],
+        "medium blunt rune salvage": [
+          "invention"
+        ],
+        "large blunt rune salvage": [
+          "invention"
+        ],
+        "huge blunt rune salvage": [
+          "invention"
+        ],
+        "tiny plated rune salvage": [
+          "invention"
+        ],
+        "small plated rune salvage": [
+          "invention"
+        ],
+        "medium plated rune salvage": [
+          "invention"
+        ],
+        "large plated rune salvage": [
+          "invention"
+        ],
+        "huge plated rune salvage": [
+          "invention"
+        ],
+        "bear fur": [
+          "mining"
+        ],
+        "grey wolf fur": [
+          "mining"
+        ],
+        fur: [
+          "mining"
+        ],
+        "tatty larupia fur": [
+          "mining"
+        ],
+        "larupia fur": [
+          "mining"
+        ],
+        "tatty graahk fur": [
+          "mining"
+        ],
+        "graahk fur": [
+          "mining"
+        ],
+        "tatty kyatt fur": [
+          "mining"
+        ],
+        "kyatt fur": [
+          "mining"
+        ],
+        "dark kebbit fur": [
+          "mining"
+        ],
+        "polar kebbit fur": [
+          "mining"
+        ],
+        "feldip weasel fur": [
+          "mining"
+        ],
+        "common kebbit fur": [
+          "mining"
+        ],
+        "desert devil fur": [
+          "mining"
+        ],
+        "spotted kebbit fur": [
+          "mining"
+        ],
+        "dashing kebbit fur": [
+          "mining"
+        ],
+        "diseased kebbit fur": [
+          "mining"
+        ],
+        "blowpipe fins": [
+          "artisan"
+        ],
+        "blowpipe chitin": [
+          "artisan"
+        ],
+        "spark chitin": [
+          "artisan"
+        ],
+        "mole claw": [
+          "artisan"
+        ],
+        "demon claw": [
+          "summoning"
+        ],
+        "tortoise shell": [
+          "summoning"
+        ],
+        "blamish myre shell (round)": [
+          "artisan"
+        ],
+        "blamish red shell (round)": [
+          "artisan"
+        ],
+        "blamish ochre shell (round)": [
+          "artisan"
+        ],
+        "blamish blue shell (round)": [
+          "artisan"
+        ],
+        "blamish bark shell": [
+          "artisan"
+        ],
+        "blamish myre shell (pointed)": [
+          "artisan"
+        ],
+        "blamish red shell (pointed)": [
+          "artisan"
+        ],
+        "blamish ochre shell (pointed)": [
+          "artisan"
+        ],
+        "blamish blue shell (pointed)": [
+          "artisan"
+        ],
+        "rock-shell chunk": [
+          "artisan"
+        ],
+        "rock-shell shard": [
+          "artisan"
+        ],
+        "rock-shell splinter": [
+          "artisan"
+        ],
+        "vampyre dust": [
+          "summoning"
+        ],
+        "silver dust": [
+          "herblore"
+        ],
+        "meteorite dust": [
+          "artisan"
+        ],
+        "kebbit teeth dust": [
+          "herblore"
+        ],
+        "kinetic cyclone upgrade kit": [
+          "melee"
+        ],
+        "tiny bladed bronze salvage": [
+          "invention"
+        ],
+        "small bladed bronze salvage": [
+          "invention"
+        ],
+        "medium bladed bronze salvage": [
+          "invention"
+        ],
+        "large bladed bronze salvage": [
+          "invention"
+        ],
+        "huge bladed bronze salvage": [
+          "invention"
+        ],
+        "tiny spiky bronze salvage": [
+          "invention"
+        ],
+        "small spiky bronze salvage": [
+          "invention"
+        ],
+        "medium spiky bronze salvage": [
+          "invention"
+        ],
+        "large spiky bronze salvage": [
+          "invention"
+        ],
+        "huge spiky bronze salvage": [
+          "invention"
+        ],
+        "tiny blunt bronze salvage": [
+          "invention"
+        ],
+        "small blunt bronze salvage": [
+          "invention"
+        ],
+        "medium blunt bronze salvage": [
+          "invention"
+        ],
+        "large blunt bronze salvage": [
+          "invention"
+        ],
+        "huge blunt bronze salvage": [
+          "invention"
+        ],
+        "tiny plated bronze salvage": [
+          "invention"
+        ],
+        "small plated bronze salvage": [
+          "invention"
+        ],
+        "medium plated bronze salvage": [
+          "invention"
+        ],
+        "large plated bronze salvage": [
+          "invention"
+        ],
+        "huge plated bronze salvage": [
+          "invention"
+        ],
+        "tiny bladed iron salvage": [
+          "invention"
+        ],
+        "small bladed iron salvage": [
+          "invention"
+        ],
+        "medium bladed iron salvage": [
+          "invention"
+        ],
+        "large bladed iron salvage": [
+          "invention"
+        ],
+        "huge bladed iron salvage": [
+          "invention"
+        ],
+        "tiny spiky iron salvage": [
+          "invention"
+        ],
+        "small spiky iron salvage": [
+          "invention"
+        ],
+        "medium spiky iron salvage": [
+          "invention"
+        ],
+        "large spiky iron salvage": [
+          "invention"
+        ],
+        "huge spiky iron salvage": [
+          "invention"
+        ],
+        "tiny blunt iron salvage": [
+          "invention"
+        ],
+        "small blunt iron salvage": [
+          "invention"
+        ],
+        "medium blunt iron salvage": [
+          "invention"
+        ],
+        "large blunt iron salvage": [
+          "invention"
+        ],
+        "huge blunt iron salvage": [
+          "invention"
+        ],
+        "tiny plated iron salvage": [
+          "invention"
+        ],
+        "small plated iron salvage": [
+          "invention"
+        ],
+        "medium plated iron salvage": [
+          "invention"
+        ],
+        "large plated iron salvage": [
+          "invention"
+        ],
+        "huge plated iron salvage": [
+          "invention"
+        ],
+        "tiny bladed steel salvage": [
+          "invention"
+        ],
+        "small bladed steel salvage": [
+          "invention"
+        ],
+        "medium bladed steel salvage": [
+          "invention"
+        ],
+        "large bladed steel salvage": [
+          "invention"
+        ],
+        "huge bladed steel salvage": [
+          "invention"
+        ],
+        "tiny spiky steel salvage": [
+          "invention"
+        ],
+        "small spiky steel salvage": [
+          "invention"
+        ],
+        "medium spiky steel salvage": [
+          "invention"
+        ],
+        "large spiky steel salvage": [
+          "invention"
+        ],
+        "huge spiky steel salvage": [
+          "invention"
+        ],
+        "tiny blunt steel salvage": [
+          "invention"
+        ],
+        "small blunt steel salvage": [
+          "invention"
+        ],
+        "medium blunt steel salvage": [
+          "invention"
+        ],
+        "large blunt steel salvage": [
+          "invention"
+        ],
+        "huge blunt steel salvage": [
+          "invention"
+        ],
+        "tiny plated steel salvage": [
+          "invention"
+        ],
+        "small plated steel salvage": [
+          "invention"
+        ],
+        "medium plated steel salvage": [
+          "invention"
+        ],
+        "large plated steel salvage": [
+          "invention"
+        ],
+        "huge plated steel salvage": [
+          "invention"
+        ],
+        "tiny bladed mithril salvage": [
+          "invention"
+        ],
+        "small bladed mithril salvage": [
+          "invention"
+        ],
+        "medium bladed mithril salvage": [
+          "invention"
+        ],
+        "large bladed mithril salvage": [
+          "invention"
+        ],
+        "huge bladed mithril salvage": [
+          "invention"
+        ],
+        "tiny spiky mithril salvage": [
+          "invention"
+        ],
+        "small spiky mithril salvage": [
+          "invention"
+        ],
+        "medium spiky mithril salvage": [
+          "invention"
+        ],
+        "large spiky mithril salvage": [
+          "invention"
+        ],
+        "huge spiky mithril salvage": [
+          "invention"
+        ],
+        "tiny blunt mithril salvage": [
+          "invention"
+        ],
+        "small blunt mithril salvage": [
+          "invention"
+        ],
+        "medium blunt mithril salvage": [
+          "invention"
+        ],
+        "large blunt mithril salvage": [
+          "invention"
+        ],
+        "huge blunt mithril salvage": [
+          "invention"
+        ],
+        "tiny plated mithril salvage": [
+          "invention"
+        ],
+        "small plated mithril salvage": [
+          "invention"
+        ],
+        "medium plated mithril salvage": [
+          "invention"
+        ],
+        "large plated mithril salvage": [
+          "invention"
+        ],
+        "huge plated mithril salvage": [
+          "invention"
+        ],
+        "tiny bladed adamant salvage": [
+          "invention"
+        ],
+        "small bladed adamant salvage": [
+          "invention"
+        ],
+        "medium bladed adamant salvage": [
+          "invention"
+        ],
+        "large bladed adamant salvage": [
+          "invention"
+        ],
+        "huge bladed adamant salvage": [
+          "invention"
+        ],
+        "tiny spiky adamant salvage": [
+          "invention"
+        ],
+        "small spiky adamant salvage": [
+          "invention"
+        ],
+        "medium spiky adamant salvage": [
+          "invention"
+        ],
+        "large spiky adamant salvage": [
+          "invention"
+        ],
+        "huge spiky adamant salvage": [
+          "invention"
+        ],
+        "tiny blunt adamant salvage": [
+          "invention"
+        ],
+        "small blunt adamant salvage": [
+          "invention"
+        ],
+        "medium blunt adamant salvage": [
+          "invention"
+        ],
+        "large blunt adamant salvage": [
+          "invention"
+        ],
+        "huge blunt adamant salvage": [
+          "invention"
+        ],
+        "tiny plated adamant salvage": [
+          "invention"
+        ],
+        "small plated adamant salvage": [
+          "invention"
+        ],
+        "medium plated adamant salvage": [
+          "invention"
+        ],
+        "large plated adamant salvage": [
+          "invention"
+        ],
+        "huge plated adamant salvage": [
+          "invention"
+        ],
+        "medium bladed orikalkum salvage": [
+          "invention"
+        ],
+        "medium spiky orikalkum salvage": [
+          "invention"
+        ],
+        "huge plated orikalkum salvage": [
+          "invention"
+        ],
+        "tiny bladed orikalkum salvage": [
+          "invention"
+        ],
+        "tiny spiky orikalkum salvage": [
+          "invention"
+        ],
+        "small plated orikalkum salvage": [
+          "invention"
+        ],
+        "medium plated orikalkum salvage": [
+          "invention"
+        ],
+        "large plated orikalkum salvage": [
+          "invention"
+        ],
+        "medium blunt orikalkum salvage": [
+          "invention"
+        ],
+        "huge bladed orikalkum salvage": [
+          "invention"
+        ],
+        "tiny blunt orikalkum salvage": [
+          "invention"
+        ],
+        "large blunt orikalkum salvage": [
+          "invention"
+        ],
+        "small bladed orikalkum salvage": [
+          "invention"
+        ],
+        "small spiky orikalkum salvage": [
+          "invention"
+        ],
+        "tiny bladed necronium salvage": [
+          "invention"
+        ],
+        "huge spiky necronium salvage": [
+          "invention"
+        ],
+        "large blunt necronium salvage": [
+          "invention"
+        ],
+        "small plated necronium salvage": [
+          "invention"
+        ],
+        "medium plated necronium salvage": [
+          "invention"
+        ],
+        "large bladed orikalkum salvage": [
+          "invention"
+        ],
+        "large spiky orikalkum salvage": [
+          "invention"
+        ],
+        "huge spiky orikalkum salvage": [
+          "invention"
+        ],
+        "small blunt orikalkum salvage": [
+          "invention"
+        ],
+        "huge blunt orikalkum salvage": [
+          "invention"
+        ],
+        "tiny plated orikalkum salvage": [
+          "invention"
+        ],
+        "ikuchi orokami mask": [
+          "mining"
+        ],
+        "kodama orokami mask": [
+          "mining"
+        ],
+        "akkorokamui orokami mask": [
+          "mining"
+        ],
+        "karasu orokami mask": [
+          "mining"
+        ],
+        "akateko orokami mask": [
+          "mining"
+        ],
+        "nue orokami mask": [
+          "mining"
+        ],
+        "shinigami orokami mask": [
+          "mining"
+        ],
+        "oni orokami mask": [
+          "mining"
+        ],
+        "myre snelm (round)": [
+          "low_tier"
+        ],
+        "blood'n'tar snelm (round)": [
+          "low_tier"
+        ],
+        "ochre snelm (round)": [
+          "low_tier"
+        ],
+        "bruise blue snelm (round)": [
+          "low_tier"
+        ],
+        "broken bark snelm (round)": [
+          "low_tier"
+        ],
+        "myre snelm (pointed)": [
+          "low_tier"
+        ],
+        "blood'n'tar snelm (pointed)": [
+          "low_tier"
+        ],
+        "ochre snelm (pointed)": [
+          "low_tier"
+        ],
+        "bruise blue snelm (pointed)": [
+          "low_tier"
+        ],
+        "bracelet mould": [
+          "artisan"
+        ],
+        "necklace mould": [
+          "artisan"
+        ],
+        "ring mould": [
+          "artisan"
+        ],
+        "sickle mould": [
+          "artisan"
+        ],
+        "tiara mould": [
+          "artisan"
+        ],
+        "holy mould": [
+          "artisan"
+        ],
+        "iron ingot": [
+          "artisan"
+        ],
+        "steel ingot": [
+          "artisan"
+        ],
+        "impious incense sticks": [
+          "artisan"
+        ],
+        "marrentill incense sticks": [
+          "supplies"
+        ],
+        "snapdragon incense sticks": [
+          "supplies"
+        ],
+        "slayer wildcard": [
+          "supplies"
+        ],
+        "gemstone dragon wildcard": [
+          "supplies"
+        ],
+        "soul devourer wildcard": [
+          "supplies"
+        ],
+        "shadow creature wildcard": [
+          "supplies"
+        ],
+        "nightmare wildcard": [
+          "supplies"
+        ],
+        "lost grove creature wildcard": [
+          "supplies"
+        ],
+        "acheron mammoth wildcard": [
+          "supplies"
+        ],
+        "corrupted creature wildcard": [
+          "supplies"
+        ],
+        "elf wildcard": [
+          "supplies"
+        ],
+        "living wyvern wildcard": [
+          "supplies"
+        ],
+        "crystal shapeshifter wildcard": [
+          "supplies"
+        ],
+        "greater demon wildcard": [
+          "supplies"
+        ],
+        "edimmu wildcard": [
+          "supplies"
+        ],
+        "stalker creature wildcard": [
+          "supplies"
+        ],
+        "lava strykewyrm wildcard": [
+          "supplies"
+        ],
+        "abyssal creature wildcard": [
+          "supplies"
+        ],
+        "equipment dissolver": [
+          "invention"
+        ],
+        "gizmo dissolver": [
+          "invention"
+        ],
+        "masterwork blue cloth": [
+          "artisan"
+        ],
+        "masterwork green cloth": [
+          "artisan"
+        ],
+        "merethiel's stave": [
+          "boss",
+          "cosmetics"
+        ],
+        "mimic helm": [
+          "cosmetics"
+        ],
+        "mycelial webbing": [
+          "farming",
+          "herblore"
+        ],
+        "pitch can (empty)": [
+          "artisan"
+        ],
+        "pitch can (full)": [
+          "artisan"
+        ],
+        "poison slime": [
+          "farming",
+          "herblore"
+        ],
+        "potion flask": [
+          "herblore"
+        ],
+        "crystal flask": [
+          "herblore"
+        ],
+        "powder of defence": [
+          "supplies"
+        ],
+        "powder of protection": [
+          "supplies"
+        ],
+        "powder of pulverising": [
+          "prayer"
+        ],
+        pouch: [
+          "summoning"
+        ],
+        proboscis: [
+          "summoning"
+        ],
+        "powder of item protection": [
+          "supplies"
         ]
       };
     }
@@ -23743,6 +25164,17 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
         return s.replace(/[A-Za-z]+/g, (w) => w[0].toUpperCase() + w.slice(1).toLowerCase());
       }
       var _GENERIC_SHORT_WORDS = /* @__PURE__ */ new Set(["ore", "log", "bar", "axe", "bow", "kit", "dye", "tar", "oil", "ash", "wax"]);
+      var _GENERIC_BASE_NAMES = /* @__PURE__ */ new Set([
+        "extreme attack",
+        "extreme strength",
+        "extreme defence",
+        "extreme magic",
+        "extreme ranging",
+        "extreme necromancy"
+      ]);
+      function _stripDose(name) {
+        return name.replace(/\s*\(\d+\)$/, "");
+      }
       function _hasWordMatch(text, name) {
         let idx = text.indexOf(name);
         while (idx !== -1) {
@@ -23760,6 +25192,7 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
         for (const name of _getIndex(items)) {
           if (_hasWordMatch(textLower, name) && !seen.has(name)) {
             if (name.length <= 3 && _GENERIC_SHORT_WORDS.has(name)) continue;
+            if (_GENERIC_BASE_NAMES.has(_stripDose(name))) continue;
             seen.add(name);
             found.push(_pyTitle(name));
             if (found.length >= 15) break;
@@ -23809,6 +25242,13 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
               date = date.slice(0, 10);
             }
             const [updateType, cats] = detectUpdateType(title);
+            const _NO_IMPACT_ITEMS_TYPES = /* @__PURE__ */ new Set([
+              "Quest / Lore Update",
+              "Game Update",
+              "Seasonal Event",
+              "Grand Exchange Update"
+            ]);
+            const skipImpact = _NO_IMPACT_ITEMS_TYPES.has(updateType);
             results.push({
               source: "RS3 News",
               title,
@@ -23817,8 +25257,8 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
               mentions: detectMentions(title + " " + desc),
               description: desc ? desc.slice(0, 200) : "",
               update_type: updateType,
-              impact_categories: cats,
-              impact_items: allItems ? getImpactedItems(cats, allItems) : []
+              impact_categories: skipImpact ? [] : cats,
+              impact_items: allItems && !skipImpact ? getImpactedItems(cats, allItems) : []
             });
           }
         } catch (e) {
@@ -24755,7 +26195,7 @@ ${data.length} indexes:
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "2.4.0",
+        version: "2.5.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",
