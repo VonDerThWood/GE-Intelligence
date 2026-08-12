@@ -23433,6 +23433,79 @@
           if (!ref || !ref.price || !latest.price || ref === latest) return null;
           return (latest.price - ref.price) / ref.price * 100;
         }
+        const MOVERS_WINDOWS = [7, 30, 90, 180];
+        let moversCache = null;
+        let moversInFlight = null;
+        async function computeMoversStartPrices() {
+          await historyLoadedPromise;
+          const toMs = (ts) => ts && ts < 1e11 ? ts * 1e3 : ts;
+          const now = Date.now();
+          const targets = {};
+          for (const d of MOVERS_WINDOWS) targets[d] = now - d * 864e5;
+          const startPrices = {};
+          for (const d of MOVERS_WINDOWS) startPrices[d] = {};
+          const allIds = [...historyPopulatedIds];
+          const BATCH = 40;
+          for (let b = 0; b < allIds.length; b += BATCH) {
+            for (const itemId of allIds.slice(b, b + BATCH)) {
+              const points = await getHistoryPoints(itemId);
+              delete historyData[itemId];
+              if (!points || points.length < 2) continue;
+              const sorted = [...points].sort((a, b2) => toMs(a.timestamp) - toMs(b2.timestamp));
+              for (const d of MOVERS_WINDOWS) {
+                const targetMs = targets[d];
+                let ref = null;
+                for (const p of sorted) {
+                  if (toMs(p.timestamp) <= targetMs) ref = p;
+                  else break;
+                }
+                if (ref && ref.price) startPrices[d][itemId] = { price: ref.price, ts: toMs(ref.timestamp) };
+              }
+            }
+            await new Promise((res) => setTimeout(res, 0));
+          }
+          return startPrices;
+        }
+        const MOVERS_MIN_PRICE = 100;
+        const MOVERS_MIN_VOLUME = 50;
+        const MOVERS_MAX_BUY_SELL_RATIO = 5;
+        const MOVERS_SANITY_LOW = 0.5;
+        const MOVERS_SANITY_HIGH = 5;
+        async function getRealTimeMovers(windowDays) {
+          const win = MOVERS_WINDOWS.includes(windowDays) ? windowDays : 7;
+          const { items } = await getData();
+          if (!moversCache || moversCache.historyVersion !== historyVersion) {
+            if (!moversInFlight) {
+              const usedHistoryVersion = historyVersion;
+              moversInFlight = computeMoversStartPrices().then((startPrices2) => {
+                moversCache = { historyVersion: usedHistoryVersion, startPrices: startPrices2 };
+                moversInFlight = null;
+                return startPrices2;
+              });
+            }
+            await moversInFlight;
+          }
+          const startPrices = moversCache.startPrices[win] || {};
+          const rows = [];
+          for (const it of items || []) {
+            if (it.untradeable || !it.id) continue;
+            const gePrice = it.high || it.low || 0;
+            if (it.liveBuy != null && it.liveSell > 0 && it.liveBuy / it.liveSell > MOVERS_MAX_BUY_SELL_RATIO) continue;
+            if (gePrice > 0 && it.liveSell != null && it.liveSell < gePrice * MOVERS_SANITY_LOW) continue;
+            const cur = it.liveBuy ?? it.liveSell ?? gePrice;
+            if (gePrice > 0 && (cur < gePrice * MOVERS_SANITY_LOW || cur > gePrice * MOVERS_SANITY_HIGH)) continue;
+            if (!cur || cur < MOVERS_MIN_PRICE) continue;
+            if ((it.volume || 0) < MOVERS_MIN_VOLUME) continue;
+            const ref = startPrices[it.id];
+            if (!ref || !ref.price) continue;
+            const pct = (cur - ref.price) / ref.price * 100;
+            if (!isFinite(pct)) continue;
+            rows.push({ id: it.id, name: it.name, startPrice: ref.price, currentPrice: cur, pct });
+          }
+          const rises = [...rows].sort((a, b) => b.pct - a.pct).slice(0, 100);
+          const falls = [...rows].sort((a, b) => a.pct - b.pct).slice(0, 100);
+          return { rises, falls, windowDays: win };
+        }
         async function updateSnapshots() {
           try {
             const parsed = await storage2.readJSON(dataFile, null);
@@ -24647,6 +24720,7 @@ Total: ${totalPL >= 0 ? "+" : ""}${Math.round(totalPL).toLocaleString()}gp (valu
           getDxpEvents,
           getSignalTrend,
           pctChangeOverDays,
+          getRealTimeMovers,
           // snapshots
           updateSnapshots,
           getPriceSnapshots,
@@ -25520,7 +25594,7 @@ ${comps.length} components, ${potions.length} potions \u2014 ${items.length} tot
       var path = require_path_browserify();
       var storage2 = require_storage_capacitor();
       var _DIR = "fake-dirname";
-      var CACHE_PATH = path.join(_DIR, "..", "..", "data", "market_watch.json");
+      var _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, "..", "..", "data", "market_watch.json");
       var CACHE_TTL = 3600 * 1e3;
       var _URL = "https://runescape.wiki/w/RuneScape:Grand_Exchange_Market_Watch";
       var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)" };
@@ -25581,8 +25655,9 @@ ${comps.length} components, ${potions.length} potions \u2014 ${items.length} tot
         results.sort((a, b) => (order[a.name] ?? 99) - (order[b.name] ?? 99));
         return results;
       }
-      async function load(force = false) {
-        const cached = await storage2.readJSON(CACHE_PATH, null);
+      async function load(force = false, dataDir = null) {
+        const cachePath = dataDir ? path.join(dataDir, "market_watch.json") : _DEV_FALLBACK_CACHE_PATH;
+        const cached = await storage2.readJSON(cachePath, null);
         if (!force && cached && Date.now() - (cached.fetchedAt || 0) < CACHE_TTL) {
           return cached.indexes;
         }
@@ -25601,7 +25676,11 @@ ${comps.length} components, ${potions.length} potions \u2014 ${items.length} tot
           if (cached) return cached.indexes;
           return [];
         }
-        await storage2.writeJSON(CACHE_PATH, { fetchedAt: Date.now(), indexes }, { pretty: true });
+        try {
+          await storage2.writeJSON(cachePath, { fetchedAt: Date.now(), indexes }, { pretty: true });
+        } catch (e) {
+          console.log(`[market_watch] Cache write failed (data still returned this run): ${e.message}`);
+        }
         return indexes;
       }
       module.exports = { load };
@@ -25614,6 +25693,93 @@ ${data.length} indexes:
             const arrow = idx.direction === "up" ? "^" : idx.direction === "down" ? "v" : "=";
             const sign = idx.change >= 0 ? "+" : "";
             console.log(`  ${idx.name.padEnd(25)}  ${idx.value.toFixed(2).padStart(10)}  ${arrow} ${sign}${idx.change.toFixed(2)}`);
+          }
+        });
+      }
+    }
+  });
+
+  // src/backend-js/top100.js
+  var require_top100 = __commonJS({
+    "src/backend-js/top100.js"(exports, module) {
+      var path = require_path_browserify();
+      var storage2 = require_storage_capacitor();
+      var _DIR = "fake-dirname";
+      var _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, "..", "..", "data", "top100.json");
+      var CACHE_TTL = 3600 * 1e3;
+      var _HEADERS = { "User-Agent": "GEnius-app/2.5 (RS3 GE tracker; contact: letterslive@gmail.com)" };
+      var _URL = (list, scale) => `https://secure.runescape.com/m=itemdb_rs/top100?list=${list}&scale=${scale}`;
+      var SCALES = { 7: 0, 30: 1, 90: 2, 180: 3 };
+      function _parseRows(html) {
+        const rows = [];
+        const trBlocks = html.match(/<tr>[\s\S]*?<\/tr>/g) || [];
+        for (const block of trBlocks) {
+          const objMatch = block.match(/obj=(\d+)/);
+          const nameMatch = block.match(/alt="([^"]+)"/);
+          const pctMatch = block.match(/class='change (positive|negative)'>\s*<a[^>]*>([+\-]?[\d.]+)%<\/a>/);
+          if (!objMatch || !nameMatch || !pctMatch) continue;
+          const numMatches = [...block.matchAll(/<td[^>]*>\s*<a[^>]*>([\d.,]+[kmb]?)<\/a>\s*<\/td>/gi)];
+          rows.push({
+            id: Number(objMatch[1]),
+            name: nameMatch[1],
+            startPrice: numMatches[0] ? numMatches[0][1] : null,
+            endPrice: numMatches[1] ? numMatches[1][1] : null,
+            gpChange: numMatches[2] ? numMatches[2][1] : null,
+            // Jagex's own "Total Rise"/"Total Fall" column
+            // pctMatch[2] already carries its own sign from the page's own text
+            // ("-50%", "+66%") — pctMatch[1] (the positive/negative CSS class)
+            // is just a redundant confirmation of the same sign, not something
+            // to multiply in on top of it. Doing both was a double-negative:
+            // "-50" (already negative) times -1 (from the "negative" class)
+            // produced +50, silently flipping every Falls row positive.
+            pct: parseFloat(pctMatch[2])
+          });
+        }
+        return rows;
+      }
+      async function _fetchList(listNum, scale) {
+        const res = await fetch(_URL(listNum, scale), { headers: _HEADERS, signal: AbortSignal.timeout(15e3) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const html = await res.text();
+        return _parseRows(html);
+      }
+      async function load(force = false, dataDir = null) {
+        const cachePath = dataDir ? path.join(dataDir, "top100.json") : _DEV_FALLBACK_CACHE_PATH;
+        const cached = await storage2.readJSON(cachePath, null);
+        if (!force && cached && Date.now() - (cached.fetchedAt || 0) < CACHE_TTL) {
+          return { byWindow: cached.byWindow };
+        }
+        const byWindow = {};
+        try {
+          for (const windowDays of Object.keys(SCALES)) {
+            const scale = SCALES[windowDays];
+            const [rises, falls] = await Promise.all([_fetchList(2, scale), _fetchList(3, scale)]);
+            byWindow[windowDays] = { rises, falls };
+          }
+        } catch (e) {
+          console.log(`[top100] Fetch failed: ${e.message}`);
+          if (cached) return { byWindow: cached.byWindow };
+          return { byWindow: {} };
+        }
+        const total = Object.values(byWindow).reduce((n, w) => n + w.rises.length + w.falls.length, 0);
+        console.log(`[top100] ${total} rows fetched across ${Object.keys(byWindow).length} windows`);
+        if (!total) {
+          if (cached) return { byWindow: cached.byWindow };
+          return { byWindow: {} };
+        }
+        try {
+          await storage2.writeJSON(cachePath, { fetchedAt: Date.now(), byWindow }, { pretty: true });
+        } catch (e) {
+          console.log(`[top100] Cache write failed (data still returned this run): ${e.message}`);
+        }
+        return { byWindow };
+      }
+      module.exports = { load, SCALES };
+      if (__require.main === module) {
+        load(true).then((data) => {
+          for (const [win, { rises, falls }] of Object.entries(data.byWindow)) {
+            console.log(`
+${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[0]?.name} +${rises[0]?.pct}%`);
           }
         });
       }
@@ -26158,15 +26324,25 @@ ${data.length} indexes:
         if (args.mode === "full" || args.mode === "prices") {
           try {
             const { load: loadIndexes } = require_market_watch();
-            indexes = await loadIndexes();
+            indexes = await loadIndexes(false, dataDir);
           } catch (e) {
             console.log(`[market_watch] Error: ${e.message}`);
+          }
+        }
+        let officialTop100 = { byWindow: {} };
+        if (args.mode === "full" || args.mode === "prices") {
+          try {
+            const { load: loadTop100 } = require_top100();
+            officialTop100 = await loadTop100(false, dataDir);
+          } catch (e) {
+            console.log(`[top100] Error: ${e.message}`);
           }
         }
         const output = {
           items,
           news,
           indexes,
+          officialTop100,
           timestamp: Date.now(),
           updated_at: (/* @__PURE__ */ new Date()).toISOString()
         };
@@ -26482,6 +26658,7 @@ ${data.length} indexes:
       getHistoryStatus: () => a.getHistoryStatus(),
       getHistoryPopulatedIds: () => a.getHistoryPopulatedIds(),
       getSignalTrend: (limits) => a.getSignalTrend(limits),
+      getRealTimeMovers: (windowDays) => a.getRealTimeMovers(windowDays),
       startHistoryPopulation: (ids) => a.startHistoryPopulation(ids, (progress) => emit("history-progress", progress)),
       stopHistoryPopulation: () => a.stopHistoryPopulation(),
       onHistoryProgress: (cb) => on("history-progress", cb),

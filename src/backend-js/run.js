@@ -881,9 +881,22 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
   if (args.mode === 'full' || args.mode === 'prices') {
     try {
       const { load: loadIndexes } = require('./market_watch.js');
-      indexes = await loadIndexes();
+      indexes = await loadIndexes(false, dataDir);
     } catch (e) {
       console.log(`[market_watch] Error: ${e.message}`);
+    }
+  }
+
+  // Jagex's own official GE Top 100 Rises/Falls (1h cache internally, see
+  // top100.js) — a distinct data source from everything else here, shown
+  // alongside GEnius's own real-time equivalent on the Dashboard.
+  let officialTop100 = { byWindow: {} };
+  if (args.mode === 'full' || args.mode === 'prices') {
+    try {
+      const { load: loadTop100 } = require('./top100.js');
+      officialTop100 = await loadTop100(false, dataDir);
+    } catch (e) {
+      console.log(`[top100] Error: ${e.message}`);
     }
   }
 
@@ -891,6 +904,7 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
     items,
     news,
     indexes,
+    officialTop100,
     timestamp: Date.now(),
     updated_at: new Date().toISOString(),
   };

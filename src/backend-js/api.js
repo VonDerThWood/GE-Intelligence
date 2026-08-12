@@ -912,6 +912,111 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop' }) {
     return ((latest.price - ref.price) / ref.price) * 100;
   }
 
+  // ─── Real-time Top Movers (GEnius's own version of Jagex's GE Top 100
+  // Rises/Falls, using live buy/sell as the "now" endpoint instead of
+  // Jagex's own slow-updating, percentage-capped official price) ─────────
+  const MOVERS_WINDOWS = [7, 30, 90, 180];
+  let moversCache = null;     // { historyVersion, startPrices: {7:{id:{price,ts}}, 30:{...}, ...} }
+  let moversInFlight = null;  // shared in-flight Promise, same dedup pattern as getSignalTrend
+
+  // One batched pass over every item's history (same evict-as-you-go
+  // pattern as computeSignalTrend) finds, for each of the 4 windows, the
+  // closest-at-or-before-target-date price — the "start" side of the %
+  // change. The "now" side is deliberately NOT read from history here;
+  // getRealTimeMovers combines this against each item's live buy/sell at
+  // call time instead, so the comparison is always as fresh as the last
+  // price fetch, not as stale as the last history point.
+  async function computeMoversStartPrices() {
+    await historyLoadedPromise;
+    const toMs = ts => (ts && ts < 1e11 ? ts * 1000 : ts);
+    const now = Date.now();
+    const targets = {};
+    for (const d of MOVERS_WINDOWS) targets[d] = now - d * 86400000;
+    const startPrices = {};
+    for (const d of MOVERS_WINDOWS) startPrices[d] = {};
+
+    const allIds = [...historyPopulatedIds];
+    const BATCH = 40;
+    for (let b = 0; b < allIds.length; b += BATCH) {
+      for (const itemId of allIds.slice(b, b + BATCH)) {
+        const points = await getHistoryPoints(itemId);
+        delete historyData[itemId];
+        if (!points || points.length < 2) continue;
+        const sorted = [...points].sort((a, b) => toMs(a.timestamp) - toMs(b.timestamp));
+        for (const d of MOVERS_WINDOWS) {
+          const targetMs = targets[d];
+          let ref = null;
+          for (const p of sorted) {
+            if (toMs(p.timestamp) <= targetMs) ref = p; else break;
+          }
+          if (ref && ref.price) startPrices[d][itemId] = { price: ref.price, ts: toMs(ref.timestamp) };
+        }
+      }
+      await new Promise(res => setTimeout(res, 0));
+    }
+    return startPrices;
+  }
+
+  // Same liquidity/price floors as Flips (FLIP_MIN_SELL_PRICE/FLIP_MIN_VOLUME
+  // in renderer.js) — this is the exact same class of problem (a trivial
+  // price move on a barely-traded item dominating a ranked list) that those
+  // floors were built to solve, so reusing the already-vetted numbers
+  // rather than picking new ones.
+  const MOVERS_MIN_PRICE = 100;
+  const MOVERS_MIN_VOLUME = 50;
+  // Same fluke/isolated-print guards as Flips (FLIP_MAX_BUY_SELL_RATIO,
+  // FLIP_SANITY_LOW in renderer.js) — caught for real building this:
+  // Fungal spore soup's liveBuy was 62,500gp (a single stale instant-buy
+  // fill from months back, still being reported as "live" because nobody's
+  // matched it since) against a GE price of 13gp and a liveSell of 1,006gp
+  // — a 62x buy/sell spread that isn't a real two-sided market, and would
+  // have shown as a fake +480,000% mover without this.
+  const MOVERS_MAX_BUY_SELL_RATIO = 5;
+  const MOVERS_SANITY_LOW = 0.5;
+  // The ratio check alone still let Fish and chips through — liveBuy
+  // 15,000gp vs liveSell 3,001gp is a 4.998x ratio (just under the 5x
+  // cutoff above) despite BOTH sides being wildly divorced from the
+  // item's real 55gp GE price. A live price this far from the item's own
+  // established value, in EITHER direction, isn't something to trust
+  // regardless of what the other live side says — capped independently.
+  const MOVERS_SANITY_HIGH = 5;
+
+  async function getRealTimeMovers(windowDays) {
+    const win = MOVERS_WINDOWS.includes(windowDays) ? windowDays : 7;
+    const { items } = await getData();
+    if (!moversCache || moversCache.historyVersion !== historyVersion) {
+      if (!moversInFlight) {
+        const usedHistoryVersion = historyVersion;
+        moversInFlight = computeMoversStartPrices().then(startPrices => {
+          moversCache = { historyVersion: usedHistoryVersion, startPrices };
+          moversInFlight = null;
+          return startPrices;
+        });
+      }
+      await moversInFlight;
+    }
+    const startPrices = moversCache.startPrices[win] || {};
+    const rows = [];
+    for (const it of (items || [])) {
+      if (it.untradeable || !it.id) continue;
+      const gePrice = it.high || it.low || 0;
+      if (it.liveBuy != null && it.liveSell > 0 && (it.liveBuy / it.liveSell) > MOVERS_MAX_BUY_SELL_RATIO) continue;
+      if (gePrice > 0 && it.liveSell != null && it.liveSell < gePrice * MOVERS_SANITY_LOW) continue;
+      const cur = it.liveBuy ?? it.liveSell ?? gePrice;
+      if (gePrice > 0 && (cur < gePrice * MOVERS_SANITY_LOW || cur > gePrice * MOVERS_SANITY_HIGH)) continue;
+      if (!cur || cur < MOVERS_MIN_PRICE) continue;
+      if ((it.volume || 0) < MOVERS_MIN_VOLUME) continue;
+      const ref = startPrices[it.id];
+      if (!ref || !ref.price) continue;
+      const pct = ((cur - ref.price) / ref.price) * 100;
+      if (!isFinite(pct)) continue;
+      rows.push({ id: it.id, name: it.name, startPrice: ref.price, currentPrice: cur, pct });
+    }
+    const rises = [...rows].sort((a, b) => b.pct - a.pct).slice(0, 100);
+    const falls = [...rows].sort((a, b) => a.pct - b.pct).slice(0, 100);
+    return { rises, falls, windowDays: win };
+  }
+
   // ─── Price snapshots (local recent history, 1/day/item) ─────────────────
   async function updateSnapshots() {
     try {
@@ -2581,7 +2686,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop' }) {
     historyLoadedPromise,
     get historyVersion() { return historyVersion; },
     // dxp / signals
-    getDxpIntelligence, getDxpEvents, getSignalTrend, pctChangeOverDays,
+    getDxpIntelligence, getDxpEvents, getSignalTrend, pctChangeOverDays, getRealTimeMovers,
     // snapshots
     updateSnapshots, getPriceSnapshots,
     // wiki stats

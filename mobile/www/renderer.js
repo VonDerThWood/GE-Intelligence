@@ -1370,7 +1370,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   const fmtDate = ts => {
     const d = new Date(typeof ts === 'number' ? ts * (ts < 1e12 ? 1000 : 1) : ts);
     if (chartView === 'alltime') return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
-    if (range === 365) return d.toLocaleDateString('en-US', {month:'short', year:'2-digit'});
+    if (range >= 365) return d.toLocaleDateString('en-US', {month:'short', year:'2-digit'});
     const fmt = dateFormat || 'MM/DD/YYYY';
     const M = d.getMonth()+1, D = d.getDate();
     if (fmt === 'DD/MM/YYYY') return `${D}/${M}`;
@@ -3740,7 +3740,173 @@ function SectorCard({sector, onClick}) {
 }
 
 /* ─── Dashboard tab ──────────────────────────────────────────── */
-function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news, overpricedThreshold=30}) {
+const TOP_MOVERS_WINDOWS = [
+  {days:7,   label:'Last 7 Days'},
+  {days:30,  label:'Last Month'},
+  {days:90,  label:'Last 3 Months'},
+  {days:180, label:'Last 6 Months'},
+];
+const TOP_MOVERS_PILLS = [
+  {key:'ge_rise',   label:'GE Market ↑', source:'ge',   dir:'rise'},
+  {key:'ge_fall',   label:'GE Market ↓', source:'ge',   dir:'fall'},
+  {key:'live_rise', label:'Live Trade ↑', source:'live', dir:'rise'},
+  {key:'live_fall', label:'Live Trade ↓', source:'live', dir:'fall'},
+];
+
+// Inline expandable Dashboard section, not a modal — Ben: "there's no
+// reason to make anyone change to a new page ... we could just scroll
+// down their normal page." Two genuinely different data sources shown
+// side by side: Jagex's own official GE Top 100 (their listed price,
+// averaged over the period, capped by their own daily-change rules) vs.
+// GEnius's own real-time equivalent (live instant buy/sell right now vs.
+// a real history point N days back) — the two lists are expected to
+// differ, sometimes a lot, since one is measuring a slow official number
+// and the other measures what's actually fillable right now.
+// Jagex's own price columns ("1,580", "606", "3.4m", "52.4k") into a plain
+// number, so the GP Change column can be sorted numerically instead of
+// only ever showing Jagex's own default (percentage) order.
+function parseGpString(str) {
+  if (str == null) return 0;
+  const s = String(str).replace(/,/g, '').trim();
+  const m = s.match(/^([\d.]+)\s*([kmb])?$/i);
+  if (!m) return parseFloat(s) || 0;
+  const n = parseFloat(m[1]);
+  const mult = {k:1e3, m:1e6, b:1e9}[m[2]?.toLowerCase()] || 1;
+  return n * mult;
+}
+
+function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleWatch}) {
+  const [open, setOpen] = useState(false);
+  const [pill, setPill] = useState('ge_rise');
+  const [windowDays, setWindowDays] = useState(7);
+  const [periodOpen, setPeriodOpen] = useState(false);
+  const [liveCache, setLiveCache] = useState({}); // {windowDays: {rises, falls}}
+  const [liveLoading, setLiveLoading] = useState(false);
+  const [sort, setSort] = useState({key:'pct', dir:-1});
+  const tog = key => setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='name' ? 1 : -1)}));
+  const arr = key => sort.key===key ? (sort.dir>0?' ▲':' ▼') : '';
+
+  const pillDef = TOP_MOVERS_PILLS.find(p => p.key === pill);
+
+  // Default sort matches the pill's own natural order (biggest rise first
+  // on a ↑ pill, biggest fall first on a ↓ pill) whenever the pill itself
+  // changes — a manual column sort (Item/GP Change) stays put across a
+  // period change, only resets when you actually switch pills.
+  useEffect(() => {
+    setSort({key:'pct', dir: pillDef.dir==='rise' ? -1 : 1});
+  }, [pill]);
+
+  useEffect(() => {
+    if (!open || pillDef.source !== 'live' || liveCache[windowDays]) return;
+    setLiveLoading(true);
+    window.genius?.getRealTimeMovers?.(windowDays)
+      .then(res => { if (res) setLiveCache(c => ({...c, [windowDays]: res})); })
+      .catch(() => {})
+      .finally(() => setLiveLoading(false));
+  }, [open, pillDef.source, windowDays]);
+
+  const itemById = useMemo(() => {
+    const m = new Map();
+    for (const it of items) if (it.id != null) m.set(it.id, it);
+    return m;
+  }, [items]);
+
+  let rows = [];
+  if (pillDef.source === 'ge') {
+    const win = officialTop100?.byWindow?.[windowDays];
+    rows = (win ? (pillDef.dir === 'rise' ? win.rises : win.falls) : []).map(r => ({
+      id: r.id, name: r.name, startDisplay: r.startPrice, endDisplay: r.endPrice, pct: r.pct,
+      // Jagex's own "Total Rise"/"Total Fall" column — a plain unsigned
+      // number on their page, sign added here to match pct's direction.
+      gpDisplay: r.gpChange != null ? (r.pct>=0?'+':'-')+r.gpChange+'gp' : '—',
+      gpChangeRaw: (r.pct>=0?1:-1) * parseGpString(r.gpChange),
+    }));
+  } else {
+    const win = liveCache[windowDays];
+    rows = (win ? (pillDef.dir === 'rise' ? win.rises : win.falls) : []).map(r => ({
+      id: r.id, name: r.name, startDisplay: fmt.gp(r.startPrice)+'gp', endDisplay: fmt.gp(r.currentPrice)+'gp', pct: r.pct,
+      gpDisplay: (r.pct>=0?'+':'-')+fmt.gp(Math.abs(r.currentPrice-r.startPrice))+'gp',
+      gpChangeRaw: r.currentPrice - r.startPrice,
+    }));
+  }
+  rows = [...rows].sort((a,b) => {
+    if (sort.key === 'name') return a.name.localeCompare(b.name) * sort.dir;
+    const av = sort.key==='gp' ? a.gpChangeRaw : a.pct;
+    const bv = sort.key==='gp' ? b.gpChangeRaw : b.pct;
+    return (av - bv) * sort.dir;
+  });
+
+  return h('div', {style:{marginBottom:20}},
+    h('div', {
+      className:'ge-section-head', style:{cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'},
+      onClick:()=>setOpen(o=>!o),
+    },
+      h('span', null, `🏆 Top 100 Price Movements ${open?'▲':'▼'}`),
+      open && h('div', {style:{position:'relative'}, onClick:e=>e.stopPropagation()},
+        h('button', {
+          className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
+          onClick:()=>setPeriodOpen(o=>!o),
+        }, TOP_MOVERS_WINDOWS.find(w=>w.days===windowDays)?.label + ' ▾'),
+        periodOpen && h('div', {
+          style:{position:'absolute', right:0, top:'110%', zIndex:20, background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:4, minWidth:150, boxShadow:'0 4px 16px rgba(0,0,0,0.6)', overflow:'hidden'},
+        },
+          TOP_MOVERS_WINDOWS.map(w => h('div', {
+            key:w.days,
+            style:{padding:'7px 12px', fontSize:12, cursor:'pointer', color: w.days===windowDays ? T.goldBright : T.text, background: w.days===windowDays ? 'rgba(201,168,76,0.12)' : 'transparent'},
+            onClick:()=>{ setWindowDays(w.days); setPeriodOpen(false); },
+            onMouseEnter:e=>e.currentTarget.style.background='rgba(201,168,76,0.08)',
+            onMouseLeave:e=>e.currentTarget.style.background = w.days===windowDays ? 'rgba(201,168,76,0.12)' : 'transparent',
+          }, w.label))
+        )
+      )
+    ),
+    open && h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 4px 4px', padding:'10px 12px'}},
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10, lineHeight:1.4}},
+        'GE Market is Jagex\'s own official Top 100, sourced straight from their site. Live Trade is GEnius\'s own version using real instant buy/sell instead of their slower official price — expect the two lists to differ.'
+      ),
+      h('div', {className:'row', style:{gap:6, marginBottom:10, flexWrap:'wrap'}},
+        TOP_MOVERS_PILLS.map(p => h('button', {
+          key:p.key,
+          className:'ge-btn'+(pill===p.key?' gold':''),
+          style:{fontSize:11, padding:'4px 10px'},
+          onClick:()=>setPill(p.key),
+        }, p.label))
+      ),
+      pillDef.source==='live' && liveLoading && !liveCache[windowDays]
+        ? h('div', {style:{padding:20, textAlign:'center', color:T.textDim, fontSize:12}}, 'Computing real-time movers from local price history…')
+        : rows.length === 0
+          ? h('div', {style:{padding:20, textAlign:'center', color:T.textDim, fontSize:12}}, 'No data for this period yet.')
+          : h('div', {className:'ge-table-wrap'},
+              h('table', {className:'ge-table'},
+                h('thead', null, h('tr', null,
+                  h('th', {onClick:()=>tog('name')}, 'Item'+arr('name')), h('th', null, 'Start'), h('th', null, 'Now'),
+                  h('th', {onClick:()=>tog('gp')}, 'GP Change'+arr('gp')), h('th', {onClick:()=>tog('pct')}, 'Change'+arr('pct')),
+                )),
+                h('tbody', null, rows.slice(0, 30).map(r => {
+                  const it = itemById.get(r.id);
+                  return h('tr', {
+                    key:r.id,
+                    style:{cursor: it ? 'pointer' : 'default'},
+                    onClick: () => it && onSelect(it),
+                  },
+                    h('td', null, h('div', {className:'row', style:{gap:6, alignItems:'center'}},
+                      it && h('img', {src:`https://secure.runescape.com/m=itemdb_rs/1786357986994_obj_sprite.gif?id=${it.id}`, style:{width:18,height:18,objectFit:'contain'}}),
+                      h('span', {style:{color: it ? T.textBright : T.textDim}}, r.name),
+                    )),
+                    h('td', null, r.startDisplay),
+                    h('td', null, r.endDisplay),
+                    h('td', {style:{color: r.pct >= 0 ? T.green : T.red}}, r.gpDisplay),
+                    h('td', {style:{color: r.pct >= 0 ? T.green : T.red, fontWeight:'bold'}}, (r.pct>=0?'+':'')+r.pct.toFixed(1)+'%'),
+                  );
+                }))
+              )
+            )
+    )
+  );
+}
+
+function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news, overpricedThreshold=30, officialTop100}) {
+  const [topMoversOpen, setTopMoversOpen] = useState(false);
   const [activeSignal, setActiveSignal] = useState(null);
   const [activeIndexId, setActiveIndexId] = useState(null);
   const [activeSector, setActiveSector] = useState(null);
@@ -4314,6 +4480,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
         )
       )
     ),
+
+    h(TopMoversSection, {items, officialTop100, onSelect, watchlist, onToggleWatch}),
 
     // ── News Item Mentions ───────────────────────────────────────
     (() => {
@@ -11695,6 +11863,7 @@ function App() {
   const [items, setItems] = useState([]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
+  const [officialTop100, setOfficialTop100] = useState({byWindow:{}});
   const [compareList, setCompareList] = useState([]);
   const [watchlist, setWatchlist] = useState([]);
   const [hiddenItems, setHiddenItems] = useState([]);
@@ -11845,6 +12014,7 @@ function App() {
       if (data.items)     setItems(data.items);
       if (data.news)      setNews(data.news);
       if (data.indexes)   setIndexes(data.indexes);
+      if (data.officialTop100) setOfficialTop100(data.officialTop100);
       if (data.timestamp) setLastUpdate(data.timestamp);
       setWatchlist(wl||[]);
       setAlerts(al||[]);
@@ -11889,6 +12059,7 @@ function App() {
         if (data.items)   setItems(data.items);
         if (data.news)    setNews(data.news);
         if (data.indexes) setIndexes(data.indexes);
+        if (data.officialTop100) setOfficialTop100(data.officialTop100);
         triggerHistoryPopulationIfNeeded(data.items);
       }).catch(e => console.error('[GEnius] getData after fetch error:', e));
       // Ben, 2026-08-09: checkPriceAlerts()/checkReminders() run server-side
@@ -12182,7 +12353,7 @@ function App() {
           h('button',{className:'scroll-jump-btn',title:'Scroll to bottom',onClick:()=>scrollContentTo(contentRef.current?.scrollHeight||0)},'▼')
         ),
         h('div',{className:'content',style:{flex:1},ref:contentRef},
-          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30}),
+          tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30,officialTop100}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
           tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems}),

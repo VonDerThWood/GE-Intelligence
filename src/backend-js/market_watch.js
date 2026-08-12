@@ -15,7 +15,19 @@ const path = require('path');
 const storage = require('./storage.js');
 
 const _DIR = __dirname;
-const CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'market_watch.json');
+// Dev-only fallback — this repo-root data/ folder isn't part of the
+// packaged app's "files" list at all (see package.json's build.files:
+// only src/**, assets/**, node_modules/**), and app.asar is read-only at
+// runtime regardless. Found for real (2026-08-11) while building top100.js
+// against the same pattern: this meant load()'s writeJSON call below has
+// been silently throwing in every packaged build, and since that call sat
+// OUTSIDE the fetch's own try/catch, the whole function threw AFTER
+// already successfully fetching real index data — discarding it and
+// leaving `indexes` permanently empty in the shipped app. Real dataDir
+// (same per-install writable directory everything else uses) now gets
+// passed in from run.js; this const is only ever hit by direct/standalone
+// testing.
+const _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'market_watch.json');
 const CACHE_TTL = 3600 * 1000; // 1 hour, in ms (Python version uses seconds)
 
 const _URL = 'https://runescape.wiki/w/RuneScape:Grand_Exchange_Market_Watch';
@@ -91,14 +103,15 @@ function _parse(html) {
   return results;
 }
 
-async function load(force = false) {
+async function load(force = false, dataDir = null) {
+  const cachePath = dataDir ? path.join(dataDir, 'market_watch.json') : _DEV_FALLBACK_CACHE_PATH;
   // Cache age is tracked via an embedded fetchedAt timestamp inside the
   // JSON itself rather than the file's OS-level mtime — Capacitor's
   // Filesystem plugin (the mobile storage backend) doesn't expose mtime
   // the same way Node's fs does, so this keeps the TTL check identical on
   // both platforms instead of needing a stat() primitive in storage.js
   // just for this one cache.
-  const cached = await storage.readJSON(CACHE_PATH, null);
+  const cached = await storage.readJSON(cachePath, null);
   if (!force && cached && (Date.now() - (cached.fetchedAt || 0)) < CACHE_TTL) {
     return cached.indexes;
   }
@@ -121,7 +134,15 @@ async function load(force = false) {
     return [];
   }
 
-  await storage.writeJSON(CACHE_PATH, { fetchedAt: Date.now(), indexes }, { pretty: true });
+  // Cache-write failure must not discard data already successfully
+  // fetched — this used to sit unguarded and throw the whole function on
+  // the read-only asar path, silently keeping `indexes` empty forever in
+  // every packaged build (see _DEV_FALLBACK_CACHE_PATH's comment above).
+  try {
+    await storage.writeJSON(cachePath, { fetchedAt: Date.now(), indexes }, { pretty: true });
+  } catch (e) {
+    console.log(`[market_watch] Cache write failed (data still returned this run): ${e.message}`);
+  }
   return indexes;
 }
 

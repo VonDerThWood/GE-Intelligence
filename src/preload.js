@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld('genius', {
   getHistoryStatus:      ()     => ipcRenderer.invoke('get-history-status'),
   getHistoryPopulatedIds:()     => ipcRenderer.invoke('get-history-populated-ids'),
   getSignalTrend:        (limits) => ipcRenderer.invoke('get-signal-trend', limits),
+  getRealTimeMovers:     (windowDays) => ipcRenderer.invoke('get-real-time-movers', windowDays),
   startHistoryPopulation:(ids)  => ipcRenderer.invoke('start-history-population', ids),
   stopHistoryPopulation: ()     => ipcRenderer.invoke('stop-history-population'),
   onHistoryProgress:     (cb)   => ipcRenderer.on('history-progress', (_, d) => cb(d)),

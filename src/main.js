@@ -453,6 +453,8 @@ ipcMain.handle('stop-history-population', () => api.stopHistoryPopulation());
 
 ipcMain.handle('get-signal-trend', async (_, itemLimits) => api.getSignalTrend(itemLimits));
 
+ipcMain.handle('get-real-time-movers', async (_, windowDays) => api.getRealTimeMovers(windowDays));
+
 ipcMain.handle('get-item-history', async (_, itemId) => api.getItemHistory(itemId));
 
 ipcMain.handle('get-price-snapshots', (_, itemId) => api.getPriceSnapshots(itemId));

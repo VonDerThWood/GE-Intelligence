@@ -263,6 +263,7 @@ async function buildGenius() {
     getHistoryStatus:        ()    => a.getHistoryStatus(),
     getHistoryPopulatedIds:  ()    => a.getHistoryPopulatedIds(),
     getSignalTrend:          (limits) => a.getSignalTrend(limits),
+    getRealTimeMovers:       (windowDays) => a.getRealTimeMovers(windowDays),
     startHistoryPopulation:  (ids) => a.startHistoryPopulation(ids, (progress) => emit('history-progress', progress)),
     stopHistoryPopulation:   ()    => a.stopHistoryPopulation(),
     onHistoryProgress:       (cb)  => on('history-progress', cb),
