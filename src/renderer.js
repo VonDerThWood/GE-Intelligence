@@ -1048,37 +1048,6 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
 
   if (!item) return null;
 
-  // Zoom helper — called by scroll and arrow keys
-  const doZoom = useCallback((direction) => {
-    if (!timeseries || !timeseries.length) return;
-    const total = timeseries.length;
-    const cur = zoomWindow || [0, total - 1];
-    const span = cur[1] - cur[0];
-    const center = cur[0] + Math.round(span * zoomCenterRef.current);
-    const STEP = 0.15; // zoom 15% per tick
-    const newSpan = direction === 'in'
-      ? Math.max(10, Math.round(span * (1 - STEP)))
-      : Math.min(total - 1, Math.round(span * (1 + STEP)));
-    const half = Math.round(newSpan / 2);
-    const start = Math.max(0, center - half);
-    const end   = Math.min(total - 1, start + newSpan);
-    const adjStart = Math.max(0, end - newSpan);
-    if (adjStart === 0 && end === total - 1) { setZoomWindow(null); return; }
-    setZoomWindow([adjStart, end]);
-    setHoverIdx(null);
-  }, [timeseries, zoomWindow]);
-
-  // Arrow key zoom when modal is open
-  useEffect(() => {
-    if (chartView !== 'alltime') return;
-    const onKey = e => {
-      if (e.key === 'ArrowUp')   { e.preventDefault(); doZoom('in');  }
-      if (e.key === 'ArrowDown') { e.preventDefault(); doZoom('out'); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [chartView, doZoom]);
-
   // Merge WeirdGloop history with local snapshots, filter to range
   const points = useMemo(() => {
     if (!history && !snapshots.length) return [];
@@ -1109,6 +1078,46 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
     const cutoff = latestTs - range * 24 * 60 * 60 * 1000;
     return combined.filter(p => getTs(p) >= cutoff);
   }, [history, snapshots, range]);
+
+  // Which range currently supports scroll/arrow/pinch zoom, and what array
+  // it zooms into — Ben (2026-08-12): zoom only ever worked on All Time
+  // (zooming into the full `timeseries`). Extended to 5y too, zooming into
+  // `points` instead (already filtered to the last 5 years by the useMemo
+  // above) — 5y should let you drill into that same 5-year window, not
+  // reveal data outside it the way All Time's own zoom-out eventually can.
+  const zoomEnabled = chartView === 'alltime' || range === 1825;
+  const zoomSource = chartView === 'alltime' ? timeseries : points;
+
+  // Zoom helper — called by scroll and arrow keys
+  const doZoom = useCallback((direction) => {
+    if (!zoomSource || !zoomSource.length) return;
+    const total = zoomSource.length;
+    const cur = zoomWindow || [0, total - 1];
+    const span = cur[1] - cur[0];
+    const center = cur[0] + Math.round(span * zoomCenterRef.current);
+    const STEP = 0.15; // zoom 15% per tick
+    const newSpan = direction === 'in'
+      ? Math.max(10, Math.round(span * (1 - STEP)))
+      : Math.min(total - 1, Math.round(span * (1 + STEP)));
+    const half = Math.round(newSpan / 2);
+    const start = Math.max(0, center - half);
+    const end   = Math.min(total - 1, start + newSpan);
+    const adjStart = Math.max(0, end - newSpan);
+    if (adjStart === 0 && end === total - 1) { setZoomWindow(null); return; }
+    setZoomWindow([adjStart, end]);
+    setHoverIdx(null);
+  }, [zoomSource, zoomWindow]);
+
+  // Arrow key zoom when modal is open
+  useEffect(() => {
+    if (!zoomEnabled) return;
+    const onKey = e => {
+      if (e.key === 'ArrowUp')   { e.preventDefault(); doZoom('in');  }
+      if (e.key === 'ArrowDown') { e.preventDefault(); doZoom('out'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomEnabled, doZoom]);
 
   // ATH/ATL from full timeseries
   const athData = useMemo(() => {
@@ -1272,6 +1281,14 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   };
 
   const activePoints = useMemo(() => {
+    // 5y zooms into `points` (already filtered to the last 5 years); All
+    // Time zooms into the full `timeseries`. Neither the date-picker
+    // fields nor zoomWindow exist/apply outside these two — every other
+    // range just shows `points` as-is, same as before.
+    if (range === 1825) {
+      if (!zoomWindow) return points;
+      return points.slice(zoomWindow[0], zoomWindow[1] + 1);
+    }
     if (chartView !== 'alltime' || !timeseries) return points;
     // Apply scroll/key zoom window first
     let base = timeseries;
@@ -1287,11 +1304,28 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
       const t = p.timestamp * (p.timestamp < 1e12 ? 1000 : 1);
       return t >= (isNaN(fromMs) ? -Infinity : fromMs) && t <= (isNaN(toMs) ? Infinity : toMs);
     });
-  }, [chartView, timeseries, points, zoomFrom, zoomTo, zoomWindow]);
+  }, [chartView, timeseries, points, range, zoomFrom, zoomTo, zoomWindow]);
   const prices  = activePoints.map(p => p.price ?? p.high ?? p.low ?? 0);
   const volumes = activePoints.map(p => p.volume || 0);
   const minP = Math.min(...prices), maxP = Math.max(...prices);
   const maxV = Math.max(...volumes, 1);
+  // Real bug caught live (Ben, 2026-08-12): the "{range}d Low/High" stat
+  // row below used to reuse minP/maxP directly, which are computed from
+  // activePoints — and activePoints silently switches to the FULL
+  // all-time series whenever chartView is 'alltime' (see its useMemo
+  // above), ignoring `range` entirely. Confirmed for real on Crystal
+  // body: with All Time selected, "365d Low" showed 300.0KGP — the exact
+  // same number and date as the genuine All-Time Low far below it — while
+  // the visible chart line never dipped anywhere near that in the
+  // selected window. The label stayed stuck on the last-picked range
+  // while the number underneath silently became a different statistic.
+  // This stat is meant to always reflect the literal last `range` days
+  // regardless of what the chart is currently zoomed/panned to, so it
+  // needs its own min/max sourced from `points` (already range-filtered),
+  // never from `activePoints`.
+  const statPrices = points.map(p => p.price ?? p.high ?? p.low ?? 0);
+  const statMinP = statPrices.length ? Math.min(...statPrices) : minP;
+  const statMaxP = statPrices.length ? Math.max(...statPrices) : maxP;
   const YLAB = 52; // width reserved for Y-axis labels on left
   const W = 620, PH = 160, VH = 60, PAD = 8;
   const CW = W - YLAB; // chart width after Y-axis
@@ -1367,18 +1401,32 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   const labelIdxs = Array.from({length: labelCount}, (_, i) =>
     Math.round(i * (activePoints.length - 1) / Math.max(labelCount - 1, 1))
   );
+  // Full MM/DD/YYYY (or DD/MM/YYYY, per the same dateFormat Settings
+  // preference used everywhere else) on every range now, including All
+  // Time and 5y — Ben (2026-08-12): those two used to abbreviate to just
+  // "Aug 2026" instead of a real date, which meant they were the only two
+  // views that never actually showed which year a point landed in at a
+  // glance without hovering.
   const fmtDate = ts => {
     const d = new Date(typeof ts === 'number' ? ts * (ts < 1e12 ? 1000 : 1) : ts);
-    if (chartView === 'alltime') return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
-    if (range >= 365) return d.toLocaleDateString('en-US', {month:'short', year:'2-digit'});
     const fmt = dateFormat || 'MM/DD/YYYY';
-    const M = d.getMonth()+1, D = d.getDate();
-    if (fmt === 'DD/MM/YYYY') return `${D}/${M}`;
-    if (fmt === 'YYYY-MM-DD') return `${d.getFullYear()}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
-    return `${M}/${D}`;
+    const M = d.getMonth()+1, D = d.getDate(), Y = d.getFullYear();
+    if (fmt === 'DD/MM/YYYY') return `${D}/${M}/${Y}`;
+    if (fmt === 'YYYY-MM-DD') return `${Y}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
+    return `${M}/${D}/${Y}`;
   };
 
-  return h('div', {className:'chart-modal-overlay', onClick:onClose},
+  // Portaled to document.body (Ben, 2026-08-12, real bug caught live): same
+  // stacking-context issue as the search dropdown fix — this modal's own
+  // z-index:500 (see .chart-modal-overlay) only ever applied within
+  // whatever local stacking context its non-portaled ancestor chain
+  // established, which had no elevated priority of its own against a
+  // sibling with an explicit stacking context — exactly what the sticky
+  // header clone (position:fixed, portaled to body) is. Confirmed live:
+  // the sticky table header was rendering ON TOP of an open chart, despite
+  // the chart's z-index (500) being far higher than the header's (10).
+  return createPortal(
+    h('div', {className:'chart-modal-overlay', onClick:onClose},
     h('div', {className:'chart-modal', style:{width:680}, onClick:e=>e.stopPropagation()},
 
       // Header
@@ -1481,7 +1529,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
             },
             onMouseLeave: () => setHoverIdx(null),
             onWheel: e => {
-              if (chartView !== 'alltime') return;
+              if (!zoomEnabled) return;
               e.preventDefault();
               doZoom(e.deltaY < 0 ? 'in' : 'out');
             },
@@ -1500,7 +1548,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
               }
             },
             onTouchMove: e => {
-              if (e.touches.length === 2 && chartView === 'alltime') {
+              if (e.touches.length === 2 && zoomEnabled) {
                 e.preventDefault();
                 const [a, b] = e.touches;
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -1651,8 +1699,8 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
 
         // Stats row
         h('div', {style:{display:'flex', gap:20, marginTop:10, fontSize:12, flexWrap:'wrap'}},
-          h('span',null, h('span',{style:{color:T.textDim}},`${range}d Low: `), h('span',{style:{color:T.red}}, fmt.gp(minP)+'gp')),
-          h('span',null, h('span',{style:{color:T.textDim}},`${range}d High: `), h('span',{style:{color:T.green}}, fmt.gp(maxP)+'gp')),
+          h('span',null, h('span',{style:{color:T.textDim}},`${range}d Low: `), h('span',{style:{color:T.red}}, fmt.gp(statMinP)+'gp')),
+          h('span',null, h('span',{style:{color:T.textDim}},`${range}d High: `), h('span',{style:{color:T.green}}, fmt.gp(statMaxP)+'gp')),
           h('span',null, h('span',{style:{color:T.textDim}},'Current: '), h('span',{style:{color:T.gold}}, fmt.gp(item.high||item.low)+'gp')),
           item.change_1d != null && h('span',null,
             h('span',{style:{color:T.textDim}},'Daily Change: '),
@@ -1826,6 +1874,8 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
         )
       )
     )
+    ),
+    document.body
   );
 }
 
@@ -5529,6 +5579,24 @@ function MarketTab({items, selected, onSelect, description}) {
 }
 
 const APP_NEWS = [
+  {
+    version: 'v2.6.0',
+    items: [
+      'New Money Makers tab, out of dev-mode and open to everyone — Herblore, Divination, Construction, Magic, Smithing, Crafting, Fletching, and Summoning, all priced off GEnius\'s own live buy/sell prices instead of the static GE reference price, with per-item buy limits and volume shown so you can tell what\'s actually worth doing.',
+      'Money Makers: Magic now covers Telekinetic Grinding, Making Leather, Bolt Enchanting (Onyx/Ascendri, with an Alchemiser-profit view alongside), and Humidify on porcelain clay.',
+      'Money Makers: Fletching now covers Ascendri/Ascension/Onyx bolts and Headless dinarrow, with toggleable Portable Fletcher, Fletching Brooch, Fletching Cape, and Workroom buffs.',
+      'Money Makers: Smithing bar-making now has a Varrock Armour toggle applying the correct tier-scaled discount automatically.',
+      'Money Makers: Construction now includes the full 12-plank → frame chain (via refined planks).',
+      'Money Makers: Summoning now includes all Ancient Summoning binding contracts, priced off the actual GE-tradeable contract item, converting to 24 scrolls per pouch during Voice of Seren instead of the usual 20.',
+      'Flips leaderboard now has a real minimum-profit floor (1m gp per buy limit), so a technically-positive but trivial margin (a few gp) can\'t qualify no matter how the profit filter is set.',
+      'Item table column headers now stay pinned in view while scrolling, with sorting fully working from the pinned header — rebuilt from scratch after the first version could visually glitch against other overlays (search results, item charts); both now render correctly on top of it instead.',
+      'Clicking your current tab in the sidebar now scrolls back to the top; added floating scroll-to-top/bottom buttons.',
+      'Fixed item charts always showing an abbreviated month/year date on the 1-year, 5-year, and All-Time ranges — every range now shows a full date, and honors your Date Format setting (MM/DD/YYYY, DD/MM/YYYY, or YYYY-MM-DD).',
+      'Added zoom (scroll wheel, arrow keys, pinch) to the 5-Year chart view — previously only the All-Time view supported it.',
+      'Fixed the item detail panel\'s "365D Low"/"30D Low" (etc.) sometimes showing the exact same price and date as the All-Time Low, even when the real low for that shorter window was different — the stat was silently reading from the chart\'s current zoom/pan state instead of the actual selected time range.',
+      'Top 100 Price Movements and Money Makers section of Dashboard/sidebar cleanup.',
+    ]
+  },
   {
     version: 'v2.5.0',
     items: [
@@ -11502,15 +11570,34 @@ function findItemPrice(items, name) {
 // price — buying an input at its real live instant-buy price and selling
 // the output at its real live instant-sell price, falling back to GE
 // price only when live data isn't available for that item.
+// Sanity guard (Ben, 2026-08-13): caught via Black dragonhide body showing
+// a 190Kgp margin that made no sense — its liveSell was a bogus 200,000gp
+// (liveBuy an equally bogus 1,000,000gp) against a real GE price of
+// 6,590gp, a ~30x divergence. A live price that far off the GE reference
+// is almost certainly a stale/placeholder value from the live-price feed
+// (the same failure mode OVERPRICED/UNDERPRICED already watches for at a
+// much tighter 20% threshold — this uses a much looser 5x band so it only
+// rejects genuinely broken values, not real volatility like the Voice of
+// Seren supply-flood swings Ben confirmed are legitimate on Summoning
+// scrolls).
+function _sanityLivePrice(live, gePrice) {
+  if (live == null) return null;
+  if (gePrice == null || gePrice <= 0) return live;
+  return (live <= gePrice * 5 && live >= gePrice / 5) ? live : null;
+}
 function findItemBuyPrice(items, name) {
   if (!name) return null;
   const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
-  return it ? (it.liveBuy ?? it.high ?? it.low ?? null) : null;
+  if (!it) return null;
+  const gePrice = it.high ?? it.low ?? null;
+  return _sanityLivePrice(it.liveBuy, gePrice) ?? gePrice ?? null;
 }
 function findItemSellPrice(items, name) {
   if (!name) return null;
   const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
-  return it ? (it.liveSell ?? it.high ?? it.low ?? null) : null;
+  if (!it) return null;
+  const gePrice = it.high ?? it.low ?? null;
+  return _sanityLivePrice(it.liveSell, gePrice) ?? gePrice ?? null;
 }
 function findItemLimit(items, name) {
   if (!name) return null;
@@ -11883,6 +11970,124 @@ const CRAFTING_RECIPES = [
     inputs:[{name:'Starbloom flower', qty:2}], output:{name:'Starbloom cloth', qty:1} },
 ];
 
+// Urn/dragonhide buffs (Ben, 2026-08-13, went through a few corrections
+// same day — see computeUrnStats for the final sourced version): a "save
+// material" pool shared by clay (urns) and dragon leather (dragonhide
+// armor) — Portable crafter and its Brooch upgrade apply to both material
+// types, Modified artisan's bandana only applies to hide/leather/cloth.
+// Portable crafter isn't tracked as a single number here — per
+// runescape.wiki/w/Portable_crafter it's actually TWO separate 10%/20%
+// rolls (crafting-stage clay save, and a distinct firing-stage "save the
+// unfired item" roll that functions as a bonus fired urn), which is why
+// computeUrnStats reuses this same saveChance for BOTH the material cost
+// AND the urn output bonus rather than needing its own separate buff
+// entry. Fire Urn spell itself isn't modeled as a buff — it's just the
+// practical way of firing at scale (fast, cheap on runes), not a source of
+// any bonus on its own. Crafting cape's "no thread needed" perk
+// deliberately excluded — Ben called it negligible and not worth
+// modeling.
+const CRAFTING_BUFFS = {
+  portableCrafter:   {label:'Portable crafter',           pct:10, kind:'save', appliesTo:['clay','leather']},
+  brooch:            {label:'Brooch of the Gods',         pct:10, kind:'save', appliesTo:['clay','leather'], requires:'portableCrafter'},
+  artisansBandana:   {label:"Modified artisan's bandana", pct:5,  kind:'save', appliesTo:['leather']},
+  artificersMeasure: {label:"Artificer's measure",        pct:5,  kind:'dupe', appliesTo:['urn']},
+};
+const CRAFTING_BUFF_DEFAULTS = {portableCrafter:false, brooch:false, artisansBandana:false, artificersMeasure:false};
+
+function craftingBuffChance(buffs, kind, material) {
+  return Object.entries(CRAFTING_BUFFS)
+    .filter(([k,b]) => b.kind===kind && b.appliesTo.includes(material) && buffs[k] && (!b.requires || buffs[b.requires]))
+    .reduce((s,[,b]) => s + b.pct/100, 0);
+}
+
+// Decorated (2 Soft clay, no gem step) / Exquisite urns — the base clay
+// cost is the same across every skill variant (the skill-specific mould is
+// untradeable/free), so all 9 Decorated "(no rune)" variants are modeled
+// off one clay recipe (Ben, 2026-08-13). Exquisite is a real two-step
+// chain, corrected after Ben flagged it (2026-08-13): 1 Soft porcelain
+// clay crafts the "(no gem)" urn, then a SKILL-SPECIFIC gem (confirmed via
+// runescape.wiki/w/Exquisite_urn's own creation table) upgrades it to the
+// tradeable "(no rune)" urn — modeled as one combined recipe (buy clay +
+// buy that skill's gem, sell the finished "(no rune)" urn) since nobody
+// sells the intermediate "(no gem)" urn separately in practice.
+const URN_SKILLS = ['cooking','divination','farming','fishing','hunter','mining','runecrafting','smithing','woodcutting'];
+const EXQUISITE_URN_GEMS = {
+  cooking:'Red topaz', divination:'Dragonstone', farming:'Emerald', fishing:'Sapphire',
+  hunter:'Opal', mining:'Jade', runecrafting:'Dragonstone', smithing:'Ruby', woodcutting:'Diamond',
+};
+const URN_RECIPES = [
+  ...URN_SKILLS.map(s => ({ key:`decorated_${s}`, clay:'Soft clay', clayQty:2, output:`Decorated ${s} urn (no rune)` })),
+  ...URN_SKILLS.map(s => ({ key:`exquisite_${s}`, clay:'Soft porcelain clay', clayQty:1, gem:EXQUISITE_URN_GEMS[s], output:`Exquisite ${s} urn (no rune)` })),
+];
+
+function computeUrnStats(recipe, items, buffs) {
+  const saveChance = craftingBuffChance(buffs, 'save', 'clay');
+  // RE-CORRECTED (Ben, 2026-08-13): runescape.wiki/w/Portable_crafter
+  // documents TWO separate effects at the SAME 10%/20%-with-Brooch rate —
+  // "10% chance to save 1 hide or clay per item crafted" (the crafting-
+  // stage save, already modeled above as saveChance) AND, distinctly,
+  // "chance to save an unfired clay item when firing it" (a firing-stage
+  // effect — functionally a bonus fired urn with no extra unfired urn
+  // consumed). They're two different rolls at two different steps that
+  // happen to share one number, not the same roll counted twice. The
+  // Money_making_guide calculator's 1900-clay/1900-output example doesn't
+  // reflect this firing bonus, but that's a gap in that specific
+  // calculator, not evidence the effect doesn't exist — the dedicated
+  // Portable_crafter page states it plainly. So saveChance is reused here
+  // for the firing-stage bonus alongside Artificer's Measure's separate
+  // 5% dupe chance.
+  const dupeChance = saveChance + craftingBuffChance(buffs, 'dupe', 'urn');
+  const clayPrice = findItemBuyPrice(items, recipe.clay);
+  const gemPrice = recipe.gem ? findItemBuyPrice(items, recipe.gem) : 0;
+  const outPrice = findItemSellPrice(items, recipe.output);
+  const missing = [];
+  if (clayPrice == null) missing.push(recipe.clay);
+  if (recipe.gem && gemPrice == null) missing.push(recipe.gem);
+  if (outPrice == null) missing.push(recipe.output);
+  const effectiveClayQty = recipe.clayQty * (1 - saveChance);
+  const cost = (clayPrice != null && (!recipe.gem || gemPrice != null)) ? clayPrice * effectiveClayQty + (gemPrice || 0) : null;
+  const outQty = 1 + dupeChance;
+  const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
+  const margin = (cost != null && revenue != null) ? revenue - cost : null;
+  const bindingLimit = findItemLimit(items, recipe.output);
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inVolumes = [recipe.clay, recipe.gem].filter(Boolean).map(n => findItemVolume(items, n)).filter(v => v != null);
+  const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
+  const outputVolume = findItemVolume(items, recipe.output);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume };
+}
+
+// Black/Royal dragonhide armor (Ben, 2026-08-13): only the pieces anyone
+// actually crafts for profit — bodies (3 leather) and Black dragonhide
+// shield (4 leather). All three are worth less than their own high alch
+// value, so the alch comparison block matters here the same way it does
+// for enchanted bolts.
+const DRAGONHIDE_RECIPES = [
+  { key:'royalBody', leather:'Royal dragon leather', leatherQty:3, output:'Royal dragonhide body' },
+  { key:'blackBody', leather:'Black dragon leather', leatherQty:3, output:'Black dragonhide body' },
+  { key:'blackShield', leather:'Black dragon leather', leatherQty:4, output:'Black dragonhide shield' },
+];
+
+function computeDragonhideStats(recipe, items, buffs) {
+  const saveChance = craftingBuffChance(buffs, 'save', 'leather');
+  const leatherPrice = findItemBuyPrice(items, recipe.leather);
+  const outPrice = findItemSellPrice(items, recipe.output);
+  const missing = [];
+  if (leatherPrice == null) missing.push(recipe.leather);
+  if (outPrice == null) missing.push(recipe.output);
+  const effectiveQty = recipe.leatherQty * (1 - saveChance);
+  const cost = leatherPrice != null ? leatherPrice * effectiveQty : null;
+  const revenue = outPrice != null ? applyTax(outPrice) : null;
+  const margin = (cost != null && revenue != null) ? revenue - cost : null;
+  const bindingLimit = findItemLimit(items, recipe.output);
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inputVolume = findItemVolume(items, recipe.leather);
+  const outputVolume = findItemVolume(items, recipe.output);
+  const outItem = items.find(it => it.name.toLowerCase() === recipe.output.toLowerCase());
+  const alch = outItem ? (outItem.alch || 0) : 0;
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume, alch };
+}
+
 // Ore -> Bar smelting (Ben, 2026-08-12), sourced from
 // runescape.wiki/w/Calculator:Smithing/Ores' own Materials columns.
 // Varrock armour gives a chance of an extra bar per smelt, tier-scoped to
@@ -11896,21 +12101,39 @@ const CRAFTING_RECIPES = [
 // each tier only ever applies to its own bar range regardless of which
 // higher tiers are also unlocked, so one toggle applying the correct
 // tier's % per recipe is equivalent and less UI clutter.
+// Double-bar chance (Ben, 2026-08-13, CORRECTED same day): originally
+// modeled as Primal-bar-only, but it's actually a baseline Smithing
+// mechanic on EVERY bar once you're past the level requirement — a flat
+// 10% chance per smelt to produce an extra full set of bars at no extra
+// ore cost, stacking multiplicatively with Varrock armour's separate
+// per-tier bonus-chance. Primal bar (runescape.wiki/w/Primal_bar) is still
+// a genuinely different recipe shape — 10 distinct ores (1 each) smelt
+// into 5 bars at once instead of 1-in-1-out — so its 10% still comes out
+// to a full extra set of 5, just via the same shared doubleBarPct field
+// every other bar now also carries.
 const SMITHING_BAR_RECIPES = [
-  { name:'Bronze bar', inputs:[{name:'Copper ore',qty:1},{name:'Tin ore',qty:1}], varrockPct:4 },
-  { name:'Iron bar',   inputs:[{name:'Iron ore',qty:2}], varrockPct:4 },
-  { name:'Steel bar',  inputs:[{name:'Iron ore',qty:1},{name:'Coal',qty:1}], varrockPct:4 },
-  { name:'Mithril bar',inputs:[{name:'Mithril ore',qty:1},{name:'Coal',qty:1}], varrockPct:3 },
-  { name:'Adamant bar',inputs:[{name:'Adamantite ore',qty:1},{name:'Luminite',qty:1}], varrockPct:3 },
-  { name:'Rune bar',   inputs:[{name:'Runite ore',qty:1},{name:'Luminite',qty:1}], varrockPct:2 },
-  { name:'Orikalkum bar', inputs:[{name:'Orichalcite ore',qty:1},{name:'Drakolith',qty:1}], varrockPct:2 },
-  { name:'Necronium bar', inputs:[{name:'Necrite ore',qty:1},{name:'Phasmatite',qty:1}], varrockPct:2 },
-  { name:'Bane bar',   inputs:[{name:'Banite ore',qty:2}], varrockPct:1 },
-  { name:'Elder rune bar', inputs:[{name:'Rune bar',qty:1},{name:'Light animica',qty:1},{name:'Dark animica',qty:1}], varrockPct:1 },
+  { name:'Bronze bar', inputs:[{name:'Copper ore',qty:1},{name:'Tin ore',qty:1}], varrockPct:4, doubleBarPct:10 },
+  { name:'Iron bar',   inputs:[{name:'Iron ore',qty:2}], varrockPct:4, doubleBarPct:10 },
+  { name:'Steel bar',  inputs:[{name:'Iron ore',qty:1},{name:'Coal',qty:1}], varrockPct:4, doubleBarPct:10 },
+  { name:'Mithril bar',inputs:[{name:'Mithril ore',qty:1},{name:'Coal',qty:1}], varrockPct:3, doubleBarPct:10 },
+  { name:'Adamant bar',inputs:[{name:'Adamantite ore',qty:1},{name:'Luminite',qty:1}], varrockPct:3, doubleBarPct:10 },
+  { name:'Rune bar',   inputs:[{name:'Runite ore',qty:1},{name:'Luminite',qty:1}], varrockPct:2, doubleBarPct:10 },
+  { name:'Orikalkum bar', inputs:[{name:'Orichalcite ore',qty:1},{name:'Drakolith',qty:1}], varrockPct:2, doubleBarPct:10 },
+  { name:'Necronium bar', inputs:[{name:'Necrite ore',qty:1},{name:'Phasmatite',qty:1}], varrockPct:2, doubleBarPct:10 },
+  { name:'Bane bar',   inputs:[{name:'Banite ore',qty:2}], varrockPct:1, doubleBarPct:10 },
+  { name:'Elder rune bar', inputs:[{name:'Rune bar',qty:1},{name:'Light animica',qty:1},{name:'Dark animica',qty:1}], varrockPct:1, doubleBarPct:10 },
+  { name:'Primal bar', inputs:[
+      {name:'Novite ore',qty:1},{name:'Bathus ore',qty:1},{name:'Marmaros ore',qty:1},{name:'Kratonium ore',qty:1},
+      {name:'Fractite ore',qty:1},{name:'Zephyrium ore',qty:1},{name:'Argonite ore',qty:1},{name:'Katagon ore',qty:1},
+      {name:'Gorgonite ore',qty:1},{name:'Promethium ore',qty:1},
+    ], outputQty:5, doubleBarPct:10 },
 ];
 
 function computeSmithingBarStats(recipe, items, varrockOn) {
-  const multiplier = varrockOn ? 1 + recipe.varrockPct/100 : 1;
+  const varrockMultiplier = (varrockOn && recipe.varrockPct) ? 1 + recipe.varrockPct/100 : 1;
+  const doubleMultiplier = recipe.doubleBarPct ? 1 + recipe.doubleBarPct/100 : 1;
+  const multiplier = varrockMultiplier * doubleMultiplier;
+  const baseQty = recipe.outputQty || 1;
   let cost = 0;
   const missing = [];
   for (const inp of recipe.inputs) {
@@ -11920,7 +12143,7 @@ function computeSmithingBarStats(recipe, items, varrockOn) {
   }
   const outPrice = findItemSellPrice(items, recipe.name);
   if (outPrice == null) missing.push(recipe.name);
-  const outQty = multiplier;
+  const outQty = baseQty * multiplier;
   const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
   const limits = [...recipe.inputs.map(i=>i.name), recipe.name].map(n => findItemLimit(items, n)).filter(l => l != null);
@@ -11929,7 +12152,7 @@ function computeSmithingBarStats(recipe, items, varrockOn) {
   const inVolumes = recipe.inputs.map(i => findItemVolume(items, i.name)).filter(v => v != null);
   const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
   const outputVolume = findItemVolume(items, recipe.name);
-  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume, multiplier };
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume, outQty };
 }
 
 // Summoning pouch -> scroll (Ben, 2026-08-12), sourced directly from
@@ -11943,14 +12166,33 @@ const SUMMONING_SCROLL_RECIPES = [
 ];
 const SUMMONING_SCROLLS_PER_POUCH = 12; // Voice of Seren figure, not the baseline 10
 
-function computeSummoningScrollStats(recipe, items) {
+// Ancient Summoning (Ben, 2026-08-12, CORRECTED 2026-08-13) —
+// runescape.wiki/w/Ancient_Summoning. "Binding contract (creature)" IS the
+// pouch here — it's bought and used directly like any other Summoning
+// pouch, not some intermediate item you use to go bind a live monster by
+// killing it (that description was wrong). Converting one contract makes
+// 20 scrolls normally, 24 during Voice of Seren (patch note: "All Ancient
+// Familiar pouches will now convert into 20 scrolls each, up from 10") —
+// same VoS-only convention as the regular scrolls.
+const ANCIENT_SUMMONING_RECIPES = [
+  {pouch:"Binding contract (hellhound)", scroll:"Hellhound scroll (Soul Food)"},
+  {pouch:"Binding contract (waterfiend)", scroll:"Waterfiend scroll (Straight Flush)"},
+  {pouch:"Binding contract (blood reaver)", scroll:"Blood Reaver scroll (Blood Siphon)"},
+  {pouch:"Binding contract (gargoyle)", scroll:"Gargoyle scroll (Hammer Rock)"},
+  {pouch:"Binding contract (abyssal demon)", scroll:"Abyssal Demon scroll (Abyssal Block)"},
+  {pouch:"Binding contract (kal'gerion demon)", scroll:"Kal'gerion Demon scroll (Crit-i-Kal)"},
+  {pouch:"Binding contract (ripper demon)", scroll:"Ripper Demon scroll (Death From Above)"},
+];
+const ANCIENT_SUMMONING_SCROLLS_PER_CONTRACT = 24; // Voice of Seren figure, not the baseline 20
+
+function computeSummoningScrollStats(recipe, items, scrollsPerPouch = SUMMONING_SCROLLS_PER_POUCH) {
   const missing = [];
   const pouchPrice = findItemBuyPrice(items, recipe.pouch);
   if (pouchPrice == null) missing.push(recipe.pouch);
   const scrollPrice = findItemSellPrice(items, recipe.scroll);
   if (scrollPrice == null) missing.push(recipe.scroll);
   const cost = pouchPrice;
-  const revenue = scrollPrice != null ? applyTax(scrollPrice) * SUMMONING_SCROLLS_PER_POUCH : null;
+  const revenue = scrollPrice != null ? applyTax(scrollPrice) * scrollsPerPouch : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
   const limits = [recipe.pouch, recipe.scroll].map(n => findItemLimit(items, n)).filter(l => l != null);
   const bindingLimit = limits.length ? Math.min(...limits) : null;
@@ -11977,13 +12219,33 @@ function FletchingBuffCheckboxes({buffs, setBuffs}) {
   );
 }
 
+function CraftingBuffCheckboxes({buffs, setBuffs}) {
+  const toggle = key => setBuffs(b => {
+    const next = {...b, [key]: !b[key]};
+    if (key === 'portableCrafter' && !next.portableCrafter) next.brooch = false;
+    return next;
+  });
+  return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
+    Object.entries(CRAFTING_BUFFS).map(([key, b]) => h('label', {
+      key, style:{display:'flex', alignItems:'center', gap:5, cursor: (b.requires && !buffs[b.requires]) ? 'not-allowed' : 'pointer', opacity: (b.requires && !buffs[b.requires]) ? 0.4 : 1},
+      title: `${b.pct}% chance ${b.kind==='dupe' ? 'to produce an extra urn' : 'to save a material'}${b.requires ? ' (needs '+CRAFTING_BUFFS[b.requires].label+')' : ''}`,
+    },
+      h('input', {type:'checkbox', checked:!!buffs[key], disabled: b.requires && !buffs[b.requires], onChange:()=>toggle(key)}),
+      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pct}%)`)),
+    ))
+  );
+}
+
 function MoneyMakersTab({items, onSelect, description}) {
   const [skill, setSkill] = useState('herblore');
   const [herbSub, setHerbSub] = useState('herbs');
   const [magicSub, setMagicSub] = useState('grinding');
   const [fletchingBuffs, setFletchingBuffs] = useState(FLETCHING_BUFF_DEFAULTS);
   const [varrockArmour, setVarrockArmour] = useState(false);
+  const [summoningSub, setSummoningSub] = useState('pouches');
   const [buffs, setBuffs] = useState(HERBLORE_BUFF_DEFAULTS);
+  const [craftingSub, setCraftingSub] = useState('cloth');
+  const [craftingBuffs, setCraftingBuffs] = useState(CRAFTING_BUFF_DEFAULTS);
 
   const herbRows = useMemo(() => {
     return items
@@ -12100,10 +12362,27 @@ function MoneyMakersTab({items, onSelect, description}) {
     }).filter(r => r.stats.missing.length === 0);
   }, [items]);
 
+  const urnRows = useMemo(() => {
+    return URN_RECIPES.map(r => {
+      const stats = computeUrnStats(r, items, craftingBuffs);
+      const label = r.gem
+        ? `${r.clayQty} × ${r.clay} + 1 × ${r.gem} → ${r.output}`
+        : `${r.clayQty} × ${r.clay} → ${r.output}`;
+      return { label, itemName:r.output, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items, craftingBuffs]);
+
+  const dragonhideRows = useMemo(() => {
+    return DRAGONHIDE_RECIPES.map(r => {
+      const stats = computeDragonhideStats(r, items, craftingBuffs);
+      return { label: `${r.leatherQty} × ${r.leather} → ${r.output}`, itemName:r.output, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items, craftingBuffs]);
+
   const smithingRows = useMemo(() => {
     return SMITHING_BAR_RECIPES.map(r => {
       const stats = computeSmithingBarStats(r, items, varrockArmour);
-      const outLabel = stats.multiplier !== 1 ? `${stats.multiplier.toFixed(4)}× ${r.name}` : `1 × ${r.name}`;
+      const outLabel = stats.outQty !== 1 ? `${stats.outQty.toFixed(4).replace(/\.?0+$/,'')}× ${r.name}` : `1 × ${r.name}`;
       return { label: `${r.inputs.map(i=>`${i.qty} × ${i.name}`).join(' + ')} → ${outLabel}`, itemName:r.name, stats };
     }).filter(r => r.stats.missing.length === 0);
   }, [items, varrockArmour]);
@@ -12112,6 +12391,13 @@ function MoneyMakersTab({items, onSelect, description}) {
     return SUMMONING_SCROLL_RECIPES.map(r => {
       const stats = computeSummoningScrollStats(r, items);
       return { label: `1 × ${r.pouch} → ${SUMMONING_SCROLLS_PER_POUCH} × ${r.scroll} (VoS)`, itemName:r.scroll, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items]);
+
+  const ancientSummoningRows = useMemo(() => {
+    return ANCIENT_SUMMONING_RECIPES.map(r => {
+      const stats = computeSummoningScrollStats(r, items, ANCIENT_SUMMONING_SCROLLS_PER_CONTRACT);
+      return { label: `1 × ${r.pouch} → ${ANCIENT_SUMMONING_SCROLLS_PER_CONTRACT} × ${r.scroll} (VoS)`, itemName:r.scroll, stats };
     }).filter(r => r.stats.missing.length === 0);
   }, [items]);
 
@@ -12206,7 +12492,30 @@ function MoneyMakersTab({items, onSelect, description}) {
         h(MoneyMakerTable, {rows:fletchingRows, onSelect:onSelectItem}),
       ),
 
-      skill === 'crafting' && h(MoneyMakerTable, {rows:craftingRows, onSelect:onSelectItem}),
+      skill === 'crafting' && h('div', null,
+        h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+          [{key:'cloth',label:'Cloth'},{key:'urns',label:'Urns'},{key:'dragonhide',label:'Dragonhide'}].map(sub => h('button', {
+            key:sub.key, onClick:()=>setCraftingSub(sub.key),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: craftingSub===sub.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${craftingSub===sub.key ? T.gold : T.border}`,
+              color: craftingSub===sub.key ? T.goldBright : T.textDim,
+            }
+          }, sub.label))
+        ),
+        craftingSub === 'cloth' && h(MoneyMakerTable, {rows:craftingRows, onSelect:onSelectItem}),
+        (craftingSub === 'urns' || craftingSub === 'dragonhide') && h(CraftingBuffCheckboxes, {buffs:craftingBuffs, setBuffs:setCraftingBuffs}),
+        craftingSub === 'urns' && h(MoneyMakerTable, {rows:urnRows, onSelect:onSelectItem}),
+        craftingSub === 'dragonhide' && h(MoneyMakerTable, {rows:dragonhideRows, onSelect:onSelectItem}),
+        craftingSub === 'dragonhide' && dragonhideRows.length > 0 && h('div', {style:{marginTop:14, padding:'10px 12px', background:T.panel, border:`1px solid ${T.border}`, borderRadius:4}},
+          h('div', {style:{fontSize:11, color:T.gold, fontWeight:'bold', marginBottom:8}}, 'High alch value (these usually sell below what alching is worth)'),
+          dragonhideRows.map(r => h('div', {key:r.itemName, style:{display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0', borderBottom:`1px solid ${T.borderDim}`}},
+            h('span', {style:{color:T.textDim}}, `${r.itemName} — sell ${fmt.gp(r.stats.outPrice)}gp`),
+            h('span', {style:{color: r.stats.alch > (r.stats.outPrice||0) ? T.gold : T.textDim, fontWeight:'bold'}}, `alch ${fmt.gp(r.stats.alch)}gp`),
+          ))
+        ),
+      ),
 
       skill === 'smithing' && h('div', null,
         h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:12}},
@@ -12216,7 +12525,21 @@ function MoneyMakersTab({items, onSelect, description}) {
         h(MoneyMakerTable, {rows:smithingRows, onSelect:onSelectItem}),
       ),
 
-      skill === 'summoning' && h(MoneyMakerTable, {rows:summoningRows, onSelect:onSelectItem}),
+      skill === 'summoning' && h('div', null,
+        h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+          [{key:'pouches',label:'Pouches'},{key:'ancient',label:'Ancient Summoning'}].map(sub => h('button', {
+            key:sub.key, onClick:()=>setSummoningSub(sub.key),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: summoningSub===sub.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${summoningSub===sub.key ? T.gold : T.border}`,
+              color: summoningSub===sub.key ? T.goldBright : T.textDim,
+            }
+          }, sub.label))
+        ),
+        summoningSub === 'pouches' && h(MoneyMakerTable, {rows:summoningRows, onSelect:onSelectItem}),
+        summoningSub === 'ancient' && h(MoneyMakerTable, {rows:ancientSummoningRows, onSelect:onSelectItem}),
+      ),
 
       h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
         '⚠ Margins assume you already have the processing method available (portables, other buffs, elemental battlestaff, etc.) — no time/click cost factored in beyond GE tax. Buy limits reset per 4 hours.'
