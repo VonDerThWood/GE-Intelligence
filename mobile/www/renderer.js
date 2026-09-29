@@ -165,7 +165,7 @@ thead th[draggable="true"] { cursor: grab; }
 thead th[draggable="true"]:active { cursor: grabbing; }
 .ge-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px; }
 .ge-table thead th { padding: 11px 10px; font-family: 'Cinzel', serif; font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: ${T.gold}; border-bottom: 2px solid ${T.borderGold}; text-align: left; cursor: pointer; user-select: none; background: ${T.panel2}; white-space: nowrap; }
-.ge-sticky-header-clone { position: fixed; z-index: 50; overflow: hidden; pointer-events: none; }
+.ge-sticky-header-clone { position: fixed; z-index: 10; overflow: hidden; pointer-events: none; }
 .ge-sticky-header-clone table { pointer-events: auto; }
 .ge-table th:hover { color: ${T.goldBright}; }
 .ge-table td { padding: 6px 10px; border-bottom: 1px solid ${T.borderDim}; color: ${T.text}; }
@@ -949,10 +949,15 @@ function LiveTimeseriesSection({itemId}) {
 }
 
 /* ─── Chart modal ────────────────────────────────────────────── */
-function ImageModal({name, fallbackUrl, onClose}) {
+function ImageModal({name, detailUrl, fallbackUrl, onClose}) {
+  // detailUrl is the real wiki-resolved big render (icons.js's `detail`
+  // field) when available — no need to guess. The old first-word-
+  // capitalized guess only still applies for items the icon cache hasn't
+  // backfilled yet; fallbackUrl (the small inline icon) is the last resort
+  // if even that fails.
   const wikiName = name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
-  const detailUrl = `https://runescape.wiki/images/${encodeURIComponent(wikiName + '_detail')}.png`;
-  const [src, setSrc] = useState(detailUrl);
+  const guessedDetailUrl = `https://runescape.wiki/images/${encodeURIComponent(wikiName + '_detail')}.png`;
+  const [src, setSrc] = useState(detailUrl || guessedDetailUrl);
 
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose(); };
@@ -1048,37 +1053,6 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
 
   if (!item) return null;
 
-  // Zoom helper — called by scroll and arrow keys
-  const doZoom = useCallback((direction) => {
-    if (!timeseries || !timeseries.length) return;
-    const total = timeseries.length;
-    const cur = zoomWindow || [0, total - 1];
-    const span = cur[1] - cur[0];
-    const center = cur[0] + Math.round(span * zoomCenterRef.current);
-    const STEP = 0.15; // zoom 15% per tick
-    const newSpan = direction === 'in'
-      ? Math.max(10, Math.round(span * (1 - STEP)))
-      : Math.min(total - 1, Math.round(span * (1 + STEP)));
-    const half = Math.round(newSpan / 2);
-    const start = Math.max(0, center - half);
-    const end   = Math.min(total - 1, start + newSpan);
-    const adjStart = Math.max(0, end - newSpan);
-    if (adjStart === 0 && end === total - 1) { setZoomWindow(null); return; }
-    setZoomWindow([adjStart, end]);
-    setHoverIdx(null);
-  }, [timeseries, zoomWindow]);
-
-  // Arrow key zoom when modal is open
-  useEffect(() => {
-    if (chartView !== 'alltime') return;
-    const onKey = e => {
-      if (e.key === 'ArrowUp')   { e.preventDefault(); doZoom('in');  }
-      if (e.key === 'ArrowDown') { e.preventDefault(); doZoom('out'); }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [chartView, doZoom]);
-
   // Merge WeirdGloop history with local snapshots, filter to range
   const points = useMemo(() => {
     if (!history && !snapshots.length) return [];
@@ -1109,6 +1083,46 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
     const cutoff = latestTs - range * 24 * 60 * 60 * 1000;
     return combined.filter(p => getTs(p) >= cutoff);
   }, [history, snapshots, range]);
+
+  // Which range currently supports scroll/arrow/pinch zoom, and what array
+  // it zooms into — Ben (2026-08-12): zoom only ever worked on All Time
+  // (zooming into the full `timeseries`). Extended to 5y too, zooming into
+  // `points` instead (already filtered to the last 5 years by the useMemo
+  // above) — 5y should let you drill into that same 5-year window, not
+  // reveal data outside it the way All Time's own zoom-out eventually can.
+  const zoomEnabled = chartView === 'alltime' || range === 1825;
+  const zoomSource = chartView === 'alltime' ? timeseries : points;
+
+  // Zoom helper — called by scroll and arrow keys
+  const doZoom = useCallback((direction) => {
+    if (!zoomSource || !zoomSource.length) return;
+    const total = zoomSource.length;
+    const cur = zoomWindow || [0, total - 1];
+    const span = cur[1] - cur[0];
+    const center = cur[0] + Math.round(span * zoomCenterRef.current);
+    const STEP = 0.15; // zoom 15% per tick
+    const newSpan = direction === 'in'
+      ? Math.max(10, Math.round(span * (1 - STEP)))
+      : Math.min(total - 1, Math.round(span * (1 + STEP)));
+    const half = Math.round(newSpan / 2);
+    const start = Math.max(0, center - half);
+    const end   = Math.min(total - 1, start + newSpan);
+    const adjStart = Math.max(0, end - newSpan);
+    if (adjStart === 0 && end === total - 1) { setZoomWindow(null); return; }
+    setZoomWindow([adjStart, end]);
+    setHoverIdx(null);
+  }, [zoomSource, zoomWindow]);
+
+  // Arrow key zoom when modal is open
+  useEffect(() => {
+    if (!zoomEnabled) return;
+    const onKey = e => {
+      if (e.key === 'ArrowUp')   { e.preventDefault(); doZoom('in');  }
+      if (e.key === 'ArrowDown') { e.preventDefault(); doZoom('out'); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [zoomEnabled, doZoom]);
 
   // ATH/ATL from full timeseries
   const athData = useMemo(() => {
@@ -1272,6 +1286,14 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   };
 
   const activePoints = useMemo(() => {
+    // 5y zooms into `points` (already filtered to the last 5 years); All
+    // Time zooms into the full `timeseries`. Neither the date-picker
+    // fields nor zoomWindow exist/apply outside these two — every other
+    // range just shows `points` as-is, same as before.
+    if (range === 1825) {
+      if (!zoomWindow) return points;
+      return points.slice(zoomWindow[0], zoomWindow[1] + 1);
+    }
     if (chartView !== 'alltime' || !timeseries) return points;
     // Apply scroll/key zoom window first
     let base = timeseries;
@@ -1287,11 +1309,28 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
       const t = p.timestamp * (p.timestamp < 1e12 ? 1000 : 1);
       return t >= (isNaN(fromMs) ? -Infinity : fromMs) && t <= (isNaN(toMs) ? Infinity : toMs);
     });
-  }, [chartView, timeseries, points, zoomFrom, zoomTo, zoomWindow]);
+  }, [chartView, timeseries, points, range, zoomFrom, zoomTo, zoomWindow]);
   const prices  = activePoints.map(p => p.price ?? p.high ?? p.low ?? 0);
   const volumes = activePoints.map(p => p.volume || 0);
   const minP = Math.min(...prices), maxP = Math.max(...prices);
   const maxV = Math.max(...volumes, 1);
+  // Real bug caught live (Ben, 2026-08-12): the "{range}d Low/High" stat
+  // row below used to reuse minP/maxP directly, which are computed from
+  // activePoints — and activePoints silently switches to the FULL
+  // all-time series whenever chartView is 'alltime' (see its useMemo
+  // above), ignoring `range` entirely. Confirmed for real on Crystal
+  // body: with All Time selected, "365d Low" showed 300.0KGP — the exact
+  // same number and date as the genuine All-Time Low far below it — while
+  // the visible chart line never dipped anywhere near that in the
+  // selected window. The label stayed stuck on the last-picked range
+  // while the number underneath silently became a different statistic.
+  // This stat is meant to always reflect the literal last `range` days
+  // regardless of what the chart is currently zoomed/panned to, so it
+  // needs its own min/max sourced from `points` (already range-filtered),
+  // never from `activePoints`.
+  const statPrices = points.map(p => p.price ?? p.high ?? p.low ?? 0);
+  const statMinP = statPrices.length ? Math.min(...statPrices) : minP;
+  const statMaxP = statPrices.length ? Math.max(...statPrices) : maxP;
   const YLAB = 52; // width reserved for Y-axis labels on left
   const W = 620, PH = 160, VH = 60, PAD = 8;
   const CW = W - YLAB; // chart width after Y-axis
@@ -1367,18 +1406,32 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   const labelIdxs = Array.from({length: labelCount}, (_, i) =>
     Math.round(i * (activePoints.length - 1) / Math.max(labelCount - 1, 1))
   );
+  // Full MM/DD/YYYY (or DD/MM/YYYY, per the same dateFormat Settings
+  // preference used everywhere else) on every range now, including All
+  // Time and 5y — Ben (2026-08-12): those two used to abbreviate to just
+  // "Aug 2026" instead of a real date, which meant they were the only two
+  // views that never actually showed which year a point landed in at a
+  // glance without hovering.
   const fmtDate = ts => {
     const d = new Date(typeof ts === 'number' ? ts * (ts < 1e12 ? 1000 : 1) : ts);
-    if (chartView === 'alltime') return d.toLocaleDateString('en-US', {month:'short', year:'numeric'});
-    if (range >= 365) return d.toLocaleDateString('en-US', {month:'short', year:'2-digit'});
     const fmt = dateFormat || 'MM/DD/YYYY';
-    const M = d.getMonth()+1, D = d.getDate();
-    if (fmt === 'DD/MM/YYYY') return `${D}/${M}`;
-    if (fmt === 'YYYY-MM-DD') return `${d.getFullYear()}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
-    return `${M}/${D}`;
+    const M = d.getMonth()+1, D = d.getDate(), Y = d.getFullYear();
+    if (fmt === 'DD/MM/YYYY') return `${D}/${M}/${Y}`;
+    if (fmt === 'YYYY-MM-DD') return `${Y}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
+    return `${M}/${D}/${Y}`;
   };
 
-  return h('div', {className:'chart-modal-overlay', onClick:onClose},
+  // Portaled to document.body (Ben, 2026-08-12, real bug caught live): same
+  // stacking-context issue as the search dropdown fix — this modal's own
+  // z-index:500 (see .chart-modal-overlay) only ever applied within
+  // whatever local stacking context its non-portaled ancestor chain
+  // established, which had no elevated priority of its own against a
+  // sibling with an explicit stacking context — exactly what the sticky
+  // header clone (position:fixed, portaled to body) is. Confirmed live:
+  // the sticky table header was rendering ON TOP of an open chart, despite
+  // the chart's z-index (500) being far higher than the header's (10).
+  return createPortal(
+    h('div', {className:'chart-modal-overlay', onClick:onClose},
     h('div', {className:'chart-modal', style:{width:680}, onClick:e=>e.stopPropagation()},
 
       // Header
@@ -1481,7 +1534,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
             },
             onMouseLeave: () => setHoverIdx(null),
             onWheel: e => {
-              if (chartView !== 'alltime') return;
+              if (!zoomEnabled) return;
               e.preventDefault();
               doZoom(e.deltaY < 0 ? 'in' : 'out');
             },
@@ -1500,7 +1553,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
               }
             },
             onTouchMove: e => {
-              if (e.touches.length === 2 && chartView === 'alltime') {
+              if (e.touches.length === 2 && zoomEnabled) {
                 e.preventDefault();
                 const [a, b] = e.touches;
                 const rect = e.currentTarget.getBoundingClientRect();
@@ -1651,8 +1704,8 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
 
         // Stats row
         h('div', {style:{display:'flex', gap:20, marginTop:10, fontSize:12, flexWrap:'wrap'}},
-          h('span',null, h('span',{style:{color:T.textDim}},`${range}d Low: `), h('span',{style:{color:T.red}}, fmt.gp(minP)+'gp')),
-          h('span',null, h('span',{style:{color:T.textDim}},`${range}d High: `), h('span',{style:{color:T.green}}, fmt.gp(maxP)+'gp')),
+          h('span',null, h('span',{style:{color:T.textDim}},`${range}d Low: `), h('span',{style:{color:T.red}}, fmt.gp(statMinP)+'gp')),
+          h('span',null, h('span',{style:{color:T.textDim}},`${range}d High: `), h('span',{style:{color:T.green}}, fmt.gp(statMaxP)+'gp')),
           h('span',null, h('span',{style:{color:T.textDim}},'Current: '), h('span',{style:{color:T.gold}}, fmt.gp(item.high||item.low)+'gp')),
           item.change_1d != null && h('span',null,
             h('span',{style:{color:T.textDim}},'Daily Change: '),
@@ -1826,6 +1879,8 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
         )
       )
     )
+    ),
+    document.body
   );
 }
 
@@ -1988,6 +2043,30 @@ function useSearch(items, userShorthands = {}) {
 function GESearchBar({items, onSelect, userShorthands}) {
   const s = useSearch(items, userShorthands);
   const showDrop = s.focused && s.results.length > 0;
+  // Portaled to document.body (Ben, 2026-08-12, real bug caught live):
+  // this dropdown used to render as a normal position:absolute child of
+  // .ge-search-wrap, nested inside .ge-header. Its own z-index:100 only
+  // ever applied WITHIN that ancestor's local stacking context — it had
+  // no way to out-rank a sibling element with its own explicit stacking
+  // context, which is exactly what the sticky-header-clone portal (see
+  // useStickyTableHeader) is: a fixed-position, explicitly z-indexed
+  // child of body. Since .ge-header itself has no elevated z-index of
+  // its own, the whole dropdown painted BELOW the sticky clone regardless
+  // of its nested z-index number. Portaling this to body too puts both
+  // in the same top-level stacking context, where the actual z-index
+  // values (9999 vs 10) finally get compared correctly.
+  const searchWrapRef = useRef(null);
+  const [dropPos, setDropPos] = useState(null);
+  useEffect(() => {
+    if (!showDrop) { setDropPos(null); return; }
+    const update = () => {
+      const r = searchWrapRef.current?.getBoundingClientRect();
+      if (r) setDropPos({top:r.bottom+4, left:r.left, width:r.width});
+    };
+    update();
+    window.addEventListener('resize', update);
+    return () => window.removeEventListener('resize', update);
+  }, [showDrop]);
   // "Press S or /" is a real, useful hint with a physical keyboard
   // attached (desktop) — meaningless on a touchscreen, where there's
   // nothing to press but the input itself. matchMedia mirrors the same
@@ -2010,7 +2089,7 @@ function GESearchBar({items, onSelect, userShorthands}) {
     if (!pool.length) return;
     onSelect(pool[Math.floor(Math.random() * pool.length)]);
   };
-  return h('div', {className:'ge-search-wrap'},
+  return h('div', {className:'ge-search-wrap', ref:searchWrapRef},
     h('input', {
       className:'ge-search-input',
       placeholder:searchPlaceholder,
@@ -2033,19 +2112,22 @@ function GESearchBar({items, onSelect, userShorthands}) {
       onMouseLeave: e => e.currentTarget.style.color = T.textDim,
     }, '🎲'),
     s.query && h('button',{className:'ge-search-clear',onClick:()=>s.setQuery('')},'x'),
-    showDrop && h('div',{className:'ge-search-results'},
-      s.results.map((it,i) =>
-        h('div',{
-          key:it.id,
-          className:'ge-result-item'+(i===s.focusIdx?' focused':''),
-          onMouseDown:()=>{onSelect(it); s.setQuery('');}
-        },
-          h('div',{className:'ge-result-name'},it.name),
-          it.high && h('div',{className:'ge-result-price'},fmt.gp(it.high)+'gp'),
-          h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
-          it.categories&&it.categories[0]&&h('div',{className:'ge-result-category'},CAT_LABEL[it.categories[0]]||it.categories[0])
+    showDrop && dropPos && createPortal(
+      h('div',{className:'ge-search-results', style:{position:'fixed', top:dropPos.top, left:dropPos.left, width:dropPos.width, right:'auto', zIndex:9999}},
+        s.results.map((it,i) =>
+          h('div',{
+            key:it.id,
+            className:'ge-result-item'+(i===s.focusIdx?' focused':''),
+            onMouseDown:()=>{onSelect(it); s.setQuery('');}
+          },
+            h('div',{className:'ge-result-name'},it.name),
+            it.high && h('div',{className:'ge-result-price'},fmt.gp(it.high)+'gp'),
+            h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
+            it.categories&&it.categories[0]&&h('div',{className:'ge-result-category'},CAT_LABEL[it.categories[0]]||it.categories[0])
+          )
         )
-      )
+      ),
+      document.body
     )
   );
 }
@@ -2504,8 +2586,16 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       setWikiStats(stats);
       setStatsLoading(false);
     }).catch(() => setStatsLoading(false));
-    const wikiName = item.name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
-    setIconUrl(`https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`);
+    // Real icon URL resolved backend-side via the wiki's own API
+    // (icons.js) — falls back to the old first-word-capitalized filename
+    // guess only for items the cache hasn't backfilled yet (or genuinely
+    // has no wiki image), so nothing regresses mid-backfill.
+    if (item.iconUrl) {
+      setIconUrl(item.iconUrl);
+    } else {
+      const wikiName = item.name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
+      setIconUrl(`https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`);
+    }
     setLivePrice(null);
     if (!item.untradeable) {
       window.genius?.getLiveItemPrice(item.id).then(price => {
@@ -2607,7 +2697,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 
   return h('div', {className:'detail-panel', style: panelWidth ? {width:panelWidth, minWidth:260} : undefined},
     chartOpen && h(ChartModal, {item, onClose:()=>{setChartOpen(false);setChartDxpMode(false);}, dateFormat, populatedHistoryIds, showDxpOverlay:chartDxpMode}),
-    imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
+    imageOpen && h(ImageModal, {name: item.name, detailUrl: item.iconDetailUrl, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
       h('div', {className:'row-between', style:{marginBottom:6, flexWrap:'wrap', rowGap:6}},
         h('div', {className:'row', style:{gap:8, alignItems:'center', minWidth:0, overflow:'hidden', flex:'1 1 140px'}},
@@ -3775,12 +3865,51 @@ function parseGpString(str) {
   return n * mult;
 }
 
-function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleWatch}) {
-  const [open, setOpen] = useState(false);
+// Compact Dashboard teaser (Ben, 2026-08-13): the full accordion moved to
+// its own tab (TopMoversTab) since it was capped at 30/100 rows and buried
+// behind a click — undersold a feature Ben wants prominent. This keeps a
+// quick glance on the Dashboard (top 5 GE Market risers) with a link to
+// the real thing, same pattern as the Watchlist/Portfolio teaser cards.
+function TopMoversSection({items, officialTop100, onSelect, onNavigate}) {
+  const itemById = useMemo(() => {
+    const m = new Map();
+    for (const it of items) if (it.id != null) m.set(it.id, it);
+    return m;
+  }, [items]);
+
+  const topRises = useMemo(() => {
+    const win = officialTop100?.byWindow?.[7];
+    return (win?.rises || []).slice(0, 5);
+  }, [officialTop100]);
+
+  return h('div', {style:{marginBottom:20}},
+    h('div', {style:{fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase', color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:10, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('top_movers'), title:'Go to Top Movers'},
+      h('span', null, '🏆 Top Movers'),
+      h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
+    topRises.length === 0
+      ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No data available yet.')
+      : topRises.map(r => {
+          const it = itemById.get(r.id);
+          return h('div', {
+            key:r.id, className:'row', style:{justifyContent:'space-between', padding:'4px 0', cursor: it?'pointer':'default', borderBottom:`1px solid ${T.borderDim}`},
+            onClick:()=>it && onSelect(it),
+          },
+            h('span', {style:{color: it ? T.textBright : T.textDim, fontSize:12}}, r.name),
+            h('span', {style:{color:T.green, fontSize:12, fontWeight:'bold'}}, '+'+r.pct.toFixed(1)+'%'),
+          );
+        })
+  );
+}
+
+
+// Full-page version of TopMoversSection (Ben, 2026-08-13): the Dashboard
+// accordion was capped at 30 of the 100 rows even expanded, and buried
+// behind a click — undersold a feature Ben specifically wants to put in
+// front of people. This shows the real full 100, sortable, no cap.
+function TopMoversTab({items, officialTop100, onSelect, watchlist, onToggleWatch, description}) {
   const [pill, setPill] = useState('ge_rise');
   const [windowDays, setWindowDays] = useState(7);
-  const [periodOpen, setPeriodOpen] = useState(false);
-  const [liveCache, setLiveCache] = useState({}); // {windowDays: {rises, falls}}
+  const [liveCache, setLiveCache] = useState({});
   const [liveLoading, setLiveLoading] = useState(false);
   const [sort, setSort] = useState({key:'pct', dir:-1});
   const tog = key => setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='name' ? 1 : -1)}));
@@ -3788,22 +3917,18 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
 
   const pillDef = TOP_MOVERS_PILLS.find(p => p.key === pill);
 
-  // Default sort matches the pill's own natural order (biggest rise first
-  // on a ↑ pill, biggest fall first on a ↓ pill) whenever the pill itself
-  // changes — a manual column sort (Item/GP Change) stays put across a
-  // period change, only resets when you actually switch pills.
   useEffect(() => {
     setSort({key:'pct', dir: pillDef.dir==='rise' ? -1 : 1});
   }, [pill]);
 
   useEffect(() => {
-    if (!open || pillDef.source !== 'live' || liveCache[windowDays]) return;
+    if (pillDef.source !== 'live' || liveCache[windowDays]) return;
     setLiveLoading(true);
     window.genius?.getRealTimeMovers?.(windowDays)
       .then(res => { if (res) setLiveCache(c => ({...c, [windowDays]: res})); })
       .catch(() => {})
       .finally(() => setLiveLoading(false));
-  }, [open, pillDef.source, windowDays]);
+  }, [pillDef.source, windowDays]);
 
   const itemById = useMemo(() => {
     const m = new Map();
@@ -3816,8 +3941,6 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
     const win = officialTop100?.byWindow?.[windowDays];
     rows = (win ? (pillDef.dir === 'rise' ? win.rises : win.falls) : []).map(r => ({
       id: r.id, name: r.name, startDisplay: r.startPrice, endDisplay: r.endPrice, pct: r.pct,
-      // Jagex's own "Total Rise"/"Total Fall" column — a plain unsigned
-      // number on their page, sign added here to match pct's direction.
       gpDisplay: r.gpChange != null ? (r.pct>=0?'+':'-')+r.gpChange+'gp' : '—',
       gpChangeRaw: (r.pct>=0?1:-1) * parseGpString(r.gpChange),
     }));
@@ -3836,41 +3959,29 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
     return (av - bv) * sort.dir;
   });
 
-  return h('div', {style:{marginBottom:20}},
-    h('div', {
-      className:'ge-section-head', style:{cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'},
-      onClick:()=>setOpen(o=>!o),
-    },
-      h('span', null, `🏆 Top 100 Price Movements ${open?'▲':'▼'}`),
-      open && h('div', {style:{position:'relative'}, onClick:e=>e.stopPropagation()},
-        h('button', {
-          className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
-          onClick:()=>setPeriodOpen(o=>!o),
-        }, TOP_MOVERS_WINDOWS.find(w=>w.days===windowDays)?.label + ' ▾'),
-        periodOpen && h('div', {
-          style:{position:'absolute', right:0, top:'110%', zIndex:20, background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:4, minWidth:150, boxShadow:'0 4px 16px rgba(0,0,0,0.6)', overflow:'hidden'},
-        },
-          TOP_MOVERS_WINDOWS.map(w => h('div', {
-            key:w.days,
-            style:{padding:'7px 12px', fontSize:12, cursor:'pointer', color: w.days===windowDays ? T.goldBright : T.text, background: w.days===windowDays ? 'rgba(201,168,76,0.12)' : 'transparent'},
-            onClick:()=>{ setWindowDays(w.days); setPeriodOpen(false); },
-            onMouseEnter:e=>e.currentTarget.style.background='rgba(201,168,76,0.08)',
-            onMouseLeave:e=>e.currentTarget.style.background = w.days===windowDays ? 'rgba(201,168,76,0.12)' : 'transparent',
-          }, w.label))
-        )
-      )
-    ),
-    open && h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 4px 4px', padding:'10px 12px'}},
-      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10, lineHeight:1.4}},
+  return h('div', {style:{padding:'4px 0'}},
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div', {style:{padding:'14px'}},
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:12, lineHeight:1.4}},
         'GE Market is Jagex\'s own official Top 100, sourced straight from their site. Live Trade is GEnius\'s own version using real instant buy/sell instead of their slower official price — expect the two lists to differ.'
       ),
-      h('div', {className:'row', style:{gap:6, marginBottom:10, flexWrap:'wrap'}},
-        TOP_MOVERS_PILLS.map(p => h('button', {
-          key:p.key,
-          className:'ge-btn'+(pill===p.key?' gold':''),
-          style:{fontSize:11, padding:'4px 10px'},
-          onClick:()=>setPill(p.key),
-        }, p.label))
+      h('div', {style:{display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center', justifyContent:'space-between'}},
+        h('div', {className:'row', style:{gap:6, flexWrap:'wrap'}},
+          TOP_MOVERS_PILLS.map(p => h('button', {
+            key:p.key,
+            className:'ge-btn'+(pill===p.key?' gold':''),
+            style:{fontSize:11, padding:'4px 10px'},
+            onClick:()=>setPill(p.key),
+          }, p.label))
+        ),
+        h('div', {className:'row', style:{gap:6, flexWrap:'wrap'}},
+          TOP_MOVERS_WINDOWS.map(w => h('button', {
+            key:w.days,
+            className:'ge-btn'+(windowDays===w.days?' gold':''),
+            style:{fontSize:11, padding:'4px 10px'},
+            onClick:()=>setWindowDays(w.days),
+          }, w.label))
+        ),
       ),
       pillDef.source==='live' && liveLoading && !liveCache[windowDays]
         ? h('div', {style:{padding:20, textAlign:'center', color:T.textDim, fontSize:12}}, 'Computing real-time movers from local price history…')
@@ -3879,10 +3990,11 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
           : h('div', {className:'ge-table-wrap'},
               h('table', {className:'ge-table'},
                 h('thead', null, h('tr', null,
-                  h('th', {onClick:()=>tog('name')}, 'Item'+arr('name')), h('th', null, 'Start'), h('th', null, 'Now'),
-                  h('th', {onClick:()=>tog('gp')}, 'GP Change'+arr('gp')), h('th', {onClick:()=>tog('pct')}, 'Change'+arr('pct')),
+                  h('th', {onClick:()=>tog('name'), style:{cursor:'pointer'}}, 'Item'+arr('name')), h('th', null, 'Start'), h('th', null, 'Now'),
+                  h('th', {onClick:()=>tog('gp'), style:{cursor:'pointer'}}, 'GP Change'+arr('gp')), h('th', {onClick:()=>tog('pct'), style:{cursor:'pointer'}}, 'Change'+arr('pct')),
+                  h('th', {style:{width:30}}, null),
                 )),
-                h('tbody', null, rows.slice(0, 30).map(r => {
+                h('tbody', null, rows.map(r => {
                   const it = itemById.get(r.id);
                   return h('tr', {
                     key:r.id,
@@ -3890,13 +4002,18 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
                     onClick: () => it && onSelect(it),
                   },
                     h('td', null, h('div', {className:'row', style:{gap:6, alignItems:'center'}},
-                      it && h('img', {src:`https://secure.runescape.com/m=itemdb_rs/1786357986994_obj_sprite.gif?id=${it.id}`, style:{width:18,height:18,objectFit:'contain'}}),
+                      it && it.iconUrl && h('img', {src:it.iconUrl, style:{width:18,height:18,objectFit:'contain'}}),
                       h('span', {style:{color: it ? T.textBright : T.textDim}}, r.name),
                     )),
                     h('td', null, r.startDisplay),
                     h('td', null, r.endDisplay),
                     h('td', {style:{color: r.pct >= 0 ? T.green : T.red}}, r.gpDisplay),
                     h('td', {style:{color: r.pct >= 0 ? T.green : T.red, fontWeight:'bold'}}, (r.pct>=0?'+':'')+r.pct.toFixed(1)+'%'),
+                    it && h('td', {onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center'}},
+                      h('button',{className:'star-btn'},
+                        h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
+                      )
+                    ),
                   );
                 }))
               )
@@ -3906,7 +4023,6 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
 }
 
 function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news, overpricedThreshold=30, officialTop100}) {
-  const [topMoversOpen, setTopMoversOpen] = useState(false);
   const [activeSignal, setActiveSignal] = useState(null);
   const [activeIndexId, setActiveIndexId] = useState(null);
   const [activeSector, setActiveSector] = useState(null);
@@ -4481,7 +4597,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       )
     ),
 
-    h(TopMoversSection, {items, officialTop100, onSelect, watchlist, onToggleWatch}),
+    h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
     // ── News Item Mentions ───────────────────────────────────────
     (() => {
@@ -4626,7 +4742,9 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Watchlist movers
     h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Your Watchlist'),
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('watchlist'), title:'Go to Watchlist'},
+        h('span', null, 'Your Watchlist'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
       watchlistItems.length === 0
         ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
             'No items watched yet. Star any item to track it here.')
@@ -5410,10 +5528,18 @@ function MarketTab({items, selected, onSelect, description}) {
   const [sort, setSort] = useState({key:'name',dir:1});
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
   const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
-  const movers  = useMemo(()=>[...items].filter(it=>it.change_1d!=null).sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
+  // Untradeable filter (Ben, 2026-08-13): Invention components etc. picked
+  // up a real change_1d in v2.5.0 (local snapshots instead of always-null),
+  // but they have no real two-sided GE market — thin/no trading means a
+  // handful of transactions can swing them 20-40%+ in a day with no actual
+  // "market movement" behind it. That noise was dominating this widget
+  // ("Heavy components" -44%, "Bucket" -25% off a 1gp move) ahead of real
+  // tradeable movers, so it's excluded here the same way it already is in
+  // getRealTimeMovers (api.js).
+  const movers  = useMemo(()=>[...items].filter(it=>!it.untradeable && it.change_1d!=null).sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
   const volTop  = useMemo(()=>[...items].filter(it=>it.volume&&it.avgVolume&&it.volume>it.avgVolume*1.3).sort((a,b)=>(b.volume/b.avgVolume)-(a.volume/a.avgVolume)).slice(0,10),[items]);
-  const rising  = useMemo(()=>items.filter(it=>(it.change_1d||0)>0),[items]);
-  const falling = useMemo(()=>items.filter(it=>(it.change_1d||0)<0),[items]);
+  const rising  = useMemo(()=>items.filter(it=>!it.untradeable && (it.change_1d||0)>0),[items]);
+  const falling = useMemo(()=>items.filter(it=>!it.untradeable && (it.change_1d||0)<0),[items]);
   // Exclude ALCH from Market signals — they have their own tab
   const MARKET_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL','ACTIVE','QUIET','THIN'];
   const signals = useMemo(()=>items.filter(it=>
@@ -5502,6 +5628,24 @@ function MarketTab({items, selected, onSelect, description}) {
 }
 
 const APP_NEWS = [
+  {
+    version: 'v2.6.0',
+    items: [
+      'New Money Makers tab, out of dev-mode and open to everyone — Herblore, Divination, Construction, Magic, Smithing, Crafting, Fletching, and Summoning, all priced off GEnius\'s own live buy/sell prices instead of the static GE reference price, with per-item buy limits and volume shown so you can tell what\'s actually worth doing.',
+      'Money Makers: Magic now covers Telekinetic Grinding, Making Leather, Bolt Enchanting (Onyx/Ascendri, with an Alchemiser-profit view alongside), and Humidify on porcelain clay.',
+      'Money Makers: Fletching now covers Ascendri/Ascension/Onyx bolts and Headless dinarrow, with toggleable Portable Fletcher, Fletching Brooch, Fletching Cape, and Workroom buffs.',
+      'Money Makers: Smithing bar-making now has a Varrock Armour toggle applying the correct tier-scaled discount automatically.',
+      'Money Makers: Construction now includes the full 12-plank → frame chain (via refined planks).',
+      'Money Makers: Summoning now includes all Ancient Summoning binding contracts, priced off the actual GE-tradeable contract item, converting to 24 scrolls per pouch during Voice of Seren instead of the usual 20.',
+      'Flips leaderboard now has a real minimum-profit floor (1m gp per buy limit), so a technically-positive but trivial margin (a few gp) can\'t qualify no matter how the profit filter is set.',
+      'Item table column headers now stay pinned in view while scrolling, with sorting fully working from the pinned header — rebuilt from scratch after the first version could visually glitch against other overlays (search results, item charts); both now render correctly on top of it instead.',
+      'Clicking your current tab in the sidebar now scrolls back to the top; added floating scroll-to-top/bottom buttons.',
+      'Fixed item charts always showing an abbreviated month/year date on the 1-year, 5-year, and All-Time ranges — every range now shows a full date, and honors your Date Format setting (MM/DD/YYYY, DD/MM/YYYY, or YYYY-MM-DD).',
+      'Added zoom (scroll wheel, arrow keys, pinch) to the 5-Year chart view — previously only the All-Time view supported it.',
+      'Fixed the item detail panel\'s "365D Low"/"30D Low" (etc.) sometimes showing the exact same price and date as the All-Time Low, even when the real low for that shorter window was different — the stat was silently reading from the chart\'s current zoom/pan state instead of the actual selected time range.',
+      'Top 100 Price Movements and Money Makers section of Dashboard/sidebar cleanup.',
+    ]
+  },
   {
     version: 'v2.5.0',
     items: [
@@ -9340,6 +9484,18 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
   const [fillVersion, setFillVersion] = useState(0);
 
   const recipe = useMemo(() => findConversionRecipe(position.item_name), [position.item_name]);
+  // BUG (Ben, 2026-09-15): "Use this" filled Output Quantity and the
+  // recipe's charge-cost row as one-time snapshots of Quantity AT CLICK
+  // TIME — neither stayed in sync if Quantity was edited afterward (a very
+  // natural flow: click Use This to see the recipe, then dial in the real
+  // quantity). Repro caught for real: converted 7,500 Eternal magic logs,
+  // but the Plank Maker charge cost still read 17,668,800gp — 360.45/item
+  // × 49,080 (the modal's own MAX), not × 7,500. Fixed by keeping both
+  // fields "linked" to Quantity via the effect below until the user
+  // manually edits either one directly, at which point that field stops
+  // auto-tracking (their manual value is respected, not stomped on).
+  const [outputQtyLinked, setOutputQtyLinked] = useState(false);
+  const [costLinked, setCostLinked] = useState(false);
 
   const useRecipe = () => {
     if (!recipe) return;
@@ -9347,13 +9503,24 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
     setOutputQty(String(qty));
     setExtraCosts([{label: `${recipe.machineLabel} charge cost`, amount: String(recipe.costPerUnit * Number(qty || 0))}]);
     setFillVersion(v => v + 1);
+    setOutputQtyLinked(true);
+    setCostLinked(true);
   };
 
-  const addCostRow = () => setExtraCosts(rows => [...rows, {label:'', amount:''}]);
-  const removeCostRow = i => setExtraCosts(rows => rows.filter((_,j)=>j!==i));
-  const setCostRow = (i, field, val) => setExtraCosts(rows => rows.map((r,j) => j===i ? {...r, [field]:val} : r));
+  const addCostRow = () => { setExtraCosts(rows => [...rows, {label:'', amount:''}]); setCostLinked(false); };
+  const removeCostRow = i => { setExtraCosts(rows => rows.filter((_,j)=>j!==i)); setCostLinked(false); };
+  const setCostRow = (i, field, val) => { setExtraCosts(rows => rows.map((r,j) => j===i ? {...r, [field]:val} : r)); setCostLinked(false); };
 
   const q = Number(qty) || 0;
+
+  useEffect(() => {
+    if (!recipe) return;
+    if (outputQtyLinked) setOutputQty(String(q));
+    if (costLinked) {
+      setExtraCosts([{label: `${recipe.machineLabel} charge cost`, amount: String(recipe.costPerUnit * q)}]);
+      setFillVersion(v => v + 1);
+    }
+  }, [q]);
   const oq = Number(outputQty) || 0;
   const totalExtraCost = extraCosts.reduce((s,r) => s + (Number(r.amount) || 0), 0);
   const inputCostUsed = position.cost_basis * q;
@@ -9385,7 +9552,7 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
         ),
         h('div', {style:{marginBottom:12}},
           h('label',{className:'form-lbl'},'Output quantity'),
-          h('input',{className:'ge-input', type:'number', min:1, value:outputQty, onChange:e=>setOutputQty(e.target.value), placeholder:'e.g. '+q, style:{width:120}})
+          h('input',{className:'ge-input', type:'number', min:1, value:outputQty, onChange:e=>{setOutputQty(e.target.value); setOutputQtyLinked(false);}, placeholder:'e.g. '+q, style:{width:120}})
         ),
         h('div', {style:{marginBottom:12}},
           h('label',{className:'form-lbl'},'Extra costs (machine charges, secondary ingredients, etc.)'),
@@ -9464,7 +9631,21 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands}) {
+function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
+  // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
+  // chart already respects (Ben, 2026-09-09: "can we add dates to the
+  // sales too" — the existing "Sold At / Converted" column was misnamed;
+  // it only ever showed the sale price, never an actual date).
+  const fmtPosDate = ts => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '—';
+    const fmtStr = dateFormat || 'MM/DD/YYYY';
+    const M = d.getMonth()+1, D = d.getDate(), Y = d.getFullYear();
+    if (fmtStr === 'DD/MM/YYYY') return `${D}/${M}/${Y}`;
+    if (fmtStr === 'YYYY-MM-DD') return `${Y}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
+    return `${M}/${D}/${Y}`;
+  };
   // Diversification suggestions pull real picks from the Almanac's
   // trade-idea engine — public since the Almanac itself went public
   // (v2.0.0). Fetches its own copy of the DXP intelligence data
@@ -9594,11 +9775,22 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const ms = [];
     if (!closedPos.length) return ms;
 
+    // Win/loss-shaped stats (Biggest Win/Loss, Flawless streak) need ONLY
+    // real sales — a Convert never sets realized_pl at all (it's a cost-
+    // basis carry-forward, not a close-out, see api.js's convertPosition),
+    // so it read as an automatic 0/loss and silently cut real win streaks
+    // short whenever a convert happened to sit in the middle of one (Ben,
+    // 2026-08-13: "The 'hot streak' thing in portfolio... Converting broke
+    // it" — confirmed, reported streak of 19 was being undercounted this
+    // way). totalRealized still sums over closedPos (sold + converted) —
+    // converts correctly contribute 0 there either way, so no bug to fix.
+    const closedSales = closedPos.filter(p => p.status === 'sold');
     const profits = closedPos.map(p => p.realized_pl || 0);
-    const biggestWin  = Math.max(...profits);
-    const biggestLoss = Math.min(...profits);
-    const biggestWinPos  = closedPos.find(p => (p.realized_pl||0) === biggestWin);
-    const biggestLossPos = closedPos.find(p => (p.realized_pl||0) === biggestLoss);
+    const salesProfits = closedSales.map(p => p.realized_pl || 0);
+    const biggestWin  = salesProfits.length ? Math.max(...salesProfits) : 0;
+    const biggestLoss = salesProfits.length ? Math.min(...salesProfits) : 0;
+    const biggestWinPos  = closedSales.find(p => (p.realized_pl||0) === biggestWin);
+    const biggestLossPos = closedSales.find(p => (p.realized_pl||0) === biggestLoss);
     const totalRealized  = profits.reduce((s,n) => s+n, 0);
 
     if (biggestWin > 0)  ms.push({ icon:'🏆', label:'Biggest Win',  value: '+'+fmt.gp(biggestWin)+'gp',  sub: biggestWinPos?.item_name || '' });
@@ -9608,15 +9800,16 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     // Trade count itself now has its own tier ladder (see
     // TRADE_COUNT_TIERS/currentTradeTier above) instead of living here as
     // flat one-off milestones.
-    // Flawless — best streak of consecutive profitable trades
+    // Flawless — best streak of consecutive profitable SALES (converts
+    // excluded, see above)
     let bestStreak = 0, currentStreak = 0;
-    for (const p of closedPos) {
+    for (const p of closedSales) {
       if ((p.realized_pl||0) > 0) { currentStreak++; bestStreak = Math.max(bestStreak, currentStreak); }
       else currentStreak = 0;
     }
-    const isCurrentlyFlawless = profits.every(p => p > 0) && closedPos.length >= 5;
+    const isCurrentlyFlawless = salesProfits.length > 0 && salesProfits.every(p => p > 0) && closedSales.length >= 5;
     if (bestStreak >= 5)
-      ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedPos.length+' for '+closedPos.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
+      ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedSales.length+' for '+closedSales.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
     return ms;
   }, [closedPos, totalCurrent]);
 
@@ -10071,7 +10264,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       showClosed && h('table',{className:'ge-table'},
         h('thead',null,h('tr',null,
           h('th',null,'Item'),h('th',null,'Qty'),h('th',null,'Cost/ea'),
-          h('th',null,'Sold At / Converted'),
+          h('th',null,'Sold Price / Converted'),
+          h('th',null,'Date'),
           h('th',{title:'Profit & Loss already locked in on this sale, after GE tax. Conversions have no realized P&L — no cash changed hands, the cost basis just carried forward to the new item.'},'Realized P&L')
         )),
         h('tbody',null, closedPos.map(pos=>
@@ -10086,6 +10280,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             pos.status==='converted'
               ? h('td',{style:{color:T.blue}},`→ ${pos.converted_to}`)
               : h('td',{style:{color:T.gold}},fmt.gp(pos.sold_price||0)+'gp'),
+            h('td',{style:{color:T.textDim}}, fmtPosDate(pos.status==='converted' ? pos.converted_at : pos.sold_at)),
             pos.status==='converted'
               ? h('td',{style:{color:T.textDim}},'—')
               : h('td',{className:(pos.realized_pl||0)>=0?'pct-up':'pct-down'},
@@ -10648,6 +10843,12 @@ function ScoreTable({rows, selected, onSelect}) {
 
 function OpportunitiesTab({items, selected, onSelect, description, watchlist, onToggleWatch, onToggleHide, onAddCompare, overpricedThreshold=30}) {
   const [signalFilter, setSignalFilter] = useState(null);
+  // Signal badges hidden by default (Ben, 2026-08-13): the "Signals"
+  // column shows every active badge on every section's rows, including
+  // the Overpriced/Underpriced sections' own OVERPRICED/UNDERPRICED badge
+  // — trivially true for every row already sitting in that section, so it
+  // just bloats the column width for no new information most of the time.
+  const [showSignals, setShowSignals] = useState(false);
 
   const withSignal = useCallback((sig) =>
     items.filter(it => it.signals && it.signals.includes(sig)), [items]);
@@ -10763,6 +10964,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       })
     ),
 
+    h('div', {
+      onClick: () => setShowSignals(v => !v),
+      style: {display:'flex', alignItems:'center', gap:4, cursor:'pointer', width:'fit-content', marginBottom:14, fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'1px'},
+    },
+      h('span', {style:{fontSize:9}}, showSignals ? '▾' : '▸'),
+      h('span', null, showSignals ? 'Hide signal badges' : 'Show signal badges'),
+    ),
+
     // Filtered view
     signalFilter && h('div', {style:{marginBottom:20}},
       h('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'6px 10px',background:T.panel2,borderRadius:4,border:`1px solid ${T.borderDim}`}},
@@ -10813,14 +11022,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'SURGE Signals', icon:'⚡', color:T.green,
       desc:'— price rising with elevated volume',
       rows:surge,
-      headers:['Item','Price','Change','Volume','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
+      headers:['Item','Price','Change','Volume',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10828,14 +11037,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'DUMP Signals', icon:'📉', color:T.red,
       desc:'— price falling with elevated volume',
       rows:dump,
-      headers:['Item','Price','Change','Volume','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
+      headers:['Item','Price','Change','Volume',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10843,14 +11052,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Accumulation', icon:'📦', color:'#4dd0e1',
       desc:'— price flat, volume quietly building',
       rows:accum,
-      headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Vol / Avg','Vol Ratio',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#4dd0e1'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10858,14 +11067,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Distribution', icon:'🌊', color:'#ffb74d',
       desc:'— price flat, extreme volume — watch for incoming drop',
       rows:distrib,
-      headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Vol / Avg','Vol Ratio',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ffb74d'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10873,15 +11082,15 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Volume Frenzy', icon:'🔥', color:'#ff80ab',
       desc:'— 250%+ above average volume',
       rows:frenzy,
-      headers:['Item','Price','Change','Vol / Avg','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Change','Vol / Avg','Vol Ratio',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ff80ab'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10889,14 +11098,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Overpriced', icon:'🏷️', color:'#ef9a9a',
       desc:`— GE price ${overpricedThreshold}%+ above real live buy/sell (adjustable in Settings)`,
       rows:overpriced,
-      headers:['Item','GE Price','Live Price','Gap %','Signals'],
-      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),gapPct,null],
+      headers:['Item','GE Price','Live Price','Gap %',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),gapPct,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
         h('td',{key:'lp'},h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'g',style:{color:'#ef9a9a'}},'+'+gapPct(it).toFixed(1)+'%'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10904,14 +11113,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Underpriced', icon:'💎', color:'#81c784',
       desc:`— real live buy/sell ${overpricedThreshold}%+ above GE price (adjustable in Settings)`,
       rows:underpriced,
-      headers:['Item','GE Price','Live Price','Gap %','Signals'],
-      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),it=>-gapPct(it),null],
+      headers:['Item','GE Price','Live Price','Gap %',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),it=>-gapPct(it),...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
         h('td',{key:'lp'},h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'g',style:{color:'#81c784'}},gapPct(it).toFixed(1)+'%'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -11085,10 +11294,19 @@ function computeFlipStats(it) {
   const roiPct = it.liveSell > 0 ? (margin / it.liveSell) * 100 : 0;
   const limit = it.limit || 0;
   const profitForLimit = margin * limit;
+  // Realistic Profit (Ben, 2026-08-13): "Profit (buy limit)" always
+  // assumes the full buy limit both buys AND sells same-day, which is
+  // fantasy for anything whose average daily volume is a fraction of its
+  // buy limit — Shadow Nihil Pouch (5,000 limit, ~406 avg volume) would
+  // take over a week just to BUY a single limit's worth, let alone sell
+  // it too. Capped at the item's own avgVolume instead of the bare limit,
+  // so this reflects what a limit's worth of trading actually looks like
+  // given real market liquidity, not a theoretical ceiling.
+  const realisticProfit = margin * Math.min(limit, it.avgVolume || 0);
   const gePrice = it.high || it.low || 0;
   const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_SANITY_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
   const ceiling = alchIsAnchor ? Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT : Infinity;
-  const base = { margin, roiPct, profitForLimit, gePrice, ceiling, limit };
+  const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit };
 
   if (it.liveSell < FLIP_MIN_SELL_PRICE) return { ...base, qualifies:false, disqualifyReason:`Sell price is under the ${fmt.gp(FLIP_MIN_SELL_PRICE)}gp floor Flips uses to avoid junk items dominating by percentage.` };
   if (margin <= 0) return { ...base, qualifies:false, disqualifyReason:'No positive margin right now — instabuy (after tax) doesn\'t beat instasell.' };
@@ -11128,7 +11346,7 @@ const FLIP_PROFIT_FILTERS = [
 ];
 function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, description}) {
   const [pillTab, setPillTab] = useState('flips'); // 'flips' | 'flagged'
-  const [sort, setSort] = useState({key:'profitForLimit', dir:-1});
+  const [sort, setSort] = useState({key:'realisticProfit', dir:-1});
   const [page, setPage] = useState(0);
   // Defaults to 1M+ (Ben: "That would cut it down from over 900 results
   // significantly") — this is a filter on Profit (buy limit), i.e. one
@@ -11235,7 +11453,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('th', {onClick:()=>tog('margin'), style:{cursor:'pointer'}}, 'Margin/item'+arrow('margin')),
                 h('th', {onClick:()=>tog('roiPct'), style:{cursor:'pointer'}}, 'ROI%'+arrow('roiPct')),
                 h('th', {onClick:()=>tog('limit'), style:{cursor:'pointer'}}, 'Buy Limit'+arrow('limit')),
-                h('th', {onClick:()=>tog('profitForLimit'), style:{cursor:'pointer'}, title:'Margin/item × buy limit — one full limit\'s worth, not a spending cap'}, 'Profit (buy limit)'+arrow('profitForLimit')),
+                h('th', {onClick:()=>tog('realisticProfit'), style:{cursor:'pointer'}, title:'Margin/item × min(buy limit, avg daily volume) — what a limit\'s worth of trading realistically nets given how liquid this item actually is'}, 'Realistic Profit'+arrow('realisticProfit')),
+                h('th', {onClick:()=>tog('profitForLimit'), style:{cursor:'pointer'}, title:'Margin/item × buy limit — the theoretical ceiling if the ENTIRE limit both buys and sells, regardless of how thin the market actually is'}, 'Max Profit (limit)'+arrow('profitForLimit')),
                 h('th', {style:{width:30}}, null),
               )),
               h('tbody', null, pageItems.map(it => h('tr', {
@@ -11248,7 +11467,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('td', {style:{color:T.gold}}, fmt.gp(it.margin)+'gp'),
                 h('td', {style:{color: it.roiPct>=5 ? T.green : T.textDim}}, it.roiPct.toFixed(2)+'%'),
                 h('td', {style:{color:T.textDim}}, it.limit.toLocaleString()),
-                h('td', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(it.profitForLimit)+'gp'),
+                h('td', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(it.realisticProfit)+'gp'),
+                h('td', {style:{color:T.textDim}}, fmt.gp(it.profitForLimit)+'gp'),
                 h('td', {onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center'}},
                   h('button',{className:'star-btn'},
                     h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
@@ -11280,9 +11500,11 @@ const MONEY_MAKER_SKILLS = [
   {key:'herblore',     label:'Herblore'},
   {key:'divination',   label:'Divination'},
   {key:'construction', label:'Construction'},
+  {key:'magic',        label:'Magic'},
   {key:'smithing',     label:'Smithing'},
   {key:'crafting',     label:'Crafting'},
   {key:'fletching',    label:'Fletching'},
+  {key:'summoning',    label:'Summoning'},
 ];
 
 // Primary/secondary sourced directly from parsing runescape.wiki/w/Potions'
@@ -11389,10 +11611,118 @@ const DIVINATION_RECIPES = [
   },
 ];
 
+// Ben's real Magic moneymakers (2026-08-11) — the classic OSRS-era
+// skilling spells (Superheat Item, Bake Pie, Tan Leather-as-such) mostly
+// aren't what actually gets used in RS3 today; these are the ones Ben
+// confirmed are. Recipes and rune costs sourced directly from each
+// spell's own wiki page (not an AI summary):
+//   - runescape.wiki/w/Telekinetic_Grind (Products table) — per-cast
+//     rune cost is a flat 2 Astral + 1 Law regardless of what's being
+//     ground; grinds up to 60 of a stackable item per cast (28 for a
+//     handful of items the wiki's own table caps lower). Filtered to
+//     items GEnius can actually price on both sides — the wiki table
+//     itself lists several (Garlic powder, Ground charcoal, etc.) that
+//     have no real GE market at all.
+//   - runescape.wiki/w/Make_Leather (Products table) — flat 2 Astral +
+//     2 Body + 2 Fire per cast, tans up to 28 hides.
+//   - runescape.wiki/w/Enchant_Crossbow_Bolt — 22 tiers exist, but per
+//     Ben only Onyx and Ascendri are actually worth casting (every
+//     other tier's own wiki-listed profit is negative or negligible);
+//     20 Fire + 1 Cosmic + 1 Death per cast, enchants 10 bolts.
+//   - runescape.wiki/w/Humidify — Porcelain clay -> Soft porcelain clay
+//     is the only cast of this Ben actually uses it for; 1 Fire + 3
+//     Water + 1 Astral per cast (single-item form, not the 28-at-once
+//     "full backpack" variant).
+const TELEKINETIC_GRIND_RUNES = [{name:'Astral rune', qty:2}, {name:'Law rune', qty:1}];
+const TELEKINETIC_GRIND_RECIPES = [
+  {name:'Anchovy paste',            input:'Anchovies',              inQty:28, outQty:28},
+  {name:'Chocolate dust',           input:'Chocolate bar',          inQty:28, outQty:28},
+  {name:'Crushed nest',             input:"Bird's nest (empty)",    inQty:28, outQty:28},
+  {name:'Dragon scale dust',        input:'Blue dragon scale',      inQty:28, outQty:28},
+  {name:'Dust of Armadyl',          input:'Shards of Armadyl',      inQty:60, outQty:480},
+  {name:'Extra fine sand',          input:'Sandstone (10kg)',       inQty:28, outQty:28},
+  {name:'Goat horn dust',           input:'Desert goat horn',       inQty:28, outQty:28},
+  {name:'Ground bat bones',         input:'Bat bones',              inQty:28, outQty:28},
+  {name:'Ground miasma rune',       input:'Miasma rune',            inQty:60, outQty:60},
+  {name:'Ground mud runes',         input:'Mud rune',               inQty:60, outQty:60},
+  {name:'Ground seaweed',           input:'Seaweed',                inQty:28, outQty:28},
+  {name:'Kebbit teeth dust',        input:'Kebbit teeth',           inQty:28, outQty:28},
+  {name:'Powder of burials',        input:'Speedy whirligig shell', inQty:60, outQty:4},
+  {name:'Powder of defence',        input:'Plain whirligig shell',  inQty:60, outQty:4},
+  {name:'Powder of item protection',input:'Swift whirligig shell',  inQty:60, outQty:4},
+  {name:'Powder of penance',        input:'Dazzling whirligig shell', inQty:60, outQty:60},
+  {name:'Powder of protection',     input:'Gliding whirligig shell',inQty:60, outQty:4},
+  {name:'Powder of pulverising',    input:'Hasty whirligig shell',  inQty:60, outQty:4},
+  {name:'Unicorn horn dust',        input:'Unicorn horn',           inQty:28, outQty:28},
+];
+
+// Fire rune cost dropped (Ben, 2026-08-11): an elemental staff covers
+// Air/Earth/Water/Fire runes entirely, so only the non-elemental Astral
+// and Body runes count as a real recurring cost.
+const MAKE_LEATHER_RUNES = [{name:'Astral rune', qty:2}, {name:'Body rune', qty:2}];
+const MAKE_LEATHER_RECIPES = [
+  {name:'Leather',              input:'Cowhide'},
+  {name:'Hard leather',         input:'Cowhide'},
+  {name:'Snakeskin',            input:'Snake hide'},
+  {name:'Green dragon leather', input:'Green dragonhide'},
+  {name:'Blue dragon leather',  input:'Blue dragonhide'},
+  {name:'Red dragon leather',   input:'Red dragonhide'},
+  {name:'Black dragon leather', input:'Black dragonhide'},
+  {name:'Royal dragon leather', input:'Royal dragonhide'},
+  {name:'Undead dragon leather',input:'Undead dragonhide'},
+  {name:'Dinosaur leather',     input:'Dinosaur hide'},
+  {name:'Apex leather',         input:'Apex hide'},
+];
+
+// Fire rune cost dropped (elemental staff) — only Cosmic and Death count.
+const ENCHANT_BOLT_RUNES = [{name:'Cosmic rune', qty:1}, {name:'Death rune', qty:1}];
+const ENCHANT_BOLT_RECIPES = [
+  {name:'Onyx bolts (e)',     input:'Onyx bolts'},
+  {name:'Ascendri bolts (e)', input:'Ascendri bolts'},
+];
+const ENCHANT_BOLT_QTY = 10; // enchants 10 bolts per cast
+
+// Fire and Water rune costs dropped (elemental staff) — only Astral counts.
+const HUMIDIFY_RUNES = [{name:'Astral rune', qty:1}];
+
 function findItemPrice(items, name) {
   if (!name) return null;
   const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
   return it ? (it.high ?? it.low ?? null) : null;
+}
+// Ben (2026-08-11): Money Makers margins need to reflect what you'd
+// actually pay/receive right now, not the GE's own slow-updating listed
+// price — buying an input at its real live instant-buy price and selling
+// the output at its real live instant-sell price, falling back to GE
+// price only when live data isn't available for that item.
+// Sanity guard (Ben, 2026-08-13): caught via Black dragonhide body showing
+// a 190Kgp margin that made no sense — its liveSell was a bogus 200,000gp
+// (liveBuy an equally bogus 1,000,000gp) against a real GE price of
+// 6,590gp, a ~30x divergence. A live price that far off the GE reference
+// is almost certainly a stale/placeholder value from the live-price feed
+// (the same failure mode OVERPRICED/UNDERPRICED already watches for at a
+// much tighter 20% threshold — this uses a much looser 5x band so it only
+// rejects genuinely broken values, not real volatility like the Voice of
+// Seren supply-flood swings Ben confirmed are legitimate on Summoning
+// scrolls).
+function _sanityLivePrice(live, gePrice) {
+  if (live == null) return null;
+  if (gePrice == null || gePrice <= 0) return live;
+  return (live <= gePrice * 5 && live >= gePrice / 5) ? live : null;
+}
+function findItemBuyPrice(items, name) {
+  if (!name) return null;
+  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  if (!it) return null;
+  const gePrice = it.high ?? it.low ?? null;
+  return _sanityLivePrice(it.liveBuy, gePrice) ?? gePrice ?? null;
+}
+function findItemSellPrice(items, name) {
+  if (!name) return null;
+  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  if (!it) return null;
+  const gePrice = it.high ?? it.low ?? null;
+  return _sanityLivePrice(it.liveSell, gePrice) ?? gePrice ?? null;
 }
 function findItemLimit(items, name) {
   if (!name) return null;
@@ -11412,11 +11742,11 @@ function computeConversionStats(inputs, output, items) {
   let cost = 0;
   const missing = [];
   for (const inp of inputs) {
-    const p = findItemPrice(items, inp.name);
+    const p = findItemBuyPrice(items, inp.name);
     if (p == null) { missing.push(inp.name); continue; }
     cost += p * inp.qty;
   }
-  const outPrice = findItemPrice(items, output.name);
+  const outPrice = findItemSellPrice(items, output.name);
   if (outPrice == null) missing.push(output.name);
   const revenue = outPrice != null ? applyTax(outPrice) * output.qty : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
@@ -11469,16 +11799,16 @@ function computePotionStats(r, items, buffs) {
   const missing = [];
   let cost = 0;
   if (!isPremadePrimary) {
-    const vialP = findItemPrice(items, 'Vial of water');
+    const vialP = findItemBuyPrice(items, 'Vial of water');
     if (vialP == null) missing.push('Vial of water'); else cost += vialP;
   }
-  const primaryP = findItemPrice(items, r.primary);
+  const primaryP = findItemBuyPrice(items, r.primary);
   if (primaryP == null) missing.push(r.primary); else cost += primaryP;
-  const secP = findItemPrice(items, r.secondary);
+  const secP = findItemBuyPrice(items, r.secondary);
   if (secP == null) missing.push(r.secondary); else cost += secP * (1 - secondarySavePct/100);
 
-  const price3 = findItemPrice(items, `${r.name} (3)`);
-  const price4 = findItemPrice(items, `${r.name} (4)`);
+  const price3 = findItemSellPrice(items, `${r.name} (3)`);
+  const price4 = findItemSellPrice(items, `${r.name} (4)`);
   if (price3 == null) missing.push(`${r.name} (3)`);
 
   const effectiveQty = 1 + dupeChance;
@@ -11524,26 +11854,38 @@ function hasRealVolume(volume, limit) {
 // dropped from consideration entirely rather than shown at a possibly-
 // fake price.
 function computeDecantingStats(name, items) {
-  const emptyFlaskPrice = findItemPrice(items, 'Potion flask');
+  const emptyFlaskPrice = findItemBuyPrice(items, 'Potion flask');
   const flaskName = `${name.replace(/ potion$/i, '')} flask (6)`;
 
+  // Each form needs its own buy AND sell price — it might end up being
+  // used as the cheap side (bought at live instabuy) or the pricey side
+  // (sold at live instasell) depending on which forms this particular
+  // potion's real prices sort into. buyPricePerDose picks the cheapest
+  // form to purchase, sellPricePerDose picks the priciest form to
+  // decant into and sell — using the same blended price for both roles
+  // would understate one side or the other whenever a form's buy/sell
+  // spread is wide.
   const forms = [1, 2, 3, 4].map(d => {
     const itemName = `${name} (${d})`;
-    const price = findItemPrice(items, itemName);
+    const buyPrice = findItemBuyPrice(items, itemName);
+    const sellPrice = findItemSellPrice(items, itemName);
     const volume = findItemVolume(items, itemName);
     const limit = findItemLimit(items, itemName);
-    const ok = price != null && hasRealVolume(volume, limit);
-    return { doses: d, itemName, price, volume, limit, pricePerDose: ok ? price / d : null, ok };
+    const ok = buyPrice != null && sellPrice != null && hasRealVolume(volume, limit);
+    return { doses: d, itemName, price: sellPrice, buyPrice, sellPrice, volume, limit,
+      buyPricePerDose: ok ? buyPrice / d : null, sellPricePerDose: ok ? sellPrice / d : null, ok };
   });
 
-  const flaskPrice = findItemPrice(items, flaskName);
+  const flaskBuyPrice = findItemBuyPrice(items, flaskName);
+  const flaskSellPrice = findItemSellPrice(items, flaskName);
   const flaskVolume = findItemVolume(items, flaskName);
   const flaskLimit = findItemLimit(items, flaskName);
-  const flaskOk = flaskPrice != null && hasRealVolume(flaskVolume, flaskLimit) && emptyFlaskPrice != null;
-  if (flaskPrice != null) {
+  const flaskOk = flaskBuyPrice != null && flaskSellPrice != null && hasRealVolume(flaskVolume, flaskLimit) && emptyFlaskPrice != null;
+  if (flaskBuyPrice != null) {
     forms.push({
-      doses: 6, itemName: flaskName, price: flaskPrice, volume: flaskVolume, limit: flaskLimit,
-      pricePerDose: flaskOk ? (flaskPrice - emptyFlaskPrice) / 6 : null, ok: flaskOk,
+      doses: 6, itemName: flaskName, price: flaskSellPrice, buyPrice: flaskBuyPrice, sellPrice: flaskSellPrice, volume: flaskVolume, limit: flaskLimit,
+      buyPricePerDose: flaskOk ? (flaskBuyPrice - emptyFlaskPrice) / 6 : null,
+      sellPricePerDose: flaskOk ? (flaskSellPrice - emptyFlaskPrice) / 6 : null, ok: flaskOk,
     });
   }
 
@@ -11557,18 +11899,18 @@ function computeDecantingStats(name, items) {
   // vials/flasks (already accounted for on the flask side above), so this
   // is the whole arbitrage: cheapest-source doses in, priciest-sale doses
   // out, at whatever dose count the sale form actually is.
-  const buyForm  = usable.reduce((a, b) => (a.pricePerDose < b.pricePerDose ? a : b));
-  const sellForm = usable.reduce((a, b) => (a.pricePerDose > b.pricePerDose ? a : b));
+  const buyForm  = usable.reduce((a, b) => (a.buyPricePerDose < b.buyPricePerDose ? a : b));
+  const sellForm = usable.reduce((a, b) => (a.sellPricePerDose > b.sellPricePerDose ? a : b));
 
-  const cost = buyForm.pricePerDose * sellForm.doses + (sellForm.doses === 6 ? emptyFlaskPrice : 0);
-  const revenue = applyTax(sellForm.price);
+  const cost = buyForm.buyPricePerDose * sellForm.doses + (sellForm.doses === 6 ? emptyFlaskPrice : 0);
+  const revenue = applyTax(sellForm.sellPrice);
   const margin = buyForm === sellForm ? null : revenue - cost;
   const bindingLimit = Math.min(buyForm.limit || Infinity, sellForm.limit || Infinity);
   const profitPerLimit = (margin != null && isFinite(bindingLimit)) ? margin * bindingLimit : null;
 
   return {
     cost, revenue, margin, missing: buyForm === sellForm ? [name] : [],
-    bindingLimit: isFinite(bindingLimit) ? bindingLimit : null, outPrice: sellForm.price,
+    bindingLimit: isFinite(bindingLimit) ? bindingLimit : null, outPrice: sellForm.sellPrice,
     profitPerLimit, buyForm, sellForm, forms,
     inputVolume: buyForm.volume, outputVolume: sellForm.volume,
   };
@@ -11640,10 +11982,395 @@ function HerbloreBuffCheckboxes({buffs, setBuffs}) {
 
 const HERBLORE_BUFF_DEFAULTS = {portableWell:false, brooch:false, modifiedMask:false, botanistsAmulet:false, factoryOutfit:false, scrollCleansing:false};
 
-function MoneyMakersTab({items, onSelect}) {
+// Fletching buffs (Ben, 2026-08-11+2026-08-12) — all four manifest as a
+// bonus to OUTPUT quantity for the same purchased input (whether that's
+// literally "extra bolts made" like the Fletching cape perk, or "material
+// wasn't consumed so you can refletch it" like the portable/Brooch —
+// mathematically identical either way, matches the wiki's own worked
+// example of fixed input producing more output).
+// Compounded MULTIPLICATIVELY, not additively like Herblore's dupe-chance
+// buffs — Herblore's own comment notes additive-vs-multiplicative is
+// "negligible at these magnitudes" for its ~5-12.5% buffs, but Fletching's
+// individual rates (up to 11.11%) are large enough that the difference
+// isn't negligible, and multiplicative compounding is what actually
+// matches Ben's confirmed real example: 20,000 Ascension bolts + Hydrix
+// bolt tips -> 25,194 Ascendri bolts (+25.97%) with every buff active.
+// Multiplicative compounding of the four confirmed rates below (1.1111 x
+// 1.1111 x 1.0075 x 1.01) works out to +25.63% — within rounding of Ben's
+// real 25.97% example, not force-fit to match it exactly.
+const FLETCHING_BUFFS = {
+  portableFletcher: {label:"Portable fletcher",        pct:11.11},
+  brooch:            {label:"Brooch of the Gods",        pct:11.11, requires:'portableFletcher'},
+  fletchingCape:     {label:"Fletching cape perk",       pct:0.75},
+  workroomTier2:     {label:"Ranger's Workroom (tier 2)",pct:1},
+};
+const FLETCHING_BUFF_DEFAULTS = {portableFletcher:false, brooch:false, fletchingCape:false, workroomTier2:false};
+
+// Five Fletching moneymakers Ben confirmed are worth modeling (2026-08-12),
+// each sourced directly from its own wiki Creation table:
+//   - Ascendri bolts: Ascension bolts + Hydrix bolt tips -> Ascendri bolts
+//     (runescape.wiki/w/Ful_arrow's sibling page; genuinely unprofitable
+//     at baseline — see Ben's screenshot, -36.9M with no buffs at all —
+//     the buff checkboxes are the difference between a huge loss and
+//     real profit, not optional flavor)
+//   - Ascension bolts: 1 Ascension shard -> 1 Ascension bolts
+//     (runescape.wiki/w/Ascension_bolts)
+//   - Onyx bolts: 1 Rune bolts + 1 Onyx bolt tips -> 1 Onyx bolts
+//     (runescape.wiki/w/Onyx_bolts — tipping, explicitly confirmed to
+//     benefit from the portable's resource-save per Ranger's Workroom's
+//     own "tipping bolts and arrows" line)
+//   - Headless dinarrow: 1 Tempered fungal shaft + 1 Dinosaur 'propellant'
+//     -> 1 Headless dinarrow (runescape.wiki/w/Headless_dinarrow) — per
+//     Ben, this is the one action that does NOT benefit from Portable
+//     fletcher/Brooch, only the Fletching cape perk and Workroom tier 2
+//   - Ful arrow: 1 Dinarrow + 3 Resonant anima of Ful (tradeable) -> 1 Ful
+//     arrow (runescape.wiki/w/Ful_arrow, the tradeable-anima/no-Wisdom-of-
+//     Anima variant — the only one of the 4 listed recipe variants that
+//     uses a real GE-tradeable material on both sides). Not confirmed to
+//     benefit from any of the four buffs, so modeled with none applied.
+const FLETCHING_RECIPES = [
+  {
+    key:'ascendriBolts', label:'Ascension bolts + Hydrix bolt tips → Ascendri bolts',
+    inputs:[{name:'Ascension bolts', qty:1}, {name:'Hydrix bolt tips', qty:1}],
+    output:{name:'Ascendri bolts', qty:1},
+  },
+  {
+    key:'ascensionBolts', label:'Ascension shard → Ascension bolts',
+    inputs:[{name:'Ascension shard', qty:1}],
+    output:{name:'Ascension bolts', qty:1},
+  },
+  {
+    key:'onyxBolts', label:'Rune bolts + Onyx bolt tips → Onyx bolts',
+    inputs:[{name:'Rune bolts', qty:1}, {name:'Onyx bolt tips', qty:1}],
+    output:{name:'Onyx bolts', qty:1},
+  },
+  {
+    key:'headlessDinarrow', label:"Tempered fungal shaft + Dinosaur 'propellant' → Headless dinarrow",
+    inputs:[{name:'Tempered fungal shaft', qty:1}, {name:"Dinosaur 'propellant'", qty:1}],
+    output:{name:'Headless dinarrow', qty:1},
+    buffExclude:['portableFletcher','brooch'],
+  },
+  {
+    key:'fulArrow', label:'Dinarrow + Resonant anima of Ful (tradeable) → Ful arrow',
+    inputs:[{name:'Dinarrow', qty:1}, {name:'Resonant anima of Ful (tradeable)', qty:3}],
+    output:{name:'Ful arrow', qty:1},
+    buffEligible:false,
+  },
+];
+
+function computeFletchingRecipeStats(recipe, items, buffs) {
+  const excluded = new Set(recipe.buffExclude || []);
+  const multiplier = recipe.buffEligible === false ? 1 : Object.entries(FLETCHING_BUFFS)
+    .filter(([k,b]) => !excluded.has(k) && buffs[k] && (!b.requires || (!excluded.has(b.requires) && buffs[b.requires])))
+    .reduce((m,[,b]) => m * (1 + b.pct/100), 1);
+
+  let cost = 0;
+  const missing = [];
+  for (const inp of recipe.inputs) {
+    const p = findItemBuyPrice(items, inp.name);
+    if (p == null) { missing.push(inp.name); continue; }
+    cost += p * inp.qty;
+  }
+  const outPrice = findItemSellPrice(items, recipe.output.name);
+  if (outPrice == null) missing.push(recipe.output.name);
+
+  const outQty = recipe.output.qty * multiplier;
+  const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
+  const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
+  const limits = [...recipe.inputs.map(i=>i.name), recipe.output.name].map(n => findItemLimit(items, n)).filter(l => l != null);
+  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inVolumes = recipe.inputs.map(i => findItemVolume(items, i.name)).filter(v => v != null);
+  const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
+  const outputVolume = findItemVolume(items, recipe.output.name);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume, multiplier };
+}
+
+// Starbloom cloth (Ben, 2026-08-12): 1 Starbloom flower -> 1 Starbloom
+// thread, 2 thread -> 1 cloth. Nobody sells the thread, so modeled
+// straight through as 2 flowers -> 1 cloth per Ben's own simplification —
+// no Crafting buffs applied here (Ben didn't ask for any on this one).
+const CRAFTING_RECIPES = [
+  { key:'starbloomCloth', label:'Starbloom flower → Starbloom cloth',
+    inputs:[{name:'Starbloom flower', qty:2}], output:{name:'Starbloom cloth', qty:1} },
+];
+
+// Urn/dragonhide buffs (Ben, 2026-08-13, went through a few corrections
+// same day — see computeUrnStats for the final sourced version): a "save
+// material" pool shared by clay (urns) and dragon leather (dragonhide
+// armor) — Portable crafter and its Brooch upgrade apply to both material
+// types, Modified artisan's bandana only applies to hide/leather/cloth.
+// Portable crafter isn't tracked as a single number here — per
+// runescape.wiki/w/Portable_crafter it's actually TWO separate 10%/20%
+// rolls (crafting-stage clay save, and a distinct firing-stage "save the
+// unfired item" roll that functions as a bonus fired urn), which is why
+// computeUrnStats reuses this same saveChance for BOTH the material cost
+// AND the urn output bonus rather than needing its own separate buff
+// entry. Fire Urn spell itself isn't modeled as a buff — it's just the
+// practical way of firing at scale (fast, cheap on runes), not a source of
+// any bonus on its own. Crafting cape's "no thread needed" perk
+// deliberately excluded — Ben called it negligible and not worth
+// modeling.
+const CRAFTING_BUFFS = {
+  portableCrafter:   {label:'Portable crafter',           pct:10, kind:'save', appliesTo:['clay','leather']},
+  brooch:            {label:'Brooch of the Gods',         pct:10, kind:'save', appliesTo:['clay','leather'], requires:'portableCrafter'},
+  artisansBandana:   {label:"Modified artisan's bandana", pct:5,  kind:'save', appliesTo:['leather']},
+  artificersMeasure: {label:"Artificer's measure",        pct:5,  kind:'dupe', appliesTo:['urn']},
+};
+const CRAFTING_BUFF_DEFAULTS = {portableCrafter:false, brooch:false, artisansBandana:false, artificersMeasure:false};
+
+function craftingBuffChance(buffs, kind, material) {
+  return Object.entries(CRAFTING_BUFFS)
+    .filter(([k,b]) => b.kind===kind && b.appliesTo.includes(material) && buffs[k] && (!b.requires || buffs[b.requires]))
+    .reduce((s,[,b]) => s + b.pct/100, 0);
+}
+
+// Decorated (2 Soft clay, no gem step) / Exquisite urns — the base clay
+// cost is the same across every skill variant (the skill-specific mould is
+// untradeable/free), so all 9 Decorated "(no rune)" variants are modeled
+// off one clay recipe (Ben, 2026-08-13). Exquisite is a real two-step
+// chain, corrected after Ben flagged it (2026-08-13): 1 Soft porcelain
+// clay crafts the "(no gem)" urn, then a SKILL-SPECIFIC gem (confirmed via
+// runescape.wiki/w/Exquisite_urn's own creation table) upgrades it to the
+// tradeable "(no rune)" urn — modeled as one combined recipe (buy clay +
+// buy that skill's gem, sell the finished "(no rune)" urn) since nobody
+// sells the intermediate "(no gem)" urn separately in practice.
+const URN_SKILLS = ['cooking','divination','farming','fishing','hunter','mining','runecrafting','smithing','woodcutting'];
+const EXQUISITE_URN_GEMS = {
+  cooking:'Red topaz', divination:'Dragonstone', farming:'Emerald', fishing:'Sapphire',
+  hunter:'Opal', mining:'Jade', runecrafting:'Dragonstone', smithing:'Ruby', woodcutting:'Diamond',
+};
+const URN_RECIPES = [
+  ...URN_SKILLS.map(s => ({ key:`decorated_${s}`, clay:'Soft clay', clayQty:2, output:`Decorated ${s} urn (no rune)` })),
+  ...URN_SKILLS.map(s => ({ key:`exquisite_${s}`, clay:'Soft porcelain clay', clayQty:1, gem:EXQUISITE_URN_GEMS[s], output:`Exquisite ${s} urn (no rune)` })),
+];
+
+function computeUrnStats(recipe, items, buffs) {
+  const saveChance = craftingBuffChance(buffs, 'save', 'clay');
+  // RE-CORRECTED (Ben, 2026-08-13): runescape.wiki/w/Portable_crafter
+  // documents TWO separate effects at the SAME 10%/20%-with-Brooch rate —
+  // "10% chance to save 1 hide or clay per item crafted" (the crafting-
+  // stage save, already modeled above as saveChance) AND, distinctly,
+  // "chance to save an unfired clay item when firing it" (a firing-stage
+  // effect — functionally a bonus fired urn with no extra unfired urn
+  // consumed). They're two different rolls at two different steps that
+  // happen to share one number, not the same roll counted twice. The
+  // Money_making_guide calculator's 1900-clay/1900-output example doesn't
+  // reflect this firing bonus, but that's a gap in that specific
+  // calculator, not evidence the effect doesn't exist — the dedicated
+  // Portable_crafter page states it plainly. So saveChance is reused here
+  // for the firing-stage bonus alongside Artificer's Measure's separate
+  // 5% dupe chance.
+  const dupeChance = saveChance + craftingBuffChance(buffs, 'dupe', 'urn');
+  const clayPrice = findItemBuyPrice(items, recipe.clay);
+  const gemPrice = recipe.gem ? findItemBuyPrice(items, recipe.gem) : 0;
+  const outPrice = findItemSellPrice(items, recipe.output);
+  const missing = [];
+  if (clayPrice == null) missing.push(recipe.clay);
+  if (recipe.gem && gemPrice == null) missing.push(recipe.gem);
+  if (outPrice == null) missing.push(recipe.output);
+  const effectiveClayQty = recipe.clayQty * (1 - saveChance);
+  const cost = (clayPrice != null && (!recipe.gem || gemPrice != null)) ? clayPrice * effectiveClayQty + (gemPrice || 0) : null;
+  const outQty = 1 + dupeChance;
+  const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
+  const margin = (cost != null && revenue != null) ? revenue - cost : null;
+  const bindingLimit = findItemLimit(items, recipe.output);
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inVolumes = [recipe.clay, recipe.gem].filter(Boolean).map(n => findItemVolume(items, n)).filter(v => v != null);
+  const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
+  const outputVolume = findItemVolume(items, recipe.output);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume };
+}
+
+// Black/Royal dragonhide armor (Ben, 2026-08-13): only the pieces anyone
+// actually crafts for profit — bodies (3 leather) and Black dragonhide
+// shield (4 leather). All three are worth less than their own high alch
+// value, so the alch comparison block matters here the same way it does
+// for enchanted bolts.
+const DRAGONHIDE_RECIPES = [
+  { key:'royalBody', leather:'Royal dragon leather', leatherQty:3, output:'Royal dragonhide body' },
+  { key:'blackBody', leather:'Black dragon leather', leatherQty:3, output:'Black dragonhide body' },
+  { key:'blackShield', leather:'Black dragon leather', leatherQty:4, output:'Black dragonhide shield' },
+];
+
+function computeDragonhideStats(recipe, items, buffs) {
+  const saveChance = craftingBuffChance(buffs, 'save', 'leather');
+  const leatherPrice = findItemBuyPrice(items, recipe.leather);
+  const outPrice = findItemSellPrice(items, recipe.output);
+  const missing = [];
+  if (leatherPrice == null) missing.push(recipe.leather);
+  if (outPrice == null) missing.push(recipe.output);
+  const effectiveQty = recipe.leatherQty * (1 - saveChance);
+  const cost = leatherPrice != null ? leatherPrice * effectiveQty : null;
+  const revenue = outPrice != null ? applyTax(outPrice) : null;
+  const margin = (cost != null && revenue != null) ? revenue - cost : null;
+  const bindingLimit = findItemLimit(items, recipe.output);
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inputVolume = findItemVolume(items, recipe.leather);
+  const outputVolume = findItemVolume(items, recipe.output);
+  const outItem = items.find(it => it.name.toLowerCase() === recipe.output.toLowerCase());
+  const alch = outItem ? (outItem.alch || 0) : 0;
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume, alch };
+}
+
+// Ore -> Bar smelting (Ben, 2026-08-12), sourced from
+// runescape.wiki/w/Calculator:Smithing/Ores' own Materials columns.
+// Varrock armour gives a chance of an extra bar per smelt, tier-scoped to
+// specific bar ranges (runescape.wiki/w/Varrock_armour's Benefits table):
+//   armour 1: 4% — bronze/iron/steel
+//   armour 2: 3% — mithril/adamant
+//   armour 3: 2% — rune/orikalkum/necronium
+//   armour 4: 1% — bane/elder rune
+// Modeled as a single "I have Varrock armour" toggle rather than 4
+// separate checkboxes — getting armour 4 requires already having 1-3, and
+// each tier only ever applies to its own bar range regardless of which
+// higher tiers are also unlocked, so one toggle applying the correct
+// tier's % per recipe is equivalent and less UI clutter.
+// Double-bar chance (Ben, 2026-08-13, CORRECTED same day): originally
+// modeled as Primal-bar-only, but it's actually a baseline Smithing
+// mechanic on EVERY bar once you're past the level requirement — a flat
+// 10% chance per smelt to produce an extra full set of bars at no extra
+// ore cost, stacking multiplicatively with Varrock armour's separate
+// per-tier bonus-chance. Primal bar (runescape.wiki/w/Primal_bar) is still
+// a genuinely different recipe shape — 10 distinct ores (1 each) smelt
+// into 5 bars at once instead of 1-in-1-out — so its 10% still comes out
+// to a full extra set of 5, just via the same shared doubleBarPct field
+// every other bar now also carries.
+const SMITHING_BAR_RECIPES = [
+  { name:'Bronze bar', inputs:[{name:'Copper ore',qty:1},{name:'Tin ore',qty:1}], varrockPct:4, doubleBarPct:10 },
+  { name:'Iron bar',   inputs:[{name:'Iron ore',qty:2}], varrockPct:4, doubleBarPct:10 },
+  { name:'Steel bar',  inputs:[{name:'Iron ore',qty:1},{name:'Coal',qty:1}], varrockPct:4, doubleBarPct:10 },
+  { name:'Mithril bar',inputs:[{name:'Mithril ore',qty:1},{name:'Coal',qty:1}], varrockPct:3, doubleBarPct:10 },
+  { name:'Adamant bar',inputs:[{name:'Adamantite ore',qty:1},{name:'Luminite',qty:1}], varrockPct:3, doubleBarPct:10 },
+  { name:'Rune bar',   inputs:[{name:'Runite ore',qty:1},{name:'Luminite',qty:1}], varrockPct:2, doubleBarPct:10 },
+  { name:'Orikalkum bar', inputs:[{name:'Orichalcite ore',qty:1},{name:'Drakolith',qty:1}], varrockPct:2, doubleBarPct:10 },
+  { name:'Necronium bar', inputs:[{name:'Necrite ore',qty:1},{name:'Phasmatite',qty:1}], varrockPct:2, doubleBarPct:10 },
+  { name:'Bane bar',   inputs:[{name:'Banite ore',qty:2}], varrockPct:1, doubleBarPct:10 },
+  { name:'Elder rune bar', inputs:[{name:'Rune bar',qty:1},{name:'Light animica',qty:1},{name:'Dark animica',qty:1}], varrockPct:1, doubleBarPct:10 },
+  { name:'Primal bar', inputs:[
+      {name:'Novite ore',qty:1},{name:'Bathus ore',qty:1},{name:'Marmaros ore',qty:1},{name:'Kratonium ore',qty:1},
+      {name:'Fractite ore',qty:1},{name:'Zephyrium ore',qty:1},{name:'Argonite ore',qty:1},{name:'Katagon ore',qty:1},
+      {name:'Gorgonite ore',qty:1},{name:'Promethium ore',qty:1},
+    ], outputQty:5, doubleBarPct:10 },
+];
+
+function computeSmithingBarStats(recipe, items, varrockOn) {
+  const varrockMultiplier = (varrockOn && recipe.varrockPct) ? 1 + recipe.varrockPct/100 : 1;
+  const doubleMultiplier = recipe.doubleBarPct ? 1 + recipe.doubleBarPct/100 : 1;
+  const multiplier = varrockMultiplier * doubleMultiplier;
+  const baseQty = recipe.outputQty || 1;
+  let cost = 0;
+  const missing = [];
+  for (const inp of recipe.inputs) {
+    const p = findItemBuyPrice(items, inp.name);
+    if (p == null) { missing.push(inp.name); continue; }
+    cost += p * inp.qty;
+  }
+  const outPrice = findItemSellPrice(items, recipe.name);
+  if (outPrice == null) missing.push(recipe.name);
+  const outQty = baseQty * multiplier;
+  const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
+  const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
+  const limits = [...recipe.inputs.map(i=>i.name), recipe.name].map(n => findItemLimit(items, n)).filter(l => l != null);
+  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inVolumes = recipe.inputs.map(i => findItemVolume(items, i.name)).filter(v => v != null);
+  const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
+  const outputVolume = findItemVolume(items, recipe.name);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice, profitPerLimit, inputVolume, outputVolume, outQty };
+}
+
+// Summoning pouch -> scroll (Ben, 2026-08-12), sourced directly from
+// runescape.wiki/w/Calculator:Summoning/Scrolls — 82 of the page's 89
+// rows (Nihils and the deacon/executioner/brawler demon pouches excluded
+// per Ben's ask). Each pouch makes 10 scrolls normally, 12 during Voice
+// of Seren (the "VoS Profit/Loss" column) — Ben specifically wants the
+// VoS figures modeled, not the baseline 10.
+const SUMMONING_SCROLL_RECIPES = [
+  {pouch:"Spirit wolf pouch",scroll:"Spirit Wolf scroll (Howl)"},{pouch:"Dreadfowl pouch",scroll:"Dreadfowl scroll (Dreadfowl Strike)"},{pouch:"Spirit spider pouch",scroll:"Spirit Spider scroll (Egg Spawn)"},{pouch:"Thorny snail pouch",scroll:"Thorny Snail scroll (Slime Spray)"},{pouch:"Granite crab pouch",scroll:"Granite Crab scroll (Stony Shell)"},{pouch:"Spirit mosquito pouch",scroll:"Spirit Mosquito scroll (Pester)"},{pouch:"Desert wyrm pouch",scroll:"Desert Wyrm scroll (Electric Lash)"},{pouch:"Spirit scorpion pouch",scroll:"Spirit Scorpion scroll (Venom Shot)"},{pouch:"Spirit tz-kih pouch",scroll:"Spirit Tz-Kih scroll (Fireball Assault)"},{pouch:"Albino rat pouch",scroll:"Albino Rat scroll (Cheese Feast)"},{pouch:"Spirit kalphite pouch",scroll:"Spirit Kalphite scroll (Sandstorm)"},{pouch:"Compost mound pouch",scroll:"Compost Mound scroll (Generate Compost)"},{pouch:"Giant chinchompa pouch",scroll:"Giant Chinchompa scroll (Explode)"},{pouch:"Vampyre bat pouch",scroll:"Vampyre Bat scroll (Vampyre Touch)"},{pouch:"Honey badger pouch",scroll:"Honey Badger scroll (Insane Ferocity)"},{pouch:"Beaver pouch",scroll:"Beaver scroll (Multichop)"},{pouch:"Void ravager pouch",scroll:"Void scroll (Call to Arms)"},{pouch:"Void shifter pouch",scroll:"Void scroll (Call to Arms)"},{pouch:"Void spinner pouch",scroll:"Void scroll (Call to Arms)"},{pouch:"Void torcher pouch",scroll:"Void scroll (Call to Arms)"},{pouch:"Bronze minotaur pouch",scroll:"Bronze Minotaur scroll (Bronze Bull Rush)"},{pouch:"Bull ant pouch",scroll:"Bull Ant scroll (Unburden)"},{pouch:"Macaw pouch",scroll:"Macaw scroll (Herbcall)"},{pouch:"Evil turnip pouch",scroll:"Evil Turnip scroll (Evil Flames)"},{pouch:"Spirit cockatrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Spirit guthatrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Spirit saratrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Spirit zamatrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Spirit pengatrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Spirit coraxatrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Spirit vulatrice pouch",scroll:"Spirit Cockatrice scroll (Petrifying Gaze)"},{pouch:"Iron minotaur pouch",scroll:"Iron Minotaur scroll (Iron Bull Rush)"},{pouch:"Pyrelord pouch",scroll:"Pyrelord scroll (Immense Heat)"},{pouch:"Magpie pouch",scroll:"Magpie scroll (Thieving Fingers)"},{pouch:"Bloated leech pouch",scroll:"Bloated Leech scroll (Blood Drain)"},{pouch:"Spirit terrorbird pouch",scroll:"Spirit Terrorbird scroll (Tireless Run)"},{pouch:"Abyssal parasite pouch",scroll:"Abyssal Parasite scroll (Abyssal Drain)"},{pouch:"Spirit jelly pouch",scroll:"Spirit Jelly scroll (Dissolve)"},{pouch:"Steel minotaur pouch",scroll:"Steel Minotaur scroll (Steel Bull Rush)"},{pouch:"Ibis pouch",scroll:"Ibis scroll (Fish Rain)"},{pouch:"Spirit kyatt pouch",scroll:"Spirit Kyatt scroll (Ambush)"},{pouch:"Spirit larupia pouch",scroll:"Spirit Larupia scroll (Rending)"},{pouch:"Spirit graahk pouch",scroll:"Spirit Graahk scroll (Goad)"},{pouch:"Karam. overlord pouch",scroll:"Karamthulu Overlord scroll (Doomsphere)"},{pouch:"Smoke devil pouch",scroll:"Smoke Devil scroll (Dust Cloud)"},{pouch:"Abyssal lurker pouch",scroll:"Abyssal Lurker scroll (Abyssal Stealth)"},{pouch:"Spirit cobra pouch",scroll:"Spirit Cobra scroll (Ophidian Incubation)"},{pouch:"Stranger plant pouch",scroll:"Stranger Plant scroll (Poisonous Blast)"},{pouch:"Mithril minotaur pouch",scroll:"Mithril Minotaur scroll (Mithril Bull Rush)"},{pouch:"Barker toad pouch",scroll:"Barker Toad scroll (Toad Bark)"},{pouch:"War tortoise pouch",scroll:"War Tortoise scroll (Testudo)"},{pouch:"Bunyip pouch",scroll:"Bunyip scroll (Swallow Whole)"},{pouch:"Fruit bat pouch",scroll:"Fruit Bat scroll (Fruitfall)"},{pouch:"Ravenous locust pouch",scroll:"Ravenous Locust scroll (Famine)"},{pouch:"Arctic bear pouch",scroll:"Arctic Bear scroll (Arctic Blast)"},{pouch:"Phoenix pouch",scroll:"Phoenix scroll (Rise From the Ashes)"},{pouch:"Obsidian golem pouch",scroll:"Obsidian Golem scroll (Volcanic Strength)"},{pouch:"Granite lobster pouch",scroll:"Granite Lobster scroll (Crushing Claw)"},{pouch:"Praying mantis pouch",scroll:"Praying Mantis scroll (Mantis Strike)"},{pouch:"Forge regent pouch",scroll:"Forge Regent scroll (Inferno)"},{pouch:"Adamant minotaur pouch",scroll:"Adamant Minotaur scroll (Adamant Bull Rush)"},{pouch:"Talon beast pouch",scroll:"Talon Beast scroll (Deadly Claw)"},{pouch:"Giant ent pouch",scroll:"Giant Ent scroll (Acorn Missile)"},{pouch:"Fire titan pouch",scroll:"Elemental Titan scroll (Titan's Constitution)"},{pouch:"Ice titan pouch",scroll:"Elemental Titan scroll (Titan's Constitution)"},{pouch:"Moss titan pouch",scroll:"Elemental Titan scroll (Titan's Constitution)"},{pouch:"Hydra pouch",scroll:"Hydra scroll (Regrowth)"},{pouch:"Nightmare muspah pouch",scroll:"Muspah scroll (Siphon Self)"},{pouch:"Spirit dagannoth pouch",scroll:"Spirit Dagannoth scroll (Spike Shot)"},{pouch:"Lava titan pouch",scroll:"Lava Titan scroll (Ebon Thunder)"},{pouch:"Reborn phoenix pouch",scroll:"Phoenix scroll (Rise From the Ashes)"},{pouch:"Swamp titan pouch",scroll:"Swamp Titan scroll (Swamp Plague)"},{pouch:"Rune minotaur pouch",scroll:"Rune Minotaur scroll (Rune Bull Rush)"},{pouch:"Unicorn stallion pouch",scroll:"Unicorn Stallion scroll (Healing Aura)"},{pouch:"Light creature pouch",scroll:"Light Creature scroll (Enlightenment)"},{pouch:"Geyser titan pouch",scroll:"Geyser Titan scroll (Boil)"},{pouch:"Wolpertinger pouch",scroll:"Wolpertinger scroll (Magic Focus)"},{pouch:"Abyssal titan pouch",scroll:"Abyssal Titan scroll (Essence Shipment)"},{pouch:"Iron titan pouch",scroll:"Iron Titan scroll (Iron Within)"},{pouch:"Pack yak pouch",scroll:"Pack Yak scroll (Winter Storage)"},{pouch:"Steel titan pouch",scroll:"Steel Titan scroll (Steel of Legends)"},{pouch:"Pack mammoth pouch",scroll:"Pack Mammoth scroll (Mammoth Feast)"},
+];
+const SUMMONING_SCROLLS_PER_POUCH = 12; // Voice of Seren figure, not the baseline 10
+
+// Ancient Summoning (Ben, 2026-08-12, CORRECTED 2026-08-13) —
+// runescape.wiki/w/Ancient_Summoning. "Binding contract (creature)" IS the
+// pouch here — it's bought and used directly like any other Summoning
+// pouch, not some intermediate item you use to go bind a live monster by
+// killing it (that description was wrong). Converting one contract makes
+// 20 scrolls normally, 24 during Voice of Seren (patch note: "All Ancient
+// Familiar pouches will now convert into 20 scrolls each, up from 10") —
+// same VoS-only convention as the regular scrolls.
+const ANCIENT_SUMMONING_RECIPES = [
+  {pouch:"Binding contract (hellhound)", scroll:"Hellhound scroll (Soul Food)"},
+  {pouch:"Binding contract (waterfiend)", scroll:"Waterfiend scroll (Straight Flush)"},
+  {pouch:"Binding contract (blood reaver)", scroll:"Blood Reaver scroll (Blood Siphon)"},
+  {pouch:"Binding contract (gargoyle)", scroll:"Gargoyle scroll (Hammer Rock)"},
+  {pouch:"Binding contract (abyssal demon)", scroll:"Abyssal Demon scroll (Abyssal Block)"},
+  {pouch:"Binding contract (kal'gerion demon)", scroll:"Kal'gerion Demon scroll (Crit-i-Kal)"},
+  {pouch:"Binding contract (ripper demon)", scroll:"Ripper Demon scroll (Death From Above)"},
+];
+const ANCIENT_SUMMONING_SCROLLS_PER_CONTRACT = 24; // Voice of Seren figure, not the baseline 20
+
+function computeSummoningScrollStats(recipe, items, scrollsPerPouch = SUMMONING_SCROLLS_PER_POUCH) {
+  const missing = [];
+  const pouchPrice = findItemBuyPrice(items, recipe.pouch);
+  if (pouchPrice == null) missing.push(recipe.pouch);
+  const scrollPrice = findItemSellPrice(items, recipe.scroll);
+  if (scrollPrice == null) missing.push(recipe.scroll);
+  const cost = pouchPrice;
+  const revenue = scrollPrice != null ? applyTax(scrollPrice) * scrollsPerPouch : null;
+  const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
+  const limits = [recipe.pouch, recipe.scroll].map(n => findItemLimit(items, n)).filter(l => l != null);
+  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
+  const inputVolume = findItemVolume(items, recipe.pouch);
+  const outputVolume = findItemVolume(items, recipe.scroll);
+  return { cost, revenue, margin, missing, bindingLimit, outPrice:scrollPrice, profitPerLimit, inputVolume, outputVolume };
+}
+
+function FletchingBuffCheckboxes({buffs, setBuffs}) {
+  const toggle = key => setBuffs(b => {
+    const next = {...b, [key]: !b[key]};
+    if (key === 'portableFletcher' && !next.portableFletcher) next.brooch = false;
+    return next;
+  });
+  return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
+    Object.entries(FLETCHING_BUFFS).map(([key, b]) => h('label', {
+      key, style:{display:'flex', alignItems:'center', gap:5, cursor: (b.requires && !buffs[b.requires]) ? 'not-allowed' : 'pointer', opacity: (b.requires && !buffs[b.requires]) ? 0.4 : 1},
+      title: `${b.pct}% chance to save material / produce extra output${b.requires ? ' (needs '+FLETCHING_BUFFS[b.requires].label+')' : ''}`,
+    },
+      h('input', {type:'checkbox', checked:!!buffs[key], disabled: b.requires && !buffs[b.requires], onChange:()=>toggle(key)}),
+      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pct}%)`)),
+    ))
+  );
+}
+
+function CraftingBuffCheckboxes({buffs, setBuffs}) {
+  const toggle = key => setBuffs(b => {
+    const next = {...b, [key]: !b[key]};
+    if (key === 'portableCrafter' && !next.portableCrafter) next.brooch = false;
+    return next;
+  });
+  return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
+    Object.entries(CRAFTING_BUFFS).map(([key, b]) => h('label', {
+      key, style:{display:'flex', alignItems:'center', gap:5, cursor: (b.requires && !buffs[b.requires]) ? 'not-allowed' : 'pointer', opacity: (b.requires && !buffs[b.requires]) ? 0.4 : 1},
+      title: `${b.pct}% chance ${b.kind==='dupe' ? 'to produce an extra urn' : 'to save a material'}${b.requires ? ' (needs '+CRAFTING_BUFFS[b.requires].label+')' : ''}`,
+    },
+      h('input', {type:'checkbox', checked:!!buffs[key], disabled: b.requires && !buffs[b.requires], onChange:()=>toggle(key)}),
+      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pct}%)`)),
+    ))
+  );
+}
+
+function MoneyMakersTab({items, onSelect, description}) {
   const [skill, setSkill] = useState('herblore');
   const [herbSub, setHerbSub] = useState('herbs');
+  const [magicSub, setMagicSub] = useState('grinding');
+  const [fletchingBuffs, setFletchingBuffs] = useState(FLETCHING_BUFF_DEFAULTS);
+  const [varrockArmour, setVarrockArmour] = useState(false);
+  const [summoningSub, setSummoningSub] = useState('pouches');
   const [buffs, setBuffs] = useState(HERBLORE_BUFF_DEFAULTS);
+  const [craftingSub, setCraftingSub] = useState('cloth');
+  const [craftingBuffs, setCraftingBuffs] = useState(CRAFTING_BUFF_DEFAULTS);
 
   const herbRows = useMemo(() => {
     return items
@@ -11694,7 +12421,109 @@ function MoneyMakersTab({items, onSelect}) {
         rows.push({ label: `${c.input} → ${c.output} (Machine, ${fmt.gp(chargeCost)}gp charge)`, itemName: c.output, stats: adjusted });
       }
     }
+    // Refined-plank -> Wooden frame chain, Fort Forinthry sawmill (Ben,
+    // 2026-08-11): 4 Plank -> 1 Refined planks -> (3 Refined planks) 1
+    // Wooden frame, i.e. 12 Plank per frame overall. Modeled as a single
+    // combined conversion since "most people do not sell the refined
+    // versions" — buy 12 Plank, sell 1 Wooden frame, skipping the
+    // intermediate entirely (matches how it's actually played).
+    const frameStats = computeConversionStats([{name:'Plank', qty:12}], {name:'Wooden frame', qty:1}, items);
+    if (frameStats.missing.length === 0) rows.push({ label: '12 × Plank → Wooden frame (Fort Forinthry sawmill)', itemName:'Wooden frame', stats: frameStats });
     return rows;
+  }, [items]);
+
+  const magicSpellRows = (recipes, runes, inQtyKey, outQtyKey) => recipes.map(r => {
+    const inQty = r[inQtyKey] ?? 1;
+    const outQty = r[outQtyKey] ?? 1;
+    const inputs = [{name:r.input, qty:inQty}, ...runes];
+    const stats = computeConversionStats(inputs, {name:r.name, qty:outQty}, items);
+    return { label: `${inQty} × ${r.input} → ${outQty} × ${r.name}`, itemName: r.name, stats };
+  }).filter(r => r.stats.missing.length === 0);
+
+  const grindingRows = useMemo(() => magicSpellRows(TELEKINETIC_GRIND_RECIPES, TELEKINETIC_GRIND_RUNES, 'inQty', 'outQty'), [items]);
+  const tanningRows = useMemo(() => magicSpellRows(MAKE_LEATHER_RECIPES.map(r=>({...r, inQty:28, outQty:28})), MAKE_LEATHER_RUNES, 'inQty', 'outQty'), [items]);
+  const boltRows = useMemo(() => magicSpellRows(ENCHANT_BOLT_RECIPES.map(r=>({...r, inQty:ENCHANT_BOLT_QTY, outQty:ENCHANT_BOLT_QTY})), ENCHANT_BOLT_RUNES, 'inQty', 'outQty'), [items]);
+
+  // Ben (2026-08-12): he doesn't actually sell these — every Onyx/Ascendri
+  // bolt he enchants goes straight into an Alchemiser (Invention device,
+  // Divine charge cost / 500 per item, same math the Alch tab already
+  // uses). Real revenue for him is high alch value, not GE sell price, so
+  // this sits alongside the normal sell-based row rather than replacing
+  // it — other players who DO sell the enchanted bolts still want that
+  // number too.
+  const boltAlchRows = useMemo(() => {
+    const natureRunePrice = (items.find(it => it.natureRunePrice) || {}).natureRunePrice || 0;
+    const divineChargeItem = items.find(it => it.name && it.name.toLowerCase() === 'divine charge');
+    const divineChargePrice = divineChargeItem ? (divineChargeItem.high || divineChargeItem.low || 0) : 0;
+    const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
+    return ENCHANT_BOLT_RECIPES.map(r => {
+      const inputCost = findItemBuyPrice(items, r.input);
+      const outItem = items.find(it => it.name.toLowerCase() === r.name.toLowerCase());
+      const alch = outItem ? (outItem.alch || 0) : 0;
+      const runeCost = ENCHANT_BOLT_RUNES.reduce((s,ru) => s + (findItemBuyPrice(items, ru.name) || 0) * ru.qty, 0);
+      if (inputCost == null || !alch) return null;
+      // Per-bolt: buy 1 unenchanted bolt (+ this bolt's share of the
+      // per-10-cast rune cost) -> enchant -> Alchemiser converts to coins
+      // at high alch value, minus its own nature rune + charge cost.
+      const costPerBolt = inputCost + runeCost/ENCHANT_BOLT_QTY;
+      const alchemiserProfit = alch - costPerBolt - natureRunePrice - chargePerItem;
+      return { name: r.name, costPerBolt, alch, alchemiserProfit };
+    }).filter(Boolean);
+  }, [items]);
+  const humidifyRows = useMemo(() => magicSpellRows([{name:'Soft porcelain clay', input:'Porcelain clay', inQty:1, outQty:1}], HUMIDIFY_RUNES, 'inQty', 'outQty'), [items]);
+
+  const fletchingRows = useMemo(() => {
+    return FLETCHING_RECIPES.map(r => {
+      const stats = computeFletchingRecipeStats(r, items, fletchingBuffs);
+      const outLabel = stats.multiplier !== 1 ? `${(r.output.qty*stats.multiplier).toFixed(4)}× ${r.output.name}` : `${r.output.qty} × ${r.output.name}`;
+      return { label: `${r.inputs.map(i=>`${i.qty} × ${i.name}`).join(' + ')} → ${outLabel}`, itemName:r.output.name, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items, fletchingBuffs]);
+
+  const craftingRows = useMemo(() => {
+    return CRAFTING_RECIPES.map(r => {
+      const stats = computeConversionStats(r.inputs, r.output, items);
+      return { label: `${r.inputs.map(i=>`${i.qty} × ${i.name}`).join(' + ')} → ${r.output.qty} × ${r.output.name}`, itemName:r.output.name, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items]);
+
+  const urnRows = useMemo(() => {
+    return URN_RECIPES.map(r => {
+      const stats = computeUrnStats(r, items, craftingBuffs);
+      const label = r.gem
+        ? `${r.clayQty} × ${r.clay} + 1 × ${r.gem} → ${r.output}`
+        : `${r.clayQty} × ${r.clay} → ${r.output}`;
+      return { label, itemName:r.output, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items, craftingBuffs]);
+
+  const dragonhideRows = useMemo(() => {
+    return DRAGONHIDE_RECIPES.map(r => {
+      const stats = computeDragonhideStats(r, items, craftingBuffs);
+      return { label: `${r.leatherQty} × ${r.leather} → ${r.output}`, itemName:r.output, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items, craftingBuffs]);
+
+  const smithingRows = useMemo(() => {
+    return SMITHING_BAR_RECIPES.map(r => {
+      const stats = computeSmithingBarStats(r, items, varrockArmour);
+      const outLabel = stats.outQty !== 1 ? `${stats.outQty.toFixed(4).replace(/\.?0+$/,'')}× ${r.name}` : `1 × ${r.name}`;
+      return { label: `${r.inputs.map(i=>`${i.qty} × ${i.name}`).join(' + ')} → ${outLabel}`, itemName:r.name, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items, varrockArmour]);
+
+  const summoningRows = useMemo(() => {
+    return SUMMONING_SCROLL_RECIPES.map(r => {
+      const stats = computeSummoningScrollStats(r, items);
+      return { label: `1 × ${r.pouch} → ${SUMMONING_SCROLLS_PER_POUCH} × ${r.scroll} (VoS)`, itemName:r.scroll, stats };
+    }).filter(r => r.stats.missing.length === 0);
+  }, [items]);
+
+  const ancientSummoningRows = useMemo(() => {
+    return ANCIENT_SUMMONING_RECIPES.map(r => {
+      const stats = computeSummoningScrollStats(r, items, ANCIENT_SUMMONING_SCROLLS_PER_CONTRACT);
+      return { label: `1 × ${r.pouch} → ${ANCIENT_SUMMONING_SCROLLS_PER_CONTRACT} × ${r.scroll} (VoS)`, itemName:r.scroll, stats };
+    }).filter(r => r.stats.missing.length === 0);
   }, [items]);
 
   const onSelectItem = (itemName) => {
@@ -11704,8 +12533,8 @@ function MoneyMakersTab({items, onSelect}) {
   };
 
   return h('div', {style:{padding:'4px 0'}},
-    h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}},
-      'Known item-conversion moneymakers — buy raw, process for free/cheap, resell. Repeatable, but limited by GE buy limits. Dev-mode only for now.'
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}},
+      description
     ),
     h('div', {style:{padding:'14px'}},
       h('div', {style:{display:'flex', gap:4, marginBottom:14, flexWrap:'wrap'}},
@@ -11746,13 +12575,99 @@ function MoneyMakersTab({items, onSelect}) {
 
       skill === 'construction' && h(MoneyMakerTable, {rows:constructionRows, onSelect:onSelectItem}),
 
-      ['smithing','crafting','fletching'].includes(skill) && h('div', {className:'empty'},
-        h('div', {className:'icon'}, '◎'),
-        h('p', null, `${MONEY_MAKER_SKILLS.find(s=>s.key===skill).label} recipes coming soon — need confirmed conversion ratios and secondary-ingredient costs before this can show real numbers.`)
+      skill === 'magic' && h('div', null,
+        h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+          [{key:'grinding',label:'Grinding'},{key:'tanning',label:'Tanning'},{key:'bolts',label:'Bolt Enchanting'},{key:'humidify',label:'Humidify'}].map(sub => h('button', {
+            key:sub.key, onClick:()=>setMagicSub(sub.key),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: magicSub===sub.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${magicSub===sub.key ? T.gold : T.border}`,
+              color: magicSub===sub.key ? T.goldBright : T.textDim,
+            }
+          }, sub.label))
+        ),
+        magicSub === 'grinding' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+          'Telekinetic Grind — 2 Astral + 1 Law rune per cast (elemental staff covers the rest). Grinds up to 60 of a stackable item per cast.'
+        ),
+        magicSub === 'grinding' && h(MoneyMakerTable, {rows:grindingRows, onSelect:onSelectItem}),
+        magicSub === 'tanning' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+          'Make Leather — 2 Astral + 2 Body rune per cast (elemental staff covers the rest). Tans up to 28 hides per cast.'
+        ),
+        magicSub === 'tanning' && h(MoneyMakerTable, {rows:tanningRows, onSelect:onSelectItem}),
+        magicSub === 'bolts' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+          'Enchant Crossbow Bolt — only Onyx and Ascendri are worth casting, every other tier runs at a loss. 1 Cosmic + 1 Death rune per cast (elemental staff covers the rest). Enchants 10 bolts per cast.'
+        ),
+        magicSub === 'bolts' && h(MoneyMakerTable, {rows:boltRows, onSelect:onSelectItem}),
+        magicSub === 'bolts' && boltAlchRows.length > 0 && h('div', {style:{marginTop:14, padding:'10px 12px', background:T.panel, border:`1px solid ${T.border}`, borderRadius:4}},
+          h('div', {style:{fontSize:11, color:T.gold, fontWeight:'bold', marginBottom:8}}, 'If alching instead of selling (Alchemiser)'),
+          boltAlchRows.map(r => h('div', {key:r.name, style:{display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0', borderBottom:`1px solid ${T.borderDim}`}},
+            h('span', {style:{color:T.textDim}}, `${r.name} — cost ${fmt.gp(r.costPerBolt)}gp, alch ${fmt.gp(r.alch)}gp`),
+            h('span', {style:{color: r.alchemiserProfit>=0 ? T.gold : T.red, fontWeight:'bold'}}, (r.alchemiserProfit>=0?'+':'')+fmt.gp(r.alchemiserProfit)+'gp/bolt'),
+          ))
+        ),
+        magicSub === 'humidify' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+          'Humidify — only worth casting on Porcelain clay → Soft porcelain clay. 1 Astral rune per cast (elemental staff covers the rest).'
+        ),
+        magicSub === 'humidify' && h(MoneyMakerTable, {rows:humidifyRows, onSelect:onSelectItem}),
+      ),
+
+      skill === 'fletching' && h('div', null,
+        h(FletchingBuffCheckboxes, {buffs:fletchingBuffs, setBuffs:setFletchingBuffs}),
+        h(MoneyMakerTable, {rows:fletchingRows, onSelect:onSelectItem}),
+      ),
+
+      skill === 'crafting' && h('div', null,
+        h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+          [{key:'cloth',label:'Cloth'},{key:'urns',label:'Urns'},{key:'dragonhide',label:'Dragonhide'}].map(sub => h('button', {
+            key:sub.key, onClick:()=>setCraftingSub(sub.key),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: craftingSub===sub.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${craftingSub===sub.key ? T.gold : T.border}`,
+              color: craftingSub===sub.key ? T.goldBright : T.textDim,
+            }
+          }, sub.label))
+        ),
+        craftingSub === 'cloth' && h(MoneyMakerTable, {rows:craftingRows, onSelect:onSelectItem}),
+        (craftingSub === 'urns' || craftingSub === 'dragonhide') && h(CraftingBuffCheckboxes, {buffs:craftingBuffs, setBuffs:setCraftingBuffs}),
+        craftingSub === 'urns' && h(MoneyMakerTable, {rows:urnRows, onSelect:onSelectItem}),
+        craftingSub === 'dragonhide' && h(MoneyMakerTable, {rows:dragonhideRows, onSelect:onSelectItem}),
+        craftingSub === 'dragonhide' && dragonhideRows.length > 0 && h('div', {style:{marginTop:14, padding:'10px 12px', background:T.panel, border:`1px solid ${T.border}`, borderRadius:4}},
+          h('div', {style:{fontSize:11, color:T.gold, fontWeight:'bold', marginBottom:8}}, 'High alch value (these usually sell below what alching is worth)'),
+          dragonhideRows.map(r => h('div', {key:r.itemName, style:{display:'flex', justifyContent:'space-between', fontSize:12, padding:'3px 0', borderBottom:`1px solid ${T.borderDim}`}},
+            h('span', {style:{color:T.textDim}}, `${r.itemName} — sell ${fmt.gp(r.stats.outPrice)}gp`),
+            h('span', {style:{color: r.stats.alch > (r.stats.outPrice||0) ? T.gold : T.textDim, fontWeight:'bold'}}, `alch ${fmt.gp(r.stats.alch)}gp`),
+          ))
+        ),
+      ),
+
+      skill === 'smithing' && h('div', null,
+        h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:12}},
+          h('input', {type:'checkbox', checked:varrockArmour, onChange:()=>setVarrockArmour(v=>!v)}),
+          h('span', {style:{color:T.textDim}}, 'Varrock armour', h('span',{style:{color:T.gold}},' (4%/3%/2%/1% chance of an extra bar, tier-scoped to bronze-steel/mithril-adamant/rune-necronium/bane-elder rune respectively)')),
+        ),
+        h(MoneyMakerTable, {rows:smithingRows, onSelect:onSelectItem}),
+      ),
+
+      skill === 'summoning' && h('div', null,
+        h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+          [{key:'pouches',label:'Pouches'},{key:'ancient',label:'Ancient Summoning'}].map(sub => h('button', {
+            key:sub.key, onClick:()=>setSummoningSub(sub.key),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: summoningSub===sub.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${summoningSub===sub.key ? T.gold : T.border}`,
+              color: summoningSub===sub.key ? T.goldBright : T.textDim,
+            }
+          }, sub.label))
+        ),
+        summoningSub === 'pouches' && h(MoneyMakerTable, {rows:summoningRows, onSelect:onSelectItem}),
+        summoningSub === 'ancient' && h(MoneyMakerTable, {rows:ancientSummoningRows, onSelect:onSelectItem}),
       ),
 
       h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
-        '⚠ Margins assume you already have the processing method available (Herblore combining, a Divination staff/sceptre, etc.) — no time/click cost factored in beyond GE tax. Buy limits reset per 4 hours.'
+        '⚠ Margins assume you already have the processing method available (portables, other buffs, elemental battlestaff, etc.) — no time/click cost factored in beyond GE tax. Buy limits reset per 4 hours.'
       ),
     )
   );
@@ -11766,6 +12681,7 @@ const TAB_DESCRIPTIONS = {
   market:         'Everything the Grand Exchange has to offer. Yes, all of it.',
   opportunities:  'Items showing unusual price or volume activity. May or may not be a trap.',
   flips:          'Let GEnius take the BS out of Buy & Sell.',
+  top_movers:     ['Look at all ', h('s', {key:'s'}, 'those chickens'), ' that movement.'],
   money_makers:   'Some assembly required.',
   portfolio:      'Track positions, profits, losses, and questionable financial decisions.',
   alch:           'Items where nature runes are paying their own rent.',
@@ -11810,6 +12726,7 @@ const NAV = [
   {id:'market',         label:'Market',           icon:'◐'},
   {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
   {id:'flips',          label:'Flips',            icon:'💱'},
+  {id:'top_movers',     label:'Top Movers',       icon:'🏆'},
   {id:'money_makers',   label:'Money Makers',     icon:'⚗'},
   {id:'compare',        label:'Compare',          icon:'⇌'},
   {id:'portfolio',      label:'Portfolio',        icon:'📊'},
@@ -11985,7 +12902,7 @@ function App() {
   }, []);
 
   // Custom nav order — flatten NAV when user has custom order (no group separators)
-  const navBase = useMemo(() => settings.devMode ? NAV : NAV.filter(n => n.id !== 'money_makers'), [settings.devMode]);
+  const navBase = NAV;
   const navItems = useMemo(() => {
     const order = settings.navOrder;
     if (!order || !order.length) return navBase;
@@ -12051,6 +12968,12 @@ function App() {
         return {...prev, stored: d.stored, initial300Done: d.initial300Done, fullyComplete};
       });
     });
+    // Covers fetches the renderer didn't itself initiate (the scheduler's
+    // own interval tick, and the post-launch auto-fetch) — those never
+    // touched setFetching(true) before, so the header button sat on
+    // "Fetch Now" the whole time even while a real fetch (possibly a
+    // slow one, see main.js's runPython comment) was genuinely running.
+    window.genius.onFetchStart(() => setFetching(true));
     window.genius.onFetchComplete(d => {
       console.log('[GEnius] fetch-complete received:', d);
       setFetching(false); setLastUpdate(d.timestamp);
@@ -12075,7 +12998,7 @@ function App() {
     });
     window.genius.onFetchError(d => { setFetching(false); toast('Fetch error: '+(d.error||'unknown'),'error'); console.error('[GEnius] fetch-error:', d); });
     window.genius.onUpdateAvailable(d => setUpdateInfo(d));
-    return () => { window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); window.genius.removeAllListeners('update-available'); };
+    return () => { window.genius.removeAllListeners('fetch-start'); window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); window.genius.removeAllListeners('update-available'); };
   }, []);
 
   // Global shortcut: S or / focuses the search bar unless a text field is active
@@ -12092,6 +13015,20 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // F5 (Ben, 2026-08-13: "F5 would be natural since that's the refresh on
+  // the browser") triggers the same Fetch Now the header button does —
+  // Electron doesn't intercept F5 for its own page-reload the way a real
+  // browser would (that's disabled app-wide, see main.js), so it was just
+  // sitting unbound. No text-field guard needed like the S//-shortcut
+  // above — F5 isn't a character you'd ever be typing into a field.
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'F5') { e.preventDefault(); if (!fetching) handleFetch(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fetching]);
 
   // Backspace closes the item detail panel (when no text field is focused),
   // or the sidebar drawer if that's open instead. This is also what the
@@ -12330,6 +13267,7 @@ function App() {
         h('div',{className:'ge-status'},h('div',{className:`status-dot ${statusType}`}),statusText),
         h('button',{
           className:'ge-btn gold ge-header-fetch',disabled:fetching,onClick:handleFetch,
+          title: fetching ? 'Fetching fresh prices…' : 'Fetch fresh prices now (or press F5)',
           style:{display:'flex',alignItems:'center',gap:6,flexShrink:0}
         },
           fetching&&h('span',{className:'spinner'}),
@@ -12338,6 +13276,7 @@ function App() {
           // out "Fetch Now"/"Fetching..." next to the hamburger, logo, and
           // search bar all competing for the same ~360px of space.
           h('span',{className:'fetch-text'}, fetching?'Fetching...':'Fetch Now'),
+          !fetching && h('span',{className:'fetch-text', style:{fontSize:10, opacity:0.65, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'1px 4px', marginLeft:2}}, 'F5'),
           h('span',{className:'fetch-icon'}, fetching?'':'⟳'),
         ),
         h('div',{className:'ge-header-divider', style:{width:1,height:20,background:T.borderDim,flexShrink:0,margin:'0 2px'}}),
@@ -12363,7 +13302,7 @@ function App() {
           tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioTab,{
-            items, portfolio, toast,
+            items, portfolio, toast, dateFormat: settings.dateFormat,
             onSavePosition: async pos => {
               await window.genius?.savePosition(pos);
               const p = await window.genius?.getPortfolio();
@@ -12388,7 +13327,8 @@ function App() {
           tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
           tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities,overpricedThreshold:settings.overpricedThreshold||30}),
           tab==='flips' &&h(FlipsTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,description:TAB_DESCRIPTIONS.flips}),
-          tab==='money_makers' &&h(MoneyMakersTab, {items:visibleItems,onSelect:handleSelect}),
+          tab==='top_movers' &&h(TopMoversTab, {items:visibleItems,officialTop100,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.top_movers}),
+          tab==='money_makers' &&h(MoneyMakersTab, {items:visibleItems,onSelect:handleSelect,description:TAB_DESCRIPTIONS.money_makers}),
           tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {

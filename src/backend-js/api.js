@@ -2024,7 +2024,21 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop' }) {
   }
 
   async function getPortfolio() {
-    return readPortfolio();
+    // resetTaxIfNeeded used to only ever run inside sellPosition, right
+    // when a NEW sale happened — so a stretch with zero sales meant the
+    // day/week/month buckets just sat frozen at whatever the last real
+    // sale was, indefinitely, since nothing else ever re-checked the
+    // date (Ben, 2026-09-09: "I haven't sold anything in like a week...
+    // Today/Week/Month all showing the same 1.22M"). Running the same
+    // check on every plain read fixes that — the buckets now correctly
+    // zero out once their window has actually passed, sale or no sale.
+    const p = await readPortfolio();
+    if (p.tax_stats) {
+      const before = JSON.stringify(p.tax_stats);
+      p.tax_stats = resetTaxIfNeeded(p.tax_stats);
+      if (JSON.stringify(p.tax_stats) !== before) await writePortfolio(p);
+    }
+    return p;
   }
 
   async function savePosition(position) {

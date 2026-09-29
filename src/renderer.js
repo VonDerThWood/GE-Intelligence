@@ -949,10 +949,15 @@ function LiveTimeseriesSection({itemId}) {
 }
 
 /* ─── Chart modal ────────────────────────────────────────────── */
-function ImageModal({name, fallbackUrl, onClose}) {
+function ImageModal({name, detailUrl, fallbackUrl, onClose}) {
+  // detailUrl is the real wiki-resolved big render (icons.js's `detail`
+  // field) when available — no need to guess. The old first-word-
+  // capitalized guess only still applies for items the icon cache hasn't
+  // backfilled yet; fallbackUrl (the small inline icon) is the last resort
+  // if even that fails.
   const wikiName = name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
-  const detailUrl = `https://runescape.wiki/images/${encodeURIComponent(wikiName + '_detail')}.png`;
-  const [src, setSrc] = useState(detailUrl);
+  const guessedDetailUrl = `https://runescape.wiki/images/${encodeURIComponent(wikiName + '_detail')}.png`;
+  const [src, setSrc] = useState(detailUrl || guessedDetailUrl);
 
   useEffect(() => {
     const handler = e => { if (e.key === 'Escape') onClose(); };
@@ -2581,8 +2586,16 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       setWikiStats(stats);
       setStatsLoading(false);
     }).catch(() => setStatsLoading(false));
-    const wikiName = item.name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
-    setIconUrl(`https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`);
+    // Real icon URL resolved backend-side via the wiki's own API
+    // (icons.js) — falls back to the old first-word-capitalized filename
+    // guess only for items the cache hasn't backfilled yet (or genuinely
+    // has no wiki image), so nothing regresses mid-backfill.
+    if (item.iconUrl) {
+      setIconUrl(item.iconUrl);
+    } else {
+      const wikiName = item.name.split(' ').map((w,i) => i===0 ? w.charAt(0).toUpperCase()+w.slice(1) : w).join('_');
+      setIconUrl(`https://runescape.wiki/images/${encodeURIComponent(wikiName)}.png`);
+    }
     setLivePrice(null);
     if (!item.untradeable) {
       window.genius?.getLiveItemPrice(item.id).then(price => {
@@ -2684,7 +2697,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 
   return h('div', {className:'detail-panel', style: panelWidth ? {width:panelWidth, minWidth:260} : undefined},
     chartOpen && h(ChartModal, {item, onClose:()=>{setChartOpen(false);setChartDxpMode(false);}, dateFormat, populatedHistoryIds, showDxpOverlay:chartDxpMode}),
-    imageOpen && h(ImageModal, {name: item.name, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
+    imageOpen && h(ImageModal, {name: item.name, detailUrl: item.iconDetailUrl, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
     h('div', {className:'detail-top'},
       h('div', {className:'row-between', style:{marginBottom:6, flexWrap:'wrap', rowGap:6}},
         h('div', {className:'row', style:{gap:8, alignItems:'center', minWidth:0, overflow:'hidden', flex:'1 1 140px'}},
@@ -3852,12 +3865,51 @@ function parseGpString(str) {
   return n * mult;
 }
 
-function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleWatch}) {
-  const [open, setOpen] = useState(false);
+// Compact Dashboard teaser (Ben, 2026-08-13): the full accordion moved to
+// its own tab (TopMoversTab) since it was capped at 30/100 rows and buried
+// behind a click — undersold a feature Ben wants prominent. This keeps a
+// quick glance on the Dashboard (top 5 GE Market risers) with a link to
+// the real thing, same pattern as the Watchlist/Portfolio teaser cards.
+function TopMoversSection({items, officialTop100, onSelect, onNavigate}) {
+  const itemById = useMemo(() => {
+    const m = new Map();
+    for (const it of items) if (it.id != null) m.set(it.id, it);
+    return m;
+  }, [items]);
+
+  const topRises = useMemo(() => {
+    const win = officialTop100?.byWindow?.[7];
+    return (win?.rises || []).slice(0, 5);
+  }, [officialTop100]);
+
+  return h('div', {style:{marginBottom:20}},
+    h('div', {style:{fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase', color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:10, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('top_movers'), title:'Go to Top Movers'},
+      h('span', null, '🏆 Top Movers'),
+      h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
+    topRises.length === 0
+      ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No data available yet.')
+      : topRises.map(r => {
+          const it = itemById.get(r.id);
+          return h('div', {
+            key:r.id, className:'row', style:{justifyContent:'space-between', padding:'4px 0', cursor: it?'pointer':'default', borderBottom:`1px solid ${T.borderDim}`},
+            onClick:()=>it && onSelect(it),
+          },
+            h('span', {style:{color: it ? T.textBright : T.textDim, fontSize:12}}, r.name),
+            h('span', {style:{color:T.green, fontSize:12, fontWeight:'bold'}}, '+'+r.pct.toFixed(1)+'%'),
+          );
+        })
+  );
+}
+
+
+// Full-page version of TopMoversSection (Ben, 2026-08-13): the Dashboard
+// accordion was capped at 30 of the 100 rows even expanded, and buried
+// behind a click — undersold a feature Ben specifically wants to put in
+// front of people. This shows the real full 100, sortable, no cap.
+function TopMoversTab({items, officialTop100, onSelect, watchlist, onToggleWatch, description}) {
   const [pill, setPill] = useState('ge_rise');
   const [windowDays, setWindowDays] = useState(7);
-  const [periodOpen, setPeriodOpen] = useState(false);
-  const [liveCache, setLiveCache] = useState({}); // {windowDays: {rises, falls}}
+  const [liveCache, setLiveCache] = useState({});
   const [liveLoading, setLiveLoading] = useState(false);
   const [sort, setSort] = useState({key:'pct', dir:-1});
   const tog = key => setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='name' ? 1 : -1)}));
@@ -3865,22 +3917,18 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
 
   const pillDef = TOP_MOVERS_PILLS.find(p => p.key === pill);
 
-  // Default sort matches the pill's own natural order (biggest rise first
-  // on a ↑ pill, biggest fall first on a ↓ pill) whenever the pill itself
-  // changes — a manual column sort (Item/GP Change) stays put across a
-  // period change, only resets when you actually switch pills.
   useEffect(() => {
     setSort({key:'pct', dir: pillDef.dir==='rise' ? -1 : 1});
   }, [pill]);
 
   useEffect(() => {
-    if (!open || pillDef.source !== 'live' || liveCache[windowDays]) return;
+    if (pillDef.source !== 'live' || liveCache[windowDays]) return;
     setLiveLoading(true);
     window.genius?.getRealTimeMovers?.(windowDays)
       .then(res => { if (res) setLiveCache(c => ({...c, [windowDays]: res})); })
       .catch(() => {})
       .finally(() => setLiveLoading(false));
-  }, [open, pillDef.source, windowDays]);
+  }, [pillDef.source, windowDays]);
 
   const itemById = useMemo(() => {
     const m = new Map();
@@ -3893,8 +3941,6 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
     const win = officialTop100?.byWindow?.[windowDays];
     rows = (win ? (pillDef.dir === 'rise' ? win.rises : win.falls) : []).map(r => ({
       id: r.id, name: r.name, startDisplay: r.startPrice, endDisplay: r.endPrice, pct: r.pct,
-      // Jagex's own "Total Rise"/"Total Fall" column — a plain unsigned
-      // number on their page, sign added here to match pct's direction.
       gpDisplay: r.gpChange != null ? (r.pct>=0?'+':'-')+r.gpChange+'gp' : '—',
       gpChangeRaw: (r.pct>=0?1:-1) * parseGpString(r.gpChange),
     }));
@@ -3913,41 +3959,29 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
     return (av - bv) * sort.dir;
   });
 
-  return h('div', {style:{marginBottom:20}},
-    h('div', {
-      className:'ge-section-head', style:{cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'},
-      onClick:()=>setOpen(o=>!o),
-    },
-      h('span', null, `🏆 Top 100 Price Movements ${open?'▲':'▼'}`),
-      open && h('div', {style:{position:'relative'}, onClick:e=>e.stopPropagation()},
-        h('button', {
-          className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
-          onClick:()=>setPeriodOpen(o=>!o),
-        }, TOP_MOVERS_WINDOWS.find(w=>w.days===windowDays)?.label + ' ▾'),
-        periodOpen && h('div', {
-          style:{position:'absolute', right:0, top:'110%', zIndex:20, background:T.panel2, border:`1px solid ${T.borderGold}`, borderRadius:4, minWidth:150, boxShadow:'0 4px 16px rgba(0,0,0,0.6)', overflow:'hidden'},
-        },
-          TOP_MOVERS_WINDOWS.map(w => h('div', {
-            key:w.days,
-            style:{padding:'7px 12px', fontSize:12, cursor:'pointer', color: w.days===windowDays ? T.goldBright : T.text, background: w.days===windowDays ? 'rgba(201,168,76,0.12)' : 'transparent'},
-            onClick:()=>{ setWindowDays(w.days); setPeriodOpen(false); },
-            onMouseEnter:e=>e.currentTarget.style.background='rgba(201,168,76,0.08)',
-            onMouseLeave:e=>e.currentTarget.style.background = w.days===windowDays ? 'rgba(201,168,76,0.12)' : 'transparent',
-          }, w.label))
-        )
-      )
-    ),
-    open && h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderTop:'none', borderRadius:'0 0 4px 4px', padding:'10px 12px'}},
-      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:10, lineHeight:1.4}},
+  return h('div', {style:{padding:'4px 0'}},
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div', {style:{padding:'14px'}},
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:12, lineHeight:1.4}},
         'GE Market is Jagex\'s own official Top 100, sourced straight from their site. Live Trade is GEnius\'s own version using real instant buy/sell instead of their slower official price — expect the two lists to differ.'
       ),
-      h('div', {className:'row', style:{gap:6, marginBottom:10, flexWrap:'wrap'}},
-        TOP_MOVERS_PILLS.map(p => h('button', {
-          key:p.key,
-          className:'ge-btn'+(pill===p.key?' gold':''),
-          style:{fontSize:11, padding:'4px 10px'},
-          onClick:()=>setPill(p.key),
-        }, p.label))
+      h('div', {style:{display:'flex', gap:10, marginBottom:12, flexWrap:'wrap', alignItems:'center', justifyContent:'space-between'}},
+        h('div', {className:'row', style:{gap:6, flexWrap:'wrap'}},
+          TOP_MOVERS_PILLS.map(p => h('button', {
+            key:p.key,
+            className:'ge-btn'+(pill===p.key?' gold':''),
+            style:{fontSize:11, padding:'4px 10px'},
+            onClick:()=>setPill(p.key),
+          }, p.label))
+        ),
+        h('div', {className:'row', style:{gap:6, flexWrap:'wrap'}},
+          TOP_MOVERS_WINDOWS.map(w => h('button', {
+            key:w.days,
+            className:'ge-btn'+(windowDays===w.days?' gold':''),
+            style:{fontSize:11, padding:'4px 10px'},
+            onClick:()=>setWindowDays(w.days),
+          }, w.label))
+        ),
       ),
       pillDef.source==='live' && liveLoading && !liveCache[windowDays]
         ? h('div', {style:{padding:20, textAlign:'center', color:T.textDim, fontSize:12}}, 'Computing real-time movers from local price history…')
@@ -3956,10 +3990,11 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
           : h('div', {className:'ge-table-wrap'},
               h('table', {className:'ge-table'},
                 h('thead', null, h('tr', null,
-                  h('th', {onClick:()=>tog('name')}, 'Item'+arr('name')), h('th', null, 'Start'), h('th', null, 'Now'),
-                  h('th', {onClick:()=>tog('gp')}, 'GP Change'+arr('gp')), h('th', {onClick:()=>tog('pct')}, 'Change'+arr('pct')),
+                  h('th', {onClick:()=>tog('name'), style:{cursor:'pointer'}}, 'Item'+arr('name')), h('th', null, 'Start'), h('th', null, 'Now'),
+                  h('th', {onClick:()=>tog('gp'), style:{cursor:'pointer'}}, 'GP Change'+arr('gp')), h('th', {onClick:()=>tog('pct'), style:{cursor:'pointer'}}, 'Change'+arr('pct')),
+                  h('th', {style:{width:30}}, null),
                 )),
-                h('tbody', null, rows.slice(0, 30).map(r => {
+                h('tbody', null, rows.map(r => {
                   const it = itemById.get(r.id);
                   return h('tr', {
                     key:r.id,
@@ -3967,13 +4002,18 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
                     onClick: () => it && onSelect(it),
                   },
                     h('td', null, h('div', {className:'row', style:{gap:6, alignItems:'center'}},
-                      it && h('img', {src:`https://secure.runescape.com/m=itemdb_rs/1786357986994_obj_sprite.gif?id=${it.id}`, style:{width:18,height:18,objectFit:'contain'}}),
+                      it && it.iconUrl && h('img', {src:it.iconUrl, style:{width:18,height:18,objectFit:'contain'}}),
                       h('span', {style:{color: it ? T.textBright : T.textDim}}, r.name),
                     )),
                     h('td', null, r.startDisplay),
                     h('td', null, r.endDisplay),
                     h('td', {style:{color: r.pct >= 0 ? T.green : T.red}}, r.gpDisplay),
                     h('td', {style:{color: r.pct >= 0 ? T.green : T.red, fontWeight:'bold'}}, (r.pct>=0?'+':'')+r.pct.toFixed(1)+'%'),
+                    it && h('td', {onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center'}},
+                      h('button',{className:'star-btn'},
+                        h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
+                      )
+                    ),
                   );
                 }))
               )
@@ -3983,7 +4023,6 @@ function TopMoversSection({items, officialTop100, onSelect, watchlist, onToggleW
 }
 
 function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, alerts, portfolio, onNavigate, news, overpricedThreshold=30, officialTop100}) {
-  const [topMoversOpen, setTopMoversOpen] = useState(false);
   const [activeSignal, setActiveSignal] = useState(null);
   const [activeIndexId, setActiveIndexId] = useState(null);
   const [activeSector, setActiveSector] = useState(null);
@@ -4558,7 +4597,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       )
     ),
 
-    h(TopMoversSection, {items, officialTop100, onSelect, watchlist, onToggleWatch}),
+    h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
     // ── News Item Mentions ───────────────────────────────────────
     (() => {
@@ -4703,7 +4742,9 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Watchlist movers
     h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Your Watchlist'),
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('watchlist'), title:'Go to Watchlist'},
+        h('span', null, 'Your Watchlist'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
       watchlistItems.length === 0
         ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
             'No items watched yet. Star any item to track it here.')
@@ -5487,10 +5528,18 @@ function MarketTab({items, selected, onSelect, description}) {
   const [sort, setSort] = useState({key:'name',dir:1});
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
   const arr = key => sort.key===key?(sort.dir>0?' ↑':' ↓'):'';
-  const movers  = useMemo(()=>[...items].filter(it=>it.change_1d!=null).sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
+  // Untradeable filter (Ben, 2026-08-13): Invention components etc. picked
+  // up a real change_1d in v2.5.0 (local snapshots instead of always-null),
+  // but they have no real two-sided GE market — thin/no trading means a
+  // handful of transactions can swing them 20-40%+ in a day with no actual
+  // "market movement" behind it. That noise was dominating this widget
+  // ("Heavy components" -44%, "Bucket" -25% off a 1gp move) ahead of real
+  // tradeable movers, so it's excluded here the same way it already is in
+  // getRealTimeMovers (api.js).
+  const movers  = useMemo(()=>[...items].filter(it=>!it.untradeable && it.change_1d!=null).sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
   const volTop  = useMemo(()=>[...items].filter(it=>it.volume&&it.avgVolume&&it.volume>it.avgVolume*1.3).sort((a,b)=>(b.volume/b.avgVolume)-(a.volume/a.avgVolume)).slice(0,10),[items]);
-  const rising  = useMemo(()=>items.filter(it=>(it.change_1d||0)>0),[items]);
-  const falling = useMemo(()=>items.filter(it=>(it.change_1d||0)<0),[items]);
+  const rising  = useMemo(()=>items.filter(it=>!it.untradeable && (it.change_1d||0)>0),[items]);
+  const falling = useMemo(()=>items.filter(it=>!it.untradeable && (it.change_1d||0)<0),[items]);
   // Exclude ALCH from Market signals — they have their own tab
   const MARKET_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL','ACTIVE','QUIET','THIN'];
   const signals = useMemo(()=>items.filter(it=>
@@ -9435,6 +9484,18 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
   const [fillVersion, setFillVersion] = useState(0);
 
   const recipe = useMemo(() => findConversionRecipe(position.item_name), [position.item_name]);
+  // BUG (Ben, 2026-09-15): "Use this" filled Output Quantity and the
+  // recipe's charge-cost row as one-time snapshots of Quantity AT CLICK
+  // TIME — neither stayed in sync if Quantity was edited afterward (a very
+  // natural flow: click Use This to see the recipe, then dial in the real
+  // quantity). Repro caught for real: converted 7,500 Eternal magic logs,
+  // but the Plank Maker charge cost still read 17,668,800gp — 360.45/item
+  // × 49,080 (the modal's own MAX), not × 7,500. Fixed by keeping both
+  // fields "linked" to Quantity via the effect below until the user
+  // manually edits either one directly, at which point that field stops
+  // auto-tracking (their manual value is respected, not stomped on).
+  const [outputQtyLinked, setOutputQtyLinked] = useState(false);
+  const [costLinked, setCostLinked] = useState(false);
 
   const useRecipe = () => {
     if (!recipe) return;
@@ -9442,13 +9503,24 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
     setOutputQty(String(qty));
     setExtraCosts([{label: `${recipe.machineLabel} charge cost`, amount: String(recipe.costPerUnit * Number(qty || 0))}]);
     setFillVersion(v => v + 1);
+    setOutputQtyLinked(true);
+    setCostLinked(true);
   };
 
-  const addCostRow = () => setExtraCosts(rows => [...rows, {label:'', amount:''}]);
-  const removeCostRow = i => setExtraCosts(rows => rows.filter((_,j)=>j!==i));
-  const setCostRow = (i, field, val) => setExtraCosts(rows => rows.map((r,j) => j===i ? {...r, [field]:val} : r));
+  const addCostRow = () => { setExtraCosts(rows => [...rows, {label:'', amount:''}]); setCostLinked(false); };
+  const removeCostRow = i => { setExtraCosts(rows => rows.filter((_,j)=>j!==i)); setCostLinked(false); };
+  const setCostRow = (i, field, val) => { setExtraCosts(rows => rows.map((r,j) => j===i ? {...r, [field]:val} : r)); setCostLinked(false); };
 
   const q = Number(qty) || 0;
+
+  useEffect(() => {
+    if (!recipe) return;
+    if (outputQtyLinked) setOutputQty(String(q));
+    if (costLinked) {
+      setExtraCosts([{label: `${recipe.machineLabel} charge cost`, amount: String(recipe.costPerUnit * q)}]);
+      setFillVersion(v => v + 1);
+    }
+  }, [q]);
   const oq = Number(outputQty) || 0;
   const totalExtraCost = extraCosts.reduce((s,r) => s + (Number(r.amount) || 0), 0);
   const inputCostUsed = position.cost_basis * q;
@@ -9480,7 +9552,7 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
         ),
         h('div', {style:{marginBottom:12}},
           h('label',{className:'form-lbl'},'Output quantity'),
-          h('input',{className:'ge-input', type:'number', min:1, value:outputQty, onChange:e=>setOutputQty(e.target.value), placeholder:'e.g. '+q, style:{width:120}})
+          h('input',{className:'ge-input', type:'number', min:1, value:outputQty, onChange:e=>{setOutputQty(e.target.value); setOutputQtyLinked(false);}, placeholder:'e.g. '+q, style:{width:120}})
         ),
         h('div', {style:{marginBottom:12}},
           h('label',{className:'form-lbl'},'Extra costs (machine charges, secondary ingredients, etc.)'),
@@ -9559,7 +9631,21 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands}) {
+function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
+  // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
+  // chart already respects (Ben, 2026-09-09: "can we add dates to the
+  // sales too" — the existing "Sold At / Converted" column was misnamed;
+  // it only ever showed the sale price, never an actual date).
+  const fmtPosDate = ts => {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return '—';
+    const fmtStr = dateFormat || 'MM/DD/YYYY';
+    const M = d.getMonth()+1, D = d.getDate(), Y = d.getFullYear();
+    if (fmtStr === 'DD/MM/YYYY') return `${D}/${M}/${Y}`;
+    if (fmtStr === 'YYYY-MM-DD') return `${Y}-${String(M).padStart(2,'0')}-${String(D).padStart(2,'0')}`;
+    return `${M}/${D}/${Y}`;
+  };
   // Diversification suggestions pull real picks from the Almanac's
   // trade-idea engine — public since the Almanac itself went public
   // (v2.0.0). Fetches its own copy of the DXP intelligence data
@@ -9689,11 +9775,22 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const ms = [];
     if (!closedPos.length) return ms;
 
+    // Win/loss-shaped stats (Biggest Win/Loss, Flawless streak) need ONLY
+    // real sales — a Convert never sets realized_pl at all (it's a cost-
+    // basis carry-forward, not a close-out, see api.js's convertPosition),
+    // so it read as an automatic 0/loss and silently cut real win streaks
+    // short whenever a convert happened to sit in the middle of one (Ben,
+    // 2026-08-13: "The 'hot streak' thing in portfolio... Converting broke
+    // it" — confirmed, reported streak of 19 was being undercounted this
+    // way). totalRealized still sums over closedPos (sold + converted) —
+    // converts correctly contribute 0 there either way, so no bug to fix.
+    const closedSales = closedPos.filter(p => p.status === 'sold');
     const profits = closedPos.map(p => p.realized_pl || 0);
-    const biggestWin  = Math.max(...profits);
-    const biggestLoss = Math.min(...profits);
-    const biggestWinPos  = closedPos.find(p => (p.realized_pl||0) === biggestWin);
-    const biggestLossPos = closedPos.find(p => (p.realized_pl||0) === biggestLoss);
+    const salesProfits = closedSales.map(p => p.realized_pl || 0);
+    const biggestWin  = salesProfits.length ? Math.max(...salesProfits) : 0;
+    const biggestLoss = salesProfits.length ? Math.min(...salesProfits) : 0;
+    const biggestWinPos  = closedSales.find(p => (p.realized_pl||0) === biggestWin);
+    const biggestLossPos = closedSales.find(p => (p.realized_pl||0) === biggestLoss);
     const totalRealized  = profits.reduce((s,n) => s+n, 0);
 
     if (biggestWin > 0)  ms.push({ icon:'🏆', label:'Biggest Win',  value: '+'+fmt.gp(biggestWin)+'gp',  sub: biggestWinPos?.item_name || '' });
@@ -9703,15 +9800,16 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     // Trade count itself now has its own tier ladder (see
     // TRADE_COUNT_TIERS/currentTradeTier above) instead of living here as
     // flat one-off milestones.
-    // Flawless — best streak of consecutive profitable trades
+    // Flawless — best streak of consecutive profitable SALES (converts
+    // excluded, see above)
     let bestStreak = 0, currentStreak = 0;
-    for (const p of closedPos) {
+    for (const p of closedSales) {
       if ((p.realized_pl||0) > 0) { currentStreak++; bestStreak = Math.max(bestStreak, currentStreak); }
       else currentStreak = 0;
     }
-    const isCurrentlyFlawless = profits.every(p => p > 0) && closedPos.length >= 5;
+    const isCurrentlyFlawless = salesProfits.length > 0 && salesProfits.every(p => p > 0) && closedSales.length >= 5;
     if (bestStreak >= 5)
-      ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedPos.length+' for '+closedPos.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
+      ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedSales.length+' for '+closedSales.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
     return ms;
   }, [closedPos, totalCurrent]);
 
@@ -10166,7 +10264,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       showClosed && h('table',{className:'ge-table'},
         h('thead',null,h('tr',null,
           h('th',null,'Item'),h('th',null,'Qty'),h('th',null,'Cost/ea'),
-          h('th',null,'Sold At / Converted'),
+          h('th',null,'Sold Price / Converted'),
+          h('th',null,'Date'),
           h('th',{title:'Profit & Loss already locked in on this sale, after GE tax. Conversions have no realized P&L — no cash changed hands, the cost basis just carried forward to the new item.'},'Realized P&L')
         )),
         h('tbody',null, closedPos.map(pos=>
@@ -10181,6 +10280,7 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             pos.status==='converted'
               ? h('td',{style:{color:T.blue}},`→ ${pos.converted_to}`)
               : h('td',{style:{color:T.gold}},fmt.gp(pos.sold_price||0)+'gp'),
+            h('td',{style:{color:T.textDim}}, fmtPosDate(pos.status==='converted' ? pos.converted_at : pos.sold_at)),
             pos.status==='converted'
               ? h('td',{style:{color:T.textDim}},'—')
               : h('td',{className:(pos.realized_pl||0)>=0?'pct-up':'pct-down'},
@@ -10743,6 +10843,12 @@ function ScoreTable({rows, selected, onSelect}) {
 
 function OpportunitiesTab({items, selected, onSelect, description, watchlist, onToggleWatch, onToggleHide, onAddCompare, overpricedThreshold=30}) {
   const [signalFilter, setSignalFilter] = useState(null);
+  // Signal badges hidden by default (Ben, 2026-08-13): the "Signals"
+  // column shows every active badge on every section's rows, including
+  // the Overpriced/Underpriced sections' own OVERPRICED/UNDERPRICED badge
+  // — trivially true for every row already sitting in that section, so it
+  // just bloats the column width for no new information most of the time.
+  const [showSignals, setShowSignals] = useState(false);
 
   const withSignal = useCallback((sig) =>
     items.filter(it => it.signals && it.signals.includes(sig)), [items]);
@@ -10858,6 +10964,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       })
     ),
 
+    h('div', {
+      onClick: () => setShowSignals(v => !v),
+      style: {display:'flex', alignItems:'center', gap:4, cursor:'pointer', width:'fit-content', marginBottom:14, fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'1px'},
+    },
+      h('span', {style:{fontSize:9}}, showSignals ? '▾' : '▸'),
+      h('span', null, showSignals ? 'Hide signal badges' : 'Show signal badges'),
+    ),
+
     // Filtered view
     signalFilter && h('div', {style:{marginBottom:20}},
       h('div', {style:{display:'flex',alignItems:'center',gap:8,marginBottom:8,padding:'6px 10px',background:T.panel2,borderRadius:4,border:`1px solid ${T.borderDim}`}},
@@ -10908,14 +11022,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'SURGE Signals', icon:'⚡', color:T.green,
       desc:'— price rising with elevated volume',
       rows:surge,
-      headers:['Item','Price','Change','Volume','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
+      headers:['Item','Price','Change','Volume',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10923,14 +11037,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'DUMP Signals', icon:'📉', color:T.red,
       desc:'— price falling with elevated volume',
       rows:dump,
-      headers:['Item','Price','Change','Volume','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',null],
+      headers:['Item','Price','Change','Volume',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10938,14 +11052,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Accumulation', icon:'📦', color:'#4dd0e1',
       desc:'— price flat, volume quietly building',
       rows:accum,
-      headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Vol / Avg','Vol Ratio',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#4dd0e1'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10953,14 +11067,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Distribution', icon:'🌊', color:'#ffb74d',
       desc:'— price flat, extreme volume — watch for incoming drop',
       rows:distrib,
-      headers:['Item','Price','Vol / Avg','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Vol / Avg','Vol Ratio',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ffb74d'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10968,15 +11082,15 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Volume Frenzy', icon:'🔥', color:'#ff80ab',
       desc:'— 250%+ above average volume',
       rows:frenzy,
-      headers:['Item','Price','Change','Vol / Avg','Vol Ratio','Signals'],
-      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,null],
+      headers:['Item','Price','Change','Vol / Avg','Vol Ratio',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,'change_1d','volume',it=>it.avgVolume?(it.volume/it.avgVolume):0,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'c'},h(ChangeDisplay,{change_1d:it.change_1d,price:it.high||it.low})),
         h('td',{key:'v'},h(VolDisplay,{volume:it.volume,avgVolume:it.avgVolume})),
         h('td',{key:'r',style:{color:'#ff80ab'}}, it.avgVolume ? (it.volume/it.avgVolume).toFixed(2)+'×' : '—'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10984,14 +11098,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Overpriced', icon:'🏷️', color:'#ef9a9a',
       desc:`— GE price ${overpricedThreshold}%+ above real live buy/sell (adjustable in Settings)`,
       rows:overpriced,
-      headers:['Item','GE Price','Live Price','Gap %','Signals'],
-      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),gapPct,null],
+      headers:['Item','GE Price','Live Price','Gap %',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),gapPct,...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
         h('td',{key:'lp'},h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'g',style:{color:'#ef9a9a'}},'+'+gapPct(it).toFixed(1)+'%'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -10999,14 +11113,14 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       title:'Underpriced', icon:'💎', color:'#81c784',
       desc:`— real live buy/sell ${overpricedThreshold}%+ above GE price (adjustable in Settings)`,
       rows:underpriced,
-      headers:['Item','GE Price','Live Price','Gap %','Signals'],
-      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),it=>-gapPct(it),null],
+      headers:['Item','GE Price','Live Price','Gap %',...(showSignals?['Signals']:[])],
+      sortKeys:['name',it=>it.high||it.low,it=>(it.liveBuy!=null&&it.liveSell!=null)?(it.liveBuy+it.liveSell)/2:(it.liveBuy??it.liveSell??0),it=>-gapPct(it),...(showSignals?[null]:[])],
       renderRow: it => [
         h('td',{key:'n'},it.name),
         h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp'),
         h('td',{key:'lp'},h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
         h('td',{key:'g',style:{color:'#81c784'}},gapPct(it).toFixed(1)+'%'),
-        signalCells(it),
+        ...(showSignals?[signalCells(it)]:[]),
       ],
     }),
 
@@ -11180,10 +11294,19 @@ function computeFlipStats(it) {
   const roiPct = it.liveSell > 0 ? (margin / it.liveSell) * 100 : 0;
   const limit = it.limit || 0;
   const profitForLimit = margin * limit;
+  // Realistic Profit (Ben, 2026-08-13): "Profit (buy limit)" always
+  // assumes the full buy limit both buys AND sells same-day, which is
+  // fantasy for anything whose average daily volume is a fraction of its
+  // buy limit — Shadow Nihil Pouch (5,000 limit, ~406 avg volume) would
+  // take over a week just to BUY a single limit's worth, let alone sell
+  // it too. Capped at the item's own avgVolume instead of the bare limit,
+  // so this reflects what a limit's worth of trading actually looks like
+  // given real market liquidity, not a theoretical ceiling.
+  const realisticProfit = margin * Math.min(limit, it.avgVolume || 0);
   const gePrice = it.high || it.low || 0;
   const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_SANITY_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
   const ceiling = alchIsAnchor ? Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT : Infinity;
-  const base = { margin, roiPct, profitForLimit, gePrice, ceiling, limit };
+  const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit };
 
   if (it.liveSell < FLIP_MIN_SELL_PRICE) return { ...base, qualifies:false, disqualifyReason:`Sell price is under the ${fmt.gp(FLIP_MIN_SELL_PRICE)}gp floor Flips uses to avoid junk items dominating by percentage.` };
   if (margin <= 0) return { ...base, qualifies:false, disqualifyReason:'No positive margin right now — instabuy (after tax) doesn\'t beat instasell.' };
@@ -11223,7 +11346,7 @@ const FLIP_PROFIT_FILTERS = [
 ];
 function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, description}) {
   const [pillTab, setPillTab] = useState('flips'); // 'flips' | 'flagged'
-  const [sort, setSort] = useState({key:'profitForLimit', dir:-1});
+  const [sort, setSort] = useState({key:'realisticProfit', dir:-1});
   const [page, setPage] = useState(0);
   // Defaults to 1M+ (Ben: "That would cut it down from over 900 results
   // significantly") — this is a filter on Profit (buy limit), i.e. one
@@ -11330,7 +11453,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('th', {onClick:()=>tog('margin'), style:{cursor:'pointer'}}, 'Margin/item'+arrow('margin')),
                 h('th', {onClick:()=>tog('roiPct'), style:{cursor:'pointer'}}, 'ROI%'+arrow('roiPct')),
                 h('th', {onClick:()=>tog('limit'), style:{cursor:'pointer'}}, 'Buy Limit'+arrow('limit')),
-                h('th', {onClick:()=>tog('profitForLimit'), style:{cursor:'pointer'}, title:'Margin/item × buy limit — one full limit\'s worth, not a spending cap'}, 'Profit (buy limit)'+arrow('profitForLimit')),
+                h('th', {onClick:()=>tog('realisticProfit'), style:{cursor:'pointer'}, title:'Margin/item × min(buy limit, avg daily volume) — what a limit\'s worth of trading realistically nets given how liquid this item actually is'}, 'Realistic Profit'+arrow('realisticProfit')),
+                h('th', {onClick:()=>tog('profitForLimit'), style:{cursor:'pointer'}, title:'Margin/item × buy limit — the theoretical ceiling if the ENTIRE limit both buys and sells, regardless of how thin the market actually is'}, 'Max Profit (limit)'+arrow('profitForLimit')),
                 h('th', {style:{width:30}}, null),
               )),
               h('tbody', null, pageItems.map(it => h('tr', {
@@ -11343,7 +11467,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('td', {style:{color:T.gold}}, fmt.gp(it.margin)+'gp'),
                 h('td', {style:{color: it.roiPct>=5 ? T.green : T.textDim}}, it.roiPct.toFixed(2)+'%'),
                 h('td', {style:{color:T.textDim}}, it.limit.toLocaleString()),
-                h('td', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(it.profitForLimit)+'gp'),
+                h('td', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(it.realisticProfit)+'gp'),
+                h('td', {style:{color:T.textDim}}, fmt.gp(it.profitForLimit)+'gp'),
                 h('td', {onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center'}},
                   h('button',{className:'star-btn'},
                     h('span',{className:watchlist.includes(it.id)?'star-on':'star-off'}, watchlist.includes(it.id)?'★':'☆')
@@ -12556,6 +12681,7 @@ const TAB_DESCRIPTIONS = {
   market:         'Everything the Grand Exchange has to offer. Yes, all of it.',
   opportunities:  'Items showing unusual price or volume activity. May or may not be a trap.',
   flips:          'Let GEnius take the BS out of Buy & Sell.',
+  top_movers:     ['Look at all ', h('s', {key:'s'}, 'those chickens'), ' that movement.'],
   money_makers:   'Some assembly required.',
   portfolio:      'Track positions, profits, losses, and questionable financial decisions.',
   alch:           'Items where nature runes are paying their own rent.',
@@ -12600,6 +12726,7 @@ const NAV = [
   {id:'market',         label:'Market',           icon:'◐'},
   {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
   {id:'flips',          label:'Flips',            icon:'💱'},
+  {id:'top_movers',     label:'Top Movers',       icon:'🏆'},
   {id:'money_makers',   label:'Money Makers',     icon:'⚗'},
   {id:'compare',        label:'Compare',          icon:'⇌'},
   {id:'portfolio',      label:'Portfolio',        icon:'📊'},
@@ -12841,6 +12968,12 @@ function App() {
         return {...prev, stored: d.stored, initial300Done: d.initial300Done, fullyComplete};
       });
     });
+    // Covers fetches the renderer didn't itself initiate (the scheduler's
+    // own interval tick, and the post-launch auto-fetch) — those never
+    // touched setFetching(true) before, so the header button sat on
+    // "Fetch Now" the whole time even while a real fetch (possibly a
+    // slow one, see main.js's runPython comment) was genuinely running.
+    window.genius.onFetchStart(() => setFetching(true));
     window.genius.onFetchComplete(d => {
       console.log('[GEnius] fetch-complete received:', d);
       setFetching(false); setLastUpdate(d.timestamp);
@@ -12865,7 +12998,7 @@ function App() {
     });
     window.genius.onFetchError(d => { setFetching(false); toast('Fetch error: '+(d.error||'unknown'),'error'); console.error('[GEnius] fetch-error:', d); });
     window.genius.onUpdateAvailable(d => setUpdateInfo(d));
-    return () => { window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); window.genius.removeAllListeners('update-available'); };
+    return () => { window.genius.removeAllListeners('fetch-start'); window.genius.removeAllListeners('fetch-complete'); window.genius.removeAllListeners('fetch-error'); window.genius.removeAllListeners('update-available'); };
   }, []);
 
   // Global shortcut: S or / focuses the search bar unless a text field is active
@@ -12882,6 +13015,20 @@ function App() {
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, []);
+
+  // F5 (Ben, 2026-08-13: "F5 would be natural since that's the refresh on
+  // the browser") triggers the same Fetch Now the header button does —
+  // Electron doesn't intercept F5 for its own page-reload the way a real
+  // browser would (that's disabled app-wide, see main.js), so it was just
+  // sitting unbound. No text-field guard needed like the S//-shortcut
+  // above — F5 isn't a character you'd ever be typing into a field.
+  useEffect(() => {
+    const onKey = e => {
+      if (e.key === 'F5') { e.preventDefault(); if (!fetching) handleFetch(); }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [fetching]);
 
   // Backspace closes the item detail panel (when no text field is focused),
   // or the sidebar drawer if that's open instead. This is also what the
@@ -13120,6 +13267,7 @@ function App() {
         h('div',{className:'ge-status'},h('div',{className:`status-dot ${statusType}`}),statusText),
         h('button',{
           className:'ge-btn gold ge-header-fetch',disabled:fetching,onClick:handleFetch,
+          title: fetching ? 'Fetching fresh prices…' : 'Fetch fresh prices now (or press F5)',
           style:{display:'flex',alignItems:'center',gap:6,flexShrink:0}
         },
           fetching&&h('span',{className:'spinner'}),
@@ -13128,6 +13276,7 @@ function App() {
           // out "Fetch Now"/"Fetching..." next to the hamburger, logo, and
           // search bar all competing for the same ~360px of space.
           h('span',{className:'fetch-text'}, fetching?'Fetching...':'Fetch Now'),
+          !fetching && h('span',{className:'fetch-text', style:{fontSize:10, opacity:0.65, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'1px 4px', marginLeft:2}}, 'F5'),
           h('span',{className:'fetch-icon'}, fetching?'':'⟳'),
         ),
         h('div',{className:'ge-header-divider', style:{width:1,height:20,background:T.borderDim,flexShrink:0,margin:'0 2px'}}),
@@ -13153,7 +13302,7 @@ function App() {
           tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioTab,{
-            items, portfolio, toast,
+            items, portfolio, toast, dateFormat: settings.dateFormat,
             onSavePosition: async pos => {
               await window.genius?.savePosition(pos);
               const p = await window.genius?.getPortfolio();
@@ -13178,6 +13327,7 @@ function App() {
           tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
           tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities,overpricedThreshold:settings.overpricedThreshold||30}),
           tab==='flips' &&h(FlipsTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,description:TAB_DESCRIPTIONS.flips}),
+          tab==='top_movers' &&h(TopMoversTab, {items:visibleItems,officialTop100,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.top_movers}),
           tab==='money_makers' &&h(MoneyMakersTab, {items:visibleItems,onSelect:handleSelect,description:TAB_DESCRIPTIONS.money_makers}),
           tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),

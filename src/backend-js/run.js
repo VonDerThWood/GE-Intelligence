@@ -900,6 +900,29 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
     }
   }
 
+  // Real item icon URLs via the wiki's own API (icons.js), replacing the
+  // old renderer.js filename-guessing approach — resolved incrementally
+  // (RESOLVE_PER_RUN in icons.js) so a fresh install's ~7,400 items
+  // backfill over several fetch cycles instead of one blocking call.
+  if ((args.mode === 'full' || args.mode === 'prices') && items.length) {
+    try {
+      const { resolveIcons } = require('./icons.js');
+      const iconCache = await resolveIcons(items.map(it => it.name), dataDir);
+      for (const it of items) {
+        const entry = iconCache[(it.name || '').toLowerCase()];
+        // `icon` (small inventory sprite) is what's shown inline
+        // everywhere; `detail` (the wiki's big zoomed-in render) is only
+        // used for the "click to enlarge" view — they can look
+        // meaningfully different (different angle/scale/shadow), so
+        // showing detail inline was mistaken for a rendering glitch.
+        if (entry?.icon) it.iconUrl = entry.icon;
+        if (entry?.detail) it.iconDetailUrl = entry.detail;
+      }
+    } catch (e) {
+      console.log(`[icons] Error: ${e.message}`);
+    }
+  }
+
   const output = {
     items,
     news,

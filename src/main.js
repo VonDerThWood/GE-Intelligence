@@ -159,6 +159,15 @@ function runPython(mode = 'prices') {
     if (webhookUrl) argv.push(`--webhook=${webhookUrl}`);
 
     console.log('[run.js] Running with args:', argv.join(' '));
+    // Fired BEFORE the historyLoadedPromise wait below, not after — that
+    // wait is exactly the part that can silently take minutes right after
+    // a cold boot (antivirus scanning ~7,300 history files for the first
+    // time), and the renderer's "Fetch Now" button had no way to know a
+    // fetch was even in progress during it (Ben, 2026-08-13: an auto-
+    // launch fetch that was actually still running just looked stuck,
+    // since only a manually-clicked Fetch Now ever set the button's own
+    // local "fetching" state).
+    notifyRenderer('fetch-start', { mode });
 
     try {
       await api.historyLoadedPromise; // don't compute stats off a still-loading, partial historyPopulatedIds
@@ -244,7 +253,27 @@ function stopScheduler() {
 // lives there (see its file comment for why), with zero Electron
 // dependencies, so a future Capacitor/mobile build could call the same
 // functions directly with no IPC layer in between at all.
-ipcMain.handle('get-data', () => api.getData());
+let didInitialFetch = false;
+ipcMain.handle('get-data', () => {
+  // The post-launch auto-fetch used to fire on a blind 3s setTimeout from
+  // app.whenReady — fine on a warm relaunch (renderer mounts well within
+  // 3s, same-day testing all confirmed it firing correctly), but a real
+  // miss Ben hit (2026-08-13): right after a full Windows restart, cold
+  // disk caches and antivirus scanning fresh files can push renderer
+  // mount noticeably past 3s. If the fetch (or its failure) fires before
+  // the renderer's fetch-complete/fetch-error listeners are registered,
+  // Electron's IPC doesn't buffer/replay the event — it's just lost, with
+  // no visible error and no retry until the next scheduled 15-min tick.
+  // Tying the initial fetch to the renderer's own first get-data call
+  // instead guarantees it's already mounted (it just made an IPC call) —
+  // the 500ms buffer after that is just to let its useEffect listeners
+  // finish registering, not a blind guess at total startup time.
+  if (!didInitialFetch) {
+    didInitialFetch = true;
+    setTimeout(() => runPython('prices'), 500);
+  }
+  return api.getData();
+});
 
 ipcMain.handle('quit-app', () => { isQuitting = true; app.quit(); return { success: true }; });
 ipcMain.handle('get-app-version', () => app.getVersion());
@@ -515,7 +544,9 @@ app.whenReady().then(async () => {
   api.loadHistory();
   api.runAutoBackup().catch(e => console.error('[autobackup] failed:', e.message));
   startScheduler();
-  setTimeout(() => runPython('prices'), 3000);
+  // Initial post-launch price fetch now triggers off the renderer's own
+  // first get-data IPC call (see that handler's comment) instead of a
+  // blind timer here.
   setTimeout(() => checkDxpNotifications(), 5000);
   setTimeout(() => checkWatchlistDigest(), 6000);
   setTimeout(() => checkReminders(), 7000);

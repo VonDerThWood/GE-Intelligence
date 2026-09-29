@@ -100,6 +100,7 @@ contextBridge.exposeInMainWorld('genius', {
   testNotification: (opts) => ipcRenderer.invoke('test-notification', opts),
 
   // Events from main process
+  onFetchStart: (cb) => ipcRenderer.on('fetch-start', (_, data) => cb(data)),
   onFetchComplete: (cb) => ipcRenderer.on('fetch-complete', (_, data) => cb(data)),
   onFetchError: (cb) => ipcRenderer.on('fetch-error', (_, data) => cb(data)),
   onUpdateAvailable: (cb) => ipcRenderer.on('update-available', (_, data) => cb(data)),
