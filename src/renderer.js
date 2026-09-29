@@ -5629,6 +5629,21 @@ function MarketTab({items, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v2.7.0',
+    items: [
+      'New Top Movers tab — Jagex\'s own official GE Top 100 Rises/Falls alongside GEnius\'s real-time equivalent, no longer buried in a Dashboard accordion capped at 30 rows.',
+      'Item icons now resolved from the wiki\'s own API instead of guessed from the item name — fixes broken/wrong images on items with apostrophes, parenthetical variants, or non-standard capitalization. The small inline icon and the "click to enlarge" detail image are now correctly two different pictures.',
+      'Flips: new "Realistic Profit" column, using your buy limit capped by the item\'s own average daily volume instead of always assuming the full limit trades same-day. The old figure is kept as "Max Profit (limit)" for reference.',
+      'Opportunities: signal badges (SURGE, OVERPRICED, etc.) are now hidden by default with a toggle to show them, instead of cluttering every row — especially redundant in the Overpriced/Underpriced sections where every row already carries that badge.',
+      'Added an F5 shortcut to Fetch Now, matching browser refresh conventions.',
+      'Fixed the header not showing "Fetching..." during an automatic fetch (scheduler tick or the post-launch fetch) — only a manually-clicked Fetch Now ever set that state before, so a slow background fetch right after a fresh boot could look stuck with no indication anything was happening.',
+      'Fixed Portfolio\'s Tax Today/This Week/This Month sitting frozen at whatever your last sale was if you hadn\'t sold anything since — the day/week/month buckets now correctly reset on their own once each window passes, not just when a new sale happens.',
+      'Added a Date column to Portfolio\'s Closed Positions — the "Sold At / Converted" column was misleadingly named; it only ever showed the price, never an actual date.',
+      'Fixed the Convert modal\'s auto-filled machine charge cost going stale if you changed Quantity after clicking "Use this" — it now stays in sync with Quantity until you manually edit it yourself.',
+      'Fixed the Top 100 table\'s item icons all showing broken — was using a Jagex sprite endpoint with a stale cache-busting token that 404s on every item now; switched to GEnius\'s own wiki-resolved icons.',
+    ]
+  },
+  {
     version: 'v2.6.0',
     items: [
       'New Money Makers tab, out of dev-mode and open to everyone — Herblore, Divination, Construction, Magic, Smithing, Crafting, Fletching, and Summoning, all priced off GEnius\'s own live buy/sell prices instead of the static GE reference price, with per-item buy limits and volume shown so you can tell what\'s actually worth doing.',
