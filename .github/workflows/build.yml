@@ -6,6 +6,17 @@ on:
       - 'v*'          # triggers on: git tag v1.0.1 && git push --tags
   workflow_dispatch:  # allows manual trigger from GitHub Actions UI
 
+# Without this, the default GITHUB_TOKEN only gets read access to repo
+# contents, which is enough for softprops/action-gh-release to create the
+# release and upload the .exe asset, but not enough for whatever follow-up
+# call it makes to finalize it — surfaces as a "Resource not accessible by
+# integration" failure on the job even though the release/asset actually
+# went through successfully (confirmed for real, 2026-09-29: v2.7.0's
+# release published fine with the exe attached despite this same job
+# showing red). This just grants the token write access for this workflow.
+permissions:
+  contents: write
+
 jobs:
   build-windows:
     runs-on: windows-latest
