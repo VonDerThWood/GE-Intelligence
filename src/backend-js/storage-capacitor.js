@@ -104,12 +104,17 @@ async function loadDirBatched(dirPath, { batchSize = 50 } = {}) {
   return out;
 }
 
+// Item files are always <numeric id>.json — refuse anything else so an id
+// can never become a path (e.g. '../x') no matter which caller passed it.
+const isItemFileId = id => /^\d+$/.test(String(id));
 async function writeDirItem(dirPath, id, data) {
+  if (!isItemFileId(id)) return;
   await ensureDir(dirPath);
   await atomicWrite(dirPath.replace(/\\/g, '/') + `/${id}.json`, JSON.stringify(data));
 }
 
 async function readDirItem(dirPath, id) {
+  if (!isItemFileId(id)) return null;
   return readJSON(dirPath.replace(/\\/g, '/') + `/${id}.json`, null);
 }
 

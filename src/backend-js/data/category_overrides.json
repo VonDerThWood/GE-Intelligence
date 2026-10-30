@@ -1342,43 +1342,43 @@
     "mining"
   ],
   "air talisman": [
-    "runes"
+    "artisan"
   ],
   "earth talisman": [
-    "runes"
+    "artisan"
   ],
   "fire talisman": [
-    "runes"
+    "artisan"
   ],
   "water talisman": [
-    "runes"
+    "artisan"
   ],
   "body talisman": [
-    "runes"
+    "artisan"
   ],
   "mind talisman": [
-    "runes"
+    "artisan"
   ],
   "blood talisman": [
-    "runes"
+    "artisan"
   ],
   "chaos talisman": [
-    "runes"
+    "artisan"
   ],
   "cosmic talisman": [
-    "runes"
+    "artisan"
   ],
   "death talisman": [
-    "runes"
+    "artisan"
   ],
   "law talisman": [
-    "runes"
+    "artisan"
   ],
   "soul talisman": [
-    "runes"
+    "artisan"
   ],
   "nature talisman": [
-    "runes"
+    "artisan"
   ],
   "logs": [
     "mining"
@@ -3546,7 +3546,7 @@
     "food"
   ],
   "elemental talisman": [
-    "runes"
+    "artisan"
   ],
   "binding necklace": [
     "artisan"
@@ -9672,9 +9672,6 @@
   "crystal deflector": [
     "ranged"
   ],
-  "ghostly essence": [
-    "rares"
-  ],
   "basilisk boots": [
     "ranged",
     "low_tier"
@@ -10094,9 +10091,6 @@
     "magic",
     "ammo"
   ],
-  "mimic tongue cape": [
-    "rares"
-  ],
   "dormant anima core helm": [
     "boss"
   ],
@@ -10377,9 +10371,6 @@
   ],
   "luck of the dwarves": [
     "hybrid"
-  ],
-  "hazelmere's signet ring": [
-    "rares"
   ],
   "lapis lazuli ring": [
     "artisan"
@@ -10839,15 +10830,16 @@
     "treasure_trails"
   ],
   "blue checkered shirt": [
-    "rares"
+    "treasure_trails"
   ],
   "green checkered shirt": [
-    "rares"
+    "treasure_trails"
   ],
   "purple checkered shirt": [
-    "rares"
+    "treasure_trails"
   ],
   "orlando smith's hat": [
+    "rares",
     "treasure_trails"
   ],
   "guido's bonfire in a bottle": [
@@ -10896,7 +10888,8 @@
     "food"
   ],
   "tavia's fishing rod": [
-    "rares"
+    "rares",
+    "mining"
   ],
   "pirate hook (right)": [
     "cosmetics"
@@ -13420,9 +13413,6 @@
     "artisan",
     "low_tier"
   ],
-  "swordy mcswordface": [
-    "rares"
-  ],
   "elder shaft": [
     "ammo",
     "artisan"
@@ -14035,6 +14025,7 @@
     "low_tier"
   ],
   "guildmaster tony's mattock": [
+    "rares",
     "archaeology"
   ],
   "spear of annihilation": [
@@ -14450,9 +14441,6 @@
   ],
   "infernus pyroclasts": [
     "food"
-  ],
-  "aurora dye": [
-    "rares"
   ],
   "empty easter basket": [
     "rares"
@@ -16931,9 +16919,6 @@
   "cloak of seasons": [
     "rares"
   ],
-  "gnome scarf": [
-    "rares"
-  ],
   "power flower basket (inactive)": [
     "rares"
   ],
@@ -17066,9 +17051,6 @@
   ],
   "enhanced kerapac's wristwraps shard": [
     "boss"
-  ],
-  "mimic plushie": [
-    "rares"
   ],
   "coin of enchantment (tradeable)": [
     "rares"
@@ -17231,9 +17213,6 @@
   "watermelon parasol": [
     "rares"
   ],
-  "pinata sombrero": [
-    "rares"
-  ],
   "vorkath's spike": [
     "boss"
   ],
@@ -17300,12 +17279,6 @@
     "low_tier"
   ],
   "frosted wreath": [
-    "rares"
-  ],
-  "gnome goggles": [
-    "rares"
-  ],
-  "pinata plushie": [
     "rares"
   ],
   "robin (item)": [
@@ -19515,5 +19488,57 @@
   ],
   "powder of item protection": [
     "supplies"
+  ],
+  "hazelmere's signet ring": [
+    "rares"
+  ],
+  "mimic tongue cape": [
+    "cosmetics"
+  ],
+  "mimic plushie": [
+    "cosmetics"
+  ],
+  "gnome scarf": [
+    "cosmetics"
+  ],
+  "gnome goggles": [
+    "cosmetics"
+  ],
+  "swordy mcswordface": [
+    "melee"
+  ],
+  "pinata sombrero": [
+    "rares"
+  ],
+  "pinata plushie": [
+    "rares"
+  ],
+  "aurora dye": [
+    "rares"
+  ],
+  "ghostly essence": [
+    "prayer"
+  ],
+  "hawthorn's hatchet": [
+    "rares",
+    "mining"
+  ],
+  "malachi's tooth": [
+    "ranged",
+    "boss"
+  ],
+  "malachi's claw": [
+    "ranged",
+    "boss"
+  ],
+  "invoke arisen flesh incantation codex": [
+    "codex",
+    "boss"
+  ],
+  "pink hallowe'en mask": [
+    "rares"
+  ],
+  "pink pumpkin": [
+    "rares"
   ]
 }

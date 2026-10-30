@@ -42,7 +42,9 @@ const BUNDLED_EVENTS = require('./data/dxp_events.json').map(e => [...e]);
 // ─── RS Wiki auto-fetch ───────────────────────────────────────────────────────
 
 const WIKI_DXP_URL = 'https://runescape.wiki/api.php?action=parse&page=Double+XP&prop=wikitext&format=json&origin=*';
-const WIKI_REFRESH_MS = 7 * 24 * 3600000; // refresh at most once per week
+// Daily, not weekly (Ben, 2026-10-07): a new DXP should reach the Almanac
+// within a day of its announcement. One small wiki request.
+const WIKI_REFRESH_MS = 24 * 3600000;
 const WIKI_CACHE_FILE = 'dxp_events_wiki.json';
 
 const WIKI_MONTHS = {
@@ -83,9 +85,11 @@ function _parseWikiDxpTable(wikitext) {
 
 // Per-session in-memory cache so repeated loadEvents() calls don't re-fetch.
 let _wikiEventsCache = null;
+let _wikiEventsCacheAt = 0; // in-memory copy also expires — GEnius often stays open for days
 
 async function _fetchWikiDxpEvents(dataDir) {
-  if (_wikiEventsCache !== null) return _wikiEventsCache;
+  if (_wikiEventsCache !== null && Date.now() - _wikiEventsCacheAt < WIKI_REFRESH_MS) return _wikiEventsCache;
+  _wikiEventsCacheAt = Date.now();
   if (!dataDir) return (_wikiEventsCache = []);
 
   const cachePath = path.join(dataDir, WIKI_CACHE_FILE);

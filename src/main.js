@@ -2,7 +2,7 @@ const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notificatio
 const path = require('path');
 const fs = require('fs');
 const storage = require('./backend-js/storage.js');
-const { createGeniusApi } = require('./backend-js/api.js');
+const { createGeniusApi, isValidDiscordWebhook } = require('./backend-js/api.js');
 
 // Was electron-store — replaced with storage.createKVStore (see its
 // comment) so this isn't tied to Electron's app.getPath() at all, which
@@ -19,6 +19,18 @@ const { createGeniusApi } = require('./backend-js/api.js');
 let store;
 let api;
 const isDev = process.argv.includes('--dev');
+
+// Test mode (Ben, 2026-10-06) — for Claude to drive the app from scripts
+// (Chrome DevTools Protocol on --remote-debugging-port) while Ben's own
+// GEnius keeps running. Launch: `npm run test-mode`. It runs as a fully
+// separate instance with its own userData folder (GEnius-test), refreshed
+// from a snapshot of the real data on every launch, so nothing done in a
+// test can touch the real portfolio/goals/alerts. Per-item price history
+// (1.6 GB) is read straight from the real folder but never written. No
+// notifications, Discord, auto-backup, update check or tray icon.
+const isTestMode = process.argv.includes('--test-mode');
+const REAL_USER_DATA = path.join(app.getPath('appData'), 'GEnius');
+if (isTestMode) app.setPath('userData', path.join(app.getPath('appData'), 'GEnius-test'));
 
 // Persistent white-flash-on-launch fix: this is a GPU compositor swap-chain
 // issue (a literal white frame gets presented before the actual painted
@@ -106,7 +118,22 @@ function createWindow() {
   mainWindow.setBackgroundColor('#1a1209');
 
   mainWindow.loadFile(path.join(__dirname, 'index.html'));
-  mainWindow.once('ready-to-show', () => { mainWindow.show(); });
+  // The preload bridge (window.genius) is attached to this window no
+  // matter what URL it's showing — so if anything ever navigated it to a
+  // remote page, that page would get full access to saveSettings, import,
+  // openExternal, etc. Nothing does today (every link goes through
+  // openExternal), but these two guards make sure nothing ever can: block
+  // in-window navigation away from the app, and refuse to open new windows
+  // (external links still work — they go to the real browser).
+  mainWindow.webContents.on('will-navigate', (e, url) => {
+    if (url !== mainWindow.webContents.getURL()) e.preventDefault();
+  });
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//.test(url)) shell.openExternal(url);
+    return { action: 'deny' };
+  });
+  // Test mode opens without stealing focus from whatever Ben is doing.
+  mainWindow.once('ready-to-show', () => { isTestMode ? mainWindow.showInactive() : mainWindow.show(); });
   // Safety net — 'ready-to-show' not firing leaves the window permanently
   // invisible while createTray() below still runs unconditionally, which
   // looks exactly like "the app only opens to the tray." Confirmed
@@ -117,7 +144,7 @@ function createWindow() {
   // window hasn't shown itself within a generous window, force it rather
   // than leave the app silently invisible.
   setTimeout(() => {
-    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) mainWindow.show();
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) isTestMode ? mainWindow.showInactive() : mainWindow.show();
   }, 8000);
   mainWindow.on('close', (e) => {
     if (!isQuitting) { e.preventDefault(); mainWindow.hide(); }
@@ -138,7 +165,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open GEnius', click: () => { mainWindow.show(); mainWindow.focus(); } },
-    { label: 'Fetch Now', click: () => runPython('prices') },
+    { label: 'Fetch Now', click: () => runPython('prices').catch(() => {}) },
     { type: 'separator' },
     { label: 'Quit', click: () => { isQuitting = true; app.quit(); } }
   ]);
@@ -151,8 +178,14 @@ function createTray() {
 // historical name (was a Python child-process spawn before the JS port,
 // see SESSION_LOG.md 2026-06-26) since renaming would touch several call
 // sites for no functional benefit.
+// Only one fetch at a time: the scheduler tick, tray Fetch Now, the
+// initial fetch and the renderer's Fetch Now could otherwise overlap and
+// interleave their writes to the same data files. A request made while a
+// fetch is already running just shares that fetch's result.
+let fetchInFlight = null;
 function runPython(mode = 'prices') {
-  return (async () => {
+  if (fetchInFlight) return fetchInFlight;
+  fetchInFlight = (async () => {
     const { main: runJs } = require('./backend-js/run.js');
     const webhookUrl = store.get('discordWebhook', '');
     const argv = [`--mode=${mode}`, `--data-dir=${dataDir}`];
@@ -171,15 +204,27 @@ function runPython(mode = 'prices') {
 
     try {
       await api.historyLoadedPromise; // don't compute stats off a still-loading, partial historyPopulatedIds
-      await runJs(argv, await api.computeHistoryStats());
-      notifyRenderer('fetch-complete', { mode, timestamp: Date.now() });
+      const result = await runJs(argv, await api.computeHistoryStats());
+      if (result && result.pricesFailed) throw new Error('Price fetch failed — still showing the previous prices');
       if (mode === 'prices' || !mode) await api.updateSnapshots();
+      if (mode !== 'news') await api.recordOpportunities();
+      await api.archiveNews();
+      // Checks run against the data this fetch just wrote, and finish
+      // before fetch-complete, so the renderer's alert/reminder re-pull on
+      // fetch-complete sees the freshly fired state.
+      await runAllChecks();
+      notifyRenderer('fetch-complete', { mode, timestamp: Date.now() });
+      // Keeps per-item history current in the background (up to 500 of the
+      // most out-of-date items per fetch). Deliberately not awaited — it
+      // takes a few minutes and must never hold up the fetch itself.
+      if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(() => {});
     } catch (error) {
       console.error('[run.js] Error:', error.message);
       notifyRenderer('fetch-error', { error: error.message });
       throw error;
     }
-  })();
+  })().finally(() => { fetchInFlight = null; });
+  return fetchInFlight;
 }
 
 function notifyRenderer(channel, data) {
@@ -220,8 +265,31 @@ async function checkReminders() {
 }
 
 async function checkPriceAlerts() {
-  for (const a of await api.getTriggeredAlerts()) {
+  // getTriggeredAlerts still runs regardless (it records fired state and
+  // sends Discord); the Settings checkbox only controls the desktop popup.
+  const triggered = await api.getTriggeredAlerts();
+  if (!store.get('notifications', true)) return;
+  for (const a of triggered) {
     new Notification({ title: a.title, body: a.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
+async function checkDxpNews() {
+  for (const n of await api.getDxpNewsNotifications()) {
+    new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
+async function checkBuyGoals() {
+  for (const n of await api.getBuyGoalNotifications()) {
+    new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
+async function runAllChecks() {
+  if (isTestMode) return; // no notifications or Discord from a test instance
+  for (const check of [checkDxpNotifications, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews]) {
+    try { await check(); } catch (e) { console.error(`[Checks] ${check.name} failed:`, e.message); }
   }
 }
 
@@ -236,11 +304,12 @@ function startScheduler() {
     const newsStale = Date.now() - lastNewsFetch > 60 * 60 * 1000;
     if (newsStale) {
       store.set('lastNewsFetch', Date.now());
-      runPython('full');
+      runPython('full').catch(() => {});
     } else {
-      runPython('prices');
+      runPython('prices').catch(() => {});
     }
-    checkDxpNotifications(); checkWatchlistDigest(); checkPortfolioDigest(); checkReminders(); checkPriceAlerts();
+    // Alert/digest/reminder checks now run inside runPython, after the
+    // fetch finishes, instead of here against the previous fetch's data.
   }, ms);
 }
 
@@ -270,13 +339,14 @@ ipcMain.handle('get-data', () => {
   // finish registering, not a blind guess at total startup time.
   if (!didInitialFetch) {
     didInitialFetch = true;
-    setTimeout(() => runPython('prices'), 500);
+    setTimeout(() => runPython('prices').catch(() => {}), 500);
   }
   return api.getData();
 });
 
 ipcMain.handle('quit-app', () => { isQuitting = true; app.quit(); return { success: true }; });
 ipcMain.handle('get-app-version', () => app.getVersion());
+ipcMain.handle('is-test-mode', () => isTestMode);
 
 ipcMain.handle('get-dxp-intelligence', async (_, opts) => {
   try { return await api.getDxpIntelligence(opts); }
@@ -299,8 +369,8 @@ ipcMain.handle('fetch-now', async (_, mode) => {
     // unfired across two manual Fetch Now clicks, only firing once the
     // exact same check was run directly outside the app. Running the same
     // checks the scheduler runs here too, so a manual refresh behaves the
-    // same way as waiting for the next automatic one.
-    checkDxpNotifications(); checkWatchlistDigest(); checkPortfolioDigest(); checkReminders(); checkPriceAlerts();
+    // same way as waiting for the next automatic one. (Those checks now
+    // run inside runPython itself, before fetch-complete is sent.)
     return { success: true };
   }
   catch (e) { return { success: false, error: e.message }; }
@@ -318,10 +388,27 @@ ipcMain.handle('get-settings', () => ({
   columnWidths:       store.get('columnWidths', {}),
   showThumbnails:     store.get('showThumbnails', true),
   devMode:            store.get('devMode', false),
+  // These three were saved but never returned here, so a changed value
+  // silently reset on every restart (found during the 2026-10-02 audit).
+  dateFormat:         store.get('dateFormat', 'MM/DD/YYYY'),
+  overpricedThreshold:store.get('overpricedThreshold', 30),
+  accentColor:        store.get('accentColor', null),
 }));
 
+// Allowlisted rather than "write whatever key the renderer sends" — the
+// same approach backup import already uses. Every key the Settings tab
+// actually saves is listed; anything else is ignored.
+const SAVEABLE_SETTINGS = new Set([
+  'discordWebhook', 'fetchInterval', 'theme', 'notifications', 'expensiveThreshold',
+  'navOrder', 'uiScale', 'detailPanelWidth', 'columnWidths', 'showThumbnails',
+  'devMode', 'dateFormat', 'overpricedThreshold', 'accentColor',
+]);
 ipcMain.handle('save-settings', async (_, settings) => {
-  Object.entries(settings).forEach(([k, v]) => store.set(k, v));
+  Object.entries(settings || {}).forEach(([k, v]) => {
+    if (!SAVEABLE_SETTINGS.has(k)) return;
+    if (k === 'discordWebhook' && v && !isValidDiscordWebhook(v)) return;
+    store.set(k, v);
+  });
   await store.flush();
   startScheduler();
   return { success: true };
@@ -431,6 +518,34 @@ ipcMain.handle('delete-alert', (_, id) => api.deleteAlert(id));
 
 ipcMain.handle('get-portfolio', () => api.getPortfolio());
 ipcMain.handle('save-position', (_, position) => api.savePosition(position));
+ipcMain.handle('get-buy-goals', () => api.getBuyGoals());
+ipcMain.handle('get-opportunity-history', () => api.getOpportunityHistory());
+ipcMain.handle('get-events', () => api.getEvents());
+ipcMain.handle('save-event', (_, ev) => api.saveEvent(ev));
+ipcMain.handle('delete-event', (_, id) => api.deleteEvent(id));
+ipcMain.handle('get-event-suggestions', () => api.getEventSuggestions());
+ipcMain.handle('dismiss-event-suggestion', (_, url) => api.dismissEventSuggestion(url));
+ipcMain.handle('get-event-impact', (_, id) => api.getEventImpact(id));
+ipcMain.handle('get-quest-items', (_, name) => api.getQuestItems(name));
+ipcMain.handle('get-new-items-summary', () => api.getNewItemsSummary());
+ipcMain.handle('get-content-drops', (_, pages) => api.getContentDrops(pages));
+ipcMain.handle('get-similar-items', (_, id) => api.getSimilarItems(id));
+ipcMain.handle('get-chart-analysis', (_, id) => api.getChartAnalysis(id));
+ipcMain.handle('ask-item', (_, id, q) => api.askItem(id, q));
+ipcMain.handle('list-auto-backups', () => api.listAutoBackups());
+ipcMain.handle('restore-auto-backup', (_, f) => api.restoreAutoBackup(f));
+ipcMain.handle('get-food-heal', (_, n) => api.getFoodHeal(n));
+ipcMain.handle('get-dxp-news', () => api.getDxpNewsDetections());
+ipcMain.handle('get-news-calendar', (_, opts) => api.getNewsCalendar(opts));
+ipcMain.handle('get-news-feed', () => api.getNewsFeed());
+ipcMain.handle('get-news-badge-count', () => api.getNewsBadgeCount());
+ipcMain.handle('mark-news-read', (_, urls) => api.markNewsRead(urls));
+ipcMain.handle('get-news-badge-prefs', () => api.getNewsBadgePrefs());
+ipcMain.handle('set-news-badge-prefs', (_, p) => api.setNewsBadgePrefs(p));
+ipcMain.handle('resolve-dxp-news', (_, url, action, dates) => api.resolveDxpNews(url, action, dates));
+ipcMain.handle('save-buy-goal', (_, goal) => api.saveBuyGoal(goal));
+ipcMain.handle('delete-buy-goal', (_, id) => api.deleteBuyGoal(id));
+ipcMain.handle('update-buy-goal-totals', (_, totals) => api.updateBuyGoalTotals(totals));
 ipcMain.handle('delete-position', (_, id) => api.deletePosition(id));
 ipcMain.handle('sell-position', (_, payload) => api.sellPosition(payload));
 ipcMain.handle('convert-position', (_, payload) => api.convertPosition(payload));
@@ -439,6 +554,7 @@ ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
 ipcMain.handle('get-live-item-price', async (_, itemId) => api.getLiveItemPrice(itemId));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
+ipcMain.handle('get-launches', async () => api.getLaunches());
 ipcMain.handle('get-drop-sources', async (_, itemName) => api.getDropSources(itemName));
 ipcMain.handle('search-monsters', async (_, query) => api.searchMonsters(query));
 ipcMain.handle('get-monster-drops', async (_, monsterName, mode) => api.getMonsterDrops(monsterName, mode));
@@ -519,24 +635,60 @@ async function checkForUpdate() {
     const latest = (data.tag_name || '').replace(/^v/, '');
     if (latest && isNewerVersion(latest, current)) {
       mainWindow?.webContents.send('update-available', { current, latest, url: data.html_url });
-      new Notification({
-        title: 'GEnius Update Available',
-        body: `v${latest} is out — you're on v${current}. Open GEnius to download.`,
-      }).show();
+      // Windows notification once per new version — the check now repeats
+      // every 6h, and the in-app banner is enough after the first ping.
+      if (store.get('updateNotifiedVersion', '') !== latest) {
+        store.set('updateNotifiedVersion', latest);
+        new Notification({
+          title: 'GEnius Update Available',
+          body: `v${latest} is out — you're on v${current}. Open GEnius to download.`,
+        }).show();
+      }
     }
   } catch {}
 }
 
+// Test mode: copy the real config + data (minus the history folder and big
+// one-off backups) into the test userData folder, fresh every launch.
+async function prepareTestModeData() {
+  const fsp = require('fs').promises;
+  const testUser = app.getPath('userData');
+  await fsp.rm(path.join(testUser, 'data'), { recursive: true, force: true });
+  await fsp.mkdir(path.join(testUser, 'data'), { recursive: true });
+  const SKIP = new Set(['history', 'autobackups', 'history.json.pre-migration-backup']);
+  for (const name of await fsp.readdir(path.join(REAL_USER_DATA, 'data'))) {
+    if (SKIP.has(name)) continue;
+    await fsp.cp(path.join(REAL_USER_DATA, 'data', name), path.join(testUser, 'data', name), { recursive: true });
+  }
+  const cfg = JSON.parse(await fsp.readFile(path.join(REAL_USER_DATA, 'config.json'), 'utf8').catch(() => '{}'));
+  cfg.discordWebhook = '';     // never ping the real Discord from a test
+  cfg.notifications = false;
+  await fsp.writeFile(path.join(testUser, 'config.json'), JSON.stringify(cfg));
+}
+
 app.whenReady().then(async () => {
+  // app.quit() above is asynchronous — without this, a second instance
+  // still went on to create a window, load data and run the scheduler
+  // (writing the same files) before it exited. Seen 2026-10-08: data
+  // briefly showed, then vanished.
+  if (!gotSingleInstanceLock) return;
+  if (isTestMode) await prepareTestModeData();
   // Initialize data paths here — app.getPath() requires app to be ready.
   // Same filename electron-store used by default, so upgrading from an
   // older build doesn't lose anyone's existing settings/watchlist/etc.
   store   = await storage.createKVStore(path.join(app.getPath('userData'), 'config.json'));
   dataDir = path.join(app.getPath('userData'), 'data');
   await storage.ensureDir(dataDir);
-  api = await createGeniusApi({ dataDir, store, platform: 'desktop' });
+  api = await createGeniusApi({ dataDir, store, platform: 'desktop',
+    ...(isTestMode ? { historyDirOverride: path.join(REAL_USER_DATA, 'data', 'history'), readOnlyHistory: true } : {}) });
 
   createWindow();
+  if (isTestMode) {
+    mainWindow.setTitle('GEnius [TEST MODE]');
+    api.loadHistory();
+    startScheduler();
+    return;
+  }
   createTray();
   // Window shows immediately; history loads in the background rather
   // than blocking startup. Even with the async-batched reads in api.js,
@@ -552,6 +704,9 @@ app.whenReady().then(async () => {
   setTimeout(() => checkReminders(), 7000);
   setTimeout(() => checkPriceAlerts(), 8000);
   setTimeout(() => checkForUpdate(), 8000);
+  // GEnius lives in the tray and can run for weeks without a restart, so a
+  // launch-only check missed releases (v2.7.0: 0 installer downloads).
+  setInterval(() => checkForUpdate(), 6 * 3600 * 1000);
 });
 
 app.on('window-all-closed', (e) => {

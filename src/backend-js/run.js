@@ -98,6 +98,48 @@ async function fetchLivePrices() {
       console.log(`[prices] 24h volume fetch failed (non-fatal): ${e.message}`);
     }
 
+    // Yesterday's full-day average (UTC day), one request (Ben, 2026-10-13):
+    // the live daily change used to need GEnius's OWN snapshot from ~24h
+    // earlier, which rarely existed when the laptop hibernates during the
+    // day ("Live daily Δ: Building…" on 0 of 7,479 items). The wiki's 24h
+    // endpoint only accepts UTC-midnight starts, so "yesterday" = the
+    // previous complete UTC day. Volume-weighted mid of buys and sells.
+    try {
+      const dayStart = Math.floor(Date.now() / 86400000) * 86400 - 86400;
+      const resY = await fetch(`https://prices.runescape.wiki/api/v2/rs/24h?timestamp=${dayStart}`, {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (resY.ok) {
+        const jy = await resY.json();
+        for (const [id, v] of Object.entries(jy.data || {})) {
+          if (!out[id]) continue;
+          // Plain mid of the day's average buy and sell (volume-weighting
+          // tilted toward whichever side happened to trade more).
+          if (v.avgHighPrice && v.avgLowPrice) { out[id].prevDayAvg = (v.avgHighPrice + v.avgLowPrice) / 2; out[id].prevDayHigh = v.avgHighPrice; out[id].prevDayLow = v.avgLowPrice; out[id].prevDayUnits = (v.highPriceVolume || 0) + (v.lowPriceVolume || 0); }
+        }
+      }
+      // "Now" = the last hour's average buy/sell mid, both sides traded —
+      // a single latest trade was far too noisy (first try: Antipoison (1)
+      // "+1,617%", 600+ items flagged vs 34 SURGEs).
+      const res1h = await fetch('https://prices.runescape.wiki/api/v2/rs/1h', {
+        headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' },
+        signal: AbortSignal.timeout(15000),
+      });
+      if (res1h.ok) {
+        const j1 = await res1h.json();
+        for (const [id, v] of Object.entries(j1.data || {})) {
+          if (!out[id] || !v.avgHighPrice || !v.avgLowPrice) continue;
+          out[id].lastHourMid = (v.avgHighPrice + v.avgLowPrice) / 2;
+          out[id].lastHourHigh = v.avgHighPrice; out[id].lastHourLow = v.avgLowPrice;
+          out[id].lastHourHighUnits = v.highPriceVolume || 0; out[id].lastHourLowUnits = v.lowPriceVolume || 0;
+          out[id].lastHourUnits = (v.highPriceVolume || 0) + (v.lowPriceVolume || 0);
+        }
+      }
+    } catch (e) {
+      console.log(`[prices] Yesterday's live average fetch failed (non-fatal): ${e.message}`);
+    }
+
     console.log(`[prices] Got live buy/sell for ${Object.keys(out).length} items`);
     return out;
   } catch (e) {
@@ -128,8 +170,9 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   let historyVolAvg = {};
   let historyPrevPrice = {};
   let historyPrevPriceTs = {};
+  let historyFirstTs = {};
   if (historyStatsOverride) {
-    ({ historyVolAvg, historyPrevPrice, historyPrevPriceTs = {} } = historyStatsOverride);
+    ({ historyVolAvg, historyPrevPrice, historyPrevPriceTs = {}, historyFirstTs = {} } = historyStatsOverride);
   } else {
   // No override (e.g. standalone CLI use, no api.js instance available) —
   // fall back to reading the per-item storage directory directly and
@@ -209,11 +252,16 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   // Build previous volume lookups from last fetch (EMA fallback for items without history)
   const EMA_ALPHA = 0.08;
   const prevAvgVolume = {};
+  // When GEnius first saw each item (Ben, 2026-10-13: Malachi's tooth/claw
+  // showed FRENZY on day one — a brand-new item's "average" volume is just
+  // its first day or two of trading, so any normal day looks like a spike).
+  const prevFirstSeen = {};
   if (existingItems) {
     for (const it of existingItems) {
       const name = it.name || '';
       const avgVol = it.avgVolume;
       if (name && avgVol) prevAvgVolume[name] = avgVol;
+      if (name) prevFirstSeen[name] = it.firstSeen || 1;   // 1 = "already known before firstSeen existed" (not new)
     }
   }
 
@@ -378,12 +426,23 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
     }
 
     const live = livePrices && livePrices[String(itemId)];
+    // Earliest of: saved history's first point, what a previous fetch
+    // recorded, or now — but only items absent from the previous fetch
+    // count as new (older items get 1 = "known before this field existed").
+    const histFirst = itemId ? historyFirstTs[String(itemId)] : null;
+    // Order: real history start wins; else a date a previous fetch stored;
+    // else 1 if it was already in the previous fetch (pre-dates this field);
+    // else now (genuinely new).
+    const stored = prevFirstSeen[name];
+    const firstSeen = histFirst ? Math.min(histFirst, stored > 1 ? stored : Infinity)
+      : stored > 1 ? stored : stored === 1 ? 1 : Date.now();
     itemsOut.push({
       id: itemId, name, categories, high, low, alch, limit, volume,
-      avgVolume, change_1d: changeOneDay, examine, members,
+      avgVolume, firstSeen, change_1d: changeOneDay, examine, members,
       liveBuy: live?.high ?? null, liveBuyTime: live?.highTime ?? null,
       liveSell: live?.low ?? null, liveSellTime: live?.lowTime ?? null,
-      liveUnits: live?.units ?? 0, liveTurnover: live?.turnover ?? 0,
+      liveUnits: live?.units ?? 0, liveTurnover: live?.turnover ?? 0, livePrevDayAvg: live?.prevDayAvg ?? null, liveLastHourMid: live?.lastHourMid ?? null,
+      liveSides: live?.prevDayHigh && live?.lastHourHigh ? { pH: live.prevDayHigh, pL: live.prevDayLow, nH: live.lastHourHigh, nL: live.lastHourLow, uH: live.lastHourHighUnits || 0, uL: live.lastHourLowUnits || 0 } : null,
     });
   }
 
@@ -404,7 +463,39 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
     const snapshots = await updateIntradaySnapshots(dataDir, signaled);
     for (const it of signaled) {
       const price = it.liveBuy ?? it.high ?? it.low;
-      it.change_1d_live = computeLiveChange1d(snapshots, it.id, price);
+      // Prefer "last hour vs yesterday" (average buy/sell mids from the
+      // wiki); fall back to GEnius's own ~24h-old snapshot.
+      const nowMid = it.liveLastHourMid;
+      it.change_1d_live = it.livePrevDayAvg && nowMid
+        ? pyRound(((nowMid - it.livePrevDayAvg) / it.livePrevDayAvg) * 100, 2)
+        : computeLiveChange1d(snapshots, it.id, price);
+      // SPIKE / SLUMP (Ben, 2026-10-13): the live-price twins of SURGE/DUMP
+      // (which use the GE guide's daily change). Kept separate so the
+      // guide-based track record isn't mixed with a different definition,
+      // and so the two can be compared (live history back to July 2026).
+      // Same ±5% / 1,000gp thresholds; only for items with real trading
+      // today (20+ units, turnover ≥ MIN_TURNOVER_GP), a trusted live
+      // price, and 14+ days on the GE.
+      const lc = it.change_1d_live;
+      const young = it.firstSeen && (Date.now() - it.firstSeen) < 14 * 86400000;
+      const ge0 = it.high || it.low || 0;
+      if (lc != null && !young && (it.liveUnits || 0) >= 20 && (it.liveTurnover || 0) >= MIN_TURNOVER_GP && isLiveTrusted(it, ge0)) {
+        const absGp = Math.abs(lc / 100 * (price || 0));
+        // Both sides must agree: buy vs yesterday's buy AND sell vs
+        // yesterday's sell each move 5%+ the same way. A lopsided hour
+        // (only buyers, e.g. alchers) shifts the mid without a real move
+        // (2nd try flagged Raw salmon +294%, Green dye −63%).
+        const sd = it.liveSides;
+        const bH = sd ? (sd.nH - sd.pH) / sd.pH * 100 : null, bL = sd ? (sd.nL - sd.pL) / sd.pL * 100 : null;
+        // Each side needs 10+ trades in the last hour (one 2,713gp buy made
+        // Raw salmon "+294%"), and the move counted is the SMALLER of the
+        // two sides, so one extreme side can't inflate it.
+        if (bH != null && sd.uH >= 10 && sd.uL >= 10) {
+          const up = Math.min(bH, bL), down = Math.max(bH, bL);
+          if (up >= SURGE_CHG_MIN && Math.abs(up / 100 * (price || 0)) >= 1000) { it.signals = [...(it.signals || []), 'SPIKE']; it.change_live_move = pyRound(up, 2); }
+          else if (down <= DUMP_CHG_MAX && Math.abs(down / 100 * (price || 0)) >= 1000) { it.signals = [...(it.signals || []), 'SLUMP']; it.change_live_move = pyRound(down, 2); }
+        }
+      }
     }
   } catch (e) {
     console.log(`[intraday] Error: ${e.message}`);
@@ -580,7 +671,10 @@ function runSignals(items) {
     const avgVol = item.avgVolume || 0;
 
     const gePrice0 = high || low;
-    const hasAvg = !!(avgVol && (gePrice0 * vol) >= MIN_TURNOVER_GP);
+    // No volume-ratio signals (FRENZY/HIGH_VOL/THIN/SURGE/...) until an item
+    // has 14+ days on the GE — before that there's no real "normal" volume.
+    const youngItem = item.firstSeen && (Date.now() - item.firstSeen) < 14 * 86400000;
+    const hasAvg = !youngItem && !!(avgVol && (gePrice0 * vol) >= MIN_TURNOVER_GP);
     const volRatio = hasAvg ? (vol / avgVol) : 0;
 
     // No price floor here anymore — removed 2026-08-05 after confirming
@@ -597,9 +691,12 @@ function runSignals(items) {
     // independently.
 
     const absChgGp = Math.abs(chg / 100 * gePrice0);
-    if (chg >= SURGE_CHG_MIN && absChgGp >= 1000 && (!hasAvg || volRatio >= DIR_VOL_RATIO)) {
+    // Young items (<14 days on the GE): the guide is still catching up from
+    // Jagex's placeholder price (e.g. 115m → real ~1.5b), so a daily jump
+    // isn't a real SURGE/DUMP.
+    if (!youngItem && chg >= SURGE_CHG_MIN && absChgGp >= 1000 && (!hasAvg || volRatio >= DIR_VOL_RATIO)) {
       signals.push('SURGE');
-    } else if (chg <= DUMP_CHG_MAX && absChgGp >= 1000 && (!hasAvg || volRatio >= DIR_VOL_RATIO)) {
+    } else if (!youngItem && chg <= DUMP_CHG_MAX && absChgGp >= 1000 && (!hasAvg || volRatio >= DIR_VOL_RATIO)) {
       signals.push('DUMP');
     } else if (hasAvg && chg >= FLAT_CHG_MIN && chg <= FLAT_CHG_MAX) {
       if (volRatio >= DISTRIB_VOL_MIN) signals.push('DISTRIBUTION');
@@ -663,7 +760,7 @@ function runSignals(items) {
       else if (volRatio >= VOL_ACTIVE_MIN) signals.push('ACTIVE');
       else if (volRatio <= VOL_THIN_MAX) signals.push('THIN');
       else if (volRatio <= VOL_QUIET_MAX) signals.push('QUIET');
-    } else if (vol && !avgVol && vol > 100000) {
+    } else if (!youngItem && vol && !avgVol && vol > 100000) {
       signals.push('HIGH_VOL');
     }
 
@@ -923,17 +1020,55 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
     }
   }
 
+  // Items removed from the GE (Ben, 2026-10-28: Jagex is removing Silverhawk
+  // feathers, springs, the portables... next month). The item list is
+  // rebuilt from the dump every fetch, so a removed item would silently
+  // vanish: gone from the watchlist, and worth 0 (-100%) in the portfolio.
+  // Instead, a tradeable item missing from the dump is held in missingItems
+  // (with its last data) and, once it has been missing for a full day (one
+  // short dump is not a removal), moves to removedItems for good. Removed
+  // items are NOT in `items`, so market scans skip them; the watchlist,
+  // portfolio and alerts look them up and show "Removed from GE".
+  let missingItems = existing.missingItems || {};
+  let removedItems = existing.removedItems || [];
+  const prevTradeable = (existing.items || []).filter(it => !it.untradeable && it.id);
+  if ((args.mode === 'full' || args.mode === 'prices') && !usedFallbackItems &&
+      items.filter(it => !it.untradeable).length >= prevTradeable.length * 0.9) {
+    const now = Date.now();
+    const present = new Set(items.map(it => it.id));
+    const nextMissing = {};
+    for (const [id, m] of Object.entries(missingItems)) if (!present.has(Number(id))) nextMissing[id] = m;
+    for (const it of prevTradeable) {
+      if (!present.has(it.id) && !nextMissing[it.id]) nextMissing[it.id] = { since: now, item: it };
+    }
+    removedItems = removedItems.filter(r => !present.has(r.id)); // came back: not removed after all
+    for (const [id, m] of Object.entries(nextMissing)) {
+      if (now - m.since < 24 * 3600000) continue;
+      if (!removedItems.some(r => r.id === Number(id))) {
+        removedItems.push({ ...m.item, removedFromGe: true, removedAt: m.since });
+        console.log(`[run] ${m.item.name} has been missing from the GE data for a day: marked removed from the GE`);
+      }
+      delete nextMissing[id];
+    }
+    missingItems = nextMissing;
+  }
+
   const output = {
     items,
+    missingItems,
+    removedItems,
     news,
     indexes,
     officialTop100,
-    timestamp: Date.now(),
-    updated_at: new Date().toISOString(),
+    // A failed price fetch keeps the previous items — and their previous
+    // timestamp, so stale prices never get labelled as a fresh update.
+    timestamp: usedFallbackItems && existing.timestamp ? existing.timestamp : Date.now(),
+    updated_at: usedFallbackItems && existing.updated_at ? existing.updated_at : new Date().toISOString(),
   };
 
   await storage.writeJSON(outFile, output, { pretty: true });
   console.log(`[run] Saved ${items.length} items + ${news.length} news -> ${outFile}`);
+  return { pricesFailed: usedFallbackItems };
 }
 
 module.exports = {

@@ -96,7 +96,12 @@ function _escapeRe(s) {
 }
 
 function detectUpdateType(title, description = '') {
-  const text = (title + ' ' + description).toLowerCase();
+  let text = (title + ' ' + description).toLowerCase();
+  // Weekly roundups cover several topics, so no single type fits (Ben,
+  // 2026-10-15: 'The Week Ahead: Ghrazi Blood Knights & Harvest Hollow!' was
+  // tagged Farming Update). Harvest Hollow is the Halloween event, not farming.
+  if (/\b(the week ahead|this week in runescape)\b/.test(text)) return ['Weekly Roundup', []];
+  text = text.replace(/harvest hollow/g, 'halloween event');
   for (const [keywords, label, cats] of UPDATE_RULES) {
     if (keywords.some(kw => new RegExp('\\b' + _escapeRe(kw) + '\\b').test(text))) {
       return [label, cats];

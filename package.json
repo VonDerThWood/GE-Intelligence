@@ -12,15 +12,16 @@
     "prebuild": "node scripts/sync-overrides.js",
     "build": "electron-builder --win --x64",
     "build:dir": "electron-builder --win --x64 --dir",
-    "postinstall": "electron-builder install-app-deps"
+    "postinstall": "electron-builder install-app-deps && node scripts/patch-capacitor.js",
+    "test-mode": "electron . --test-mode --remote-debugging-port=9333"
   },
   "devDependencies": {
-    "@capacitor/assets": "^3.0.5",
     "@capacitor/cli": "^8.4.1",
-    "electron": "^28.0.0",
-    "electron-builder": "24.13.1",
+    "electron": "^44.5.1",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.1",
-    "path-browserify": "^1.0.1"
+    "path-browserify": "^1.0.1",
+    "typescript": "^5.9.3"
   },
   "build": {
     "appId": "com.vonderthwood.genius",
@@ -31,7 +32,9 @@
     "files": [
       "src/**/*",
       "assets/**/*",
-      "node_modules/**/*"
+      "node_modules/**/*",
+      "!node_modules/@capacitor/**",
+      "!node_modules/tslib/**"
     ],
     "asarUnpack": [
       "src/backend-js/data/**/*"

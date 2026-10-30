@@ -1,0 +1,12 @@
+{
+  "name": "genius-plugin",
+  "private": true,
+  "description": "GEnius RS3 plugin (Lua). core/ is the market math, tested against the desktop app's JavaScript.",
+  "scripts": {
+    "test": "node test/test_core.js && node test/test_offers.js && node test/test_tradelog.js && node test/test_json.js",
+    "sync": "node scripts/sync.js"
+  },
+  "devDependencies": {
+    "fengari": "^0.1.5"
+  }
+}

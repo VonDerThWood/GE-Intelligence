@@ -213,11 +213,20 @@ thead th[draggable="true"]:active { cursor: grabbing; }
 .drag-item:hover { border-color: ${T.gold}; background: rgba(201,168,76,0.06); }
 .drag-item.drag-over { border-color: ${T.goldBright}; background: rgba(201,168,76,0.12); }
 
+/* ── Native dropdown lists (Ben, 2026-10-13): Windows draws the opened
+   list on white while the text kept the theme's light colour — unreadable.
+   Give every <select>'s options/groups the theme's dark background. */
+select option, select optgroup { background: ${T.panel}; color: ${T.text}; }
+select optgroup { color: ${T.gold}; font-style: normal; }
+select option:checked { background: ${T.border}; color: ${T.textBright}; }
+
 /* ── Signal badges ── */
 .signal-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 8px; }
 .signal-badge { font-size: 10px; padding: 2px 6px; border-radius: 2px; letter-spacing: 0.5px; border: 1px solid; }
 .signal-badge.SURGE        { background: rgba(76,175,80,0.15);   border-color: rgba(76,175,80,0.4);   color: ${T.green}; }
 .signal-badge.DUMP         { background: rgba(229,57,53,0.15);   border-color: rgba(229,57,53,0.4);   color: ${T.red}; }
+.signal-badge.SPIKE        { background: rgba(76,175,80,0.08);   border-color: rgba(76,175,80,0.6);   color: ${T.green}; border-style: dashed; }
+.signal-badge.SLUMP        { background: rgba(229,57,53,0.08);   border-color: rgba(229,57,53,0.6);   color: ${T.red}; border-style: dashed; }
 .signal-badge.ACCUMULATION { background: rgba(0,188,212,0.12);   border-color: rgba(0,188,212,0.4);   color: #4dd0e1; }
 .signal-badge.DISTRIBUTION { background: rgba(255,152,0,0.12);   border-color: rgba(255,152,0,0.4);   color: #ffb74d; }
 .signal-badge.FRENZY       { background: rgba(255,64,129,0.15);  border-color: rgba(255,64,129,0.5);  color: #ff80ab; }
@@ -239,6 +248,20 @@ thead th[draggable="true"]:active { cursor: grabbing; }
 
 /* ── Market overview ── */
 .overview-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
+.cal-dow { font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: ${T.textDim}; text-align: center; padding: 2px 0 4px; }
+.cal-cell { min-height: 84px; background: ${T.panel2}; border: 1px solid ${T.borderDim}; border-radius: 3px; padding: 3px 4px; cursor: pointer; overflow: hidden; }
+.cal-cell:hover { border-color: ${T.border}; }
+.cal-out { opacity: 0.4; }
+.cal-past .cal-num { color: ${T.textDim}; }
+.cal-today { border-color: ${T.gold}; }
+.cal-today .cal-num { color: ${T.goldBright}; font-weight: bold; }
+.cal-sel { box-shadow: inset 0 0 0 2px ${T.gold}; }
+.cal-num { font-size: 11px; color: ${T.text}; margin-bottom: 2px; }
+.cal-chips { display: flex; flex-direction: column; gap: 2px; }
+.cal-chip { font-size: 10px; line-height: 1.3; padding: 1px 3px; background: rgba(0,0,0,0.25); border-radius: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: ${T.textBright}; }
+.cal-chip-icon { margin-right: 3px; }
+.cal-more { font-size: 9px; color: ${T.textDim}; padding-left: 3px; }
 .ov-card { padding: 10px 12px; background: ${T.panel2}; border: 1px solid ${T.borderDim}; border-radius: 3px; box-shadow: inset 0 1px 0 rgba(201,168,76,0.08); }
 .ov-val { font-size: 20px; color: ${T.gold}; font-weight: 300; }
 .ov-lbl { font-size: 10px; color: ${T.textDim}; margin-top: 2px; letter-spacing: 0.5px; text-transform: uppercase; }
@@ -303,6 +326,8 @@ select.ge-input option { background: ${T.panel}; }
    it permanently to nav. */
 @media (max-width: 700px) {
   .sidebar-toggle { display: inline-flex; align-items: center; }
+  /* Almanac Launches: drop the sparkline column on phones */
+  .launch-table .launch-col-spark { display: none; }
   /* The header (hamburger + logo + search + status + Fetch Now + quit)
      has nowhere near enough room on a ~360-400 CSS-px-wide phone screen
      for all of that — confirmed for real: the search input was getting
@@ -310,7 +335,10 @@ select.ge-input option { background: ${T.panel}; }
      keyboard would pop up) but with no visible room to actually see what
      was typed or render results in. Drop the least essential pieces and
      let the search bar actually have the room it needs. */
-  .ge-status, .ge-header-divider { display: none; }
+  .ge-header-divider { display: none; }
+  /* Compact fetch status (dot + "Live"/"5m ago") so phones show whether
+     prices are fresh. Was hidden entirely, leaving no sign fetching worked. */
+  .ge-status { padding: 2px 5px; font-size: 10px; gap: 4px; flex-shrink: 0; }
   .ge-header-quit { display: none; } /* "quit app" isn't really a mobile concept — Android handles backgrounding itself */
   .ge-header-fetch .fetch-text { display: none; }
   .ge-header-fetch .fetch-icon { display: inline; }
@@ -349,12 +377,53 @@ select.ge-input option { background: ${T.panel}; }
     padding-bottom: env(safe-area-inset-bottom);
   }
   .panel-resize-handle { display: none; }
+  /* Tables: auto layout at phone width (useTableColumns drops the desktop
+     colgroup widths and keeps only each table's phoneCols). */
+  .ge-table { table-layout: auto !important; width: 100% !important; font-size: 12px; }
+  .ge-table thead th { padding: 9px 6px; letter-spacing: 0.5px; white-space: normal; }
+  .ge-table td { padding: 6px 6px; }
+  /* Let cell text wrap (long names, "B: … S: …" live lines) and shrink
+     item icons, so the table fits the screen instead of side-scrolling. */
+  .ge-table td, .ge-table td * { white-space: normal !important; }
+  /* Portfolio row actions: 2x2 grid instead of four squashed buttons. */
+  .pt-portfolio td:last-child > div { display: grid !important; grid-template-columns: 1fr 1fr; gap: 4px !important; }
+  .pt-portfolio td:last-child .ge-btn { min-width: 28px; min-height: 28px; padding: 2px 4px !important; }
+  .ge-table td img { width: 20px !important; height: 20px !important; margin-left: 4px; }
+  .col-resize-handle { display: none; }
+  /* Summary cards: 2 per row instead of 4 squeezed off the right edge;
+     Dashboard Weather + Item of the Day stack instead of side by side. */
+  .overview-grid { grid-template-columns: 1fr 1fr !important; }
+  /* Calendar on a phone: no room for text in cells, so icons only (the
+     tapped day's events are listed in full below the grid). */
+  .cal-cell { min-height: 52px; padding: 2px; }
+  .cal-chip { padding: 0; background: none; border-left: none !important; text-align: center; }
+  .cal-chip-text { display: none; }
+  .cal-chips { flex-direction: row; flex-wrap: wrap; gap: 1px; justify-content: center; }
+  .cal-more { display: none; }
+  /* Finger-sized tap targets (table header toggles stay compact). */
+  .content button, .detail-panel button { min-height: 32px; }
+  .ge-table thead button { min-height: 0; }
+  /* Chart modal: full width, title on its own line, range buttons wrap. */
+  .chart-modal { width: 100% !important; max-width: 100vw; max-height: 100vh; padding: 12px; border-radius: 0; }
+  .chart-modal-overlay { align-items: stretch; }
+  .chart-modal-title { flex-direction: column; align-items: flex-start; gap: 8px; }
+  .chart-modal-title > div { flex-wrap: wrap; }
+  .ov-card { min-width: 0; overflow-wrap: anywhere; }
+  .dash-mood-row { flex-wrap: wrap; }
+  .dash-mood-row > * { flex: 1 1 100% !important; min-width: 0; }
+  ${phoneHideCols()}
+  /* Scroll-jump buttons sat on top of the right-hand (price) column: keep
+     only "top", smaller and fainter. */
+  .scroll-jump-btn:last-child { display: none; }
+  .scroll-jump-btn { width: 30px; height: 30px; opacity: 0.45; }
 }
 `; }
 
 
 function buildBlackCss() { return `
 body { background: #000 !important; }
+select option, select optgroup { background: #0a0a0a !important; }
+select option:checked { background: #1c1c1c !important; }
 .app { background: #000 !important; }
 .sidebar { background: #0a0a0a !important; border-color: #1c1c1c !important; }
 .ge-header { background: linear-gradient(180deg, #111 0%, #0a0a0a 100%) !important; border-color: #1c1c1c !important; }
@@ -389,6 +458,8 @@ body { background: #000 !important; }
 const SIGNAL_INFO = {
   SURGE:        'Price is up 5%+ today with above-average volume — buyers are actively pushing the price higher.',
   DUMP:         'Price is down 5%+ today with above-average volume — sellers are offloading heavily.',
+  SPIKE:        'LIVE price is up 5%+ over the last ~24 hours, with real trading behind it (20+ trades). The live twin of SURGE, which uses the slower GE guide price — SPIKE can show a move a day earlier.',
+  SLUMP:        'LIVE price is down 5%+ over the last ~24 hours, with real trading behind it (20+ trades). The live twin of DUMP, which uses the slower GE guide price — SLUMP can show a move a day earlier.',
   ACCUMULATION: 'Price is flat while volume quietly builds — often signals that someone is loading up before a move.',
   DISTRIBUTION: 'Price is flat but volume is extremely elevated — large quantities are changing hands, which can precede a sharp drop.',
   FRENZY:       'Volume is 250%+ above average — an extreme trading spike. Something is driving unusual attention to this item.',
@@ -479,11 +550,21 @@ function ChangeDisplay({change_1d, price}) {
     )
   );
 }
-// GE tax: 2% on items over 50gp. RS3 has NO cap on the tax (unlike OSRS,
+// GE tax: 2% on items selling for 50gp or more (1-49gp is untaxed, confirmed by Ben 2026-10-05). RS3 has NO cap on the tax (unlike OSRS,
 // which caps at 5m/item) — corrected 2026-06-24 after Ben caught the old
 // 5,000,000gp cap, which was an OSRS-only mechanic that had been wrongly
 // applied here, affecting the margin calculator and item detail panel too.
-const applyTax = price => price <= 50 ? price : Math.floor(price * 0.98);
+const applyTax = price => price < 50 ? price : Math.floor(price * 0.98);
+// Net proceeds of a whole sale (price × qty) after GE tax — must match
+// saleNet() in backend-js/api.js, which records the actual sale.
+const saleNet = (price, qty) => price >= 50 ? Math.round(price * qty * 0.98) : price * qty;
+
+// Label for an item Jagex removed from the GE (run.js removedItems).
+function RemovedFromGeTag({item}) {
+  const d = item.removedAt ? new Date(item.removedAt).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
+  return h('div', {style:{fontSize:10, color:T.red, marginTop:2}, title:'No longer on the Grand Exchange. Last known price shown.'},
+    `Removed from GE${d ? ' · ' + d : ''}`);
+}
 
 // ── Fun features ─────────────────────────────────────────────────────────────
 
@@ -993,6 +1074,14 @@ function ImageModal({name, detailUrl, fallbackUrl, onClose}) {
 
 function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOverlay}) {
   const [range, setRange] = useState(30);
+  // Chart analysis phase 2: typical-range band + tested levels drawn on the
+  // price chart (replaces the old untested volume-cluster levels).
+  const [analysis, setAnalysis] = useState(null);
+  useEffect(() => {
+    setAnalysis(null);
+    if (!item?.id || item.untradeable) return;
+    window.genius?.getChartAnalysis(item.id).then(setAnalysis).catch(() => {});
+  }, [item?.id]);
   const [history, setHistory] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
@@ -1013,6 +1102,15 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   const zoomCenterRef = React.useRef(0.5); // 0-1 fraction of chart where cursor is
   const pinchRef = React.useRef(null); // last two-finger distance, for pinch-to-zoom on touch devices
   const [dxpEvents, setDxpEvents] = useState([]);
+  // Event Impact milestones that list this item — drawn as vertical markers.
+  const [itemMilestones, setItemMilestones] = useState([]);
+  useEffect(() => {
+    window.genius?.getEvents?.().then(evs => {
+      const n = (item?.name || '').toLowerCase();
+      setItemMilestones((evs || []).filter(e => e.items.some(x => x.toLowerCase() === n))
+        .flatMap(e => e.milestones.map(m => ({...m, eventName: e.name}))));
+    }).catch(() => {});
+  }, [item?.name]);
   useEffect(() => {
     if (!showDxpOverlay) return;
     window.genius?.getDxpEvents?.().then(evts => setDxpEvents(evts || [])).catch(() => {});
@@ -1026,6 +1124,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
 
   useEffect(() => {
     if (!item?.id) return;
+    let stale = false;
     setLoading(true); setError(false); setHistory(null); setTimeseries(null); setTimeseriesLoading(true); setDateLookup(null); setDateQuery(''); setChartView('recent'); setSnapshots([]);
     if (item.untradeable) {
       // No WeirdGloop GE history exists for untradeable items (Invention
@@ -1037,18 +1136,24 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
       setLoading(false);
       setTimeseriesLoading(false);
     } else {
+      // A slow fetch for a previously selected item can resolve after the
+      // user has moved on — `stale` drops those results instead of letting
+      // them overwrite the current item's chart.
       window.genius?.getItemHistory(item.id).then(hist => {
+        if (stale) return;
         if (hist && hist.length) setHistory(hist); else setError(true);
         setLoading(false);
-      }).catch(() => { setError(true); setLoading(false); });
+      }).catch(() => { if (!stale) { setError(true); setLoading(false); } });
       window.genius?.getItemTimeseries(item.id).then(ts => {
+        if (stale) return;
         setTimeseries(ts && ts.length ? ts : null);
         setTimeseriesLoading(false);
-      }).catch(() => setTimeseriesLoading(false));
+      }).catch(() => { if (!stale) setTimeseriesLoading(false); });
     }
     window.genius?.getPriceSnapshots(item.id).then(snaps => {
-      setSnapshots(snaps && snaps.length ? snaps : []);
+      if (!stale) setSnapshots(snaps && snaps.length ? snaps : []);
     }).catch(() => {});
+    return () => { stale = true; };
   }, [item?.id]);
 
   if (!item) return null;
@@ -1159,60 +1264,6 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
     return {ath, atl};
   }, [timeseries, item.high, item.low]);
 
-  // Support & resistance levels — volume-weighted, like real "Volume
-  // Profile" technical analysis: a price the item traded heavily at one
-  // day means more than a price it just quietly drifted through for a
-  // week, even though both look identical if you only count how many
-  // daily snapshots landed there. Each day's price (high/low are the same
-  // value in this data — one snapshot per day, not a real OHLC range) gets
-  // weighted by that day's volume instead of counted as a flat +1.
-  // Log-dampened so one freak high-volume day (a bot dump, a manipulation
-  // spike, a single whale trade) can't single-handedly dominate a bucket
-  // and masquerade as a real recurring level.
-  const supportResistance = useMemo(() => {
-    if (!timeseries || timeseries.length < 30) return null;
-    const points = timeseries.filter(p => p.high || p.low);
-    if (!points.length) return null;
-    const prices = points.map(p => p.high || p.low);
-
-    const min = Math.min(...prices);
-    const max = Math.max(...prices);
-    const range = max - min;
-    if (range === 0) return null;
-
-    // Bucket prices into 20 bins, weighted by dampened volume
-    const BINS = 20;
-    const bucketSize = range / BINS;
-    const buckets = Array(BINS).fill(0);
-    let totalWeight = 0;
-    points.forEach(p => {
-      const price = p.high || p.low;
-      const idx = Math.min(BINS - 1, Math.floor((price - min) / bucketSize));
-      const weight = Math.log10((p.volume || 0) + 10); // +10 floor so zero-volume days still count a little
-      buckets[idx] += weight;
-      totalWeight += weight;
-    });
-
-    const currentPrice = timeseries[timeseries.length-1]?.high || timeseries[timeseries.length-1]?.low || 0;
-
-    // Find local maxima in the histogram — these are price clusters (support/resistance)
-    // Only include levels within 50% of current price so stale historical levels don't show
-    const levels = [];
-    for (let i = 1; i < BINS - 1; i++) {
-      if (buckets[i] > buckets[i-1] && buckets[i] > buckets[i+1] && buckets[i] > totalWeight * 0.04) {
-        const price = min + (i + 0.5) * bucketSize;
-        if (currentPrice > 0 && (price < currentPrice * 0.75 || price > currentPrice * 1.25)) continue;
-        levels.push({
-          price,
-          strength: buckets[i],
-          type: price < currentPrice ? 'support' : 'resistance',
-        });
-      }
-    }
-
-    if (!levels.length) return null;
-    return levels.sort((a,b) => b.strength - a.strength).slice(0, 4);
-  }, [timeseries]);
 
   // Seasonal data — monthly and weekly
   const seasonalData = useMemo(() => {
@@ -1402,7 +1453,8 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   }, [candles]);
 
   // Date label helpers
-  const labelCount = Math.min(activePoints.length, 6);
+  // 3 labels on a phone: six full dates ran together into one string.
+  const labelCount = Math.min(activePoints.length, IS_PHONE ? 3 : 6);
   const labelIdxs = Array.from({length: labelCount}, (_, i) =>
     Math.round(i * (activePoints.length - 1) / Math.max(labelCount - 1, 1))
   );
@@ -1605,6 +1657,22 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
                 });
               });
             })(),
+            // Event milestone markers (News → Events)
+            itemMilestones.length > 0 && activePoints.length > 1 && (() => {
+              const tsOf = p => p.timestamp < 1e12 ? p.timestamp * 1000 : p.timestamp;
+              const firstTs = tsOf(activePoints[0]), lastTs = tsOf(activePoints[activePoints.length - 1]);
+              return itemMilestones.map((m, mi) => {
+                const t = new Date(m.date + 'T12:00:00').getTime();
+                if (t < firstTs || t > lastTs) return null;
+                let idx = 0;
+                for (let i = 0; i < activePoints.length; i++) if (tsOf(activePoints[i]) <= t) idx = i;
+                const color = m.type === 'release' ? '#64b5f6' : 'rgba(184,115,51,0.9)';
+                return h('g', {key:'ms' + mi},
+                  h('line', {x1:px(idx), x2:px(idx), y1:PAD, y2:PH - PAD, stroke:color, strokeWidth:1, strokeDasharray: m.type === 'release' ? 'none' : '4,3'}),
+                  h('title', null, `${m.eventName}: ${(EVENT_TYPE_LABELS[m.type] || m.type)} (${m.date})${m.title ? ' · ' + m.title : ''}`),
+                  h('rect', {x:px(idx) - 4, y:PAD, width:8, height:PH - PAD * 2, fill:'transparent'}));
+              });
+            })(),
             // Y-axis labels on left
             gridLevels.map((g, i) =>
               h('text', {key:i, x:YLAB-4, y:g.y+3, fontSize:9, fill:T.textDim, textAnchor:'end'},
@@ -1620,6 +1688,47 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
                 strokeDasharray: g.t===0||g.t===1 ? 'none' : '3,3'
               })
             ),
+            // Typical range band + tested levels (Chart analysis)
+            analysis && (analysis.status === 'ok' || analysis.alch) && (() => {
+              const clampY = y => Math.max(PAD, Math.min(PH - PAD, y));
+              const out = [];
+              const t = analysis.typical;
+              if (t) {
+                const y1 = clampY(py(t.hi)), y2 = clampY(py(t.lo));
+                if (y2 - y1 > 1) out.push(h('rect', {key:'typ', x:YLAB, y:y1, width:W - PAD - YLAB, height:y2 - y1, fill:'rgba(201,168,76,0.08)', pointerEvents:'none'},
+                  h('title', null, `Typical range ${fmt.gp(t.lo)}–${fmt.gp(t.hi)}gp (80% of the last year)`)));
+              }
+              if (analysis.alch) {
+                // "Alch floor" only when this item actually held it (95%+ of
+                // days, 3 yrs); otherwise "alch value". Off-chart → edge marker.
+                const al = analysis.alch, isFloor = al.kind === 'floor';
+                const label = `${isFloor ? 'alch floor' : 'alch value'} ${Math.round(al.floor).toLocaleString()}`;
+                const y = py(al.floor);
+                const txt = (yy, extra) => h('text', {x:W - PAD - 2, y:yy, fontSize:9, fill:'#b388ff', textAnchor:'end', stroke:T.panel, strokeWidth:3, paintOrder:'stroke'}, label + extra);
+                const tip = `${isFloor ? 'Alch floor' : 'Alch value line'}: ${Math.round(al.floor).toLocaleString()}gp
+
+`
+                  + `High alch value ${al.alch.toLocaleString()}gp − nature rune ${al.nature.toLocaleString()}gp (today's price).
+`
+                  + `This is the break-even for High Alchemy: buying below it and alching makes a profit.
+`
+                  + alchHistory(al) + (isFloor ? ' It acts as a floor for this item.' : '');
+                if (y >= PAD && y <= PH - PAD) out.push(h('g', {key:'alch'},
+                  h('line', {x1:YLAB, x2:W - PAD, y1:y, y2:y, stroke:'#b388ff', strokeWidth:1.2, strokeDasharray: isFloor ? '6,3' : '2,3', opacity: isFloor ? 1 : 0.7, pointerEvents:'none'}),
+                  h('line', {x1:YLAB, x2:W - PAD, y1:y, y2:y, stroke:'transparent', strokeWidth:10, style:{cursor:'help'}}, h('title', null, tip)),
+                  h('g', {pointerEvents:'none'}, txt(y - 3, ''))));
+                else out.push(h('g', {key:'alch', style:{cursor:'help'}}, h('title', null, tip), txt(y > PH - PAD ? PH - PAD - 3 : PAD + 10, y > PH - PAD ? ' ↓ (below chart)' : ' ↑ (above chart)')));
+              }
+              if (analysis.levels?.reliable) analysis.levels.list.forEach((l, i) => {
+                const y = py(l.price);
+                if (y < PAD || y > PH - PAD) return;
+                const col = l.kind === 'support' ? T.green : T.red;
+                out.push(h('g', {key:'lv' + i, pointerEvents:'none'},
+                  h('line', {x1:YLAB, x2:W - PAD, y1:y, y2:y, stroke:col, strokeWidth:1, strokeDasharray:'5,4', opacity:0.8}),
+                  h('text', {x:YLAB + 4, y:y - 3, fontSize:9, fill:col, textAnchor:'start', stroke:T.panel, strokeWidth:3, paintOrder:'stroke'}, `${l.kind} ${Math.round(l.price).toLocaleString()} · held ${l.held}/${l.touches}`)));
+              });
+              return out;
+            })(),
             chartMode === 'line' && [
               // Area fill
               h('path', {key:'area', d:areaPath, fill:`${priceColor}18`, stroke:'none'}),
@@ -1766,24 +1875,37 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
           )
         ),
 
-        // Support & Resistance
-        timeseries && h('div', {style:{marginTop:12, borderTop:`1px solid ${T.borderDim}`, paddingTop:10}},
-          h('div', {style:{fontFamily:'Cinzel,serif', fontSize:11, letterSpacing:'1px', color:T.gold, marginBottom:8}}, 'SUPPORT & RESISTANCE'),
-          supportResistance && supportResistance.length > 0
+        // Tested levels (Chart analysis phase 2) — replaces the old
+        // untested volume-cluster "support & resistance" (they marked where
+        // the price spent time, never whether it turned there).
+        analysis && (analysis.status === 'ok' || analysis.alch) && h('div', {style:{marginTop:12, borderTop:`1px solid ${T.borderDim}`, paddingTop:10}},
+          h('div', {style:{fontFamily:'Cinzel,serif', fontSize:11, letterSpacing:'1px', color:T.gold, marginBottom:8}}, 'TYPICAL RANGE & TESTED LEVELS'),
+          analysis.typical && h('div', {style:{fontSize:12, color:T.text, marginBottom:6}},
+            h('span', {style:{display:'inline-block', width:10, height:10, background:'rgba(201,168,76,0.35)', marginRight:6, verticalAlign:'-1px'}}),
+            `Typical range ${fmt.gp(analysis.typical.lo)} – ${fmt.gp(analysis.typical.hi)}gp`, h('span', {style:{color:T.textDim, fontSize:11}}, ' (80% of the last year)')),
+          analysis.alch && h('div', {style:{fontSize:12, color:T.text, marginBottom:6}},
+            h('span', {style:{display:'inline-block', width:14, borderTop:'2px dotted #b388ff', marginRight:6, verticalAlign:'3px'}}),
+            `${analysis.alch.kind === 'floor' ? 'Alch floor' : 'Alch value'} ${Math.round(analysis.alch.floor).toLocaleString()}gp`
+              + (analysis.alch.days ? ` — ${analysis.alch.belowDays ? `below it on ${analysis.alch.belowDays} of ${analysis.alch.days.toLocaleString()} days` : 'never below it'} (3 yrs)` : ''),
+            h('span', {style:{color:T.textDim, fontSize:11}}, ` (high alch ${analysis.alch.alch.toLocaleString()} − nature rune ${analysis.alch.nature.toLocaleString()}; moves with nature rune prices)`),
+            h('div', {style:{color:T.textDim, fontSize:11, marginTop:2, marginLeft:20}}, 'The break-even for High Alchemy: buying below this line and alching makes a profit.')),
+          analysis.status !== 'ok' ? null : analysis.levels?.reliable && analysis.levels.list.length
             ? h('div', {style:{display:'flex', gap:8, flexWrap:'wrap'}},
-                supportResistance.map((lvl, i) =>
+                [...analysis.levels.list].sort((a, b) => b.price - a.price).map((lvl, i) =>
                   h('div', {key:i, style:{
                     padding:'5px 12px', borderRadius:3, fontSize:12,
-                    background: lvl.type==='support' ? 'rgba(100,200,100,0.08)' : 'rgba(200,100,100,0.08)',
-                    border: `1px solid ${lvl.type==='support' ? T.green : T.red}55`,
-                  }},
-                    h('span', {style:{color: lvl.type==='support' ? T.green : T.red, fontWeight:'bold'}}, fmt.gp(lvl.price)+'gp'),
-                    h('span', {style:{color:T.textDim, fontSize:10, marginLeft:6}}, lvl.type)
+                    background: lvl.kind==='support' ? 'rgba(100,200,100,0.08)' : 'rgba(200,100,100,0.08)',
+                    border: `1px solid ${lvl.kind==='support' ? T.green : T.red}55`,
+                  }, title:`Turned here ${lvl.swings} times; later held ${lvl.held} of ${lvl.touches} touches. Last turned ${lvl.lastSwing}.`},
+                    h('span', {style:{color: lvl.kind==='support' ? T.green : T.red, fontWeight:'bold'}}, Math.round(lvl.price).toLocaleString()+'gp'),
+                    h('span', {style:{color:T.textDim, fontSize:10, marginLeft:6}}, `${lvl.kind} · held ${lvl.held}/${lvl.touches}`)
                   )
                 )
               )
             : h('div', {style:{fontSize:11, color:T.textDim}},
-                'No significant levels detected near the current price. The item may be trending without a clear floor or ceiling.'
+                analysis.levels?.n
+                  ? `No tested levels: this item's turning points held ${Math.round(analysis.levels.held / analysis.levels.n * 100)}% of the time, about the same as random prices (${Math.round(analysis.levels.base * 100)}%).`
+                  : 'No repeated turning points to test for this item.'
               )
         ),
 
@@ -2133,6 +2255,291 @@ function GESearchBar({items, onSelect, userShorthands}) {
 }
 
 /* ─── Price trend badges ─────────────────────────────────────── */
+// Chart analysis (Ben, 2026-10-08) — phase 1: trend vs market + where the
+// price sits in its 1-year range. Each reading carries its own track record
+// on this item's history (backend getChartAnalysis); "Reliable" only when it
+// clearly beat the item's base rate (binomial p < 0.01), otherwise shown
+// greyed as "Weak" with the numbers. Summary line always visible; click to
+// expand.
+// Ask about this item (Ben, 2026-10-09) — fill-in-the-blank questions,
+// answered by the backend askItem() from saved price history. Answers are
+// exact counts and dates. Recent answers stay listed per item this session.
+const ASK_PERIODS = [['90d', 'last 90 days'], ['1y', 'last year'], ['3y', 'last 3 years'], ['all', 'all history']];
+const ASK_MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'].map((m, i) => [String(i + 1), m]);
+// Each question: sentence parts — strings, or {f: field, kind, opts}.
+const ASK_QUESTIONS = [
+  {type:'level', group:'Price levels', label:'How often within / above / below X% of a price?', defaults:{mode:'within', pct:5, period:'1y'},
+    parts:['How often has it been', {f:'mode', kind:'select', opts:[['within','within'],['above','above'],['below','below']]}, {f:'pct', kind:'num'}, '% of', {f:'price', kind:'gp'}, 'in the', {f:'period', kind:'select', opts:ASK_PERIODS}, '?']},
+  {type:'alch', group:'Price levels', label:'How often near its alch floor?', defaults:{pct:3, period:'3y'},
+    parts:['How often has it been within', {f:'pct', kind:'num'}, '% of its alch floor in the', {f:'period', kind:'select', opts:ASK_PERIODS}, '?']},
+  {type:'last', group:'Price levels', label:'When was it last above / below a price?', defaults:{mode:'below'},
+    parts:['When was it last', {f:'mode', kind:'select', opts:[['above','at or above'],['below','at or below']]}, {f:'price', kind:'gp'}, '?']},
+  {type:'stay', group:'Price levels', label:'Once past a price, how long did it stay?', defaults:{mode:'below', period:'3y'},
+    parts:['Once it went', {f:'mode', kind:'select', opts:[['below','below'],['above','above']]}, {f:'price', kind:'gp'}, ', how long did it stay there? (', {f:'period', kind:'select', opts:ASK_PERIODS}, ')']},
+  {type:'recover', group:'Price levels', label:'After dropping below a price, how long to get back?', defaults:{period:'3y'},
+    parts:['After dropping below', {f:'price', kind:'gp'}, ', how long until it got back? (', {f:'period', kind:'select', opts:ASK_PERIODS}, ')']},
+  {type:'moves', group:'Moves', label:'How often did it move X%+ in a week / month?', defaults:{pct:10, window:'week', period:'3y'},
+    parts:['How often did it move', {f:'pct', kind:'num'}, '%+ in a', {f:'window', kind:'select', opts:[['week','week'],['month','month']]}, 'over the', {f:'period', kind:'select', opts:ASK_PERIODS}, '?']},
+  {type:'extremes', group:'Moves', label:'Biggest rise and biggest drop', defaults:{window:'month', period:'all'},
+    parts:['Biggest rise and drop over a', {f:'window', kind:'select', opts:[['week','week'],['month','month'],['year','year']]}, 'in', {f:'period', kind:'select', opts:ASK_PERIODS}]},
+  {type:'month', group:'Moves', label:'Does it usually rise or fall in a given month?', defaults:{month:String(new Date().getMonth() + 1)},
+    parts:['Does it usually rise or fall in', {f:'month', kind:'select', opts:ASK_MONTHS}, '?']},
+  {type:'date', group:'Time', label:'What was it on a date?', defaults:{date:new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)},
+    parts:['What was it on', {f:'date', kind:'date'}, '?']},
+  {type:'average', group:'Time', label:'Average price over a period', defaults:{period:'90d'},
+    parts:['Average price over the', {f:'period', kind:'select', opts:ASK_PERIODS}]},
+  {type:'thisMonth', group:'Time', label:'This month vs the same month in past years', defaults:{},
+    parts:['How does this month compare with the same days in past years?']},
+  {type:'dxp', group:'Events', label:'What does it do around Double XP?', defaults:{},
+    parts:['What does it do before, during and after Double XP weekends?']},
+  {type:'update', group:'Events', label:'What did it do after a game update?', defaults:{},
+    parts:['What did it do after', {f:'eventId', kind:'event'}, '?']},
+  {type:'volume', group:'Volume', label:'How often was daily volume above X?', defaults:{period:'1y'},
+    parts:['How often was daily volume', {f:'volume', kind:'gp', placeholder:'e.g. 10k'}, 'or more in the', {f:'period', kind:'select', opts:ASK_PERIODS}, '?']},
+  {type:'volumeNow', group:'Volume', label:'Is it more traded than usual right now?', defaults:{},
+    parts:['Is it more traded than usual this week?']},
+  {type:'flip', group:'Flipping', label:'Would a buy at X and sell at Y have filled?', defaults:{},
+    parts:['Would a buy at', {f:'buy', kind:'gp'}, 'and a sell at', {f:'sell', kind:'gp'}, 'both have filled in the same week?']},
+];
+const _askHistory = new Map(); // itemId -> [{label, lines}] — session only
+
+function AskItem({item}) {
+  const [open, setOpen] = useState(false);
+  const [qType, setQType] = useState('level');
+  const [params, setParams] = useState(ASK_QUESTIONS[0].defaults);
+  const [fillKey, setFillKey] = useState(0);       // remounts GpInputs after a quick fill
+  const [answer, setAnswer] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [events, setEvents] = useState([]);
+  const [extra, setExtra] = useState(null);         // {alchFloor, typical} for quick fill
+  const [recent, setRecent] = useState([]);
+  useEffect(() => { setAnswer(null); setRecent(_askHistory.get(item?.id) || []); setExtra(null); }, [item?.id]);
+  useEffect(() => {
+    if (!open || !item?.id) return;
+    if (!events.length) window.genius?.getEvents?.().then(ev => setEvents((ev || []).filter(e => e.milestones?.some(m => m.type === 'release')))).catch(() => {});
+    if (!extra) window.genius?.getChartAnalysis(item.id).then(a => setExtra({alchFloor: a?.alch?.floor, typical: a?.typical})).catch(() => setExtra({}));
+  }, [open, item?.id]);
+  if (!item || item.untradeable) return null;
+  const q = ASK_QUESTIONS.find(x => x.type === qType);
+  const pick = t => { setQType(t); setParams({...ASK_QUESTIONS.find(x => x.type === t).defaults}); setAnswer(null); };
+  const set = (f, v) => setParams(p => ({...p, [f]: v}));
+  const priceField = q.parts.find(pt => pt.kind === 'gp' && pt.f !== 'volume')?.f;
+  const quick = v => { if (priceField && v > 0) { set(priceField, Math.round(v)); setFillKey(k => k + 1); } };
+  const ask = async () => {
+    setBusy(true);
+    const res = await window.genius?.askItem(item.id, {type: qType, ...params}).catch(e => ({error: String(e.message || e)}));
+    setBusy(false); setAnswer(res);
+    if (res && !res.error) {
+      const entry = {label: q.label, lines: res.lines};
+      const next = [entry, ...(_askHistory.get(item.id) || [])].slice(0, 5);
+      _askHistory.set(item.id, next); setRecent(next);
+    }
+  };
+  const ctl = {background:'rgba(255,255,255,0.04)', border:`1px solid ${T.border}`, borderRadius:3, color:T.text, fontSize:11, padding:'2px 4px'};
+  const field = (pt, i) => {
+    const v = params[pt.f];
+    if (pt.kind === 'select') return h('select', {key:i, value:v ?? '', onChange:e => set(pt.f, e.target.value), style:ctl}, pt.opts.map(([val, lbl]) => h('option', {key:val, value:val}, lbl)));
+    if (pt.kind === 'num') return h('input', {key:i, type:'number', min:0, value:v ?? '', onChange:e => set(pt.f, e.target.value), style:{...ctl, width:44}});
+    if (pt.kind === 'date') return h('input', {key:i, type:'date', value:v ?? '', onChange:e => set(pt.f, e.target.value), style:ctl});
+    if (pt.kind === 'event') return h('select', {key:i, value:v ?? '', onChange:e => set(pt.f, e.target.value), style:{...ctl, maxWidth:180}},
+      h('option', {value:''}, 'pick an update…'), events.map(e => h('option', {key:e.id, value:e.id}, e.name)));
+    return h('span', {key:i + ':' + fillKey, style:{display:'inline-block', width:90, verticalAlign:'middle'}},
+      h(GpInput, {value:v ?? '', placeholder:pt.placeholder || 'e.g. 33k', onChange:val => set(pt.f, val), style:{...ctl, width:'100%'}}));
+  };
+  const groups = [...new Set(ASK_QUESTIONS.map(x => x.group))];
+  const qf = (label, v) => v > 0 && h('span', {onClick:() => quick(v), style:{cursor:'pointer', color:T.gold, textDecoration:'underline dotted', marginRight:8}}, label);
+
+  return h('div', {style:{marginTop:6, border:`1px solid ${T.borderDim}`, borderRadius:4, background:'rgba(255,255,255,0.02)'}},
+    h('div', {onClick:() => setOpen(v => !v), title:'Ask a question about this item’s price history',
+      style:{padding:'5px 8px', fontSize:11, color:T.text, cursor:'pointer', display:'flex', alignItems:'center', gap:6}},
+      h('span', {style:{color:T.gold, fontWeight:600}}, '❓ Ask about this item'),
+      h('span', {style:{color:T.textDim}}, `${ASK_QUESTIONS.length} questions`),
+      h('span', {style:{marginLeft:'auto', color:T.textDim}}, open ? '▴' : '▾')),
+    open && h('div', {style:{padding:'0 8px 8px', fontSize:11}},
+      h('select', {value:qType, onChange:e => pick(e.target.value), style:{...ctl, width:'100%', padding:'4px'}},
+        groups.map(g => h('optgroup', {key:g, label:g}, ASK_QUESTIONS.filter(x => x.group === g).map(x => h('option', {key:x.type, value:x.type}, x.label))))),
+      h('div', {style:{marginTop:8, lineHeight:2.1, color:T.text}},
+        q.parts.map((pt, i) => typeof pt === 'string' ? h('span', {key:i}, ' ' + pt + ' ') : field(pt, i))),
+      priceField && h('div', {style:{fontSize:10, color:T.textDim, marginTop:2}}, 'Quick fill: ',
+        qf('today’s price', item.high || item.low), qf('alch floor', extra?.alchFloor),
+        qf('typical low', extra?.typical?.lo), qf('typical high', extra?.typical?.hi)),
+      h('button', {className:'ge-btn', onClick:ask, disabled:busy, style:{marginTop:8, padding:'3px 14px', fontSize:12}}, busy ? 'Working…' : 'Ask'),
+      answer && h('div', {style:{marginTop:10, padding:'6px 8px', borderLeft:`2px solid ${answer.error ? T.red : T.gold}`, background:'rgba(201,168,76,0.05)', lineHeight:1.5}},
+        answer.error ? h('div', {style:{color:T.red}}, answer.error)
+          : [...answer.lines.map((l, i) => h('div', {key:i, style:{color: i ? T.textDim : T.text}}, l)),
+             h('div', {key:'src', style:{fontSize:10, color:T.textDim, marginTop:4, fontStyle:'italic'}}, `Daily GE guide prices up to ${answer.asOf}${qType === 'flip' ? ' (flip uses live prices)' : ''}.`)]),
+      recent.length > 1 && h('div', {style:{marginTop:10}},
+        h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.05em'}}, 'Recent questions'),
+        recent.slice(1).map((r, i) => { const t = r.lines.filter(l => !/:$/.test(l) && !/ — released /.test(l)).join(' '); return h('div', {key:i, title:r.lines.join(' '), style:{fontSize:10, color:T.textDim, marginTop:3}}, `· ${r.label} — ${t.length > 150 ? t.slice(0, 147) + '…' : t}`); }))));
+}
+
+// Restore from a daily auto-backup (Ben, 2026-10-11). Lists the backups in
+// autobackups/ with what each holds; restoring first saves the current data
+// as a "pre-restore" snapshot (listed here too), so any restore can be
+// undone. Reloads the window afterwards so every tab picks up the data.
+function AutoBackupRestore({toast}) {
+  const [list, setList] = useState(null);
+  const [busy, setBusy] = useState(null);
+  const load = () => window.genius?.listAutoBackups?.().then(l => setList(l || [])).catch(() => setList([]));
+  const restore = async b => {
+    const when = b.backedUpAt ? new Date(b.backedUpAt).toLocaleString() : b.file;
+    if (!window.confirm(`Restore the backup from ${when}?\n\nYour watchlist, portfolio, alerts, notes, reminders and settings will be replaced with that backup's copy. Your current data is saved first as a "pre-restore" backup, so you can undo this.`)) return;
+    setBusy(b.file);
+    const res = await window.genius?.restoreAutoBackup(b.file).catch(e => ({error: String(e.message || e)}));
+    setBusy(null);
+    if (res?.error) { toast('Restore failed: ' + res.error, 'error'); return; }
+    toast('Backup restored — reloading', 'success');
+    setTimeout(() => window.location.reload(), 800);
+  };
+  const c = b => [`${b.counts.watchlist} watchlist`, b.counts.positions != null ? `${b.counts.positions} positions` : 'no portfolio',
+    b.counts.alerts != null ? `${b.counts.alerts} alerts` : 'no alerts', b.counts.reminders ? `${b.counts.reminders} reminders` : null, b.counts.notes ? `${b.counts.notes} notes` : null].filter(Boolean).join(' · ');
+  return h('div', {style:{marginTop:10}},
+    list == null
+      ? h('button', {className:'ge-btn', onClick:load}, '↺ Restore daily backup')
+      : h('div', {style:{border:`1px solid ${T.borderDim}`, borderRadius:4, padding:8}},
+          h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:6}},
+            h('span', {style:{fontSize:12, color:T.gold}}, 'Daily backups'),
+            h('span', {style:{fontSize:11, color:T.textDim, cursor:'pointer'}, onClick:() => setList(null)}, '✕ close')),
+          h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8, lineHeight:1.5}},
+            'GEnius saves one automatically each day (kept 15 days). Restoring saves your current data first, so it can be undone.'),
+          !list.length && h('div', {style:{fontSize:11, color:T.textDim}}, 'No backups yet.'),
+          list.map(b => h('div', {key:b.file, style:{display:'flex', alignItems:'center', gap:8, padding:'5px 0', borderTop:`1px solid ${T.borderDim}`}},
+            h('div', {style:{flex:1, minWidth:0}},
+              h('div', {style:{fontSize:12, color:T.text}}, (b.backedUpAt ? new Date(b.backedUpAt).toLocaleString() : b.file) + (b.kind === 'pre-restore' ? '  (saved before a restore)' : '')),
+              h('div', {style:{fontSize:10, color:T.textDim}}, c(b))),
+            h('button', {className:'ge-btn', disabled:!!busy, onClick:() => restore(b), style:{fontSize:11, padding:'2px 10px'}}, busy === b.file ? 'Restoring…' : 'Restore')))));
+}
+
+// Exact alch-line history text — counts, never rounded percentages
+// (Ben, 2026-10-09: "100% of days" was false; it had dipped below).
+function alchHistory(al) {
+  if (!al || al.days == null) return '';
+  if (!al.belowDays) return `Never below it in the last 3 years (${al.days.toLocaleString()} days).`;
+  const lo = al.lowest;
+  if (lo && lo.gap >= -0.035) return `Sits right on it: dipped under on ${al.belowDays.toLocaleString()} of ${al.days.toLocaleString()} days in the last 3 years, but never more than ${Math.abs(lo.gap * 100).toFixed(1)}% below.`;
+  return `Below it on ${al.belowDays.toLocaleString()} of ${al.days.toLocaleString()} days in the last 3 years`
+    + (lo ? ` (lowest: ${Math.round(lo.price).toLocaleString()}gp, ${Math.abs(lo.gap * 100).toFixed(1)}% below, on ${lo.date})` : '') + '.';
+}
+
+function ChartAnalysis({item}) {
+  const [data, setData] = useState(null);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setData(null);
+    if (!item?.id || item.untradeable) return;
+    let stale = false;
+    window.genius?.getChartAnalysis(item.id).then(r => { if (!stale) setData(r || {status:'error', readings:[]}); })
+      .catch(() => { if (!stale) setData({status:'error', readings:[]}); });
+    return () => { stale = true; };
+  }, [item?.id]);
+  if (!item || item.untradeable || !data) return null;
+  if (data.status !== 'ok') {
+    const why = {illiquid:'the guide price rarely changes for this item', not_enough_history:'not enough price history yet', stale_history:'price history is still updating'}[data.status] || 'no data';
+    const al = data.alch;
+    return h('div', {style:{marginTop:6}},
+      h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic'}}, `🔍 Analysis unavailable — ${why}.`),
+      al && h('div', {style:{fontSize:11, color:T.text, marginTop:4}},
+        h('span', {style:{color:'#b388ff'}}, `${al.kind === 'floor' ? 'Alch floor' : 'Alch value'} ${Math.round(al.floor).toLocaleString()}gp`),
+        al.days ? h('span', {style:{color:T.textDim}}, ' — ' + alchHistory(al)) : null));
+  }
+  const pct = v => (v > 0 ? '+' : '') + v.toFixed(1) + '%';
+  const share = t => Math.round(t.share * 100) + '%';
+  const trend = data.readings.find(r => r.key === 'trend');
+  const range = data.readings.find(r => r.key === 'range');
+  const summary = [];
+  if (trend) summary.push(trend.dir === 'up' ? '📈 Rising vs market' : trend.dir === 'down' ? '📉 Falling vs market' : '➖ In line with market');
+  const typ = data.typical;
+  if (typ) summary.push(typ.current > typ.hi ? 'above typical range' : typ.current < typ.lo ? 'below typical range' : 'in typical range');
+  else if (range) summary.push(range.zone === 'high' ? 'near 1-year high' : range.zone === 'low' ? 'near 1-year low' : `${Math.round(range.pct)}% of 1-year range`);
+  const lv = data.levels, dip = data.dip;
+  const nearSup = lv?.reliable && lv.list.find(l => l.kind === 'support');
+  if (nearSup) summary.push('above tested support');
+  if (data.alch?.kind === 'floor' && data.alch.gapPct < 10) summary.push(data.alch.gapPct < -0.5 ? 'below alch floor' : data.alch.gapPct < 3 ? 'at alch floor' : 'near alch floor');
+  const spk = data.spike, volD = data.volume;
+  if (volD?.ratio7 >= 2 || volD?.ratio7 <= 0.5) summary.push(`volume ${volD.ratio7.toFixed(1)}× normal`);
+  const nReliable = data.readings.filter(r => r.track && r.track.strength !== 'weak').length + (lv?.reliable && lv.list.length ? 1 : 0) + (dip?.reliable || dip?.opposite ? 1 : 0) + (spk?.opposite ? 1 : 0);
+  if (trend?.track?.strength === 'opposite') summary.push('rises/drops like this tend to reverse');
+  const anyReliable = nReliable > 0;
+
+  const badge = t => {
+    if (!t) return null;
+    if (t.strength === 'opposite') return h('span', {
+      title: 'Clearly did the OPPOSITE of this pattern on this item’s history — unlikely to be chance.',
+      style:{fontSize:9, padding:'1px 5px', borderRadius:3, marginLeft:6, textTransform:'uppercase', letterSpacing:'0.05em', color:T.gold, border:`1px solid ${T.gold}`}}, t.label || 'Opposite');
+    const rel = t.strength === 'reliable';
+    return h('span', {
+      title: rel ? 'Held up clearly more often than this item does anyway — unlikely to be chance.'
+                 : 'Has not reliably held up on this item\'s history (too few past cases, or no better than what it does anyway). Treat as a description, not a prediction.',
+      style:{fontSize:9, padding:'1px 5px', borderRadius:3, marginLeft:6, textTransform:'uppercase', letterSpacing:'0.05em',
+        color: rel ? T.green : T.textDim, border:`1px solid ${rel ? T.green : T.border}`}}, rel ? 'Reliable' : 'Weak');
+  };
+  const row = (title, t, record) => h('div', {style:{marginTop:8, opacity: t && t.strength === 'weak' ? 0.75 : 1}},
+    h('div', {style:{fontSize:12, color:T.text}}, title, badge(t)),
+    record && h('div', {style:{fontSize:11, color:T.textDim, marginTop:2, lineHeight:1.45}}, record));
+
+  const trendRow = trend && row(
+    trend.dir === 'flat' ? `Moving with the market: ${pct(trend.rel30)} vs market over 30 days`
+      : `${trend.dir === 'up' ? 'Rising' : 'Falling'} vs market: ${pct(trend.rel30)} over 30 days` + (trend.rel90 != null ? ` (90 days: ${pct(trend.rel90)})` : ''),
+    trend.track && (trend.track.strength === 'opposite' ? {...trend.track, label:'Tends to reverse'} : trend.track),
+    trend.track && (trend.track.n
+      ? `After similar ${trend.dir === 'up' ? 'rises' : 'drops'}, it kept ${trend.dir === 'up' ? 'rising' : 'falling'} the next month ${trend.track.k} of ${trend.track.n} times (${share(trend.track)}). It ${trend.dir === 'up' ? 'rises' : 'falls'} in ${Math.round(trend.track.base * 100)}% of months anyway.`
+      : 'No similar moves in its history to compare against.'));
+  const rangeRow = range && (!typ || range.zone !== 'middle') && row(
+    `${range.zone === 'high' ? 'Near its 1-year high' : range.zone === 'low' ? 'Near its 1-year low' : 'Mid-range'}: ${Math.round(range.pct)}% of the way from ${fmt.gp(range.lo)} to ${fmt.gp(range.hi)}gp`,
+    range.track && (range.track.strength === 'opposite' ? {...range.track, label:'Tends to keep going'} : range.track),
+    range.track && (range.track.n
+      ? `Past times it sat this ${range.zone}, it moved back ${range.zone === 'high' ? 'down' : 'up'} (vs market) within 30 days ${range.track.k} of ${range.track.n} times (${share(range.track)}). It ${range.zone === 'high' ? 'falls' : 'rises'} in ${Math.round(range.track.base * 100)}% of months anyway.`
+      : 'It hasn\'t sat this ' + range.zone + ' before with enough history to compare.'));
+
+  return h('div', {style:{marginTop:8, border:`1px solid ${T.borderDim}`, borderRadius:4, background:'rgba(255,255,255,0.02)'}},
+    h('div', {
+      onClick: () => setOpen(v => !v),
+      title: 'Click for the full analysis',
+      style:{padding:'5px 8px', fontSize:11, color:T.text, cursor:'pointer', display:'flex', alignItems:'center', gap:6, flexWrap:'wrap'},
+    },
+      h('span', {style:{color:T.gold, fontWeight:600}}, '🔍 Analysis'),
+      h('span', null, summary.join(' · ')),
+      anyReliable && h('span', {style:{color:T.green, fontSize:10}}, `● ${nReliable} reliable`),
+      h('span', {style:{marginLeft:'auto', color:T.textDim}}, open ? '▴' : '▾')),
+    open && h('div', {style:{padding:'0 8px 8px'}},
+      typ && row(`Typical range: ${fmt.gp(typ.lo)} – ${fmt.gp(typ.hi)}gp`, null,
+        `Where it spent 80% of the last year. Now ${typ.current > typ.hi ? `above it (${fmt.gp(typ.current)}gp)` : typ.current < typ.lo ? `below it (${fmt.gp(typ.current)}gp)` : `${Math.round(typ.pct)}% of the way up`}. A description, not a prediction.`),
+      lv && (lv.reliable && lv.list.length
+        ? row('Tested price levels', {strength:'reliable'},
+            h('div', null,
+              [...lv.list].sort((a, b) => b.price - a.price).map((l, i) => h('div', {key:i}, h('span', {style:{color: l.kind === 'support' ? T.green : T.red}}, `${l.kind === 'support' ? 'Support' : 'Resistance'} ${Math.round(l.price).toLocaleString()}gp`),
+                ` — held ${l.held} of ${l.touches} times (last turned ${l.lastSwing})`)),
+              h('div', {style:{marginTop:3}}, `Across all its levels: held ${lv.held} of ${lv.n} times; random prices held ${Math.round(lv.base * 100)}%. Drawn on the full chart.`)))
+        : h('div', {style:{marginTop:8, fontSize:11, color:T.textDim, lineHeight:1.45}},
+            lv.n ? `No reliable floors or ceilings: its past turning points held ${Math.round(lv.held / lv.n * 100)}% of the time, about the same as random prices (${Math.round(lv.base * 100)}%).`
+                 : 'No repeated turning points to test.')),
+      data.alch && row(`${data.alch.kind === 'floor' ? 'Alch floor' : 'Alch value line'}: ${Math.round(data.alch.floor).toLocaleString()}gp`, null,
+        `The break-even for High Alchemy: high alch ${data.alch.alch.toLocaleString()} − nature rune ${data.alch.nature.toLocaleString()}. Buying below it and alching makes a profit. Now ${Math.abs(data.alch.gapPct) < 0.5 ? 'right at it' : `${Math.abs(data.alch.gapPct).toFixed(1)}% ${data.alch.gapPct < 0 ? 'below' : 'above'} it`}. `
+        + (data.alch.kind === 'floor' ? `Acts as a floor for this item. ${alchHistory(data.alch)}`
+          : data.alch.kind === 'below' ? `Not a floor for this item — it usually sits below it, which makes it profitable to alch. ${alchHistory(data.alch)}`
+          : data.alch.kind === 'mixed' ? `Only a partial floor. ${alchHistory(data.alch)}`
+          : 'Not enough history to say whether it acts as a floor.')
+        + ' Moves with the nature rune price.'),
+      dip?.reliable && row(`Recovers from ~${dip.size}% dips`, {strength:'reliable'},
+        `Climbed back ${Math.round(dip.size / (1 - dip.size / 100))}%+ within 30 days ${dip.k} of ${dip.n} times` + (dip.medianDays ? ` (usually in ~${dip.medianDays} days)` : '') + `. On other days when it was just as jumpy, it climbed that much ${Math.round(dip.base * 100)}% of the time.`),
+      data.tick && data.tick.pct >= 2 && h('div', {style:{marginTop:8, padding:'6px 8px', borderLeft:`2px solid ${T.textDim}`, fontSize:11, color:T.textDim, lineHeight:1.45}},
+        `Cheap item: 1gp is ${data.tick.pct.toFixed(1)}% of the price, so percentages move in big steps` + (data.tick.was30 ? ` (30 days ago it was ${data.tick.was30}gp, now ${data.tick.price}gp)` : '') + '. Moves under 2gp are ignored here.'),
+      dip?.opposite && !dip.reliable && row(`Dips of ~${dip.size}% tend to keep going`, {strength:'opposite', label:'Opposite'},
+        `After drops like this it climbed back ${Math.round(dip.size / (1 - dip.size / 100))}%+ within 30 days only ${dip.k} of ${dip.n} times. On other days when it was just as jumpy, it climbed that much ${Math.round(dip.base * 100)}% of the time. This is common on the GE: about half of all items keep falling after dips rather than bouncing back.`),
+      spk?.opposite && row('Jumps tend to stick', {strength:'opposite', label:'Opposite'},
+        (spk.activeNow ? `It jumped ${spk.p7.toFixed(1)}% this week. ` : '') + `After jumps of 10%+ in a week, it fell back 5%+ (vs market) within a month only ${spk.k} of ${spk.n} times. On other days when it was just as jumpy, it fell that much ${Math.round(spk.base * 100)}% of the time.`),
+      // "Jumps tend to fade" removed 2026-10-09: failed the out-of-sample
+      // check (badges from pre-Oct-2024 data held on only 42% of items after).
+      volD && row(`Volume this week: ${volD.ratio7.toFixed(1)}× normal`, null,
+        `About ${fmt.gp(Math.round(volD.week))} a day, vs ${fmt.gp(Math.round(volD.normal))} normally (the 2 months before). A description, not a signal.`),
+      volD?.notes?.length > 0 && volD.notes.map(nt => h('div', {key:nt.key, style:{marginTop:8, padding:'6px 8px', borderLeft:`2px solid ${T.gold}`, background:'rgba(201,168,76,0.06)', fontSize:11, color:T.text, lineHeight:1.45}},
+        h('div', {style:{fontSize:9, color:T.gold, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:2}}, 'Chart myth check'),
+        nt.text)),
+      trendRow, rangeRow,
+      h('div', {style:{fontSize:10, color:T.textDim, marginTop:10, lineHeight:1.4, fontStyle:'italic'}},
+        `Based on daily GE guide prices since ${data.since}, compared with the overall market (150 most-traded items). Past cases are checked once a month so one move isn't counted many times. Not financial advice — a description of this item's past behaviour.`)));
+}
+
 function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
   const [trends, setTrends] = useState(null);
 
@@ -2244,7 +2651,7 @@ function RecipeSection({item, allItems}) {
   );
 }
 
-function BigMacLine({price, bondGP}) {
+function BigMacLine({price, bondGP, isLive}) {
   const [pos, setPos] = useState(null);
   const macs = getBigMacs(price, bondGP);
   if (!macs) return null;
@@ -2259,7 +2666,7 @@ function BigMacLine({price, bondGP}) {
       background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
       padding:'5px 8px', fontSize:11, color:T.textDim, maxWidth:180, lineHeight:1.5,
       pointerEvents:'none', boxShadow:'0 2px 8px rgba(0,0,0,0.5)',
-    }}, `Based on live bond price (${fmt.gp(bondGP)}gp = $${BOND_USD} USD) and Big Mac index ($${BIGMAC_USD} USD)`), document.body)
+    }}, `Based on the item's ${isLive ? 'live' : 'GE guide'} price (${fmt.gp(price)}gp), the live bond price (${fmt.gp(bondGP)}gp = ${BOND_USD} USD) and the Big Mac index (${BIGMAC_USD} USD)`), document.body)
   );
 }
 
@@ -2310,7 +2717,7 @@ function FlipCalculator({item, onAddToPortfolio, livePrice}) {
     setSell(livePrice?.high ?? (item.high || item.low || 0));
   }, [item.id, livePrice]);
 
-  const tax       = Math.floor(sell * 0.02);
+  const tax       = sell - applyTax(sell);
   const netSell   = sell - tax;
   const profit    = (netSell - buy) * qty;
   const investment = buy * qty;
@@ -2525,6 +2932,9 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const [imageOpen, setImageOpen]     = useState(false);
   const [wikiStats, setWikiStats]     = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
+  // "Moves with" (similar items) — click-to-load, reset per item.
+  const [similar, setSimilar] = useState(null);
+  useEffect(() => { setSimilar(null); }, [item?.id]);
   // Drop sources — deliberately NOT auto-fetched like wikiStats above.
   // Ben: this is a click-to-check lookup for unusual items, not something
   // that should fire a wiki request on every item click.
@@ -2621,6 +3031,9 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const chg = item.change_1d;
   const sparkColor = chg != null && chg < 0 ? T.red : T.green;
   const [sparkHistory, setSparkHistory] = useState([]);
+  // Food heal amount (wiki Food table) — null for non-food.
+  const [foodHeal, setFoodHeal] = useState(null);
+  useEffect(() => { setFoodHeal(null); if (item?.name && !item.untradeable) window.genius?.getFoodHeal?.(item.name).then(setFoodHeal).catch(() => {}); }, [item?.id]);
   useEffect(() => {
     if (!item?.id) return;
     setSparkHistory([]);
@@ -2853,6 +3266,10 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           },
         }, 'DXP')
       ),
+      // Chart analysis sits right under the chart (Ben, 2026-10-09: it was
+      // easy to miss lower down, half behind the panel's scroll arrows).
+      h(ChartAnalysis, {item}),
+      h(AskItem, {item}),
       item.untradeable
         ? [
             ['Production cost', gpFmt(item.high || item.low)+' gp'],
@@ -2864,6 +3281,32 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         : [
             ['Price',         gpFmt(item.high || item.low)+' gp'],
             ['After 2% tax', item.low ? gpFmt(applyTax(item.low))+' gp' : '—'],
+            // "950 + 8%" foods: also show the amount at 99 Constitution
+            // (9,900 base LP) — Ben: most players are endgame with max HP.
+            ...(foodHeal && !foodHeal.total && foodHeal.text ? (() => {
+              const m = foodHeal.text.match(/^([0-9,]+)\s*\+\s*([0-9.]+)%$/);
+              const at99 = m ? Number(m[1].replace(/,/g, '')) + Number(m[2]) / 100 * 9900 : null;
+              const live = item.liveBuy != null && item.liveSell != null ? (item.liveBuy + item.liveSell) / 2 : (item.liveBuy ?? item.liveSell);
+              const p = live || item.high || item.low;
+              return [
+                ['Heals', h('span', {title:'Life points healed (from the item\'s RuneScape Wiki page). The % part is of your max life points; the ≈ figure assumes 99 Constitution (9,900 base LP, no boosts).'},
+                  foodHeal.text + ' LP' + (at99 ? ` (≈ ${Math.round(at99).toLocaleString()} at 99)` : ''))],
+                ...(at99 && p ? [['Cost per LP', h('span', {title:`${live ? 'Live' : 'GE guide'} price ÷ ${Math.round(at99).toLocaleString()} LP (at 99 Constitution)`}, (p / at99).toFixed(2) + ' gp')]] : []),
+              ];
+            })() : []),
+            ...(foodHeal && foodHeal.total ? (() => {
+              const tot = foodHeal.total || foodHeal.use;
+              const multi = foodHeal.use && foodHeal.total && foodHeal.total !== foodHeal.use;
+              const healTxt = multi
+                ? (foodHeal.over ? `${foodHeal.use.toLocaleString()} + ${foodHeal.over.toLocaleString()} over time` : `${foodHeal.use.toLocaleString()} per bite · ${foodHeal.total.toLocaleString()} total`)
+                : `${tot.toLocaleString()} LP`;
+              const live = item.liveBuy != null && item.liveSell != null ? (item.liveBuy + item.liveSell) / 2 : (item.liveBuy ?? item.liveSell);
+              const p = live || item.high || item.low;
+              return [
+                ['Heals', h('span', {title:'Life points healed (RuneScape Wiki food table)'}, healTxt)],
+                ['Cost per LP', h('span', {title:`${live ? 'Live' : 'GE guide'} price ÷ ${tot.toLocaleString()} total LP`}, p ? (p / tot).toFixed(2) + ' gp' : '—')],
+              ];
+            })() : []),
             ['Daily Change',  (() => {
               const price = item.high || item.low;
               const chg = item.change_1d;
@@ -2874,8 +3317,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             })()],
             ['Live Daily Δ', h('span', {
               title: item.change_1d_live == null
-                ? 'Needs ~20+ hours of live-price history to build up before this can show — check back later.'
-                : 'True today-vs-24h-ago change, from the live buy/sell price itself rather than the regular daily snapshot.'
+                ? 'Not enough live trading in the last hour to compare with yesterday yet.'
+                : 'Last hour\'s live buy/sell average vs yesterday\'s (from the RuneScape Wiki live prices), rather than the GE guide.'
             }, item.change_1d_live == null ? h('span',{style:{color:T.textDim, fontStyle:'italic'}},'Building up…') : h('span',{className:pctClass(item.change_1d_live)}, fmt.pct(item.change_1d_live)))],
             ['High alch',    item.alch ? gpFmt(item.alch)+' gp' : '—'],
             ['GE Limit',     item.limit ? item.limit.toLocaleString() : '—'],
@@ -2941,10 +3384,15 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true), untradeable: item.untradeable}),
 
       // Big Mac price conversion
-      !item.untradeable && h(BigMacLine, {
-        price: item.high || item.low,
-        bondGP: (allItems||[]).find(it => it.name === 'Bond')?.high || 0,
-      }),
+      // Live prices (Ben, 2026-10-13): the GE guide can be far off — e.g.
+      // new items listed at 115m while trading at ~1.5b. Mid of live
+      // instant-buy/sell, falling back to the guide when there's no live data.
+      !item.untradeable && h(BigMacLine, (() => {
+        const live = it => it && (it.liveBuy != null && it.liveSell != null ? (it.liveBuy + it.liveSell) / 2 : (it.liveBuy ?? it.liveSell));
+        const bond = (allItems||[]).find(it => it.name === 'Bond');
+        const p = live(item), b = live(bond);
+        return { price: p || item.high || item.low, bondGP: b || bond?.high || 0, isLive: !!p };
+      })()),
 
       // Examine text — use dump data first, fall back to wiki fetch
       statsLoading && !item.examine && h('div',{style:{marginTop:12,fontSize:11,color:T.textDim}},'Loading item info...'),
@@ -3056,8 +3504,31 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
               setDropSourcesLoading(false);
             }).catch(() => { setDropSources({sources:[]}); setDropSourcesLoading(false); });
           }
-        }, dropSourcesLoading ? '⏳ Loading…' : '🐲 Drop sources')
+        }, dropSourcesLoading ? '⏳ Loading…' : '🐲 Drop sources'),
+        !item.untradeable && h('button',{
+          className:'ge-btn',
+          style:{fontSize:11, padding:'3px 10px'},
+          title:'Items whose prices have historically moved together with this one (beyond the overall market)',
+          onClick:()=>{
+            setSimilar('loading');
+            window.genius?.getSimilarItems(item.id).then(r => setSimilar(r || {together:[], opposite:[]})).catch(() => setSimilar({together:[], opposite:[]}));
+          }
+        }, similar === 'loading' ? '⏳ Loading…' : '🔗 Moves with')
       ),
+
+      similar && similar !== 'loading' && h('div', {style:{marginTop:8}},
+        similar.pending ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'Still building the comparison table in the background. Try again in a few minutes.')
+        : similar.tooFlat ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'This item\'s price barely moves week to week, so there\'s nothing reliable to compare.')
+        : h('div', null,
+            h('div', {style:{fontSize:10, color:T.textDim, marginBottom:4}}, 'Weekly price moves over the last two years, after removing the overall market\'s move. Some matches are coincidence: treat these as leads to check, not proof.'),
+            similar.together.length === 0 ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'Nothing moves closely with it.')
+            : similar.together.map(o => h('div', {key:o.id, style:{display:'flex', justifyContent:'space-between', fontSize:11, padding:'2px 0'}},
+                h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => { const it = (allItems || []).find(i => i.id === o.id); it && onSelectItem && onSelectItem(it); }}, o.name),
+                h('span', {style:{color:T.green}, title:`Correlation ${o.corr.toFixed(2)} over ${o.weeks} weeks`}, Math.round(o.corr * 100) + '% match'))),
+            similar.opposite.length > 0 && h('div', {style:{fontSize:10, color:T.textDim, margin:'6px 0 2px'}}, 'Tends to move opposite:'),
+            similar.opposite.map(o => h('div', {key:o.id, style:{display:'flex', justifyContent:'space-between', fontSize:11, padding:'2px 0'}},
+              h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => { const it = (allItems || []).find(i => i.id === o.id); it && onSelectItem && onSelectItem(it); }}, o.name),
+              h('span', {style:{color:T.red}, title:`Correlation ${o.corr.toFixed(2)} over ${o.weeks} weeks`}, Math.round(-o.corr * 100) + '% opposite'))))),
 
       dropSources && h('div', {style:{marginTop:8}},
         dropSources.sources.length === 0
@@ -3164,7 +3635,33 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
 // currently rendering (e.g. ItemTable hides its `signals` column on some
 // tabs). Order state always tracks the FULL key set; rendering/measuring
 // filter down to the visible ones.
-function useTableColumns(storageKey, defaultWidths, visibleCols) {
+// Hand-built tables (no useTableColumns) mark which columns to hide at
+// phone width by table class: 1-based column positions. Keep the item name
+// plus the one or two numbers that table exists to show.
+const PHONE_HIDE_COLS = {
+  'pt-flips':     [2, 3, 4, 6, 7, 9],     // keep Item, Margin/item, Realistic profit, ★
+  'pt-flagged':   [2, 3, 4, 5],           // keep Item, Why it's flagged
+  'pt-portfolio': [2, 5, 6, 7],           // keep Item, Price/value, P&L, actions
+  'pt-money':     [2, 3, 4, 5, 7],        // keep Item, Margin, Profit per limit (+ any after)
+  'pt-movers':    [2, 4],                 // keep Item, Now, Change, ★
+  'pt-opps':      [4, 5, 6, 7, 8],        // keep the first three
+  'pt-score':     [3, 5, 6],              // keep Item, Score, Change
+  'pt-realized':  [2, 3],                 // keep Item, Realized P&L, % of total
+  'pt-closed':    [2, 3, 5, 6],           // keep Item, Avg return, Total P&L
+};
+function phoneHideCols() {
+  return Object.entries(PHONE_HIDE_COLS).map(([cls, cols]) =>
+    cols.map(c => `.${cls} > * > tr > :nth-child(${c}):not([colspan])`).join(', ') + ' { display: none; }'
+  ).join(' ');
+}
+
+// Phone-width screens (same 700px breakpoint as the drawer CSS; desktop's
+// window can't get this narrow). Tables there show only their phoneCols
+// and lay out automatically instead of using the desktop column widths —
+// the rest of each row is one tap away in the item panel.
+const IS_PHONE = typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 700px)').matches;
+
+function useTableColumns(storageKey, defaultWidths, visibleCols, phoneCols) {
   const defaultOrder = Object.keys(defaultWidths);
   const orderKey = storageKey + '_order';
   const loadWidths = () => {
@@ -3199,7 +3696,9 @@ function useTableColumns(storageKey, defaultWidths, visibleCols) {
     // eslint-disable-next-line
   }, [storageKey]);
 
-  const colOrder = visibleCols ? colOrderFull.filter(k => visibleCols.includes(k)) : colOrderFull;
+  let colOrder = visibleCols ? colOrderFull.filter(k => visibleCols.includes(k)) : colOrderFull;
+  const phone = IS_PHONE && phoneCols;
+  if (phone) colOrder = phoneCols.filter(k => colOrder.includes(k));
 
   // Callback ref (not a plain useRef) so mounting the wrap div triggers a
   // re-measure — a plain ref changing .current re-runs nothing.
@@ -3327,10 +3826,10 @@ function useTableColumns(storageKey, defaultWidths, visibleCols) {
   };
 
   // colgroup() + handles(): the two order-dependent bits every table needs.
-  const colgroup = () => h('colgroup', null,
+  const colgroup = () => phone ? null : h('colgroup', null,
     colOrder.map(k => h('col', {key:k, style:{width: colWidths[k]}}))
   );
-  const handles = () => colOrder.slice(0, -1).map(k => overlayHandle(k));
+  const handles = () => phone ? [] : colOrder.slice(0, -1).map(k => overlayHandle(k));
 
   return { colWidths, displayWidths: colWidths, tableWrapRef, overlayHandle, colOrder, colgroup, handles, th };
 }
@@ -3407,6 +3906,113 @@ function overpricedUnderpricedLists(items, thresholdPct) {
 // the nearest `.content` scroll container's top edge, render a fixed-
 // position clone (see ItemTable's render) that tracks the real header's
 // left/width/top via getBoundingClientRect on every scroll/resize tick.
+// Long explanation paragraphs: on a phone, show 3 lines plus a More/Less
+// toggle (only when the text actually runs past 3 lines) so the table
+// below isn't pushed off-screen. Desktop renders the plain div as before.
+// Phones have no hover, so title= tooltips were unreachable. Tapping an
+// element whose tooltip IS its purpose (no click action of its own: "?"
+// icons, labels, badges) shows the text; long-pressing anything with a
+// tooltip (buttons included) shows it without triggering the button.
+function TouchTooltips() {
+  const [tip, setTip] = useState(null); // {text, x, y}
+  useEffect(() => {
+    let timer = null, longFired = false;
+    const titled = el => el && el.closest && el.closest('[title]');
+    // React click handlers aren't visible on the element, so a pointer
+    // cursor is the tell for clickable divs/cards.
+    const interactive = el => !!(el.closest('button, a, input, select, textarea, label, [role=button], tr, .nav-btn') || getComputedStyle(el).cursor === 'pointer');
+    const show = (el, x, y) => setTip({text: el.getAttribute('title'), x, y});
+    const onStart = e => {
+      longFired = false;
+      const el = titled(e.target); if (!el) return;
+      const t = e.touches[0];
+      timer = setTimeout(() => { longFired = true; show(el, t.clientX, t.clientY); }, 500);
+    };
+    const cancel = () => clearTimeout(timer);
+    const onClick = e => {
+      if (longFired) { e.preventDefault(); e.stopPropagation(); longFired = false; return; }
+      const el = titled(e.target);
+      if (el && !interactive(e.target)) { show(el, e.clientX, e.clientY); return; }
+      setTip(null);
+    };
+    document.addEventListener('touchstart', onStart, {passive: true});
+    document.addEventListener('touchend', cancel);
+    document.addEventListener('touchmove', cancel, {passive: true});
+    document.addEventListener('click', onClick, true);
+    return () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchend', cancel);
+      document.removeEventListener('touchmove', cancel);
+      document.removeEventListener('click', onClick, true);
+    };
+  }, []);
+  if (!tip || !tip.text) return null;
+  const top = tip.y > window.innerHeight / 2 ? null : tip.y + 16;
+  const bottom = top == null ? window.innerHeight - tip.y + 16 : null;
+  return createPortal(h('div', {
+    onClick: () => setTip(null),
+    style:{position:'fixed', left:12, right:12, top, bottom, zIndex:1000, padding:'10px 12px',
+      background:T.panel2, border:'1px solid '+T.borderGold, borderRadius:4, color:T.text,
+      fontSize:12, lineHeight:1.5, boxShadow:'0 4px 16px rgba(0,0,0,0.7)', whiteSpace:'pre-line'},
+  }, tip.text), document.body);
+}
+
+// Mobile only: how GEnius keeps checking prices while it isn't on screen
+// (Ben, 2026-10-15: "let the user pick between the permanent notification
+// or slower alerts").
+function BackgroundModeSetting({toast}) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => { window.genius.getLiveMonitoring().then(setSt).catch(() => setSt({enabled:false})); }, []);
+  const choose = async on => {
+    setBusy(true);
+    try { setSt(await window.genius.setLiveMonitoring(on)); }
+    catch (e) { toast("Couldn't change background mode: " + e.message, 'error'); }
+    setBusy(false);
+  };
+  const opt = (on, title, desc) => h('label', {className:'row', style:{gap:8, cursor:'pointer', alignItems:'flex-start', marginBottom:8, opacity: busy ? 0.6 : 1}},
+    h('input', {type:'radio', name:'bgmode', checked: !!(st && st.enabled) === on, disabled: busy || !st, onChange: () => choose(on), style:{marginTop:3}}),
+    h('div', null, h('div', null, title), h('div', {style:{fontSize:11, color:T.textDim, lineHeight:1.5}}, desc)));
+  return h('div', {style:{marginBottom:20}},
+    h('div', {className:'ge-section-head'}, 'Background checking'),
+    opt(false, 'Battery saver (default)', 'Android checks your price alerts in the background whenever it allows, usually every 1 to 4 hours (longer with Battery Saver on). No permanent notification.'),
+    opt(true, 'Live monitoring', 'GEnius keeps fetching on your normal schedule while it\'s closed, so alerts arrive within minutes. Shows a permanent notification; you can hide it in Android settings (GEnius → Notifications → Live monitoring) without muting alerts. Uses more battery. Swiping GEnius away from recent apps stops it.'),
+    st && st.enabled && !st.running && h('div', {style:{fontSize:11, color:T.red}}, 'Live monitoring is on but not running. Try switching it off and on again.'));
+}
+
+// Mobile only (Ben, 2026-10-18): notifications during these hours still
+// appear, but silently (no sound or vibration), without needing Do Not
+// Disturb, which would also silence real emergencies.
+function QuietHoursSetting() {
+  const [q, setQ] = useState(null);
+  useEffect(() => { window.genius.getQuietHours().then(setQ).catch(() => {}); }, []);
+  const save = patch => { const next = {...q, ...patch}; setQ(next); window.genius.setQuietHours(patch).catch(() => {}); };
+  if (!q) return null;
+  const timeInput = key => h('input', {type:'time', className:'ge-input', value:q[key], disabled:!q.enabled,
+    onChange: e => e.target.value && save({[key]: e.target.value}), style:{width:110}});
+  return h('div', {style:{marginBottom:20}},
+    h('div', {className:'ge-section-head'}, 'Quiet hours'),
+    h('label', {className:'row', style:{gap:8, cursor:'pointer', marginBottom:8}},
+      h('input', {type:'checkbox', checked:!!q.enabled, onChange: e => save({enabled: e.target.checked})}),
+      h('span', null, 'Silence GEnius notifications overnight')),
+    h('div', {style:{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', opacity: q.enabled ? 1 : 0.5}},
+      h('span', {style:{fontSize:12, color:T.textDim}}, 'From'), timeInput('start'),
+      h('span', {style:{fontSize:12, color:T.textDim}}, 'to'), timeInput('end')),
+    h('div', {style:{fontSize:11, color:T.textDim, marginTop:6, lineHeight:1.5}},
+      'Alerts and digests still arrive and show in your notifications, just without sound or vibration. Only affects GEnius, so calls and other apps still get through.'));
+}
+
+function PhoneFold({style, children}) {
+  const [open, setOpen] = useState(false);
+  const [long, setLong] = useState(false);
+  const ref = useRef(null);
+  useEffect(() => { const el = ref.current; if (el) setLong(el.scrollHeight > el.clientHeight + 2); });
+  if (!IS_PHONE) return h('div', {style}, children);
+  return h('div', {style, onClick: () => (long || open) && setOpen(o => !o)},
+    h('div', {ref, style: open ? null : {display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', overflow:'hidden'}}, children),
+    (long || open) && h('div', {style:{color:T.gold, fontSize:11, marginTop:3, cursor:'pointer'}}, open ? 'Show less ▴' : 'More ▾'));
+}
+
 function useStickyTableHeader(wrapRef, theadRef) {
   const [state, setState] = useState({pinned:false, top:0, left:0, width:0});
   useEffect(() => {
@@ -3456,7 +4062,8 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
     const extra = showGapPct ? 'gapPct' : 'spread';
     return [...base.slice(0, i+1), extra, ...base.slice(i+1)];
   }, [showSignals, showGapPct, showSpread]);
-  const cols = useTableColumns('genius_col_widths', DEFAULT_COL_WIDTHS, visibleCols);
+  const cols = useTableColumns('genius_col_widths', DEFAULT_COL_WIDTHS, visibleCols,
+    ['name', 'high', showGapPct ? 'gapPct' : showSpread ? 'spread' : 'change_1d']);
   const theadRef = useRef(null);
   // cols.tableWrapRef is a callback ref (useCallback), not a useRef object —
   // it has no .current to read, so the sticky-header hook needs its own
@@ -3988,7 +4595,7 @@ function TopMoversTab({items, officialTop100, onSelect, watchlist, onToggleWatch
         : rows.length === 0
           ? h('div', {style:{padding:20, textAlign:'center', color:T.textDim, fontSize:12}}, 'No data for this period yet.')
           : h('div', {className:'ge-table-wrap'},
-              h('table', {className:'ge-table'},
+              h('table', {className:'ge-table pt-movers'},
                 h('thead', null, h('tr', null,
                   h('th', {onClick:()=>tog('name'), style:{cursor:'pointer'}}, 'Item'+arr('name')), h('th', null, 'Start'), h('th', null, 'Now'),
                   h('th', {onClick:()=>tog('gp'), style:{cursor:'pointer'}}, 'GP Change'+arr('gp')), h('th', {onClick:()=>tog('pct'), style:{cursor:'pointer'}}, 'Change'+arr('pct')),
@@ -4347,6 +4954,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const SIG_COLORS = {
     SURGE:{bg:'#1a3a1a',border:'#4caf50',text:'#4caf50'},
     DUMP:{bg:'#3a1a1a',border:'#e53935',text:'#e53935'},
+    SPIKE:{bg:'#14261a',border:'#4caf50',text:'#81c784'},
+    SLUMP:{bg:'#2a1414',border:'#e53935',text:'#ef9a9a'},
     ACCUMULATION:{bg:'#1a2a3a',border:'#64b5f6',text:'#64b5f6'},
     DISTRIBUTION:{bg:'#2a1a3a',border:'#ce93d8',text:'#ce93d8'},
     FRENZY:{bg:'#3a2a0a',border:'#ffd700',text:'#ffd700'},
@@ -4505,7 +5114,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
 
     // ── Mood + Item of the Day ───────────────────────────────────
-    h('div', {style:{display:'flex', gap:8, marginBottom:20}},
+    h('div', {className:'dash-mood-row', style:{display:'flex', gap:8, marginBottom:20}},
 
       // Mood of the Market
       mood && h('div', {
@@ -4597,6 +5206,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       )
     ),
 
+    h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
     h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
     // ── News Item Mentions ───────────────────────────────────────
@@ -5043,7 +5653,7 @@ function CompareTab({compareList, onRemove, onClear, allItems, description, user
 }
 
 /* ─── Tab views ──────────────────────────────────────────────── */
-function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
+function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
   // Three-pill Normal/DXP/Seasonal switcher — no longer dev-mode gated
   // (Ben, 2026-07-29: "those should not be behind dev mode, my apologies").
   const [view, setView] = useState('normal');
@@ -5061,7 +5671,9 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
 
   const activeList   = view === 'dxp' ? dxpWatchlist : watchlist;
   const activeToggle = view === 'dxp' ? toggleDxpWatch : onToggleWatch;
-  const watched      = items.filter(it => activeList.map(String).includes(String(it.id)));
+  // Watched items Jagex removed from the GE stay listed (last price, labelled)
+  // instead of silently vanishing.
+  const watched      = [...items, ...(removedItems || [])].filter(it => activeList.map(String).includes(String(it.id)));
 
   // ── Seasonal view helpers ────────────────────────────────────────────────
   const seasonalRows = view === 'seasonal'
@@ -5184,18 +5796,19 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
           )
         : h('div', {className:'offer-grid'},
             watched.map(it =>
-              h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
+              h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it), style: it.removedFromGe ? {opacity:0.6} : undefined},
                 h('div', {className:'offer-slot-name'}, it.name),
+                it.removedFromGe && h(RemovedFromGeTag, {item: it}),
                 h('div', {className:'offer-slot-price'}, fmt.gp(it.high||it.low)+'gp'),
-                h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
-                h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
+                !it.removedFromGe && h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
+                !it.removedFromGe && h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
                 h('div', {className:'offer-slot-star'},
                   h('button', {
                     className:'star-btn',
                     onClick: e => { e.stopPropagation(); activeToggle(it.id); }
                   }, h('span', {className:'star-on'}, '★'))
                 ),
-                it.signals && it.signals.map(s => h(SignalBadge, {key:s, signal:s, style:{marginTop:4, marginRight:2}}))
+                !it.removedFromGe && it.signals && it.signals.map(s => h(SignalBadge, {key:s, signal:s, style:{marginTop:4, marginRight:2}}))
               )
             )
           )
@@ -5329,7 +5942,7 @@ function RecipePane({allItems}) {
   );
 }
 
-function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel, showMachines, allItems}) {
+function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare, description, splitLabel, showMachines, allItems, onNavigate}) {
   const [view, setView] = useState('items');
   const tradeableItems    = useMemo(() => (items||[]).filter(it => !it.untradeable), [items]);
   const untradeableItems  = useMemo(() => (items||[]).filter(it =>  it.untradeable), [items]);
@@ -5344,7 +5957,10 @@ function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
       showMachines && h('button', {className: view==='machines' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('machines')},
         'Machines')
     ),
-    view === 'machines' ? h(MachineCalculators, {items: allItems || items, onSelect}) : h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
+    // Invention's Items pill also carries the "make it yourself" calculators
+    // (Tight springs, Enchanted notepaper) above the item table.
+    view === 'items' && showMachines && h(InventionCraftCalc, {items: allItems || items}),
+    view === 'machines' ? h(MachineCalculators, {items: allItems || items, onSelect, onNavigate}) : h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
   );
 }
 
@@ -5364,7 +5980,23 @@ function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
 // comparison columns — couldn't find RS3-specific (not OSRS, which has a
 // separate economy) fee numbers confirmed for those, and fabricating exact
 // gp figures would be worse than leaving them out.
-const GP_PER_MACHINE_CHARGE = 24.03;
+// Was a hardcoded 24.03gp/charge snapshot, silently drifting out of sync
+// with the real market (Ben, 2026-10-01: caught a ~3% gap against the
+// live-computed rate while checking Hide Tanner profit). 1 Divine charge
+// gives 3,000 machine charges to a portable (runescape.wiki/w/Divine_charge,
+// confirmed — that ratio itself doesn't change, only the gp side does), so
+// the real per-charge cost is just the item's own live price divided by
+// that fixed count — computed fresh every time from `items` instead of a
+// number that was only ever accurate the day someone set it.
+const MACHINE_CHARGES_PER_DIVINE_CHARGE = 3000;
+function machineChargeGpRate(items) {
+  const dc = (items || []).find(it => it.name && it.name.toLowerCase() === 'divine charge');
+  const price = dc ? (dc.high || dc.low || 0) : 0; // same source as the Alch tab's divineChargePrice
+  // Divine charge hidden or unpriced — fall back to the last known rate
+  // rather than 0, which would make every machine look like free profit.
+  return price > 0 ? price / MACHINE_CHARGES_PER_DIVINE_CHARGE : FALLBACK_GP_PER_MACHINE_CHARGE;
+}
+const FALLBACK_GP_PER_MACHINE_CHARGE = 24.03;
 const INVENTION_MACHINES = [
   {
     id: 'plank', label: 'Plank Maker', chargePerItem: 15, itemsPerHour: 40,
@@ -5435,17 +6067,18 @@ const INVENTION_MACHINES = [
 ];
 const MACHINE_COL_WIDTHS = {input:160, output:190, inPrice:110, outPrice:110, profit:110, roi:80, hourly:130, daily:140};
 
-function MachineCalculators({items, onSelect}) {
+function MachineCalculators({items, onSelect, onNavigate}) {
   const [active, setActive] = useState(INVENTION_MACHINES[0].id);
   const [sort, setSort] = useState({key:'profit', dir:-1});
-  const cols = useTableColumns('genius_machine_col_widths_'+active, MACHINE_COL_WIDTHS);
+  const cols = useTableColumns('genius_machine_col_widths_'+active, MACHINE_COL_WIDTHS, null, ['output', 'profit', 'hourly']);
   const byName = useMemo(() => {
     const m = {};
     (items||[]).forEach(it => { if (it.name) m[it.name.toLowerCase()] = it; });
     return m;
   }, [items]);
-  const machine = INVENTION_MACHINES.find(m => m.id === active);
-  const chargeCost = machine.chargePerItem * GP_PER_MACHINE_CHARGE;
+  const machine = INVENTION_MACHINES.find(m => m.id === active) || INVENTION_MACHINES[0];
+  const chargeGpRate = machineChargeGpRate(items);
+  const chargeCost = machine.chargePerItem * chargeGpRate;
   const extraCost = machine.extraInput ? (byName[machine.extraInput.toLowerCase()]?.high || byName[machine.extraInput.toLowerCase()]?.low || 0) : 0;
 
   const rows = useMemo(() => machine.conversions.map(c => {
@@ -5483,11 +6116,20 @@ function MachineCalculators({items, onSelect}) {
       INVENTION_MACHINES.map(m => h('button', {
         key:m.id, onClick:()=>setActive(m.id),
         className: active===m.id ? 'ge-btn gold' : 'ge-btn',
-      }, m.label))
+      }, m.label)),
+      // Not a fourth machine calculator — just a shortcut over to the
+      // existing Alch tab (Ben, 2026-10-01), since the Alchemiser is
+      // already its own fully-built feature there, not something that
+      // belongs duplicated inline here.
+      h('button', {
+        key:'alchemiser', onClick:()=>onNavigate && onNavigate('alch'),
+        className:'ge-btn', title:'Go to the Alch tab',
+      }, 'Alchemiser →')
     ),
+    h(React.Fragment, null,
     h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:4, lineHeight:1.5}}, machine.note),
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10}},
-      `Machine charge cost: ${machine.chargePerItem} charge/item (${fmt.gp(Math.round(chargeCost))}gp/item, divine charges at ${GP_PER_MACHINE_CHARGE}gp/charge)`,
+      `Machine charge cost: ${machine.chargePerItem} charge/item (${fmt.gp(Math.round(chargeCost))}gp/item, divine charges at ${chargeGpRate.toFixed(2)}gp/charge, live)`,
       machine.extraInput && ` · plus 1 ${machine.extraInput} (${fmt.gp(extraCost)}gp) per item`
     ),
     h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef},
@@ -5518,12 +6160,179 @@ function MachineCalculators({items, onSelect}) {
         ))),
       ),
       cols.handles(),
-    )
+    ))
+  );
+}
+
+// ─── Invention crafting calculators (Ben, 2026-10-28) ─────────────────────
+// Springs and magic notepaper leave the GE in November, so their Invention-
+// made versions (Tight springs, Enchanted notepaper) become the only source.
+// Shown on the Invention tab's Items pill. Recipes from the RS Wiki
+// (runescape.wiki/w/Tight_spring, /w/Enchanted_notepaper, checked
+// 2026-10-28). Component prices are the wiki's material prices GEnius
+// already loads (untradeable.js), except where liveSources is given: then
+// the component is priced from the cheapest item to disassemble at its LIVE
+// instant-buy price (Ben: guide prices understate it, tensile ~632 vs ~740).
+// Tensile parts per disassembly, no junk reduction ("rate per item" on the
+// wiki's Calculator:Disassembly by material/Tensile, checked 2026-10-28).
+const TENSILE_SOURCES = [
+  ['Black salamander', 2.77], ['Magic longbow', 3.52], ['Yew shortbow', 2.77], ['Acadia longbow', 1.98],
+  ['Magic shortbow', 3.52], ['Yew longbow', 2.77], ['Maple longbow', 1.58], ['Elder longbow', 3.60],
+];
+const INVENTION_CRAFTS = [
+  {
+    id: 'spring', name: 'Tight springs', geItem: 'Spring', level: 43, perCraft: 20,
+    // Wiki estimate of disassembly time to gather one batch's components.
+    minutesPerCraft: 6.88,
+    use: 'Charge the Spring cleaner (1 spring = 1 charge).',
+    unlock: 'Spring cleaner and Tight springs discovery.',
+    inputs: [
+      { component: 'Tensile parts', qty: 120, liveSources: TENSILE_SOURCES },
+      { component: 'Subtle components', qty: 1 },
+    ],
+  },
+  {
+    id: 'notepaper', name: 'Enchanted notepaper', geItem: 'Magic notepaper', level: 97, perCraft: 20,
+    use: 'Note items, like magic notepaper (1 per item).',
+    unlock: 'Blueprint from the Daemonheim rewards shop (200,000 Dungeoneering tokens).',
+    inputs: [
+      { item: 'Elder logs', qty: 1 },
+      { item: 'Astral rune', qty: 5 },
+      { component: 'Magic parts', qty: 15 },
+      { component: 'Ethereal components', qty: 1 },
+    ],
+  },
+];
+
+function InventionCraftCalc({items}) {
+  const [active, setActive] = useState(INVENTION_CRAFTS[0].id);
+  const [needText, setNeedText] = useState('1000');
+  const [rateText, setRateText] = useState('');
+  const craft = INVENTION_CRAFTS.find(c => c.id === active);
+  const byName = n => (items || []).find(it => (it.name || '').toLowerCase() === n.toLowerCase());
+  const priceOf = it => it ? (it.high || it.low || 0) : 0;
+  const livePrice = it => it ? (it.liveBuy || it.high || it.low || 0) : 0; // what buying actually costs
+
+  const inputs = craft.inputs.map(inp => {
+    const label = inp.item || inp.component;
+    let each = 0, note = null;
+    if (inp.item) { each = livePrice(byName(inp.item)); note = 'live GE buy'; }
+    else {
+      for (const [src, perItem] of inp.liveSources || []) {
+        const p = livePrice(byName(src)) / perItem;
+        if (p > 0 && (!each || p < each)) { each = p; note = `cheapest live source: ${src}`; }
+      }
+      if (!each) { each = priceOf(byName(inp.component)); note = 'wiki material price'; }
+    }
+    return { label, qty: inp.qty, each, total: each * inp.qty, note };
+  });
+  const missing = inputs.some(i => !i.each);
+  const perCraft = inputs.reduce((s, i) => s + i.total, 0);
+  const perUnit = perCraft / craft.perCraft;
+  const geP = livePrice(byName(craft.geItem));
+  const need = Math.max(0, Math.round(parseGpString(needText) || 0));
+  const crafts = Math.ceil(need / craft.perCraft);
+  const minutes = craft.minutesPerCraft ? crafts * craft.minutesPerCraft : 0;
+  const rate = Math.max(0, parseGpString(rateText) || 0); // gp/hour your time is worth
+  const timeCost = rate * minutes / 60;
+  const total = crafts * perCraft;
+
+  const row = (label, value, sub) => h('div', {style:{display:'flex', justifyContent:'space-between', gap:12, padding:'6px 0', borderBottom:`1px solid ${T.borderDim}`, fontSize:12}},
+    h('span', {style:{color:T.textDim}}, label),
+    h('span', {style:{color:T.text, textAlign:'right'}}, value, sub && h('div', {style:{fontSize:10, color:T.textDim}}, sub)));
+  const input = (value, set, placeholder) => h('input', {className:'ge-input', value, placeholder, onChange:e => set(e.target.value), style:{width:120}});
+  const hrs = m => m >= 60 ? `${(m / 60).toFixed(1)} hours` : `${Math.round(m)} minutes`;
+  const recipe = craft.inputs.map(i => `${i.qty} ${i.item || i.component}`).join(' + ') + ` = ${craft.perCraft} ${craft.name}`;
+
+  return h('div', {style:{padding:'12px 14px', borderBottom:`1px solid ${T.border}`}},
+    h('div', {style:{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginBottom:8}},
+      h('span', {style:{fontSize:12, color:T.gold, marginRight:4}}, 'Make it yourself:'),
+      INVENTION_CRAFTS.map(c => h('button', {key:c.id, onClick:()=>setActive(c.id), className: active===c.id ? 'ge-btn gold' : 'ge-btn'}, c.name))),
+    h('div', {style:{maxWidth:600}},
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8, lineHeight:1.5}},
+        `${craft.use} Invention ${craft.level}, at an Inventor's workbench: `,
+        h('b', {style:{color:T.text, fontStyle:'normal'}}, recipe), `. Needs: ${craft.unlock}`),
+      missing && h('div', {style:{color:T.red, fontSize:12, marginBottom:8}}, 'Some prices are not loaded yet: fetch prices and try again.'),
+      inputs.map(i => h(React.Fragment, {key:i.label}, row(i.label, `${fmt.gp(Math.round(i.each))}gp each`, `× ${i.qty} = ${fmt.gp(Math.round(i.total))}gp · ${i.note}`))),
+      row(`Cost per craft (${craft.perCraft})`, h('b', null, fmt.gp(Math.round(perCraft)) + 'gp')),
+      row('Cost each', h('b', {style:{color:T.goldBright}}, fmt.gp(Math.round(perUnit)) + 'gp'),
+        geP ? `GE ${craft.geItem} (live buy): ${fmt.gp(geP)}gp · ${perUnit <= geP ? 'making is cheaper'
+              : perUnit / geP >= 2 ? `making costs ${(perUnit / geP).toFixed(1)}× as much` : `making costs ${Math.round((perUnit / geP - 1) * 100)}% more`}`
+            : `${craft.geItem} is no longer on the GE`),
+      h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', alignItems:'center', margin:'12px 0 6px', fontSize:12, color:T.textDim}},
+        h('label', null, 'How many ', input(needText, setNeedText, '1000')),
+        craft.minutesPerCraft && h('label', {title:'Optional: what an hour of your time is worth, to price the disassembly time'}, 'Your time (gp/hour) ', input(rateText, setRateText, 'e.g. 1m'))),
+      need > 0 && h('div', null,
+        row('Crafts', crafts.toLocaleString(), `${(crafts * craft.perCraft).toLocaleString()} ${craft.name}`),
+        row('Materials', craft.inputs.map(i => `${(crafts * i.qty).toLocaleString()} ${i.item || i.component}`).join(', ')),
+        row('Total cost', h('b', null, fmt.gp(Math.round(total)) + 'gp')),
+        minutes > 0 && row('Disassembly time (wiki estimate)', hrs(minutes), `~${craft.minutesPerCraft} minutes per craft`),
+        rate > 0 && minutes > 0 && row('Including your time', h('b', {style:{color:T.goldBright}}, fmt.gp(Math.round(total + timeCost)) + 'gp'),
+          `${fmt.gp(Math.round((total + timeCost) / (crafts * craft.perCraft)))}gp each`)),
+      h('div', {style:{fontSize:10, color:T.textDim, marginTop:10}}, 'Recipes and yields: RuneScape Wiki (checked 28 Oct 2026). Disassembly sources assume no junk reduction, bought at live instant-buy prices; junk reduction makes them cheaper.'))
   );
 }
 
 /* ─── Market tab ─────────────────────────────────────────────── */
-function MarketTab({items, selected, onSelect, description}) {
+// "Hide items under X gp" (Ben, 2026-10-20): 1gp junk like vials and plant
+// pots tops every % movers list (1gp -> 2gp is +100%). Remembered per
+// device; 0 = off. Paired with a popup listing exactly what it hides, so a
+// filter set too high never silently drops something you care about.
+const MIN_PRICE_KEY = 'genius_min_price_filter';
+function useMinPriceFilter() {
+  const [minPrice, setMinPriceState] = useState(() => {
+    try { return Number(localStorage.getItem(MIN_PRICE_KEY)) || 0; } catch { return 0; }
+  });
+  const setMinPrice = v => {
+    setMinPriceState(v);
+    try { localStorage.setItem(MIN_PRICE_KEY, String(v || 0)); } catch {}
+  };
+  return [minPrice, setMinPrice];
+}
+const itemPrice = it => it.high || it.low || 0;
+
+function MinPriceFilter({items, minPrice, setMinPrice}) {
+  const [text, setText] = useState(minPrice ? String(minPrice) : '');
+  const [showHidden, setShowHidden] = useState(false);
+  const hidden = useMemo(() => minPrice > 0
+    ? items.filter(it => !it.untradeable && itemPrice(it) > 0 && itemPrice(it) < minPrice).sort((a, b) => itemPrice(b) - itemPrice(a))
+    : [], [items, minPrice]);
+  const apply = () => {
+    const v = Math.max(0, Math.round(parseGpString(text) || 0));
+    setMinPrice(v); setText(v ? String(v) : '');
+  };
+  return h('div', {style:{display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim}},
+    h('span', null, 'Hide items under'),
+    h('input', {className:'ge-input', style:{width:90}, value:text, placeholder:'off',
+      onChange: e => setText(e.target.value), onBlur: apply, onKeyDown: e => e.key === 'Enter' && apply()}),
+    h('span', null, 'gp'),
+    minPrice > 0 && h('span', null, '· hiding ' + hidden.length.toLocaleString() + ' item' + (hidden.length === 1 ? '' : 's') + ' · ',
+      h('a', {href:'#', style:{color:T.gold}, onClick: e => { e.preventDefault(); setShowHidden(true); }}, 'see which'),
+      ' · ',
+      h('a', {href:'#', style:{color:T.textDim}, onClick: e => { e.preventDefault(); setMinPrice(0); setText(''); }}, 'clear')),
+    showHidden && createPortal(h('div', {
+      onClick: () => setShowHidden(false),
+      style:{position:'fixed', inset:0, zIndex:900, background:'rgba(0,0,0,0.6)', display:'flex', alignItems:'center', justifyContent:'center', padding:16}},
+      h('div', {onClick: e => e.stopPropagation(),
+        style:{background:T.panel, border:`1px solid ${T.borderGold}`, borderRadius:4, width:'min(480px, 100%)', maxHeight:'80vh', display:'flex', flexDirection:'column'}},
+        h('div', {style:{padding:'12px 14px', borderBottom:`1px solid ${T.border}`}},
+          h('div', {style:{fontSize:15, color:T.gold, fontFamily:"'Cinzel', serif"}}, 'Hidden by your filter'),
+          h('div', {style:{fontSize:12, color:T.textDim, marginTop:4, lineHeight:1.5}},
+            hidden.length.toLocaleString() + ' items under ' + fmt.gp(minPrice) + 'gp are left out of Top movers and the Rising, Falling and Signal lists (Unusual volume always shows everything). Most expensive first: those are the closest to your cut-off.')),
+        h('div', {style:{overflowY:'auto', padding:'4px 14px'}},
+          hidden.length
+            ? hidden.map(it => h('div', {key:it.id, style:{display:'flex', justifyContent:'space-between', padding:'5px 0', borderBottom:`1px solid ${T.borderDim}`, fontSize:12}},
+                h('span', {style:{color:T.text}}, it.name),
+                h('span', {style:{color:T.gold}}, fmt.gp(itemPrice(it)) + 'gp')))
+            : h('div', {style:{padding:'12px 0', fontSize:12, color:T.textDim}}, 'Nothing is hidden at this price.')),
+        h('div', {style:{padding:'10px 14px', borderTop:`1px solid ${T.border}`, textAlign:'right'}},
+          h('button', {className:'ge-btn', onClick: () => setShowHidden(false)}, 'Close')))), document.body));
+}
+
+function MarketTab({items: allItems, selected, onSelect, description}) {
+  const [minPrice, setMinPrice] = useMinPriceFilter();
+  // Everything below works on the filtered list; "Items tracked" keeps the full count.
+  const items = useMemo(() => minPrice > 0 ? allItems.filter(it => itemPrice(it) >= minPrice) : allItems, [allItems, minPrice]);
   const [filter, setFilter] = useState(null);
   const [sort, setSort] = useState({key:'name',dir:1});
   const tog = key => setSort(s=>({key,dir:s.key===key?-s.dir:1}));
@@ -5537,7 +6346,9 @@ function MarketTab({items, selected, onSelect, description}) {
   // tradeable movers, so it's excluded here the same way it already is in
   // getRealTimeMovers (api.js).
   const movers  = useMemo(()=>[...items].filter(it=>!it.untradeable && it.change_1d!=null).sort((a,b)=>Math.abs(b.change_1d||0)-Math.abs(a.change_1d||0)).slice(0,10),[items]);
-  const volTop  = useMemo(()=>[...items].filter(it=>it.volume&&it.avgVolume&&it.volume>it.avgVolume*1.3).sort((a,b)=>(b.volume/b.avgVolume)-(a.volume/a.avgVolume)).slice(0,10),[items]);
+  // Unusual volume ignores the price filter (Ben): a volume spike on a
+  // cheap item can still mean something.
+  const volTop  = useMemo(()=>[...allItems].filter(it=>it.volume&&it.avgVolume&&it.volume>it.avgVolume*1.3).sort((a,b)=>(b.volume/b.avgVolume)-(a.volume/a.avgVolume)).slice(0,10),[allItems]);
   const rising  = useMemo(()=>items.filter(it=>!it.untradeable && (it.change_1d||0)>0),[items]);
   const falling = useMemo(()=>items.filter(it=>!it.untradeable && (it.change_1d||0)<0),[items]);
   // Exclude ALCH from Market signals — they have their own tab
@@ -5558,8 +6369,9 @@ function MarketTab({items, selected, onSelect, description}) {
   const cardStyle = key=>({cursor:'pointer',outline:filter===key?`2px solid ${T.gold}`:'none'});
   return h('div',null,
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h(MinPriceFilter, {items: allItems, minPrice, setMinPrice}),
     h('div',{className:'overview-grid'},
-      h('div',{className:'ov-card'},h('div',{className:'ov-val'},items.length),h('div',{className:'ov-lbl'},'Items tracked')),
+      h('div',{className:'ov-card'},h('div',{className:'ov-val'},allItems.length),h('div',{className:'ov-lbl'},'Items tracked')),
       h('div',{className:'ov-card',style:cardStyle('rising'),onClick:()=>setFilter(f=>f==='rising'?null:'rising')},
         h('div',{className:'ov-val pct-up'},rising.length),h('div',{className:'ov-lbl'},'Rising today'+(filter==='rising'?' ▲':''))
       ),
@@ -5955,130 +6767,399 @@ const APP_NEWS = [
   },
 ];
 
-function NewsTab({news, onOpen, description, items, onSelect}) {
-  const [sub, setSub] = useState('rs3');
-  return h('div',null,
-    h('div',{style:{display:'flex', justifyContent:'center', padding:'16px 0 4px'}},
-      h('img',{src:'../assets/logo-full.png', alt:'GEnius', style:{width:200, maxWidth:'70%'}}),
-    ),
-    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+// ─── Event Impact Explorer (News → Events pill) ─────────────────────────────
+// (Ben, 2026-10-06) See api.js "Event Impact" for the model. Suggestions
+// come from the permanent news archive; Ben confirms each into an event
+// (new, or as another milestone on an existing one) and picks its items.
+const EVENT_TYPE_LABELS = {roadmap:'Roadmap', devblog:'Dev blog / preview', date_announced:'Date announced', release:'Release', other:'Other'};
+const EVENT_KINDS = {boss:'Boss', skilling:'Skilling update', quest:'Quest', area:'Area / expansion', other:'Other'};
+// Item categories an event can watch (sidebar ids with items in them).
+const EVENT_WATCH_CATEGORIES = [['supplies','PVM Supplies'],['ammo','Ammo'],['runes','Runes'],['herblore','Herblore'],['food','Food'],
+  ['mining','Gathering'],['artisan','Artisan'],['farming','Farming'],['archaeology','Archaeology'],['invention','Invention'],
+  ['summoning','Summoning'],['prayer','Prayer'],['melee','Melee'],['ranged','Ranged'],['magic','Magic'],['necromancy','Necromancy'],['boss','Boss Drops']];
 
-    // Sub-tab pills
-    h('div',{style:{display:'flex', gap:8, padding:'10px 14px', borderBottom:`1px solid ${T.border}`}},
-      h('button',{
-        onClick:()=>setSub('rs3'),
-        style:{padding:'5px 14px', fontSize:12, fontWeight:'bold', letterSpacing:'0.05em',
-          background: sub==='rs3' ? T.gold : 'transparent',
-          color: sub==='rs3' ? '#1a1208' : T.textDim,
-          border:`1px solid ${sub==='rs3' ? T.gold : T.border}`,
-          borderRadius:3, cursor:'pointer'}
-      }, `RS3 News${news&&news.length ? ` (${news.length})` : ''}`),
-      h('button',{
-        onClick:()=>setSub('app'),
-        style:{padding:'5px 14px', fontSize:12, fontWeight:'bold', letterSpacing:'0.05em',
-          background: sub==='app' ? T.gold : 'transparent',
-          color: sub==='app' ? '#1a1208' : T.textDim,
-          border:`1px solid ${sub==='app' ? T.gold : T.border}`,
-          borderRadius:3, cursor:'pointer'}
-      }, `App Updates (${APP_NEWS.length})`)
-    ),
+function EventPhaseCell({v, market}) {
+  if (v == null) return h('td', {style:{color:T.textDim}}, '—');
+  const vs = market != null ? v - market : null;
+  return h('td', {title: market != null ? `Item ${fmt.pct(v)} vs market ${fmt.pct(market)} over the same window` : null},
+    h('div', {className: v >= 0 ? 'pct-up' : 'pct-down'}, fmt.pct(v)),
+    vs != null && h('div', {style:{fontSize:10, color: vs >= 0 ? T.green : T.red}}, `${vs >= 0 ? '+' : ''}${vs.toFixed(1)} vs mkt`));
+}
 
-    // RS3 News pane
-    sub==='rs3' && h('div',{style:{padding:'0 14px'}},
-      (!news||!news.length)
-        ? h('div',{className:'empty-state'},
-            h('div',{style:{fontSize:32, marginBottom:8}}, '📰'),
-            h('div',null,'No RS news loaded yet.'),
-            h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Fetch Now to load.')
-          )
-        : news.map((n,i)=>h('div',{key:i,className:'news-item'},
-            h('div',{className:'row',style:{gap:6,marginBottom:2}},
-              h('span',{className:'news-src'},n.source),
-              h('span',{style:{fontSize:10,color:T.textDim}},n.date),
-              n.update_type && h('span',{style:{
-                fontSize:9, padding:'1px 6px', borderRadius:2, marginLeft:4,
-                background:'rgba(201,168,76,0.15)', border:`1px solid rgba(201,168,76,0.3)`,
-                color:T.gold, letterSpacing:'0.05em', textTransform:'uppercase',
-              }}, n.update_type),
-            ),
-            h('div',{className:'news-title',onClick:()=>n.url&&onOpen(n.url)},n.title),
-            n.description && h('div',{style:{fontSize:11,color:T.textDim,marginTop:2,lineHeight:1.5}},n.description),
-            n.mentions&&n.mentions.length>0&&h('div',{style:{marginTop:5}},
-              h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}}, 'Items mentioned'),
-              h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
-                n.mentions.map(m => {
-                  const item = items && items.find(it => it.name.toLowerCase() === m.toLowerCase());
-                  return h('span',{
-                    key:m, className:'news-tag',
-                    onClick: item && onSelect ? ()=>onSelect(item) : undefined,
-                    style:{cursor: item ? 'pointer' : 'default', color: item ? T.gold : T.textDim},
-                    title: item ? `Click to view ${m}` : m,
-                  }, m);
-                })
-              )
-            ),
-            n.price_since&&n.price_since.length>0&&h('div',{style:{marginTop:6}},
-              h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}},
-                `Price since post · ${n.price_since_days||''}d later`
-              ),
-              h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
-                n.price_since.map(m => {
-                  const it = items && items.find(i => i.name.toLowerCase()===m.name.toLowerCase());
-                  const chgColor = m.pct > 0 ? T.green : m.pct < 0 ? T.red : T.textDim;
-                  return h('span',{
-                    key:m.name, className:'news-tag',
-                    onClick: it && onSelect ? ()=>onSelect(it) : undefined,
-                    style:{cursor:it?'pointer':'default', display:'flex', alignItems:'center', gap:4},
-                  },
-                    h('span',{style:{color:T.text}},m.name),
-                    h('span',{style:{color:chgColor}},(m.pct>0?'+':'')+m.pct+'%'),
-                  );
-                })
-              )
-            ),
+function EventDetail({event, items, userShorthands, onSaved, onDeleted, onOpen, onSelect, toast}) {
+  const [draft, setDraft] = useState(event);
+  const [impact, setImpact] = useState(null);
+  const [addItem, setAddItem] = useState('');
+  // Editing (type, categories, notes, milestones, items) is collapsed by
+  // default so the results are what you see first (Ben, 2026-10-06).
+  const [editing, setEditing] = useState(false);
+  useEffect(() => { setDraft(event); }, [event.id]);
+  const loadImpact = () => { setImpact(null); window.genius?.getEventImpact(event.id).then(setImpact).catch(() => setImpact({rows:[], phases:[]})); };
+  useEffect(loadImpact, [event.id, JSON.stringify(event.items), JSON.stringify(event.milestones), event.type, JSON.stringify(event.categories)]);
 
-            n.impact_items&&n.impact_items.length>0&&h('div',{style:{marginTop:6}},
-              h('div',{style:{fontSize:9,color:T.textDim,textTransform:'uppercase',letterSpacing:'0.08em',marginBottom:3}},
-                'Market reaction · ' + (n.impact_categories||[]).join(', ')
-              ),
-              h('div',{style:{display:'flex',flexWrap:'wrap',gap:4}},
-                n.impact_items.map(m => {
-                  const item = items && items.find(it => it.name.toLowerCase() === m.name.toLowerCase());
-                  const chg = m.change_1d;
-                  const chgColor = chg > 0 ? T.green : chg < 0 ? T.red : T.textDim;
-                  return h('span',{
-                    key:m.name, className:'news-tag',
-                    onClick: item && onSelect ? ()=>onSelect(item) : undefined,
-                    style:{cursor: item ? 'pointer' : 'default', display:'flex', alignItems:'center', gap:4},
-                    title: item ? `Click to view ${m.name}` : m.name,
-                  },
-                    h('span',{style:{color:T.text}}, m.name),
-                    chg != null && h('span',{style:{color:chgColor}}, (chg>0?'+':'')+chg.toFixed(1)+'%'),
-                    (m.signals||[]).map(s=>h('span',{key:s,style:{color:T.gold,fontSize:9}},s))
-                  );
-                })
-              )
-            )
-          ))
-    ),
+  const save = async next => {
+    const r = await window.genius?.saveEvent(next || draft);
+    if (r?.success) { onSaved(); toast('Event saved', 'success'); }
+  };
+  const setMs = (i, k, v) => setDraft(d => ({...d, milestones: d.milestones.map((m, j) => j === i ? {...m, [k]: v} : m)}));
+  const byId = Object.fromEntries((items || []).map(it => [it.id, it]));
 
-    // App Updates pane
-    sub==='app' && h('div',{style:{padding:'0 14px 12px'}},
-      APP_NEWS.filter(section => section.items.length > 0).map(section => h('div',{key:section.version, style:{marginBottom:14, paddingTop:12}},
-        h('div',{style:{fontSize:11, fontWeight:'bold', color:T.textBright, marginBottom:6,
-          paddingBottom:3, borderBottom:`1px solid ${T.borderDim}`}}, section.version),
-        h('ul',{style:{listStyle:'none', margin:0, padding:0}},
-          section.items.map((item,i) => h('li',{key:i, style:{
-            fontSize:12, color:T.text, padding:'2px 0 2px 12px',
-            position:'relative', lineHeight:1.5
-          }},
-            h('span',{style:{position:'absolute',left:0,color:T.textDim}}, '·'),
-            item
-          ))
-        )
-      ))
-    )
-  );
+  return h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:14}},
+    h('div', {style:{display:'flex', gap:8, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
+      h('div', {style:{flex:1, fontSize:12, color:T.textDim, minWidth:200}},
+        event.milestones.map(m => `${EVENT_TYPE_LABELS[m.type] || m.type} ${m.date}`).join(' → ') || 'No milestones yet',
+        event.notes && h('div', {style:{marginTop:4, color:T.text, fontStyle:'italic'}}, event.notes)),
+      h('button', {className: editing ? 'ge-btn gold' : 'ge-btn', onClick:() => setEditing(v => !v)}, editing ? '▾ Editing' : '✎ Edit')),
+    editing && h('div', {style:{border:`1px solid ${T.borderDim}`, borderRadius:3, padding:12, marginBottom:14, background:T.inset}},
+    h('div', {style:{display:'flex', gap:8, alignItems:'center', marginBottom:12}},
+      h('input', {className:'ge-input', value:draft.name, onChange:e => setDraft(d => ({...d, name:e.target.value})), style:{flex:1, fontSize:15}}),
+      h('button', {className:'ge-btn gold', onClick:() => save()}, 'Save'),
+      h('button', {className:'ge-btn danger', onClick:async () => { if (confirm(`Delete "${event.name}"?`)) { await window.genius?.deleteEvent(event.id); onDeleted(); } }}, 'Delete')),
+
+    h('div', {style:{display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end', marginBottom:12}},
+      h('div', null, h('label', {className:'form-lbl'}, 'Type'),
+        h('select', {className:'ge-input', value:draft.type || 'other', onChange:e => setDraft(d => ({...d, type:e.target.value}))},
+          Object.entries(EVENT_KINDS).map(([k, l]) => h('option', {key:k, value:k}, l)))),
+      draft.type === 'quest' && h('div', {style:{flex:'1 1 220px'}}, h('label', {className:'form-lbl'}, 'Quest (wiki page name)'),
+        h('div', {style:{display:'flex', gap:6}},
+          h('input', {className:'ge-input', value:draft.quest || '', placeholder:"Pharaoh's Folly", onChange:e => setDraft(d => ({...d, quest:e.target.value}))}),
+          h('button', {className:'ge-btn', onClick:async () => {
+            if (!draft.quest) { toast('Enter the quest name', 'error'); return; }
+            const r = await window.genius?.getQuestItems(draft.quest);
+            if (!r?.found) { toast('Quest page not found on the wiki', 'error'); return; }
+            const add = [...r.required, ...r.recommended].filter(n => !draft.items.includes(n));
+            setDraft(d => ({...d, items:[...d.items, ...add]}));
+            toast(add.length ? `Added ${add.length} quest item${add.length === 1 ? '' : 's'}: save to analyse` : 'No new tradeable items in its requirements', add.length ? 'success' : 'info');
+          }}, 'Get quest items')))),
+    draft.type === 'boss' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}}, 'Boss events always watch PVM Supplies, Ammo and Runes. Add more below if needed.'),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:'4px 12px', marginBottom:12}},
+      h('span', {className:'form-lbl', style:{width:'100%', marginBottom:2}}, 'Watch categories'),
+      EVENT_WATCH_CATEGORIES.map(([id, label]) => {
+        const forced = draft.type === 'boss' && ['supplies','ammo','runes'].includes(id);
+        const on = forced || (draft.categories || []).includes(id);
+        return h('label', {key:id, style:{fontSize:11, color: on ? T.text : T.textDim, cursor: forced ? 'default' : 'pointer', display:'flex', alignItems:'center', gap:4}},
+          h('input', {type:'checkbox', checked:on, disabled:forced, onChange:e => setDraft(d => ({...d, categories: e.target.checked
+            ? [...new Set([...(d.categories || []), id])] : (d.categories || []).filter(c => c !== id)}))}), label);
+      })),
+    h('label', {className:'form-lbl'}, 'Content pages: bosses or loot tables this update added (one per line)'),
+    h('div', {style:{display:'flex', gap:6, alignItems:'flex-start', marginBottom:12}},
+      h('textarea', {className:'ge-input', rows:2, style:{flex:1, resize:'vertical'}, placeholder:'Amascut, Goddess of Destruction\nLoot (heists)',
+        value:(draft.contentPages || []).join('\n'), onChange:e => setDraft(d => ({...d, contentPages:e.target.value.split('\n')}))}),
+      h('button', {className:'ge-btn', onClick:async () => {
+        const pages = (draft.contentPages || []).map(x => x.trim()).filter(Boolean);
+        if (!pages.length) { toast('Add a wiki page name first', 'error'); return; }
+        const r = await window.genius?.getContentDrops(pages);
+        const add = (r?.items || []).filter(n => !draft.items.includes(n));
+        setDraft(d => ({...d, items:[...d.items, ...add]}));
+        const empty = Object.entries(r?.perPage || {}).filter(([, n]) => !n).map(([p]) => p);
+        toast(`Added ${add.length} drop${add.length === 1 ? '' : 's'}` + (empty.length ? `. No drop table found for: ${empty.join(', ')}` : '') + (add.length ? ': save to analyse' : ''), add.length ? 'success' : 'info');
+      }}, 'Read drops')),
+    h('textarea', {className:'ge-input', value:draft.notes || '', placeholder:'Notes (context, theories, what to watch for)', rows:2,
+      onChange:e => setDraft(d => ({...d, notes:e.target.value})), style:{width:'100%', marginBottom:12, resize:'vertical'}}),
+
+    h('div', {className:'ge-section-head'}, 'Milestones'),
+    h('table', {className:'ge-table', style:{marginBottom:8}},
+      h('thead', null, h('tr', null, h('th', null, 'Date'), h('th', null, 'Type'), h('th', null, 'Post'), h('th', null, ''))),
+      h('tbody', null, draft.milestones.map((m, i) => h('tr', {key:i},
+        h('td', null, h('input', {className:'ge-input', type:'date', value:m.date, onChange:e => setMs(i, 'date', e.target.value)})),
+        h('td', null, h('select', {className:'ge-input', value:m.type, onChange:e => setMs(i, 'type', e.target.value)},
+          Object.entries(EVENT_TYPE_LABELS).map(([k, l]) => h('option', {key:k, value:k}, l)))),
+        h('td', null, m.url ? h('span', {className:'news-title', style:{fontSize:12}, onClick:() => onOpen(m.url)}, m.title || m.url)
+          : h('input', {className:'ge-input', value:m.title || '', placeholder:'Note (optional)', onChange:e => setMs(i, 'title', e.target.value)})),
+        h('td', null, h('button', {className:'ge-btn', onClick:() => setDraft(d => ({...d, milestones: d.milestones.filter((_, j) => j !== i)}))}, '✕')))))),
+    h('button', {className:'ge-btn', style:{marginBottom:14}, onClick:() => setDraft(d => ({...d, milestones:[...d.milestones, {type:'other', date:new Date().toISOString().slice(0,10), title:'', url:''}]}))}, '+ Add milestone'),
+
+    h('div', {className:'ge-section-head'}, `Items (${draft.items.length})`),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:6, marginBottom:8}},
+      draft.items.map(n => h('span', {key:n, style:{fontSize:11, padding:'2px 8px', border:`1px solid ${T.borderDim}`, borderRadius:3, color:T.text}},
+        n, ' ', h('span', {style:{cursor:'pointer', color:T.red}, onClick:() => setDraft(d => ({...d, items:d.items.filter(x => x !== n)}))}, '✕')))),
+    h('div', {style:{display:'flex', gap:8, marginBottom:14, maxWidth:420}},
+      h('div', {style:{flex:1}}, h(ItemAutocomplete, {items, value:addItem, onChange:setAddItem, placeholder:'Add an affected item...', userShorthands})),
+      h('button', {className:'ge-btn', onClick:() => {
+        const it = items.find(i => i.name.toLowerCase() === addItem.toLowerCase());
+        if (!it) { toast('Pick an item from the list', 'error'); return; }
+        if (!draft.items.includes(it.name)) setDraft(d => ({...d, items:[...d.items, it.name]}));
+        setAddItem('');
+      }}, 'Add')),
+    h('div', {style:{fontSize:11, color:T.textDim}}, 'Save to update the results below.')),
+
+    h('div', {className:'ge-section-head'}, 'Price impact by phase'),
+    !impact ? h('div', {style:{fontSize:12, color:T.textDim}}, 'Calculating…')
+    : !impact.phases.length ? h('div', {style:{fontSize:12, color:T.textDim}}, 'Add at least one milestone.')
+    : h('div', {style:{overflowX:'auto'}}, h('table', {className:'ge-table'},
+        h('thead', null,
+          h('tr', null, h('th', null, 'Item'), impact.phases.map(ph => h('th', {key:ph.key, title:`${new Date(ph.from).toLocaleDateString()} → ${new Date(ph.to).toLocaleDateString()}`}, ph.label))),
+          h('tr', null, h('td', {style:{color:T.textDim, fontSize:11}}, 'Whole market'),
+            impact.phases.map(ph => h('td', {key:ph.key, style:{color:T.textDim, fontSize:11}}, ph.pending ? 'not yet' : ph.market != null ? fmt.pct(ph.market) : '—')))),
+        h('tbody', null, impact.rows.map(r => h('tr', {key:r.name},
+          h('td', {style:{color:T.gold, cursor: r.id ? 'pointer' : 'default'}, onClick:() => r.id && byId[r.id] && onSelect(byId[r.id])}, r.name),
+          impact.phases.map(ph => ph.pending
+            ? h('td', {key:ph.key, style:{color:T.textDim}}, 'not yet')
+            : h(EventPhaseCell, {key:ph.key, v:r.phases[ph.key], market:ph.market}))))))),
+    impact && impact.newItems && impact.newItems.length > 0 && h('div', {style:{marginTop:16}},
+      h('div', {className:'ge-section-head'}, `New items released with this update (${impact.newItems.length})`),
+      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6}}, 'First appeared on the GE around release day, so they are tracked from their first price instead.'),
+      h('div', {style:{overflowX:'auto'}}, h('table', {className:'ge-table'},
+        h('thead', null, h('tr', null, ['Item', 'First price', 'Peak (first week)', 'After 1 week', 'After 1 month', 'After 2 months'].map(x => h('th', {key:x}, x)))),
+        h('tbody', null, impact.newItems.map(r => h('tr', {key:r.name},
+          h('td', {style:{color:T.gold, cursor:'pointer'}, onClick:() => byId[r.id] && onSelect(byId[r.id])}, r.name),
+          h('td', null, fmt.gp(r.first) + 'gp'),
+          h('td', {className:'pct-up'}, r.peak7 > 0 ? fmt.pct(r.peak7) : '—'),
+          ...['d7', 'd30', 'd60'].map(k => r[k] == null ? h('td', {key:k, style:{color:T.textDim}}, 'not yet')
+            : h('td', {key:k, className: r[k] >= 0 ? 'pct-up' : 'pct-down'}, fmt.pct(r[k]))))))))),
+    impact && impact.links && (impact.links.pending || impact.links.pairs.length > 0) && h('div', {style:{marginTop:16}},
+      h('div', {className:'ge-section-head'}, 'New links since this update'),
+      impact.links.pending ? h('div', {style:{fontSize:12, color:T.textDim}}, 'Needs at least 30 days after release.')
+      : h('div', null,
+          h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6}},
+            `Pairs among the ${impact.links.scanned} items this update touched whose daily prices moved together in the 90 days after release, but did not before the update was first announced.`),
+          impact.links.pairs.map(pr => h('div', {key:pr.a + '-' + pr.b, style:{display:'flex', justifyContent:'space-between', gap:10, fontSize:12, padding:'3px 0', borderBottom:`1px solid ${T.borderDim}`}},
+            h('span', null,
+              h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => byId[pr.a] && onSelect(byId[pr.a])}, pr.aName), ' ↔ ',
+              h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => byId[pr.b] && onSelect(byId[pr.b])}, pr.bName)),
+            h('span', {style:{color:T.blue, whiteSpace:'nowrap'}, title:`After release: correlation ${pr.corr.toFixed(2)} over ${pr.days} days. Before: ${pr.before == null ? 'not enough data' : pr.before.toFixed(2)}`},
+              `${Math.round(pr.corr * 100)}% now · ${pr.before == null ? 'n/a' : Math.round(pr.before * 100) + '%'} before`))))),
+    impact && impact.categoryWatch && h('div', {style:{marginTop:16}},
+      h('div', {className:'ge-section-head'}, `Category watch: most unusual moves (${impact.categoryWatch.rows.length} of ${impact.categoryWatch.scanned || 0} scanned)`),
+      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6}},
+        'Every item in ' + impact.categoryWatch.categories.map(c => (EVENT_WATCH_CATEGORIES.find(x => x[0] === c) || [c, c])[1]).join(', ') + ', ranked by how unusual its move was for that item: compared with the market and with its own typical moves in the year before. "Unusual" is how many times bigger than its usual move it was.'),
+      !impact.categoryWatch.rows.length ? h('div', {style:{fontSize:12, color:T.textDim}}, 'No finished phases yet.')
+      : h('div', {style:{overflowX:'auto'}}, h('table', {className:'ge-table'},
+          h('thead', null, h('tr', null, h('th', null, 'Item'), h('th', {title:'Its most unusual phase move, as a multiple of its usual move size'}, 'Unusual'), impact.phases.map(ph => h('th', {key:ph.key}, ph.label)))),
+          h('tbody', null, impact.categoryWatch.rows.map(r => h('tr', {key:r.name},
+            h('td', {style:{color:T.gold, cursor:'pointer'}, onClick:() => byId[r.id] && onSelect(byId[r.id])}, r.name),
+            h('td', {style:{color: r.score >= 3 ? T.goldBright : T.text}}, r.score.toFixed(1) + '×'),
+            impact.phases.map(ph => ph.pending
+              ? h('td', {key:ph.key, style:{color:T.textDim}}, 'not yet')
+              : h(EventPhaseCell, {key:ph.key, v:r.phases[ph.key], market:ph.market})))))))));
+}
+
+function EventsView({items, onOpen, onSelect, userShorthands, toast}) {
+  const [events, setEvents] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [openId, setOpenId] = useState(null);
+  const [showAllSug, setShowAllSug] = useState(false);
+  const [newSummary, setNewSummary] = useState(null);
+  useEffect(() => { window.genius?.getNewItemsSummary?.().then(setNewSummary).catch(() => {}); }, []);
+  const reload = async () => {
+    const evs = await window.genius?.getEvents() || [];
+    setEvents(evs);
+    setSuggestions(await window.genius?.getEventSuggestions() || []);
+    // Arriving from a News post's "📜 Linked" tag: open that update and
+    // scroll to it.
+    if (_almanacInitialUpdate) {
+      const target = evs.find(e => e.name === _almanacInitialUpdate);
+      _almanacInitialUpdate = null;
+      if (target) {
+        setOpenId(target.id);
+        setTimeout(() => document.querySelector(`[data-update-id="${target.id}"]`)?.scrollIntoView({block:'start', behavior:'smooth'}), 150);
+      }
+    }
+  };
+  useEffect(() => { reload(); }, []);
+
+  const itemsFromMentions = pst => (pst.mentions || []).filter(m => items.some(i => i.name.toLowerCase() === m.toLowerCase()));
+  const newFromPost = async pst => {
+    const id = Date.now().toString();
+    await window.genius?.saveEvent({id, name: pst.title, items: itemsFromMentions(pst), source:'news',
+      milestones:[{type: pst.guessed_type, date: pst.date, title: pst.title, url: pst.url}]});
+    await reload(); setOpenId(id);
+  };
+  const attachToEvent = async (pst, evId) => {
+    const ev = events.find(e => e.id === evId);
+    if (!ev) return;
+    const extra = itemsFromMentions(pst).filter(n => !ev.items.includes(n));
+    await window.genius?.saveEvent({...ev, items:[...ev.items, ...extra],
+      milestones:[...ev.milestones, {type: pst.guessed_type, date: pst.date, title: pst.title, url: pst.url}]});
+    await reload(); toast(`Added to ${ev.name}`, 'success');
+  };
+  const shown = showAllSug ? suggestions : suggestions.slice(0, 6);
+
+  return h('div', {style:{padding:14}},
+    h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.6, marginBottom:12}},
+      'Track game updates as a timeline (roadmap, dev blog, date announced, release) and see how affected items moved in each phase, compared with the whole market over the same window.'),
+    newSummary && newSummary.with60 > 0 && h('div', {style:{fontSize:12, color:T.text, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'8px 10px', marginBottom:14, background:T.inset}},
+      h('b', null, 'New items after release: '),
+      `across ${newSummary.events} events, ${newSummary.belowAt60} of ${newSummary.with60} new items (${Math.round(newSummary.belowAt60 / newSummary.with60 * 100)}%) were below their first price two months later. `,
+      `Median change: ${fmt.pct(newSummary.median.d7 ?? 0)} after a week, ${fmt.pct(newSummary.median.d30 ?? 0)} after a month, ${fmt.pct(newSummary.median.d60 ?? 0)} after two months.`,
+      newSummary.exceptions.length > 0 && h('div', {style:{fontSize:11, color:T.textDim, marginTop:4}},
+        'Exceptions (higher after 2 months): ', newSummary.exceptions.slice(0, 6).map((x, i) => h('span', {key:x.name}, i ? ', ' : '',
+          h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => { const it = items.find(j => j.id === x.id); it && onSelect(it); }}, x.name), ` ${fmt.pct(x.d60)}`)))),
+
+    h('div', {style:{display:'flex', justifyContent:'space-between', alignItems:'center'}},
+      h('div', {className:'ge-section-head', style:{flex:1}}, `Game updates (${events.length})`),
+      h('button', {className:'ge-btn', style:{marginLeft:8, marginBottom:10}, onClick:async () => {
+        const id = Date.now().toString();
+        await window.genius?.saveEvent({id, name:'New event', items:[], milestones:[]});
+        await reload(); setOpenId(id);
+      }}, '+ Add update')),
+    events.length === 0
+      ? h('div', {className:'empty', style:{padding:'20px 0'}}, h('p', null, 'No game updates tracked yet. Start one from a news post above, or add one by hand.'))
+      : h('div', {style:{display:'flex', flexDirection:'column', gap:6, marginBottom:14}},
+          [...events].sort((a, b) => (b.milestones.at(-1)?.date || '').localeCompare(a.milestones.at(-1)?.date || '')).map(ev => {
+            const rel = ev.milestones.find(m => m.type === 'release');
+            // Details open directly under the clicked event (they used to
+            // render after the whole list — off-screen with 24 events).
+            return h(React.Fragment, {key:ev.id},
+              h('div', {'data-update-id': ev.id, onClick:() => setOpenId(openId === ev.id ? null : ev.id),
+                  style:{cursor:'pointer', padding:'8px 10px', border:`1px solid ${openId === ev.id ? T.gold : T.borderDim}`, borderRadius:3, background:T.inset, display:'flex', justifyContent:'space-between', gap:10}},
+                h('span', {style:{color:T.text}}, (openId === ev.id ? '▾ ' : '▸ ') + ev.name),
+                h('span', {style:{fontSize:11, color:T.textDim}},
+                  `${EVENT_KINDS[ev.type] ? EVENT_KINDS[ev.type] + ' · ' : ''}${ev.milestones.length} milestone${ev.milestones.length === 1 ? '' : 's'} · ${ev.items.length} item${ev.items.length === 1 ? '' : 's'}` + (rel ? ` · release ${rel.date}` : ''))),
+              openId === ev.id && h(EventDetail, {key:'d' + ev.id, event:ev, items, userShorthands, onOpen, onSelect, toast,
+                onSaved:reload, onDeleted:() => { setOpenId(null); reload(); }}));
+          })),
+    // News suggestions sit below the tracked updates (Ben, 2026-10-06).
+    suggestions.length > 0 && h('div', {style:{marginTop:18}},
+      h('div', {className:'ge-section-head'}, `From the news (${suggestions.length})`),
+      shown.map(pst => h('div', {key:pst.url, style:{display:'flex', gap:8, alignItems:'center', flexWrap:'wrap', padding:'6px 0', borderBottom:`1px solid ${T.borderDim}`}},
+        h('span', {style:{fontSize:11, color:T.textDim, width:80}}, pst.date),
+        h('span', {style:{fontSize:10, color:T.gold, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 5px'}}, EVENT_TYPE_LABELS[pst.guessed_type]),
+        h('span', {className:'news-title', style:{flex:'1 1 240px', fontSize:12}, onClick:() => onOpen(pst.url)}, pst.title),
+        h('button', {className:'ge-btn', onClick:() => newFromPost(pst)}, 'Track as new update'),
+        events.length > 0 && h('select', {className:'ge-input', style:{width:'auto'}, value:'', onChange:e => e.target.value && attachToEvent(pst, e.target.value)},
+          h('option', {value:''}, 'Add to update…'), events.map(ev => h('option', {key:ev.id, value:ev.id}, ev.name))),
+        h('button', {className:'ge-btn', title:'Not relevant — hide it', onClick:async () => { await window.genius?.dismissEventSuggestion(pst.url); reload(); }}, '✕'))),
+      suggestions.length > 6 && h('button', {className:'ge-btn', style:{marginTop:6}, onClick:() => setShowAllSug(v => !v)}, showAllSug ? 'Show fewer' : `Show all ${suggestions.length}`)));
+}
+
+// GEnius's own changelog — moved from the News tab to About (Ben, 2026-10-07):
+// News is for RuneScape news.
+function AppUpdatesList() {
+  return h('div', null,
+    APP_NEWS.filter(section => section.items.length > 0).map(section => h('div', {key:section.version, style:{marginBottom:14, paddingTop:12}},
+      h('div', {style:{fontSize:11, fontWeight:'bold', color:T.textBright, marginBottom:6, paddingBottom:3, borderBottom:`1px solid ${T.borderDim}`}}, section.version),
+      h('ul', {style:{listStyle:'none', margin:0, padding:0}},
+        section.items.map((item, i) => h('li', {key:i, style:{fontSize:12, color:T.text, padding:'2px 0 2px 12px', position:'relative', lineHeight:1.5}},
+          h('span', {style:{position:'absolute', left:0, color:T.textDim}}, '·'), item))))));
+}
+
+// Redesigned News tab (Ben, 2026-10-07): a "Coming up" strip, then the
+// posts, each tagged with what GEnius found in it. The sidebar badge counts
+// only unread posts of the kinds ticked under ⚙ (relevant-only).
+const NEWS_BADGE_KINDS = [
+  ['dxp', '⚡ DXP announced or teased'], ['release', '🚀 New release dates'], ['seasonal', '🎉 New event dates'],
+  ['holds', '💰 Mentions items you hold'], ['watch', '★ Mentions items you watch'], ['linked', '📜 Linked to a tracked Game Update'],
+  ['marketplace', '🛍 Marketplace / MTX'], ['livestream', '🎙 Streams and Q&As'], ['maintenance', '🔧 Maintenance / patch notes'],
+  ['all', '📰 Every new post'],
+];
+function newsRelevant(p, prefs) {
+  if (!prefs) return false;
+  if (prefs.all) return true;
+  if (prefs.dxp && p.dxp) return true;
+  if (p.dates.some(d => prefs[d.category])) return true;
+  if (prefs.holds && p.holds.length) return true;
+  if (prefs.watch && p.watch.length) return true;
+  if (prefs.linked && p.linked) return true;
+  return false;
+}
+const newsTagStyle = color => ({fontSize:11, borderRadius:3, padding:'1px 8px', border:`1px solid ${color}`, color, cursor:'default'});
+
+function NewsTab({onOpen, description, items, onSelect, toast, onNavigate}) {
+  const [view, setView] = useState(() => { const v = _newsInitialSub === 'upcoming' ? 'calendar' : 'feed'; _newsInitialSub = null; return v; });
+  const [calFocus, setCalFocus] = useState(null); // 'YYYY-MM-DD' to open the calendar on
+  const [feed, setFeed] = useState(null);
+  const [cal, setCal] = useState([]);
+  const [events, setEvents] = useState([]);
+  const [prefs, setPrefs] = useState(null);
+  const [filter, setFilter] = useState('all');
+  const [showPrefs, setShowPrefs] = useState(false);
+  const reload = async () => {
+    const [f, c, ev, pr] = await Promise.all([window.genius?.getNewsFeed(), window.genius?.getNewsCalendar(), window.genius?.getEvents(), window.genius?.getNewsBadgePrefs()]);
+    setFeed(f || []); setCal(c || []); setEvents(ev || []); setPrefs(pr || null);
+  };
+  useEffect(() => { reload(); }, []);
+  const changed = () => window.dispatchEvent(new Event('genius-news-read'));
+  const openPost = async p => { onOpen(p.url); if (p.unread) { await window.genius?.markNewsRead(p.url); changed(); reload(); } };
+  const markAll = async () => { await window.genius?.markNewsRead('all'); changed(); reload(); };
+  const setPref = async (k, v) => { const next = await window.genius?.setNewsBadgePrefs({...prefs, [k]: v}); setPrefs(next); changed(); };
+  const trackAsUpdate = async p => {
+    const t = p.title || '';
+    const type = /roadmap|ahead|reveal|check.?in/i.test(t) ? 'roadmap' : /out now|launch|live|released|(is|are) here|has arrived/i.test(t) ? 'release' : /dev ?blog|preview|first look|sneak/i.test(t) ? 'devblog' : 'other';
+    await window.genius?.saveEvent({id: Date.now().toString(), name: t, items: [], source: 'news', milestones: [{type, date: p.date, title: t, url: p.url}]});
+    toast('Tracking it in Almanac → Game Updates', 'success');
+    reload();
+  };
+
+  // Coming up: next dates, named after a tracked Game Update when one has a
+  // milestone on that date, plus any teased-but-undated DXP.
+  const comingUp = useMemo(() => {
+    const byDate = {};
+    for (const ev of events) for (const m of ev.milestones) if (m.type === 'release') byDate[m.date] = ev.name;
+    const rows = cal.filter(e => ['dxp', 'release', 'seasonal', 'marketplace'].includes(e.category))
+      .map(e => ({...e, label: byDate[e.start] || e.label}));
+    const seen = new Set(), out = [];
+    for (const r of rows) { const k = r.start + r.label; if (!seen.has(k)) { seen.add(k); out.push(r); } }
+    const teased = (feed || []).filter(p => p.dxp && p.dxp.status === 'teased').slice(0, 1)
+      .map(p => ({tease: true, label: '⚡ Double XP (teased)', expected: p.dxp.expected}));
+    return [...out.slice(0, 3 - teased.length), ...teased];
+  }, [cal, events, feed]);
+
+  if (!feed) return h('div', {className:'empty'}, h('p', null, 'Loading…'));
+  const unreadRelevant = feed.filter(p => p.unread && newsRelevant(p, prefs)).length;
+  const shown = feed.filter(p => filter === 'all' ? true : filter === 'dates' ? p.dates.length || p.dxp : filter === 'items' ? p.holds.length || p.watch.length : p.unread);
+  const fmtD = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, {month:'short', day:'numeric'});
+  const chip = (k, label) => h('button', {key:k, onClick:() => setFilter(k), style:{fontSize:12, padding:'3px 10px', borderRadius:3, cursor:'pointer',
+    border:`1px solid ${filter === k ? T.gold : T.borderDim}`, background: filter === k ? 'rgba(201,168,76,0.12)' : 'transparent', color: filter === k ? T.textBright : T.textDim}}, label);
+
+  return h('div', null,
+    description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    view === 'calendar'
+      ? h('div', null,
+          h('div', {style:{padding:'10px 14px 0'}}, h('button', {className:'ge-btn', onClick:() => setView('feed')}, '← Back to news')),
+          h(UpcomingCalendar, {onOpen, focusDate: calFocus}))
+      : h('div', {style:{padding:'12px 14px'}},
+          comingUp.length > 0 && h('div', {style:{marginBottom:16}},
+            h('div', {className:'ge-section-head', style:{display:'flex', justifyContent:'space-between', cursor:'pointer'}, onClick:() => { setCalFocus(null); setView('calendar'); }},
+              h('span', null, '📅 Coming up'), h('span', {style:{color:T.gold, letterSpacing:0, textTransform:'none'}}, 'Full calendar →')),
+            h('div', {style:{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(180px, 1fr))', gap:8}},
+              comingUp.map((e, i) => {
+                const w = e.tease ? null : calWhen(e);
+                return h('div', {key:i, style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'8px 10px'}},
+                  h('div', {style:{fontSize:11, color:T.textDim}}, e.tease
+                    ? (e.expected === 'soon' ? 'Coming soon' : e.expected.length === 10 ? 'Starts ' + fmtD(e.expected) : 'Expected ' + new Date(e.expected + '-15T12:00:00').toLocaleDateString(undefined, {month:'long'}))
+                    : `${w.rel[0].toUpperCase() + w.rel.slice(1)} · ${w.range}`),
+                  h('div', {style:{fontSize:14, color:T.textBright, marginTop:2}}, e.label));
+              }))),
+          h('div', {style:{display:'flex', gap:6, flexWrap:'wrap', alignItems:'center', marginBottom:8}},
+            chip('all', 'All posts'), chip('dates', 'Has dates'), chip('items', 'Mentions my items'),
+            chip('unread', `Unread (${feed.filter(p => p.unread).length})`),
+            h('span', {style:{flex:1}}),
+            feed.some(p => p.unread) && h('button', {className:'ge-btn', style:{fontSize:11}, onClick:markAll}, 'Mark all read'),
+            h('button', {className:'ge-btn', style:{fontSize:11}, title:'Choose which kinds of news count toward the sidebar badge', onClick:() => setShowPrefs(v => !v)}, '⚙')),
+          showPrefs && prefs && h('div', {style:{border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'8px 12px', marginBottom:10, background:T.inset}},
+            h('div', {style:{fontSize:12, color:T.text, marginBottom:6}}, 'The sidebar badge counts unread posts with any of these:'),
+            h('div', {style:{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(230px, 1fr))', gap:'2px 12px'}},
+              NEWS_BADGE_KINDS.map(([k, label]) => h('label', {key:k, style:{fontSize:12, color: prefs[k] ? T.text : T.textDim, display:'flex', gap:6, alignItems:'center', cursor:'pointer'}},
+                h('input', {type:'checkbox', checked:!!prefs[k], onChange:e => setPref(k, e.target.checked)}), label))),
+            h('div', {style:{fontSize:11, color:T.textDim, marginTop:6}}, `Right now that's ${unreadRelevant} post${unreadRelevant === 1 ? '' : 's'}.`)),
+          shown.length === 0 && h('div', {className:'empty', style:{padding:'20px 0'}}, h('p', null, 'No posts here.')),
+          shown.map(p => {
+            const tags = [];
+            const toAlmanac = (view, update) => () => { _almanacInitialView = view; if (update) _almanacInitialUpdate = update; onNavigate && onNavigate('dxp_intel'); };
+            if (p.dxp) tags.push(h('span', {key:'dxp', style:{...newsTagStyle('#ffd700'), cursor:'pointer'}, title:'Open the DXP Almanac', onClick:toAlmanac('dxp')},
+              p.dxp.status === 'teased' ? `⚡ Double XP teased${p.dxp.expected && p.dxp.expected !== 'soon' ? ': ' + (p.dxp.expected.length === 10 ? 'starts ' + fmtD(p.dxp.expected) : new Date(p.dxp.expected + '-15T12:00:00').toLocaleDateString(undefined, {month:'long'})) : ''}`
+              : p.dxp.dates ? `⚡ Double XP: ${fmtD(p.dxp.dates[0])} → ${fmtD(p.dxp.dates[1])}` : '⚡ Double XP dates', ' → DXP Almanac'));
+            const nonDxp = p.dates.filter(d => d.category !== 'dxp');
+            if (nonDxp.length) tags.push(h('span', {key:'cal', style:{...newsTagStyle('#64b5f6'), cursor:'pointer'},
+              title: nonDxp.map(d => `${d.start}: ${d.label}`).join('\n') + '\n\nClick to open the calendar',
+              onClick: () => { setCalFocus(nonDxp.map(d => d.start).sort()[0]); setView('calendar'); }},
+              `📅 ${nonDxp.length === 1 ? fmtD(nonDxp[0].start) : nonDxp.length + ' dates'} added to calendar`));
+            if (p.holds.length) tags.push(h('span', {key:'h', style:newsTagStyle('#4caf50'), title:p.holds.join(', ')}, `💰 Mentions ${p.holds.length === 1 ? p.holds[0] : p.holds.length + ' items you hold'}`));
+            if (p.newItems && p.newItems.length) tags.push(h('span', {key:'n', style:newsTagStyle('#e08030'), title:'New on the GE around this post:\n' + p.newItems.join('\n')},
+              `🆕 ${p.newItems.length === 1 ? p.newItems[0] : p.newItems.length + ' new GE items'}`));
+            if (p.watch.length) tags.push(h('span', {key:'w', style:newsTagStyle('#c9a84c'), title:p.watch.join(', ')}, `★ Mentions ${p.watch.length === 1 ? p.watch[0] : p.watch.length + ' watched items'}`));
+            if (p.dates.some(d => d.category === 'seasonal')) tags.push(h('span', {key:'s', style:{...newsTagStyle('#4caf50'), cursor:'pointer'}, title:'Open Seasonal Events in the Almanac', onClick:toAlmanac('seasonal')}, '🎉 Event → Seasonal Almanac'));
+            if (p.linked) tags.push(h('span', {key:'l', style:{...newsTagStyle('#c39bd3'), cursor:'pointer'}, title:'Open this update in Almanac → Game Updates', onClick:toAlmanac('updates', p.linked)}, `📜 ${p.linked} → price impact`));
+            else if (p.release || p.dates.some(d => d.category === 'release')) tags.push(h('span', {key:'t', style:{...newsTagStyle('#c39bd3'), cursor:'pointer'}, onClick:() => trackAsUpdate(p)}, '📜 Track as update'));
+            return h('div', {key:p.url, style:{padding:'10px 0', borderBottom:`1px solid ${T.borderDim}`}},
+              h('div', {style:{display:'flex', gap:8, alignItems:'baseline'}},
+                h('span', {style:{width:8, height:8, borderRadius:'50%', background: p.unread ? T.gold : 'transparent', display:'inline-block', flexShrink:0}}),
+                h('span', {className:'news-title', style:{fontSize:14, color: p.unread ? T.textBright : T.textDim}, onClick:() => openPost(p)}, p.title),
+                h('span', {style:{marginLeft:'auto', fontSize:11, color:T.textDim, whiteSpace:'nowrap'}}, fmtD(p.date))),
+              tags.length ? h('div', {style:{display:'flex', gap:6, flexWrap:'wrap', margin:'5px 0 0 16px'}}, tags)
+                : h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', margin:'3px 0 0 16px'}}, 'Nothing for GEnius in this one.'));
+          })));
 }
 
 const ALERT_CONDITIONS = [
@@ -6246,7 +7327,8 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
           ),
           needsPrice && h('div',null,
             h('label',{className:'form-lbl'},'Price threshold'),
-            h(GpInput,{value:form.price, placeholder:'e.g. 500m', onChange:v=>setForm(f=>({...f,price:v}))})
+            h(GpInput,{value:form.price, placeholder:'e.g. 500m', onChange:v=>setForm(f=>({...f,price:v}))}),
+            h(PriceTargetOdds,{items, itemName:form.item_name, target:form.price, direction: /below/.test(form.condition) ? 'below' : 'above'})
           ),
           needsPct && h('div',null,
             h('label',{className:'form-lbl'}, form.condition==='score_above' ? 'Score threshold' : '% threshold'),
@@ -6544,8 +7626,232 @@ function computeRecommendationCandidates(data, priceById) {
 let _dxpDataCache = null;
 let _dxpDataCacheTime = null; // when _dxpDataCache was last (re)fetched — shown in the UI so it's obvious the tab is showing session-cached data, not necessarily this exact moment's numbers
 
-function DXPIntelTab({items, onSelect}) {
-  const [activeView, setActiveView] = useState('dxp'); // 'dxp' | 'seasonal'
+// ─── News calendar (News → 🗓 Upcoming, Dashboard → Coming up) ──────────────
+// (Ben, 2026-10-07) Every dated line from the official news, categorized.
+const CAL_CATS = {
+  dxp:         {label:'Double XP',    icon:'⚡', color:'#ffd700'},
+  release:     {label:'Releases',     icon:'🚀', color:'#64b5f6'},
+  seasonal:    {label:'Events',       icon:'🎉', color:'#4caf50'},
+  marketplace: {label:'Marketplace',  icon:'🛍', color:'#b87333'},
+  livestream:  {label:'Streams & Q&A', icon:'🎙', color:'#9c7b3f'},
+  maintenance: {label:'Maintenance',  icon:'🔧', color:'#6b4c1e'},
+  other:       {label:'Other',        icon:'•',  color:'#9c7b3f'},
+};
+// Shown by default; maintenance/other are logged but hidden unless picked.
+const CAL_DEFAULT_ON = ['dxp', 'release', 'seasonal', 'marketplace', 'livestream'];
+let _newsInitialSub = null; // set before navigating to News to open a pill
+
+function calWhen(e) {
+  const f = d => new Date(d + 'T12:00:00').toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'});
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const days = Math.round((new Date(e.start + 'T12:00:00') - today) / 86400000);
+  const live = e.end && days <= 0;
+  const rel = live ? 'happening now' : days === 0 ? 'today' : days === 1 ? 'tomorrow' : days < 0 ? 'started' : `in ${days} days`;
+  return {range: f(e.start) + (e.end ? ' → ' + f(e.end) : ''), rel, live, days};
+}
+
+function CalendarRow({e, onOpen, compact}) {
+  const c = CAL_CATS[e.category] || CAL_CATS.other;
+  const w = calWhen(e);
+  return h('div', {style:{display:'flex', gap:10, alignItems:'baseline', padding: compact ? '4px 0' : '6px 0', borderBottom:`1px solid ${T.borderDim}`}},
+    h('span', {style:{width:18, textAlign:'center', color:c.color}, title:c.label}, c.icon),
+    h('div', {style:{flex:1, minWidth:0}},
+      h('div', {style:{fontSize: compact ? 12 : 13, color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace: compact ? 'nowrap' : 'normal'}}, e.label),
+      !compact && h('div', {style:{fontSize:10, color:T.textDim}},
+        e.merged ? `Mentioned ${e.mentions > 1 ? e.mentions + ' times ' : ''}in this post (${e.postDate}) ` : 'From ',
+        h('span', {className:'news-title', style:{fontSize:10}, onClick:() => onOpen && onOpen(e.postUrl)}, e.merged ? 'open post' : e.postTitle),
+        e.merged ? '' : ` (${e.postDate})`)),
+    h('div', {style:{textAlign:'right', whiteSpace:'nowrap'}},
+      h('div', {style:{fontSize:11, color: w.live ? T.green : w.days <= 7 ? T.gold : T.text}}, w.rel),
+      h('div', {style:{fontSize:10, color:T.textDim}}, w.range)));
+}
+
+// Calendar (Ben, 2026-10-18: "It's not even a calendar view, it's literally
+// just news post titles"). Month grid by default; the old list is a toggle.
+// Multi-day events (DXP, seasonal events) show on every day they run, and
+// the user's own reminders are added in their own category.
+const CAL_REMINDER = {label:'My reminders', icon:'⏰', color:'#e57373'};
+const calIso = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+function UpcomingCalendar({onOpen, focusDate}) {
+  const [mode, setMode] = useState(() => { try { return localStorage.getItem('genius_cal_mode') || 'month'; } catch { return 'month'; } });
+  const setModeSaved = m => { setMode(m); try { localStorage.setItem('genius_cal_mode', m); } catch {} };
+  const todayIso = calIso(new Date());
+  const [month, setMonth] = useState(() => { const d = focusDate ? new Date(focusDate + 'T12:00:00') : new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [selDay, setSelDay] = useState(focusDate || todayIso);
+  useEffect(() => { if (focusDate) { const d = new Date(focusDate + 'T12:00:00'); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setSelDay(focusDate); setModeSaved('month'); } }, [focusDate]);
+  const [reminders, setReminders] = useState([]);
+  const loadReminders = () => window.genius?.getReminders?.().then(r => setReminders(r || [])).catch(() => {});
+  useEffect(() => { loadReminders(); }, []);
+  // Add a reminder straight from the calendar (Ben, 2026-10-18). Same store
+  // as item reminders, with no item: it notifies as "GEnius Reminder".
+  const [adding, setAdding] = useState(false);
+  const [remText, setRemText] = useState('');
+  const addReminder = async () => {
+    const message = remText.trim();
+    if (!message) return;
+    await window.genius?.saveReminder?.({ id: Date.now().toString(), itemName: '', dueDate: selDay, message, fired: false });
+    setRemText(''); setAdding(false); loadReminders();
+  };
+  const deleteReminder = async id => { await window.genius?.deleteReminder?.(id); loadReminders(); };
+  const [entries, setEntries] = useState(null);
+  const [on, setOn] = useState(() => {
+    try { const v = JSON.parse(localStorage.getItem('genius_cal_filter')); if (Array.isArray(v)) return v; } catch {}
+    return CAL_DEFAULT_ON;
+  });
+  useEffect(() => { window.genius?.getNewsCalendar?.({pastDays: 62}).then(e => setEntries(e || [])).catch(() => setEntries([])); }, []);
+  const toggle = k => setOn(cur => { const next = cur.includes(k) ? cur.filter(x => x !== k) : [...cur, k]; try { localStorage.setItem('genius_cal_filter', JSON.stringify(next)); } catch {} return next; });
+  if (!entries) return h('div', {className:'empty'}, h('p', null, 'Loading…'));
+  // Reminders as calendar entries (their own category, always shown).
+  const reminderEntries = (reminders || []).filter(r => r.dueDate).map(r => ({
+    start: r.dueDate, end: null, category: 'reminder', label: (r.itemName ? r.itemName + ': ' : '') + (r.message || 'Reminder'), reminder: true, id: r.id, fired: !!r.fired }));
+  const all = [...entries, ...reminderEntries];
+  const counts = {};
+  for (const e of all) counts[e.category] = (counts[e.category] || 0) + 1;
+  const catOf = e => e.category === 'reminder' ? CAL_REMINDER : (CAL_CATS[e.category] || CAL_CATS.other);
+  const visible = all.filter(e => e.category === 'reminder' || on.includes(e.category));
+  // List mode keeps its old meaning: upcoming only.
+  const shown = visible.filter(e => (e.end || e.start) >= todayIso);
+  const onDay = iso => visible.filter(e => e.start <= iso && (e.end || e.start) >= iso);
+
+  const modeBtn = (m, label) => h('button', {className:'ge-btn' + (mode === m ? ' gold' : ''), onClick:() => setModeSaved(m), style:{padding:'3px 12px'}}, label);
+
+  // Month grid: 6 weeks starting on the Sunday on/before the 1st.
+  const first = new Date(month);
+  const gridStart = new Date(first); gridStart.setDate(1 - first.getDay());
+  const cells = Array.from({length: 42}, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d; });
+  const monthLabel = month.toLocaleDateString(undefined, {month:'long', year:'numeric'});
+  const shiftMonth = n => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
+  // The selected day lists EVERYTHING on it, hidden categories included
+  // (faded): a news tag can point at a date whose only entry is in a
+  // category the grid filters out ('Other'), which looked empty.
+  const dayEvents = all.filter(e => e.start <= selDay && (e.end || e.start) >= selDay);
+  const hiddenCat = e => e.category !== 'reminder' && !on.includes(e.category);
+
+  const monthView = h('div', null,
+    h('div', {style:{display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:8}},
+      h('button', {className:'ge-btn', onClick:() => shiftMonth(-1), title:'Previous month'}, '‹'),
+      h('div', {style:{fontFamily:'Cinzel, serif', color:T.goldBright, fontSize:15}}, monthLabel),
+      h('div', {style:{display:'flex', gap:6}},
+        h('button', {className:'ge-btn', onClick:() => { const d = new Date(); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setSelDay(todayIso); }}, 'Today'),
+        h('button', {className:'ge-btn', onClick:() => shiftMonth(1), title:'Next month'}, '›'))),
+    h('div', {className:'cal-grid'},
+      ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d => h('div', {key:d, className:'cal-dow'}, d)),
+      cells.map(d => {
+        const iso = calIso(d);
+        const evs = onDay(iso);
+        const inMonth = d.getMonth() === month.getMonth();
+        const cls = 'cal-cell' + (inMonth ? '' : ' cal-out') + (iso === todayIso ? ' cal-today' : '') + (iso === selDay ? ' cal-sel' : '') + (iso < todayIso ? ' cal-past' : '');
+        return h('div', {key:iso, className:cls, onClick:() => setSelDay(iso)},
+          h('div', {className:'cal-num'}, d.getDate()),
+          h('div', {className:'cal-chips'},
+            evs.slice(0, 3).map((e, i) => {
+              const c = catOf(e);
+              const cont = e.start < iso; // continuing a multi-day event
+              return h('div', {key:i, className:'cal-chip', title:`${c.label}: ${e.label}`,
+                style:{borderLeft:`3px solid ${c.color}`, opacity: cont ? 0.6 : 1}},
+                h('span', {className:'cal-chip-icon'}, c.icon), h('span', {className:'cal-chip-text'}, cont ? '↳ ' + e.label : e.label));
+            }),
+            evs.length > 3 && h('div', {className:'cal-more'}, `+${evs.length - 3} more`)));
+      })),
+    h('div', {style:{marginTop:12}},
+      h('div', {className:'ge-section-head', style:{fontSize:12}},
+        new Date(selDay + 'T12:00:00').toLocaleDateString(undefined, {weekday:'long', month:'long', day:'numeric'})),
+      dayEvents.length
+        ? dayEvents.map((e, i) => e.reminder
+            ? h('div', {key:i, style:{display:'flex', gap:10, alignItems:'center', padding:'6px 0', borderBottom:`1px solid ${T.borderDim}`, opacity: e.fired ? 0.55 : 1}},
+                h('span', {style:{width:18, textAlign:'center'}}, CAL_REMINDER.icon),
+                h('div', {style:{flex:1, fontSize:13, color:T.textBright}}, e.label, e.fired && h('span', {style:{fontSize:10, color:T.textDim, marginLeft:6}}, '(sent)')),
+                h('button', {className:'ge-btn danger', title:'Delete reminder', style:{padding:'2px 8px'}, onClick:() => deleteReminder(e.id)}, '✕'))
+            : h('div', {key:i, style:{opacity: hiddenCat(e) ? 0.55 : 1}, title: hiddenCat(e) ? 'This category is hidden in the grid (filters above)' : undefined}, h(CalendarRow, {e, onOpen})))
+        : h('div', {style:{fontSize:12, color:T.textDim, padding:'6px 0'}}, 'Nothing on this day.'),
+      selDay >= todayIso && (adding
+        ? h('div', {style:{display:'flex', gap:6, marginTop:8, flexWrap:'wrap'}},
+            h('input', {className:'ge-input', autoFocus:true, placeholder:'Reminder (e.g. Check Crimson ichor price)', value:remText,
+              onChange:e => setRemText(e.target.value), onKeyDown:e => { if (e.key === 'Enter') addReminder(); if (e.key === 'Escape') { e.preventDefault(); setAdding(false); } },
+              style:{flex:'1 1 220px'}}),
+            h('button', {className:'ge-btn gold', onClick:addReminder}, 'Save'),
+            h('button', {className:'ge-btn', onClick:() => setAdding(false)}, 'Cancel'))
+        : h('button', {className:'ge-btn', style:{marginTop:8}, onClick:() => setAdding(true)}, '+ Add reminder'))));
+
+  return h('div', {style:{padding:'10px 14px'}},
+    h('div', {style:{display:'flex', gap:6, marginBottom:10}}, modeBtn('month', '📅 Month'), modeBtn('list', '☰ List')),
+    h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.6, marginBottom:10}},
+      'Every upcoming date mentioned in the official news, sorted by when it happens. Dates are read from each post\'s text (roadmap images can\'t be read), so labels from long paragraphs can be rough: the post each one came from is linked.'),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:6, marginBottom:10}},
+      Object.entries(CAL_CATS).map(([k, c]) => h('button', {key:k, onClick:() => toggle(k),
+        style:{fontSize:11, padding:'3px 10px', borderRadius:3, cursor:'pointer',
+          border:`1px solid ${on.includes(k) ? c.color : T.borderDim}`, background: on.includes(k) ? 'rgba(201,168,76,0.12)' : 'transparent',
+          color: on.includes(k) ? T.textBright : T.textDim}}, `${c.icon} ${c.label}${counts[k] ? ` (${counts[k]})` : ''}`))),
+    mode === 'month' ? monthView
+    : shown.length === 0
+      ? h('div', {className:'empty', style:{padding:'24px 0'}}, h('p', null, entries.length ? 'Nothing upcoming in the selected categories.' : 'No upcoming dates yet. They\'re collected from new news posts as they come in.'))
+      : shown.map((e, i) => e.reminder
+          ? h('div', {key:i, style:{display:'flex', gap:10, padding:'6px 0', borderBottom:`1px solid ${T.borderDim}`}},
+              h('span', {style:{width:18, textAlign:'center'}}, CAL_REMINDER.icon),
+              h('div', {style:{flex:1, fontSize:13, color:T.textBright}}, e.label),
+              h('div', {style:{fontSize:11, color:T.textDim}}, new Date(e.start + 'T12:00:00').toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric'})))
+          : h(CalendarRow, {key:i, e, onOpen})));
+}
+
+// Dashboard card: the next few dates that matter (DXP, releases, events,
+// marketplace) — the "make News more visible" part.
+function ComingUpSection({onNavigate, onOpen}) {
+  const [entries, setEntries] = useState([]);
+  useEffect(() => { window.genius?.getNewsCalendar?.().then(e => setEntries(e || [])).catch(() => {}); }, []);
+  const top = entries.filter(e => ['dxp', 'release', 'seasonal', 'marketplace'].includes(e.category)).slice(0, 5);
+  if (!top.length) return null;
+  return h('div', {style:{marginBottom:20}},
+    h('div', {style:{fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase', color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:6, cursor:'pointer', display:'flex', justifyContent:'space-between'},
+        onClick:() => { _newsInitialSub = 'upcoming'; onNavigate && onNavigate('news'); }},
+      h('span', null, '📅 Coming up'),
+      h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'Full calendar →')),
+    top.map((e, i) => h(CalendarRow, {key:i, e, onOpen, compact:true})));
+}
+
+// DXP news watcher banner (Ben, 2026-10-07): DXP announcements spotted in
+// the news feed, before the wiki's DXP table has them. Auto-added when the
+// post states the dates; otherwise asks for them here.
+function DxpNewsBanner({toast}) {
+  const [det, setDet] = useState([]);
+  const [draft, setDraft] = useState({});
+  const reload = () => window.genius?.getDxpNews?.().then(d => setDet(d || [])).catch(() => {});
+  useEffect(() => { reload(); }, []);
+  const recent = det.filter(d => Date.now() - d.detectedAt < 21 * 86400000);
+  if (!recent.length) return null;
+  const fmtD = x => new Date(x + 'T12:00:00').toLocaleDateString(undefined, {weekday:'short', month:'short', day:'numeric', year:'numeric'});
+  return h('div', {style:{marginBottom:14, display:'flex', flexDirection:'column', gap:6}},
+    recent.map(d => h('div', {key:d.url, style:{border:`1px solid ${T.gold}`, borderRadius:3, padding:'8px 10px', background:'rgba(201,168,76,0.08)', fontSize:12}},
+      h('div', {style:{display:'flex', justifyContent:'space-between', gap:8, flexWrap:'wrap'}},
+        h('span', null, '📣 ', h('b', null, d.status === 'teased' ? 'Double XP teased: ' : 'Double XP in the news: '),
+          h('span', {className:'news-title', onClick:() => window.genius?.openExternal(d.url)}, d.title), ` (${d.date})`),
+        h('button', {className:'ge-btn', style:{fontSize:11, padding:'1px 8px'}, onClick:async () => { await window.genius?.resolveDxpNews(d.url, 'dismiss'); reload(); }}, '✕')),
+      d.status === 'added' || d.status === 'known'
+        ? h('div', {style:{marginTop:4, color:T.textDim}}, `${fmtD(d.dates[0])} → ${fmtD(d.dates[1])}. ${d.status === 'added' ? 'Added to the Almanac.' : 'Already in the Almanac.'}` + (d.teasedOn ? ` First teased ${d.teasedOn}.` : ''))
+        : d.status === 'teased' && !draft[d.url + ':open']
+        ? h('div', {style:{marginTop:4, color:T.textDim}},
+            `Teased, ${d.expected === 'soon' ? 'coming soon' : d.expected.length === 10 ? 'starting ' + fmtD(d.expected) : 'expected ' + new Date(d.expected + '-15T12:00:00').toLocaleDateString(undefined, {month:'long', year:'numeric'})}. ${d.expected.length === 10 ? 'End date not announced yet' : 'No dates yet'}: it's added to the Almanac automatically once they're announced. `,
+            h('span', {style:{color:T.gold, cursor:'pointer', textDecoration:'underline'}, onClick:() => setDraft(x => ({...x, [d.url + ':open']:true}))}, 'Know the dates already?'))
+        : h('div', {style:{marginTop:6, display:'flex', gap:6, alignItems:'center', flexWrap:'wrap'}},
+            h('span', {style:{color:T.textDim}}, 'Starts'),
+            h('input', {type:'date', className:'ge-input', style:{width:'auto'}, value:draft[d.url]?.[0] || '', onChange:e => setDraft(x => ({...x, [d.url]:[e.target.value, x[d.url]?.[1] || '']}))}),
+            h('span', {style:{color:T.textDim}}, 'ends'),
+            h('input', {type:'date', className:'ge-input', style:{width:'auto'}, value:draft[d.url]?.[1] || '', onChange:e => setDraft(x => ({...x, [d.url]:[x[d.url]?.[0] || '', e.target.value]}))}),
+            h('button', {className:'ge-btn gold', onClick:async () => {
+              const dd = draft[d.url] || [];
+              if (!dd[0] || !dd[1] || dd[1] <= dd[0]) { toast('Enter a start and a later end date', 'error'); return; }
+              const r = await window.genius?.resolveDxpNews(d.url, 'add', dd);
+              if (!r?.success) { toast(r?.error || 'Could not add it', 'error'); return; }
+              toast('DXP added to the Almanac', 'success'); reload();
+            }}, 'Add to Almanac')))));
+}
+
+// Set before navigating to the Almanac to open a specific view (the News
+// tab's "Game Updates" link uses it).
+let _almanacInitialView = null;
+let _almanacInitialUpdate = null; // Game Update name to open on arrival
+function DXPIntelTab({items, onSelect, userShorthands, toast}) {
+  const [activeView, setActiveView] = useState(() => { const v = _almanacInitialView || 'dxp'; _almanacInitialView = null; return v; }); // 'dxp' | 'seasonal' | 'updates'
   const [data, setData] = useState(() => _dxpDataCache);
   const [loading, setLoading] = useState(() => !_dxpDataCache);
   const [refreshing, setRefreshing] = useState(false);
@@ -6573,9 +7879,11 @@ function DXPIntelTab({items, onSelect}) {
   // Mentions reuses the Recommendations widths rather than getting its own
   // handles, since it's the same columns directly below the same table.
   const mainCols = useTableColumns('genius_almanac_main_col_widths_v2',
-    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:150, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26});
+    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:150, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26},
+    null, ['name', 'direction', 'confidence', 'expand']);
   const recCols = useTableColumns('genius_almanac_rec_col_widths_v2',
-    {star:26, name:185, strategy:160, netRoi:88, profitPerItem:128, profitForLimit:148});
+    {star:26, name:185, strategy:160, netRoi:88, profitPerItem:128, profitForLimit:148},
+    null, ['name', 'netRoi', 'profitForLimit']);
 
   useEffect(() => {
     // Already have data cached from an earlier visit this session — skip
@@ -6992,6 +8300,8 @@ function DXPIntelTab({items, onSelect}) {
       [
         {id:'dxp',      label:'📅 DXP Weekend'},
         {id:'seasonal', label:'🗓️ Seasonal Events'},
+        {id:'updates',  label:'📜 Game Updates'},
+        {id:'launches', label:'🚀 Launches'},
       ].map(v => h('button', {
         key: v.id,
         onClick: () => setActiveView(v.id),
@@ -7004,6 +8314,9 @@ function DXPIntelTab({items, onSelect}) {
       }, v.label))
     ),
     activeView === 'seasonal' && h(SeasonalEventsTab, {items, onSelect}),
+    activeView === 'launches' && h(LaunchesTab, {items, onSelect}),
+    activeView === 'updates' && h(EventsView, {items, onSelect, userShorthands, toast, onOpen: url => window.genius?.openExternal(url)}),
+    activeView === 'dxp' && h(DxpNewsBanner, {toast}),
     activeView === 'dxp' && h('div', null,
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14}},
       // itemCount is a real measured count (every item with enough local
@@ -7302,6 +8615,157 @@ function DXPIntelTab({items, onSelect}) {
           )
     ), // end dxp view wrapper div
     ),
+  );
+}
+
+/* ─── GEnius Almanac — Launches ─────────────────────────────────────────────
+   How new releases move the market (2026-10-28). One card per release from
+   the curated list in backend-js/data/launches.json: its new items and the
+   existing items it was expected to move, each with launch -> low -> now
+   from the wiki's LIVE daily prices (they only exist from 2026-07-22). Mid
+   = average of instant-buy and instant-sell. Evidence, not advice: it shows
+   what happened, never "buy now". */
+const _launchDayMs = date => Date.parse(date + 'T00:00:00Z');
+function launchCurve(days, releaseDate) {
+  const from = _launchDayMs(releaseDate);
+  const pts = (days || [])
+    .filter(p => p.timestamp >= from)
+    .map(p => {
+      const b = p.instabuy, s = p.instasell;
+      const raw = b != null && s != null ? (b + s) / 2 : (b ?? s);
+      // Whole gp, except sub-10gp items where the decimals still matter.
+      const mid = raw != null && raw >= 10 ? Math.round(raw) : raw;
+      return { day: Math.round((p.timestamp - from) / 86400000), mid };
+    })
+    .filter(p => p.mid > 0);
+  if (!pts.length) return null;
+  let low = pts[0];
+  for (const p of pts) if (p.mid < low.mid) low = p;
+  const launch = pts[0], now = pts[pts.length - 1];
+  // Trade activity: share of days since its first trade that had live
+  // trades. Ben (2026-10-28): filter on this, not on price (Crimson ichor
+  // never passed 1m but is one of the most telling items).
+  const today = Math.floor((Date.now() - _launchDayMs(releaseDate)) / 86400000);
+  const activity = new Set(pts.map(p => p.day)).size / Math.max(1, today - launch.day + 1);
+  return { pts, launch: launch.mid, launchDay: launch.day, low: low.mid, lowDay: low.day, now: now.mid, activity };
+}
+// "Actively traded": live trades on at least 70% of days since its first trade.
+const LAUNCH_ACTIVE_SHARE = 0.7;
+
+function LaunchItemRow({entry, curve, items, onSelect, isWatch}) {
+  const item = (items || []).find(i => i.id === entry.id);
+  const pctOf = (a, b) => (a && b) ? (a / b - 1) * 100 : null;
+  const vsLaunch = curve ? pctOf(curve.now, curve.launch) : null;
+  const offLow = curve ? pctOf(curve.now, curve.low) : null;
+  const cell = {padding:'6px 8px', borderBottom:`1px solid ${T.borderDim}`, fontSize:12, whiteSpace:'nowrap'};
+  return h('tr', null,
+    h('td', {style:{...cell, whiteSpace:'normal'}},
+      h('span', {
+        onClick: item && onSelect ? () => onSelect(item) : undefined,
+        style:{color:T.text, cursor:item && onSelect ? 'pointer' : 'default'},
+        title: item ? 'Open item' : undefined,
+      }, entry.name),
+      isWatch && entry.why && h('div', {style:{fontSize:10, color:T.textDim}}, entry.why)
+    ),
+    curve === undefined
+      ? h('td', {colSpan:5, style:{...cell, color:T.textDim}}, 'Loading live prices…')
+      : curve === null
+        ? h('td', {colSpan:5, style:{...cell, color:T.textDim}}, 'No live trade data yet')
+        : [
+          h('td', {key:'l', className:'launch-col-launch', style:{...cell, textAlign:'right'}}, fmt.gp(curve.launch),
+            curve.launchDay > 0 && h('div', {style:{fontSize:10, color:T.textDim}}, `first trade day ${curve.launchDay}`)),
+          h('td', {key:'lo', style:{...cell, textAlign:'right'}}, fmt.gp(curve.low),
+            h('div', {style:{fontSize:10, color:T.textDim}}, `day ${curve.lowDay}`)),
+          h('td', {key:'n', style:{...cell, textAlign:'right'}}, fmt.gp(curve.now),
+            offLow != null && offLow >= 0.5 && h('div', {style:{fontSize:10, color:T.textDim}}, `${fmt.pct(offLow)} off low`)),
+          h('td', {key:'v', className:pctClass(vsLaunch), style:{...cell, textAlign:'right'}}, vsLaunch == null ? '—' : fmt.pct(vsLaunch)),
+          h('td', {key:'s', className:'launch-col-spark', style:{...cell, width:120}},
+            h(SparklineSVG, {data:curve.pts.map(p => p.mid), color: vsLaunch != null && vsLaunch < 0 ? T.red : T.green, w:120, ht:30})),
+        ]
+  );
+}
+
+function LaunchCard({release, items, onSelect}) {
+  const day = Math.floor((Date.now() - _launchDayMs(release.date)) / 86400000);
+  const [curves, setCurves] = useState(null); // id -> curve (null = no live data)
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    let stale = false;
+    const ids = [...new Set([...(release.newItems || []), ...(release.watch || [])].map(e => e.id))];
+    Promise.all(ids.map(id => loadLiveDaily(id).then(d => [id, launchCurve(d, release.date)]).catch(() => [id, null])))
+      .then(pairs => { if (!stale) setCurves(new Map(pairs)); });
+    return () => { stale = true; };
+  }, [release.id, release.date]);
+  // New items: actively traded ones first (by launch price), the rest folded.
+  const active = [], quiet = [];
+  if (curves) {
+    for (const e of release.newItems || []) {
+      const c = curves.get(e.id);
+      (c && c.activity >= LAUNCH_ACTIVE_SHARE ? active : quiet).push(e);
+    }
+    const launchOf = e => curves.get(e.id)?.launch || 0;
+    active.sort((a, b) => launchOf(b) - launchOf(a));
+    quiet.sort((a, b) => launchOf(b) - launchOf(a));
+  }
+  const th = {padding:'4px 8px', fontSize:10, color:T.textDim, fontWeight:'normal', textAlign:'right', borderBottom:`1px solid ${T.border}`};
+  const statusColor = {confirmed:T.green, wrong:T.red, pending:T.textDim};
+  const table = (rows, isWatch, title) => rows.length > 0 && h('div', {style:{marginTop:10}},
+    h('div', {style:{fontSize:11, color:T.gold, marginBottom:4}}, title),
+    h('div', {style:{overflowX:'auto'}},
+      h('table', {className:'launch-table', style:{width:'100%', borderCollapse:'collapse'}},
+        h('thead', null, h('tr', null,
+          h('th', {style:{...th, textAlign:'left'}}, 'Item'),
+          h('th', {className:'launch-col-launch', style:th}, isWatch ? 'Release day' : 'Launch'),
+          h('th', {style:th}, 'Low'),
+          h('th', {style:th}, 'Now'),
+          h('th', {style:th}, isWatch ? 'vs release day' : 'vs launch'),
+          h('th', {className:'launch-col-spark', style:th}, 'Since release'),
+        )),
+        h('tbody', null, rows.map(e => h(LaunchItemRow, {key:e.id, entry:e, curve:curves.get(e.id) ?? null, items, onSelect, isWatch})))
+      )
+    )
+  );
+  const newRows = showAll ? [...active, ...quiet] : active;
+  return h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', marginBottom:14}},
+    h('div', {style:{display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap'}},
+      h('div', {style:{fontSize:15, color:T.goldBright, fontWeight:'bold'}}, release.name),
+      h('div', {style:{fontSize:11, color:T.textDim}},
+        `${release.date} · day ${day}${release.kind ? ' · ' + release.kind : ''}`)
+    ),
+    release.notes && h('div', {style:{fontSize:11, color:T.textDim, marginTop:4}}, release.notes),
+    !curves && h('div', {style:{fontSize:12, color:T.textDim, marginTop:10}}, `Loading live prices for ${(release.newItems || []).length + (release.watch || []).length} items…`),
+    curves && table(newRows, false, `New items (${(release.newItems || []).length})`),
+    curves && quiet.length > 0 && h('button', {
+      onClick: () => setShowAll(s => !s),
+      style:{marginTop:6, background:'transparent', border:`1px solid ${T.borderDim}`, color:T.textDim, borderRadius:4, padding:'3px 10px', fontSize:11, cursor:'pointer'},
+    }, showAll ? 'Hide rarely traded items' : `Show ${quiet.length} more (rarely traded)`),
+    curves && table(release.watch || [], true, 'Existing items it was expected to move'),
+    (release.predictions || []).length > 0 && h('div', {style:{marginTop:10}},
+      h('div', {style:{fontSize:11, color:T.gold, marginBottom:4}}, 'Predictions (written on release day)'),
+      release.predictions.map((p, i) => h('div', {key:i, style:{fontSize:12, color:T.text, marginBottom:3}},
+        h('span', {style:{color:statusColor[p.status] || T.textDim, fontSize:10, border:`1px solid ${statusColor[p.status] || T.borderDim}`, borderRadius:3, padding:'0 5px', marginRight:6, textTransform:'uppercase'}}, p.status || 'pending'),
+        p.text,
+        p.note && h('span', {style:{color:T.textDim}}, ` (${p.note})`)
+      ))
+    )
+  );
+}
+
+function LaunchesTab({items, onSelect}) {
+  const [releases, setReleases] = useState(null);
+  useEffect(() => {
+    window.genius?.getLaunches?.().then(r => setReleases(r || [])).catch(() => setReleases([]));
+  }, []);
+  return h('div', null,
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14, lineHeight:1.5}},
+      'How new releases moved the market: each release\'s new items and the existing items it was expected to move, from live instant-trade prices (mid of buy and sell). ',
+      h('span', {style:{color:T.gold}}, 'Early data: '),
+      releases ? `${releases.length} release${releases.length === 1 ? '' : 's'} tracked so far. ` : '',
+      'Live prices only go back to 22 July 2026. This shows what happened, not what will.'
+    ),
+    releases === null && h('div', {style:{color:T.textDim, fontSize:12}}, 'Loading…'),
+    releases && releases.length === 0 && h('div', {style:{color:T.textDim, fontSize:12}}, 'No releases tracked yet.'),
+    (releases || []).map(r => h(LaunchCard, {key:r.id, release:r, items, onSelect}))
   );
 }
 
@@ -8209,6 +9673,9 @@ function AboutTab() {
           '.'
         ),
       ),
+      h('div', {style:{marginTop:20}},
+        h('div', {className:'ge-section-head'}, 'App updates'),
+        h(AppUpdatesList)),
     ),
   );
 }
@@ -8304,8 +9771,12 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
   };
   const set = k => e => update({[k]: e.target.value});
   const setChk = k => e => update({[k]: e.target.checked});
+  // Mirrors DISCORD_WEBHOOK_RE in backend-js/api.js — the backend refuses
+  // to save anything else, so flag it here instead of failing silently.
+  const webhookInvalid = !!s.discordWebhook && !/^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+\/?(?:\?[\w=&-]*)?$/.test(s.discordWebhook.trim());
   const testHook = async () => {
     if (!s.discordWebhook) { toast('Enter webhook URL first','error'); return; }
+    if (webhookInvalid) { toast('Not a valid Discord webhook URL','error'); return; }
     try {
       await fetch(s.discordWebhook,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({content:'GEnius test — connected!'})});
       toast('Webhook test sent!','success');
@@ -8421,6 +9892,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       h('div',{className:'ge-section-head'},'Discord webhook'),
       h('label',{className:'form-lbl'},'Webhook URL'),
       h('input',{className:'ge-input',type:'text',placeholder:'https://discord.com/api/webhooks/...',value:s.discordWebhook||'',onChange:set('discordWebhook'),style:{marginBottom:8}}),
+      webhookInvalid && h('div',{style:{fontSize:11, color:T.red, marginBottom:8}},'Not a valid Discord webhook URL — it will not be saved, and alerts keep going to your previous webhook. To turn alerts off, clear the field. Copy it from Discord: Channel settings → Integrations → Webhooks.'),
       h('button',{className:'ge-btn',onClick:testHook},'Test webhook')
     ),
     h('div',{style:{marginBottom:20}},
@@ -8477,6 +9949,8 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         }
       },'Test notification')
     ),
+    window.genius?.setLiveMonitoring && h(BackgroundModeSetting, {toast}),
+    window.genius?.setQuietHours && h(QuietHoursSetting),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Watchlist Digest'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
@@ -8560,7 +10034,8 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
           if (res?.error) { toast('Import failed: '+res.error,'error'); return; }
           toast('Data imported — restart GEnius to see all changes','success');
         }},'⬇ Import Backup'),
-      )
+      ),
+      h(AutoBackupRestore, {toast}),
     ),
 
     h('div',{style:{marginBottom:20}},
@@ -8824,7 +10299,7 @@ const ALCH_DEFAULT_COL_WIDTHS = {name:280, high:110, limit:90, afterTax:110, alc
 
 function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, description}) {
   const [sort, setSort] = useState({key:'alchProfit', dir:-1});
-  const cols = useTableColumns('genius_alch_col_widths', ALCH_DEFAULT_COL_WIDTHS);
+  const cols = useTableColumns('genius_alch_col_widths', ALCH_DEFAULT_COL_WIDTHS, null, ['name', 'high', 'alchProfit']);
 
   // Same shared GE/Live toggle as every other price column in the app
   // (ItemTable's 'high' column, same localStorage key) — rather than a
@@ -9045,6 +10520,97 @@ function SidebarOrderEditor({navItems, order, onChange}) {
 }
 
 /* ─── GP input with K/M/B shorthand ──────────────────────────── */
+// Price target backtesting (Ben, 2026-10-06): under any price target
+// (alert threshold, Portfolio target/stop-loss, Buy Planner max price),
+// how often the item actually traded there over the past year and when it
+// last did. Daily prices from saved history + GEnius's own snapshots, one
+// price per day. `direction` is 'above' (target is a high to reach) or
+// 'below' (a low to reach / a floor).
+const _oddsCache = new Map(); // itemId -> {at, days:[{ts, price}]} for this session
+async function loadDailyPrices(itemId) {
+  const hit = _oddsCache.get(itemId);
+  if (hit && Date.now() - hit.at < 10 * 60000) return hit.days;
+  const [hist, snaps] = await Promise.all([
+    window.genius?.getItemHistoryLocal(itemId).catch(() => null),
+    window.genius?.getPriceSnapshots(itemId).catch(() => null),
+  ]);
+  const byDay = new Map();
+  for (const pt of [...(hist || []), ...(snaps || [])]) {
+    if (!pt.price) continue;
+    const ts = pt.timestamp > 1e12 ? pt.timestamp : pt.timestamp * 1000;
+    const day = Math.floor(ts / 86400000);
+    const prev = byDay.get(day);
+    if (!prev || ts > prev.ts) byDay.set(day, {ts, price: pt.price});
+  }
+  const days = [...byDay.values()].sort((a, b) => a.ts - b.ts);
+  _oddsCache.set(itemId, {at: Date.now(), days});
+  return days;
+}
+
+// Live (instant-buy/sell) daily averages from the wiki's live price API —
+// only goes back to late July 2026, but it's what offers actually fill at:
+// a buy offer fills against instant-sells, a sell offer against instant-buys.
+const _liveOddsCache = new Map();
+async function loadLiveDaily(itemId) {
+  const hit = _liveOddsCache.get(itemId);
+  if (hit && Date.now() - hit.at < 10 * 60000) return hit.days;
+  const ts = await window.genius?.getItemLiveTimeseries(itemId, '1y').catch(() => null);
+  const days = (ts || []).filter(p => p.instabuy != null || p.instasell != null);
+  _liveOddsCache.set(itemId, {at: Date.now(), days});
+  return days;
+}
+
+function PriceTargetOdds({items, itemName, target, direction}) {
+  const [days, setDays] = useState(null);
+  const [live, setLive] = useState(null);
+  const item = useMemo(() => (items || []).find(i => i.name.toLowerCase() === String(itemName || '').toLowerCase()), [items, itemName]);
+  const t = Number(target) || 0;
+  useEffect(() => {
+    if (!item || item.untradeable) { setDays(null); return; }
+    let stale = false;
+    loadDailyPrices(item.id).then(d => { if (!stale) setDays(d); });
+    loadLiveDaily(item.id).then(d => { if (!stale) setLive(d); });
+    return () => { stale = true; };
+  }, [item?.id]);
+  if (!item || !(t > 0) || !days || days.length < 7) return null;
+
+  // Live line: buy-side targets vs the day's average instant-sell price
+  // (what buy offers fill at), sell-side vs average instant-buy.
+  let liveLine = null;
+  const liveKey = direction === 'below' ? 'instasell' : 'instabuy';
+  const liveDays = (live || []).filter(p => p[liveKey] != null);
+  if (liveDays.length >= 7) {
+    const lHits = p => direction === 'below' ? p[liveKey] <= t : p[liveKey] >= t;
+    const lPct = liveDays.filter(lHits).length / liveDays.length * 100;
+    let lLast = null;
+    for (let i = liveDays.length - 1; i >= 0; i--) if (lHits(liveDays[i])) { lLast = liveDays[i]; break; }
+    const lAgo = lLast ? Math.floor((Date.now() - lLast.timestamp) / 86400000) : null;
+    const lSince = new Date(liveDays[0].timestamp).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    const lColor = lPct >= 25 ? T.green : lPct >= 5 ? T.gold : T.red;
+    liveLine = h('div', {title:`Daily average ${direction === 'below' ? 'instant-sell' : 'instant-buy'} price from the live price API: what ${direction === 'below' ? 'buy' : 'sell'} offers actually fill at. Data starts ${lSince}.`},
+      '⚡ Live: ', h('span', {style:{color:lColor}}, `${lPct < 1 && lPct > 0 ? '<1' : Math.round(lPct)}% of days`),
+      ` since ${lSince} · `, lLast == null ? 'not yet' : lAgo <= 1 ? 'last: today' : `last: ${lAgo} days ago (${fmt.gp(Math.round(lLast[liveKey]))}gp)`);
+  }
+
+  const hits = p => direction === 'below' ? p.price <= t : p.price >= t;
+  const yearAgo = Date.now() - 365 * 86400000;
+  const year = days.filter(d => d.ts >= yearAgo);
+  const pctYear = year.length ? year.filter(hits).length / year.length * 100 : null;
+  let last = null;
+  for (let i = days.length - 1; i >= 0; i--) if (hits(days[i])) { last = days[i]; break; }
+  const daysAgo = last ? Math.floor((Date.now() - last.ts) / 86400000) : null;
+  const sinceLabel = new Date(days[0].ts).toLocaleDateString(undefined, {month:'short', year:'numeric'});
+  const word = direction === 'below' ? 'at or below' : 'at or above';
+  const lastText = last == null ? `never since ${sinceLabel}`
+    : daysAgo <= 1 ? 'last: today' : `last: ${daysAgo} days ago (${fmt.gp(last.price)}gp)`;
+  const color = pctYear == null ? T.textDim : pctYear >= 25 ? T.green : pctYear >= 5 ? T.gold : T.red;
+  return h('div', {style:{fontSize:11, color:T.textDim, marginTop:4, lineHeight:1.5}},
+    h('div', {title:`Share of days in the past year the GE guide price was ${word} ${t.toLocaleString()}gp, from saved price history.`},
+      '📊 GE: ', h('span', {style:{color}}, pctYear == null ? '—' : `${pctYear < 1 && pctYear > 0 ? '<1' : Math.round(pctYear)}% of days`),
+      ` ${word} this in the past year · ${lastText}`),
+    liveLine);
+}
+
 function GpInput({value, onChange, placeholder, style}) {
   const [raw, setRaw] = useState(value ? String(value) : '');
 
@@ -9198,7 +10764,7 @@ function ItemAutocomplete({items, value, onChange, placeholder, userShorthands})
 
 /* ─── Position modal ──────────────────────────────────────────── */
 function PositionModal({items, position, onSave, onClose, userShorthands}) {
-  const todayStr = new Date().toISOString().slice(0,10);
+  const todayStr = (d => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`)(new Date()); // local date, not UTC
   const blank = { id:Date.now().toString(), item_name:'', quantity:'', cost_basis:'',
     target_price:'', target_profit_pct:'', stop_loss:'', status:'open', created_at:new Date().toISOString(), date_opened: todayStr };
   const [form, setForm] = useState(position ? {...position,
@@ -9248,7 +10814,7 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
       // Dragon dart tip lot's quantity (3,148) and sold_quantity (3,461)
       // disagreed by exactly 313 after an edit.
       payload.quantity = sq;
-      payload.realized_pl = Math.round(sp * sq * 0.98) - Number(form.cost_basis) * sq;
+      payload.realized_pl = saleNet(sp, sq) - Number(form.cost_basis) * sq;
     }
     onSave(payload, createAlert);
   };
@@ -9323,7 +10889,7 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
           ),
           (form.sold_price && (form.sold_quantity||form.quantity)) && (() => {
             const sq = Number(form.sold_quantity||form.quantity), sp = Number(form.sold_price);
-            const net = Math.round(sp * sq * 0.98);
+            const net = saleNet(sp, sq);
             const pl = net - Number(form.cost_basis||0) * sq;
             return h('div', {style:{fontSize:11,color:T.textDim,marginTop:6}},
               'Realized P/L: ', h('span',{style:{color: pl>=0?T.green:T.red, fontWeight:'bold'}}, (pl>=0?'+':'')+fmt.gp(pl)+'gp'));
@@ -9348,11 +10914,13 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
         h('div', {className:'ge-section-head'}, 'Optional Targets'),
         h('div', {className:'form-grid-3'},
           h('div', null, h('label',{className:'form-lbl'},'Target Price'),
-            h(GpInput,{value:form.target_price, placeholder:'Exit price', onChange:v=>setForm(f=>({...f,target_price:v}))})),
+            h(GpInput,{value:form.target_price, placeholder:'Exit price', onChange:v=>setForm(f=>({...f,target_price:v}))}),
+            h(PriceTargetOdds,{items, itemName:form.item_name, target:form.target_price, direction:'above'})),
           h('div', null, h('label',{className:'form-lbl'},'Target Profit %'),
             h('input',{className:'ge-input',type:'number',placeholder:'e.g. 15',value:form.target_profit_pct,onChange:set('target_profit_pct')})),
           h('div', null, h('label',{className:'form-lbl'},'Stop-Loss Price'),
-            h(GpInput,{value:form.stop_loss, placeholder:'Floor price', onChange:v=>setForm(f=>({...f,stop_loss:v}))}))
+            h(GpInput,{value:form.stop_loss, placeholder:'Floor price', onChange:v=>setForm(f=>({...f,stop_loss:v}))}),
+            h(PriceTargetOdds,{items, itemName:form.item_name, target:form.stop_loss, direction:'below'}))
         ),
 
         form.target_price && h('label', {className:'row', style:{gap:8,marginBottom:12,cursor:'pointer',fontSize:11}},
@@ -9370,7 +10938,7 @@ function PositionModal({items, position, onSave, onClose, userShorthands}) {
 }
 
 /* ─── Sell modal ──────────────────────────────────────────────── */
-function SellModal({position, onSell, onClose}) {
+function SellModal({position, item, onSell, onClose}) {
   // Per-item vs. total-sale-price toggle (Ben, 2026-07-31): the GE itself
   // shows an average price per item on the sale summary screen, but
   // logging a position still meant manually dividing that back out by
@@ -9379,17 +10947,24 @@ function SellModal({position, onSell, onClose}) {
   // Both inputs are kept in their own state (not derived from each
   // other) so toggling back and forth doesn't lose what you typed due to
   // rounding.
-  const [priceMode, setPriceMode] = useState('perItem'); // 'perItem' | 'total'
+  const [priceMode, setPriceMode] = useState('perItem'); // 'perItem' | 'total' | 'alch'
   const [sellPrice, setSellPrice] = useState(position.currentPrice || '');
   const [totalPrice, setTotalPrice] = useState('');
   const [qty, setQty] = useState(position.quantity);
   const q = Number(qty);
-  const sp = priceMode === 'total'
+  // High alch (Ben, 2026-10-26): no GE tax, one nature rune per cast, so the
+  // "price" is the alch value minus a nature rune. Offered when the item has one.
+  const alchValue = item?.alch || 0;
+  const naturePrice = item?.natureRunePrice || 0;
+  const alchNet = Math.max(0, alchValue - naturePrice);
+  const isAlch = priceMode === 'alch';
+  const sp = isAlch ? alchNet
+    : priceMode === 'total'
     ? (q > 0 ? Math.round((Number(totalPrice) || 0) / q) : 0)
     : (typeof sellPrice === 'number' ? sellPrice : Number(sellPrice) || 0);
-  const gross = sp * q;
-  const tax   = Math.round(gross * 0.02);
-  const net   = Math.round(sp > 50 ? sp * q * 0.98 : sp * q);
+  const gross = isAlch ? alchValue * q : sp * q;
+  const net   = isAlch ? alchNet * q : saleNet(sp, q);
+  const tax   = isAlch ? 0 : gross - net;
   const cost  = position.cost_basis * q;
   const pl    = net - cost;
 
@@ -9408,12 +10983,12 @@ function SellModal({position, onSell, onClose}) {
   return h('div', {className:'modal-overlay'},
     h('div', {className:'modal'},
       h('div', {className:'modal-header'},
-        h('div', {className:'detail-name', style:{fontSize:15}}, `Sell: ${position.item_name}`),
+        h('div', {className:'detail-name', style:{fontSize:15}}, `${isAlch ? 'Alch' : 'Sell'}: ${position.item_name}`),
         h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:onClose}, 'X')
       ),
       h('div', {className:'modal-body'},
         h('div', {style:{display:'flex', gap:4, marginBottom:10}},
-          ['perItem','total'].map(m => h('button', {
+          ['perItem','total', ...(alchValue > 0 ? ['alch'] : [])].map(m => h('button', {
             key:m, onClick:()=>setPriceMode(m),
             style:{
               padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
@@ -9421,10 +10996,14 @@ function SellModal({position, onSell, onClose}) {
               border: `1px solid ${priceMode===m ? T.gold : T.border}`,
               color: priceMode===m ? T.goldBright : T.textDim,
             }
-          }, m==='perItem' ? 'Price per item' : 'Total sale price'))
+          }, m==='perItem' ? 'Price per item' : m==='total' ? 'Total sale price' : 'High alch'))
         ),
         h('div', {className:'form-grid-2'},
-          priceMode === 'total'
+          isAlch
+            ? h('div', null, h('label',{className:'form-lbl'},'Alch value (per item)'),
+                h('div', {style:{fontSize:13, color:T.gold, padding:'6px 0'}},
+                  `${fmt.gp(alchValue)}gp − ${fmt.gp(naturePrice)}gp nature rune = ${fmt.gp(alchNet)}gp`))
+          : priceMode === 'total'
             ? h('div', null, h('label',{className:'form-lbl'},'Total Sale Price'),
                 h(GpInput,{value:totalPrice, onChange:v=>setTotalPrice(v), placeholder:'Total gp received'}))
             : h('div', null, h('label',{className:'form-lbl'},'Sell Price (per item)'),
@@ -9438,9 +11017,9 @@ function SellModal({position, onSell, onClose}) {
         ),
 
         sp > 0 && h('div', {style:{background:'rgba(0,0,0,0.25)',borderRadius:4,padding:'10px',marginBottom:12}},
-          h('div', {className:'ge-section-head', style:{fontSize:10,marginBottom:6}}, 'What if I sold now?'),
-          [['Gross Sale Value', fmt.gp(gross)+'gp', null],
-           ['GE Tax (2%)',      '-'+fmt.gp(tax)+'gp', T.red],
+          h('div', {className:'ge-section-head', style:{fontSize:10,marginBottom:6}}, isAlch ? 'What if I alched now?' : 'What if I sold now?'),
+          [[isAlch ? 'Alch Value' : 'Gross Sale Value', fmt.gp(gross)+'gp', null],
+           isAlch ? ['Nature Runes', '-'+fmt.gp(naturePrice * q)+'gp', T.red] : ['GE Tax (2%)', '-'+fmt.gp(tax)+'gp', T.red],
            ['Net Proceeds',     fmt.gp(net)+'gp', null],
            ['Cost Basis',       '-'+fmt.gp(cost)+'gp', null],
            ['Net P&L',          (pl>=0?'+':'')+fmt.gp(pl)+'gp', pl>=0?T.green:T.red],
@@ -9453,8 +11032,8 @@ function SellModal({position, onSell, onClose}) {
         h('div', {style:{display:'flex',gap:8,justifyContent:'flex-end'}},
           h('button',{className:'ge-btn',onClick:onClose},'Cancel'),
           h('button',{className:'ge-btn gold',disabled:!sp||sp<=0,
-            onClick:()=>onSell({id:position.id,sell_price:sp,quantity:q})
-          },'Confirm Sale')
+            onClick:()=>onSell({id:position.id,sell_price:sp,quantity:q, ...(isAlch ? {alch:true} : {})})
+          }, isAlch ? 'Confirm Alch' : 'Confirm Sale')
         )
       )
     )
@@ -9467,7 +11046,7 @@ function SellModal({position, onSell, onClose}) {
 // the output item and a real machine-charge cost instead of leaving Ben
 // to type both in and compute the charge cost by hand — the exact
 // reliability gap the Portfolio Convert action was built to close.
-function findConversionRecipe(inputItemName) {
+function findConversionRecipe(inputItemName, items) {
   const nameLower = (inputItemName || '').toLowerCase().trim();
   for (const machine of INVENTION_MACHINES) {
     const conv = machine.conversions.find(c => c.input.toLowerCase() === nameLower);
@@ -9475,15 +11054,27 @@ function findConversionRecipe(inputItemName) {
       return {
         machineLabel: machine.label,
         output: conv.output,
-        costPerUnit: Math.round(machine.chargePerItem * GP_PER_MACHINE_CHARGE),
+        costPerUnit: Math.round(machine.chargePerItem * machineChargeGpRate(items)),
       };
     }
   }
   return null;
 }
 
-function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) {
+function ConvertModal({position, allItems, onConvert, onClose, userShorthands, otherPositions = []}) {
   const [qty, setQty] = useState(position.quantity);
+  // More inputs used up by the same conversion (Ben, 2026-10-26: bolt tips
+  // + bolts fletched together). Each row: one of your other open positions
+  // and how many of it go in.
+  const [extraInputs, setExtraInputs] = useState([]);
+  const addInput = () => {
+    const free = otherPositions.find(p => !extraInputs.some(x => x.id === p.id));
+    // Same amount as the main input by default (1 tip + 1 bolt = 1 tipped bolt).
+    if (free) setExtraInputs(rows => [...rows, {id: free.id, qty: Math.min(free.quantity, Number(qty) || free.quantity)}]);
+  };
+  const setInput = (i, patch) => setExtraInputs(rows => rows.map((r, j) => j === i ? {...r, ...patch} : r));
+  const removeInput = i => setExtraInputs(rows => rows.filter((_, j) => j !== i));
+  const posById = id => otherPositions.find(p => p.id === id);
   const [outputName, setOutputName] = useState('');
   const [outputQty, setOutputQty] = useState('');
   const [extraCosts, setExtraCosts] = useState([{label:'', amount:''}]);
@@ -9498,7 +11089,7 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
   // hard reset" case.
   const [fillVersion, setFillVersion] = useState(0);
 
-  const recipe = useMemo(() => findConversionRecipe(position.item_name), [position.item_name]);
+  const recipe = useMemo(() => findConversionRecipe(position.item_name, allItems), [position.item_name, allItems]);
   // BUG (Ben, 2026-09-15): "Use this" filled Output Quantity and the
   // recipe's charge-cost row as one-time snapshots of Quantity AT CLICK
   // TIME — neither stayed in sync if Quantity was edited afterward (a very
@@ -9538,7 +11129,10 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
   }, [q]);
   const oq = Number(outputQty) || 0;
   const totalExtraCost = extraCosts.reduce((s,r) => s + (Number(r.amount) || 0), 0);
-  const inputCostUsed = position.cost_basis * q;
+  const inputCostUsed = position.cost_basis * q + extraInputs.reduce((s, r) => {
+    const p = posById(r.id);
+    return s + (p ? p.cost_basis * Math.min(Number(r.qty) || 0, p.quantity) : 0);
+  }, 0);
   const totalCost = inputCostUsed + totalExtraCost;
   const newCostBasis = oq > 0 ? Math.round(totalCost / oq) : 0;
 
@@ -9564,6 +11158,21 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
             h(QtyInput,{value:qty, min:1, max:position.quantity, onChange:v=>setQty(v)})),
           h('div', null, h('label',{className:'form-lbl'},'Output item'),
             h(ItemAutocomplete,{items:allItems, value:outputName, onChange:setOutputName, placeholder:'Search item...', userShorthands}))
+        ),
+        h('div', {style:{marginBottom:12}},
+          extraInputs.length > 0 && h('label',{className:'form-lbl'},'Also used up in this conversion'),
+          extraInputs.map((r, i) => {
+            const p = posById(r.id);
+            return h('div', {key:i, style:{display:'flex', gap:6, marginBottom:6, alignItems:'center'}},
+              h('select', {className:'ge-input', style:{flex:1}, value:r.id,
+                onChange:e => { const np = posById(e.target.value); setInput(i, {id: e.target.value, qty: np ? Math.min(np.quantity, Number(qty) || np.quantity) : r.qty}); }},
+                otherPositions.filter(o => o.id === r.id || !extraInputs.some(x => x.id === o.id)).map(o =>
+                  h('option', {key:o.id, value:o.id}, `${o.item_name} (${o.quantity.toLocaleString()} @ ${fmt.gp(o.cost_basis)}gp)`))),
+              h(QtyInput, {value:r.qty, min:1, max:p ? p.quantity : 1, onChange:v => setInput(i, {qty: v})}),
+              h('button', {className:'ge-btn danger', style:{padding:'2px 8px', fontSize:11}, onClick:() => removeInput(i)}, '×'));
+          }),
+          otherPositions.length > extraInputs.length && h('button', {className:'ge-btn', style:{fontSize:11, padding:'3px 10px'}, onClick:addInput,
+            title:'For conversions that use up more than one item, like bolt tips + bolts fletched together'}, '+ Add another input')
         ),
         h('div', {style:{marginBottom:12}},
           h('label',{className:'form-lbl'},'Output quantity'),
@@ -9592,7 +11201,8 @@ function ConvertModal({position, allItems, onConvert, onClose, userShorthands}) 
         h('div', {style:{display:'flex',gap:8,justifyContent:'flex-end'}},
           h('button',{className:'ge-btn',onClick:onClose},'Cancel'),
           h('button',{className:'ge-btn gold',disabled:!outputName||oq<=0||q<=0,
-            onClick:()=>onConvert({id:position.id, quantity:q, outputItemName:outputName, outputQuantity:oq, extraCost:totalExtraCost})
+            onClick:()=>onConvert({id:position.id, quantity:q, outputItemName:outputName, outputQuantity:oq, extraCost:totalExtraCost,
+              extraInputs: extraInputs.map(r => ({id: r.id, quantity: Number(r.qty) || 0}))})
           },'Confirm Conversion')
         )
       )
@@ -9646,7 +11256,7 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
+function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
   // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
   // chart already respects (Ben, 2026-09-09: "can we add dates to the
   // sales too" — the existing "Sold At / Converted" column was misnamed;
@@ -9678,6 +11288,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
   const [sellModal,   setSellModal]   = useState(null);
   const [convertModal, setConvertModal] = useState(null);
   const [showClosed,  setShowClosed]  = useState(true);
+  // Closed Positions sort (Ben, 2026-10-16): click a header; again to reverse.
+  const [closedSort, setClosedSort] = useState({key: 'date', dir: -1});
   const [ctxMenu,     setCtxMenu]     = useState(null); // {x, y, pos}
   const [allocView,   setAllocView]   = useState('item'); // 'item' | 'category'
   const [tierModal,   setTierModal]   = useState(null); // 'investor' | 'tradeCount' | null
@@ -9703,20 +11315,172 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const currentPrice = item
       ? (priceMode === 'live' ? (item.liveBuy ?? item.liveSell ?? item.high ?? item.low ?? 0) : (item.high || item.low || 0))
       : 0;
+    // Removed from the GE: worth 0 here (Ben, 2026-10-28: it can't be sold
+    // any more, so -100% is honest), but labelled so it doesn't look like a bug.
+    const removed = !item && (removedItems || []).find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
     const currentValue = currentPrice * pos.quantity;
     const costValue    = pos.cost_basis * pos.quantity;
     const grossPL      = currentValue - costValue;
-    const tax          = Math.round(currentValue * 0.02);
+    const tax          = currentValue - saleNet(currentPrice, pos.quantity);
     const netPL        = grossPL - tax;
     const plPct        = costValue > 0 ? (grossPL / costValue) * 100 : 0;
     const targetDist   = pos.target_price ? pos.target_price - currentPrice : null;
     const stopDist     = pos.stop_loss    ? currentPrice - pos.stop_loss    : null;
     const category      = item?.categories?.[0] || 'misc';
-    return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category};
-  }), [positions, items, priceMode]);
+    return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category, removedItem: removed || null};
+  }), [positions, items, removedItems, priceMode]);
 
   const openPos   = enriched.filter(p => p.status !== 'sold' && p.status !== 'converted');
   const closedPos = enriched.filter(p => p.status === 'sold' || p.status === 'converted');
+
+  // Closed trades grouped by item (Ben, 2026-10-20): one row per item with
+  // its totals, and a chevron to open the individual trades. Repeat trades
+  // (shards, bombs) used to fill the list with near-identical rows.
+  const tradeQty = p => p.status === 'converted' ? (p.converted_quantity || 0) : (p.sold_quantity || p.quantity || 0);
+  const tradeDate = p => String(p.sold_at || p.converted_at || p.created_at || '');
+  const tradeTax = p => p.status === 'converted' || p.sold_via === 'alch' ? 0 : (p.sold_price || 0) * tradeQty(p) - saleNet(p.sold_price || 0, tradeQty(p));
+  const tradeCost = p => (p.cost_basis || 0) * tradeQty(p);
+  const tradeReturn = p => p.status === 'converted' || !tradeCost(p) ? null : (p.realized_pl || 0) / tradeCost(p) * 100;
+  const closedGroups = useMemo(() => {
+    const by = {};
+    for (const p of closedPos) (by[(p.item_name || '').toLowerCase()] ||= []).push(p);
+    return Object.values(by).map(trades => {
+      trades.sort((a, b) => tradeDate(b).localeCompare(tradeDate(a)));
+      const sales = trades.filter(p => p.status !== 'converted');
+      const cost = sales.reduce((t, p) => t + tradeCost(p), 0);
+      const pl = sales.reduce((t, p) => t + (p.realized_pl || 0), 0);
+      return { key: (trades[0].item_name || '').toLowerCase(), name: trades[0].item_name, trades, sales,
+        qty: trades.reduce((t, p) => t + tradeQty(p), 0), pl,
+        wins: sales.filter(p => (p.realized_pl || 0) > 0).length,
+        ret: cost ? pl / cost * 100 : null,
+        tax: sales.reduce((t, p) => t + tradeTax(p), 0),
+        last: tradeDate(trades[0]) };
+    });
+  }, [closedPos]);
+  const [openGroups, setOpenGroups] = useState({});
+  const groupVal = (g, key) => {
+    switch (key) {
+      case 'item': return g.key;
+      case 'qty':  return g.qty;
+      case 'win':  return g.sales.length ? g.wins / g.sales.length : -1;
+      case 'ret':  return g.ret ?? -Infinity;
+      case 'tax':  return g.tax;
+      case 'pl':   return g.pl;
+      default:     return g.last;
+    }
+  };
+  const sortedGroups = [...closedGroups].sort((a, b) => {
+    const av = groupVal(a, closedSort.key), bv = groupVal(b, closedSort.key);
+    const c = typeof av === 'string' ? av.localeCompare(bv) : av - bv;
+    return c * closedSort.dir;
+  });
+  // Text columns start A-Z; numbers and dates start biggest/newest first.
+  const toggleClosedSort = key => setClosedSort(s => s.key === key ? {key, dir: -s.dir} : {key, dir: key === 'item' ? 1 : -1});
+  const closedTh = (key, label) => h('th', {onClick: () => toggleClosedSort(key), style:{cursor:'pointer'}},
+    label + (closedSort.key === key ? (closedSort.dir > 0 ? ' ↑' : ' ↓') : ''));
+
+  // Recovery numbers (Ben, 2026-10-06): for a losing position, the sell
+  // price that breaks even after GE tax, how far away that is, and when the
+  // item last actually traded at or above it (saved history + daily
+  // snapshots). Turns "I hope it comes back" into something checkable.
+  const breakEvenPrice = cost => {
+    const untaxed = Math.ceil(cost);
+    return untaxed < 50 ? untaxed : Math.ceil(cost / 0.98);
+  };
+  const losers = openPos.filter(p => p.netPL < 0 && p.currentPrice > 0);
+  const losersKey = losers.map(p => p.id + ':' + breakEvenPrice(p.cost_basis)).join('|');
+  const [lastSeen, setLastSeen] = useState({});
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      const out = {};
+      for (const p of losers) {
+        const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
+        if (!it) continue;
+        const be = breakEvenPrice(p.cost_basis);
+        const [hist, snaps] = await Promise.all([
+          window.genius?.getItemHistoryLocal(it.id).catch(() => null),
+          window.genius?.getPriceSnapshots(it.id).catch(() => null),
+        ]);
+        let last = null, first = null;
+        for (const pt of [...(hist || []), ...(snaps || [])]) {
+          const ts = pt.timestamp > 1e12 ? pt.timestamp : pt.timestamp * 1000;
+          if (first == null || ts < first) first = ts;
+          if (pt.price >= be && (last == null || ts > last)) last = ts;
+        }
+        out[p.id] = { last, first };
+      }
+      if (!stale) setLastSeen(out);
+    })();
+    return () => { stale = true; };
+  }, [losersKey]);
+
+  // "Since you bought it" (Ben, 2026-10-06): the price range an open
+  // position has seen since its Date Opened — highest/lowest daily GE price,
+  // the best net profit you could have taken (at that high, after tax), and
+  // the worst point it's been underwater. Daily GE guide prices (history +
+  // snapshots), so a brief intraday spike won't show.
+  const openKey = openPos.map(p => p.id + ':' + (p.date_opened || p.created_at)).join('|');
+  const [sinceBought, setSinceBought] = useState({});
+  useEffect(() => {
+    let stale = false;
+    (async () => {
+      const out = {};
+      for (const p of openPos) {
+        const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
+        if (!it || it.untradeable) continue;
+        const opened = new Date(p.date_opened || p.created_at).getTime();
+        if (!opened) continue;
+        const days = (await loadDailyPrices(it.id)).filter(d => d.ts >= opened - 86400000);
+        if (!days.length) continue;
+        let hi = days[0], lo = days[0];
+        for (const d of days) { if (d.price > hi.price) hi = d; if (d.price < lo.price) lo = d; }
+        out[p.id] = { hi, lo };
+      }
+      if (!stale) setSinceBought(out);
+    })();
+    return () => { stale = true; };
+  }, [openKey]);
+
+  const sinceBoughtCell = pos => {
+    const sb = sinceBought[pos.id];
+    if (!sb) return h('td', {style:{color:T.textDim}}, '—');
+    // Shown PER ITEM: a position stores one quantity + one average cost, not
+    // when each unit was bought, so a "best total" would wrongly assume
+    // today's full quantity was already held back then (Ben: had 200k
+    // vulnerability bombs at the March high, not today's 300k). Totals stay
+    // in the tooltip, labelled as using the current quantity.
+    const cost = pos.cost_basis * pos.quantity;
+    const bestPL = saleNet(sb.hi.price, pos.quantity) - cost;
+    const worstPL = saleNet(sb.lo.price, pos.quantity) - cost;
+    const bestEa = applyTax(sb.hi.price) - pos.cost_basis;
+    const worstEa = applyTax(sb.lo.price) - pos.cost_basis;
+    const d = x => new Date(x.ts).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+    return h('td', {title:`Since you bought (daily GE prices):\nHigh ${sb.hi.price.toLocaleString()}gp on ${d(sb.hi)}: ${bestEa >= 0 ? '+' : ''}${Math.round(bestEa).toLocaleString()}gp per item after tax (${bestPL >= 0 ? '+' : ''}${Math.round(bestPL).toLocaleString()}gp if you'd held your current quantity).\nLow ${sb.lo.price.toLocaleString()}gp on ${d(sb.lo)}: ${worstEa >= 0 ? '+' : ''}${Math.round(worstEa).toLocaleString()}gp per item (${worstPL >= 0 ? '+' : ''}${Math.round(worstPL).toLocaleString()}gp with your current quantity).`},
+      // Condensed to one line (Ben, 2026-10-12: table scrolled sideways);
+      // best/worst per item are in the tooltip above.
+      h('div', {style:{fontSize:11, whiteSpace:'nowrap'}}, h('span', {style:{color:T.green}}, '▲ ' + fmt.gp(sb.hi.price)), ' ', h('span', {style:{color:T.red}}, '▼ ' + fmt.gp(sb.lo.price))));
+  };
+
+  const breakEvenCell = pos => {
+    if (!(pos.currentPrice > 0)) return h('td', {style:{color:T.textDim}}, '—');
+    if (pos.netPL >= 0) return h('td', {style:{color:T.textDim}, title:'Already at or above break-even after tax'}, '✓');
+    const be = breakEvenPrice(pos.cost_basis);
+    const needs = (be - pos.currentPrice) / pos.currentPrice * 100;
+    const seen = lastSeen[pos.id];
+    let seenText = '…';
+    if (seen) {
+      if (seen.last != null) {
+        const days = Math.floor((Date.now() - seen.last) / 86400000);
+        seenText = days < 1 ? 'last seen today' : days === 1 ? 'last seen yesterday' : `last seen ${days}d ago`;
+      } else {
+        seenText = seen.first ? `never reached since ${new Date(seen.first).toLocaleDateString(undefined, {month:'short', year:'numeric'})}` : 'no price history';
+      }
+    }
+    return h('td', {title:`Sell at ${be.toLocaleString()}gp or more to break even after the 2% GE tax. Needs +${needs.toFixed(1)}% from now; ${seenText}.`},
+      h('div', {style:{whiteSpace:'nowrap'}}, fmt.gp(be) + 'gp'),
+      h('div', {style:{fontSize:10, whiteSpace:'nowrap'}}, h('span', {style:{color:T.red}}, '+' + needs.toFixed(1) + '%'), h('span', {style:{color:T.textDim}}, ' · ' + seenText.replace('last seen ', ''))));
+  };
 
   const totalInvested = openPos.reduce((s,p) => s+p.costValue, 0);
   const totalCurrent  = openPos.reduce((s,p) => s+p.currentValue, 0);
@@ -9827,6 +11591,84 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       ms.push({ icon:'✨', label:'Flawless', value: isCurrentlyFlawless ? closedSales.length+' for '+closedSales.length : 'Best streak: '+bestStreak, sub: isCurrentlyFlawless ? 'Every trade profitable' : 'Streak broken — best was '+bestStreak, dimmed: !isCurrentlyFlawless });
     return ms;
   }, [closedPos, totalCurrent]);
+
+  // Consolation Prizes (Ben, 2026-10-02): the loss-side mirror of the
+  // Achievements above, sparked by a 2.42B-unrealized Magic frame position
+  // ("we should have added some achievements for GP losses, too").
+  // Deliberately lives in its own panel rather than interrupting with
+  // toasts — a notification roasting you the moment you take a loss is
+  // funny once. Only badges derivable from data GEnius already stores
+  // (closed trades, open positions' cost basis/open date, live prices) —
+  // add-to-position history isn't tracked (a position is one quantity +
+  // one cost basis), so "Catching Knives"/"Sunk Cost Fallacy"-style badges
+  // are intentionally not here. Open positions with no current price are
+  // excluded: an untracked item prices at 0, which would read as a fake
+  // -100% and hand out Red Wedding/Stop the Count for free.
+  const consolationPrizes = useMemo(() => {
+    const out = [];
+    const sales = closedPos.filter(p => p.status === 'sold');
+    const pricedOpen = openPos.filter(p => p.currentPrice > 0);
+    const plOf = p => p.realized_pl || 0;
+    const saleCost = p => (p.cost_basis || 0) * (p.sold_quantity || p.quantity || 0);
+    const daysHeld = p => Math.floor((Date.now() - new Date(p.date_opened || p.created_at).getTime()) / 86400000);
+    const losses = sales.filter(p => plOf(p) < 0);
+
+    // Biggest single realized loss — highest tier earned only
+    const worstSale = losses.reduce((w, p) => (!w || plOf(p) < plOf(w)) ? p : w, null);
+    if (worstSale && plOf(worstSale) <= -1e9)
+      out.push({ icon:'🎮', label:'Skill Issue', value: fmt.gp(plOf(worstSale))+'gp', sub: `${worstSale.item_name} — no explanation necessary` });
+    else if (worstSale && plOf(worstSale) <= -100e6)
+      out.push({ icon:'🧾', label:'Tax Write-Off', value: fmt.gp(plOf(worstSale))+'gp', sub: `${worstSale.item_name} — the accountant says it's fine` });
+
+    // Worst streak of consecutive losing sales
+    let worstStreak = 0, runStreak = 0;
+    const salesBySellDate = [...sales].sort((a, b) => new Date(a.sold_at || a.date_opened || 0) - new Date(b.sold_at || b.date_opened || 0));
+    for (const p of salesBySellDate) {
+      if (plOf(p) < 0) { runStreak++; worstStreak = Math.max(worstStreak, runStreak); }
+      else runStreak = 0;
+    }
+    if (worstStreak >= 3)
+      out.push({ icon:'📉', label:'Statistically Impressive', value:'Worst streak: '+worstStreak, sub:'Consistency is a skill' });
+
+    // Losses spread across many different items
+    const lostItems = new Set(losses.map(p => p.item_name));
+    if (lostItems.size >= 10)
+      out.push({ icon:'🔬', label:'Market Research', value: lostItems.size+' items', sub:"You're not losing gp, you're gathering data" });
+
+    // Lifetime gross realized losses
+    const grossLosses = losses.reduce((s, p) => s + plOf(p), 0);
+    if (grossLosses <= -500e6)
+      out.push({ icon:'🧠', label:'GEnius Investor', value: fmt.gp(grossLosses)+'gp', sub:'Lifetime realized losses — the app turns its own name against you' });
+
+    // Every open position red at once (min 5 so one item can't cheese it)
+    if (pricedOpen.length >= 5 && pricedOpen.every(p => p.plPct < 0))
+      out.push({ icon:'🩸', label:'Red Wedding', value: pricedOpen.length+' for '+pricedOpen.length, sub:'Every open position is in the red. Nobody survived' });
+
+    // Big unrealized hole across the whole portfolio
+    const pricedUnrealized = pricedOpen.reduce((s, p) => s + (p.currentValue - p.costValue), 0);
+    if (pricedUnrealized <= -1e9)
+      out.push({ icon:'🛑', label:'Stop the Count', value: fmt.gp(pricedUnrealized)+'gp', sub:'Unrealized. The counter has been unplugged' });
+
+    // Held a loser for a long time
+    const longHolds = pricedOpen.filter(p => p.plPct <= -10 && daysHeld(p) >= 90);
+    if (longHolds.length) {
+      const w = longHolds.reduce((a, p) => daysHeld(p) > daysHeld(a) ? p : a);
+      out.push({ icon:'🕰️', label:"Now It's a Long-Term Investment", value: daysHeld(w)+' days', sub:`${w.item_name} — it's fine, it's a long-term hold` });
+    }
+
+    // Chain: It's Only a Loss If You Sell -> Narrator: He Sold
+    const deepRed = pricedOpen.filter(p => p.plPct <= -50);
+    if (deepRed.length) {
+      const w = deepRed.reduce((a, p) => p.plPct < a.plPct ? p : a);
+      out.push({ icon:'🙈', label:"It's Only a Loss If You Sell", value: w.plPct.toFixed(1)+'%', sub:`${w.item_name} — technically true` });
+    }
+    const soldDeep = losses.filter(p => saleCost(p) > 0 && plOf(p) / saleCost(p) <= -0.5);
+    if (soldDeep.length) {
+      const w = soldDeep.reduce((a, p) => plOf(p) < plOf(a) ? p : a);
+      out.push({ icon:'🎙️', label:'Narrator: He Sold', value: fmt.gp(plOf(w))+'gp', sub:`${w.item_name} — it was only a loss once he sold` });
+    }
+    return out;
+  }, [closedPos, openPos]);
 
   // Realized P&L grouped by item — a higher-level summary of the Closed
   // Positions table below (which is per-TRADE, not per-item), so "which
@@ -9994,44 +11836,46 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
             'Sold positions move to the history section below.'
           )
         )
-      : h('table',{className:'ge-table'},
+      : h('table',{className:'ge-table pt-portfolio'},
           h('thead',null, h('tr',null,
-            h('th',null,'Item'), h('th',null,'Qty'), h('th',null,'Cost/ea'),
-            h('th',{title: priceMode==='ge' ? 'GE (listed) price' : 'Live buy/sell price'}, priceMode==='ge'?'Current (GE)':'Current (Live)'), h('th',null,'Value'),
-            h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax.'},'Net P&L'),
-            h('th',{title:'The same P&L as a percentage of what you paid — useful for comparing positions of very different sizes at a glance.'},'P&L %'),
-            h('th',null,'Held'), h('th',null,'Target'), h('th',null,'')
+            h('th',null,'Item'), h('th',{title:'Quantity, and what you paid per item'},'Qty @ cost'),
+            h('th',{title: (priceMode==='ge' ? 'GE (listed)' : 'Live buy/sell') + ' price per item, and the whole position\'s value'}, priceMode==='ge'?'Price / value (GE)':'Price / value (Live)'),
+            h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'},'Net P&L'),
+            h('th',{title:'The sell price that breaks even after GE tax, how far away it is, and when the item last traded that high'},'Break-even'),
+            h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
+            h('th',{title:'How long you\'ve held it, and your target price'},'Held / target'), h('th',null,'')
           )),
           h('tbody',null, openPos.map(pos =>
             h('tr',{key:pos.id},
               h('td',{
                 style: onSelect ? {cursor:'pointer', color:T.gold} : null,
                 onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
-              }, pos.item_name),
-              h('td',null,pos.quantity.toLocaleString()),
-              h('td',null,fmt.gp(pos.cost_basis)+'gp'),
-              h('td',{style:{color:T.gold}},fmt.gp(pos.currentPrice)+'gp'),
-              h('td',null,fmt.gp(pos.currentValue)+'gp'),
-              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'),
-              h('td',{className:pos.plPct>=0?'pct-up':'pct-down'},fmt.pct(pos.plPct)),
-              h('td',{style:{color:T.textDim}},(() => {
-                const d = pos.date_opened || pos.created_at;
-                if (!d) return '—';
-                const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-                return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
-              })()),
-              h('td',{style:{color:pos.target_price?(pos.currentPrice>=pos.target_price?T.green:T.textDim):T.textDim}},
-                pos.target_price ? fmt.gp(pos.target_price)+'gp' : '—'),
+              }, pos.item_name,
+                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER'),
+                pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem})),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
+              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
+              breakEvenCell(pos),
+              sinceBoughtCell(pos),
+              h('td',null,
+                h('div',{style:{color:T.textDim, whiteSpace:'nowrap'}},(() => {
+                  const d = pos.date_opened || pos.created_at;
+                  if (!d) return '—';
+                  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+                  return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
+                })()),
+                pos.target_price ? h('div',{style:{fontSize:10, whiteSpace:'nowrap', color:pos.currentPrice>=pos.target_price?T.green:T.textDim}},'→ '+fmt.gp(pos.target_price)+'gp') : null),
               h('td',null,
                 h('div',{style:{display:'flex',gap:3}},
-                  h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10},
-                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'Edit'),
-                  h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
+                  h('button',{className:'ge-btn',title:'Edit',style:{padding:'2px 5px',fontSize:11},
+                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'✎'),
+                  h('button',{className:'ge-btn',title:'Sell',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
                     onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
-                  h('button',{className:'ge-btn',style:{padding:'2px 6px',fontSize:10,borderColor:T.blue},
-                    onClick:()=>setConvertModal(pos)},'Convert'),
-                  h('button',{className:'ge-btn danger',style:{padding:'2px 6px',fontSize:10},
-                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'Del')
+                  h('button',{className:'ge-btn',title:'Convert into another item',style:{padding:'2px 5px',fontSize:11,borderColor:T.blue},
+                    onClick:()=>setConvertModal(pos)},'⇄'),
+                  h('button',{className:'ge-btn danger',title:'Delete position',style:{padding:'2px 5px',fontSize:11},
+                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'✕')
                 )
               )
             )
@@ -10240,10 +12084,27 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
       )
     ),
 
+    consolationPrizes.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
+      h('div',{className:'ge-section-head', title:'The loss-side Achievements. Earned the hard way.'},'Consolation Prizes'),
+      h('div',{style:{display:'flex',flexWrap:'wrap',gap:8}},
+        consolationPrizes.map((m,i) => h('div',{key:i,style:{
+          display:'flex',flexDirection:'column',alignItems:'center',gap:3,
+          padding:'8px 12px',borderRadius:4,minWidth:68,maxWidth:190,
+          border:`1.5px solid ${T.red}`,
+          background:'rgba(229,57,53,0.08)',
+        }},
+          h('div',{style:{fontSize:20}},m.icon),
+          h('div',{style:{fontSize:11,fontWeight:'bold',color:T.red,textAlign:'center'}},m.label),
+          m.value && h('div',{style:{fontSize:12,fontWeight:'bold',color:T.textBright,marginTop:1}},m.value),
+          h('div',{style:{fontSize:10,color:T.textDim,marginTop:1,textAlign:'center'}},m.sub),
+        ))
+      )
+    ),
+
     realizedByItem.length > 0 && h('div',{style:{padding:'12px',borderTop:`1px solid ${T.border}`}},
       h('div',{className:'ge-section-head'},'Realized P&L by Item'),
       h('div',{className:'ge-table-wrap'},
-        h('table',{className:'ge-table'},
+        h('table',{className:'ge-table pt-realized'},
           h('thead',null,h('tr',null,
             h('th',null,'Item'), h('th',null,'Trades'), h('th',null,'Qty'),
             h('th',null,'Realized P&L'),
@@ -10276,33 +12137,52 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
         h('div',{className:'ge-section-head',style:{margin:0}},`Closed Positions (${closedPos.length})`),
         h('span',{style:{color:T.textDim}},showClosed?'▲':'▼')
       ),
-      showClosed && h('table',{className:'ge-table'},
-        h('thead',null,h('tr',null,
-          h('th',null,'Item'),h('th',null,'Qty'),h('th',null,'Cost/ea'),
-          h('th',null,'Sold Price / Converted'),
-          h('th',null,'Date'),
-          h('th',{title:'Profit & Loss already locked in on this sale, after GE tax. Conversions have no realized P&L — no cash changed hands, the cost basis just carried forward to the new item.'},'Realized P&L')
-        )),
-        h('tbody',null, closedPos.map(pos=>
-          h('tr',{key:pos.id,
-            onClick: () => { setEditPos(pos); setShowModal(true); },
-            onContextMenu: e => { e.preventDefault(); setCtxMenu({x:e.clientX, y:e.clientY, pos}); },
-            style:{cursor:'pointer'},
-          },
-            h('td',null,pos.item_name),
-            h('td',null,(pos.status==='converted' ? pos.converted_quantity : pos.sold_quantity||pos.quantity).toLocaleString()),
-            h('td',null,fmt.gp(pos.cost_basis)+'gp'),
-            pos.status==='converted'
-              ? h('td',{style:{color:T.blue}},`→ ${pos.converted_to}`)
-              : h('td',{style:{color:T.gold}},fmt.gp(pos.sold_price||0)+'gp'),
-            h('td',{style:{color:T.textDim}}, fmtPosDate(pos.status==='converted' ? pos.converted_at : pos.sold_at)),
-            pos.status==='converted'
-              ? h('td',{style:{color:T.textDim}},'—')
-              : h('td',{className:(pos.realized_pl||0)>=0?'pct-up':'pct-down'},
-                  (pos.realized_pl>=0?'+':'')+fmt.gp(pos.realized_pl||0)+'gp')
-          )
-        ))
-      )
+      showClosed && (() => {
+        const pctTd = v => v == null ? h('td',{style:{color:T.textDim}},'—') : h('td',{className: v >= 0 ? 'pct-up' : 'pct-down'}, (v > 0 ? '+' : '') + v.toFixed(1) + '%');
+        const plTd = v => h('td',{className: v >= 0 ? 'pct-up' : 'pct-down'}, (v >= 0 ? '+' : '') + fmt.gp(v) + 'gp');
+        const thSort = (key, label, title) => h('th',{onClick:()=>toggleClosedSort(key), style:{cursor:'pointer'}, title},
+          label + (closedSort.key === key ? (closedSort.dir > 0 ? ' ↑' : ' ↓') : ''));
+        // Clicking a single trade edits it; right-click deletes, as before.
+        const openTrade = pos => ({ onClick: e => { e.stopPropagation(); setEditPos(pos); setShowModal(true); },
+          onContextMenu: e => { e.preventDefault(); e.stopPropagation(); setCtxMenu({x:e.clientX, y:e.clientY, pos}); } });
+        const rows = [];
+        for (const g of sortedGroups) {
+          const many = g.trades.length > 1, open = many && openGroups[g.key];
+          // One-trade items: the row IS the trade.
+          const rowProps = many ? { onClick: () => setOpenGroups(o => ({...o, [g.key]: !o[g.key]})) } : openTrade(g.trades[0]);
+          rows.push(h('tr',{key:'g_'+g.key, ...rowProps, style:{cursor:'pointer'}},
+            h('td',null,
+              h('span',{style:{display:'inline-block', width:16, color:T.textDim}}, many ? (open ? '▾' : '▸') : ''),
+              g.name,
+              h('span',{style:{marginLeft:8, fontSize:11, color:T.textDim}}, g.trades.length + ' trade' + (many ? 's' : ''))),
+            h('td',null, g.qty.toLocaleString()),
+            h('td',{style:{color:T.textDim}}, g.sales.length ? g.wins + ' of ' + g.sales.length : '—'),
+            pctTd(g.ret),
+            h('td',{style:{color:T.textDim}}, g.tax ? fmt.gp(g.tax) + 'gp' : '—'),
+            h('td',{style:{color:T.textDim}}, fmtPosDate(g.last)),
+            g.sales.length ? plTd(g.pl) : h('td',{style:{color:T.blue}}, '→ ' + g.trades[0].converted_to)));
+          if (open) for (const p of g.trades) {
+            const conv = p.status === 'converted';
+            rows.push(h('tr',{key:p.id, ...openTrade(p), style:{cursor:'pointer', background:T.inset, fontSize:12}},
+              h('td',{style:{paddingLeft:28, color:T.textDim}}, conv ? 'Converted' : (p.sold_via === 'alch' ? 'Alched @ ' : 'Sold @ ') + fmt.gp(p.sold_price || 0) + 'gp',
+                h('span',{style:{marginLeft:8, fontSize:11}}, 'cost ' + fmt.gp(p.cost_basis) + 'gp')),
+              h('td',null, tradeQty(p).toLocaleString()),
+              h('td',null),
+              pctTd(tradeReturn(p)),
+              h('td',{style:{color:T.textDim}}, conv ? '—' : fmt.gp(tradeTax(p)) + 'gp'),
+              h('td',{style:{color:T.textDim}}, fmtPosDate(conv ? p.converted_at : p.sold_at)),
+              conv ? h('td',{style:{color:T.blue}}, '→ ' + p.converted_to) : plTd(p.realized_pl || 0)));
+          }
+        }
+        return h('table',{className:'ge-table pt-closed'},
+          h('thead',null,h('tr',null,
+            closedTh('item', 'Item'), closedTh('qty', 'Traded'),
+            thSort('win', 'Win rate', 'Sales that made a profit, out of all sales of this item'),
+            thSort('ret', 'Avg return', 'Total realized P&L as a % of the gp you paid for what you sold'),
+            closedTh('tax', 'Tax paid'), closedTh('date', 'Last closed'),
+            thSort('pl', 'Total P&L', 'Profit & Loss locked in on these sales, after GE tax. Conversions have no realized P&L: no cash changed hands, the cost basis carried forward to the new item.'))),
+          h('tbody',null, rows));
+      })()
     ),
 
     // Closed position context menu
@@ -10349,13 +12229,15 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     // Modals
     showModal && h(PositionModal, {items, position:editPos, onClose:()=>{setShowModal(false);setEditPos(null);}, onSave:handleSave, userShorthands}),
     sellModal  && h(SellModal,    {position:sellModal, onClose:()=>setSellModal(null),
+      item: items.find(it => it.name.toLowerCase() === (sellModal.item_name || '').toLowerCase()),
       onSell: async (opts) => {
         const res = await onSellPosition(opts);
         setSellModal(null);
-        if (res?.success) toast(`Sold! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
+        if (res?.success) toast(`${opts.alch ? 'Alched' : 'Sold'}! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
       }
     }),
     convertModal && h(ConvertModal, {position:convertModal, allItems:items, userShorthands, onClose:()=>setConvertModal(null),
+      otherPositions: openPos.filter(p => p.id !== convertModal.id),
       onConvert: async (opts) => {
         const res = await onConvertPosition(opts);
         setConvertModal(null);
@@ -10509,7 +12391,9 @@ function HistoryPopup({state, onDismiss}) {
     ),
 
     fullyComplete && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10}},
-      'All GE items have price history. You\'re fully loaded.'
+      state.unavailable && stored < total
+        ? `${stored.toLocaleString()} items have price history. ${state.unavailable} (usually brand-new items) have none available yet — GEnius will try them again tomorrow.`
+        : 'All GE items have price history. You\'re fully loaded.'
     ),
 
     h('div', {style:{background:'rgba(0,0,0,0.3)', borderRadius:3, height:6, overflow:'hidden'}},
@@ -10812,7 +12696,7 @@ function ScoreTable({rows, selected, onSelect}) {
       h('span', {style:{fontSize:10,color:T.textDim}}, '— composite score combining momentum, volume, signals, and alch profit'),
     ),
     h('div', {className:'ge-table-wrap'},
-      h('table', {className:'ge-table'},
+      h('table', {className:'ge-table pt-score'},
         h('thead', null, h('tr', null, headers.map((hd,i) =>
           h('th', {key:i, style:{cursor: i < 5 ? 'pointer' : 'default', userSelect:'none'}, onClick:()=>i<5&&onHeader(i)},
             hd, sortCol===i ? (sortAsc?' ▲':' ▼') : ''
@@ -10927,7 +12811,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
         desc && h('span', {style:{fontSize:10,color:T.textDim}}, desc)
       ),
       h('div', {className:'ge-table-wrap'},
-        h('table', {className:'ge-table'},
+        h('table', {className:'ge-table pt-opps'},
           h('thead', null, h('tr', null, headers.map((hd,i) => {
             const sortable = sortKeys && sortKeys[i];
             return h('th', {key:i, style:{cursor:sortable?'pointer':'default', userSelect:'none'}, onClick:()=>onHeader(i)},
@@ -11413,14 +13297,14 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
           }
         }, v==='flips' ? `Flips (${flips.length.toLocaleString()})` : `Flagged (${flagged.length.toLocaleString()})`))
       ),
-      pillTab === 'flagged' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      pillTab === 'flagged' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `Items that look like a huge margin on paper but got excluded from Flips for a spread-sanity reason — a stale isolated print, one side badly overpaid relative to the other, or a price well past what the item is actually worth. Kept visible here instead of silently vanishing, since knowing WHY something's excluded beats it just not being there.`
       ),
       pillTab === 'flagged' && (
         flagged.length === 0
           ? h('div', {className:'empty'}, h('div', {className:'icon'}, '◎'), h('p', null, 'Nothing currently flagged for a spread-sanity issue.'))
           : h('div', {className:'ge-table-wrap'},
-              h('table', {className:'ge-table'},
+              h('table', {className:'ge-table pt-flagged'},
                 h('thead', null, h('tr', null,
                   h('th', null, 'Item'), h('th', null, 'Buy'), h('th', null, 'Sell'),
                   h('th', null, 'GE Price'), h('th', null, 'Volume'), h('th', null, 'Why it\'s flagged'),
@@ -11438,7 +13322,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
               )
             )
       ),
-      pillTab === 'flips' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      pillTab === 'flips' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `${flips.length.toLocaleString()} items with a live buy/sell spread worth flipping (${sorted.length.toLocaleString()} shown at the current profit filter). Margin = instabuy minus 2% GE tax, minus instasell — the real spread available right now, not just today's price change. Excludes low-volume items (near-zero-volume items let a single fluke print swing the numbers wildly), sell prices dumped too far under the item's GE price, prices that are stale relative to how often this specific item normally trades (6-48 hours depending on its typical volume — a single old instant-buy print nobody's matched since, not something you could actually get filled at now), one side badly overpaid relative to the other, a huge volume spike on an item that barely trades at all normally (a wash-trade signature), and — for items where alching is basically the whole economic purpose — buy prices well above what alching that item is actually worth. A genuine high-volume demand spike is allowed through even far above GE price.`
       ),
       pillTab === 'flips' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
@@ -11459,7 +13343,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
             flips.length === 0 ? 'No live flip data available yet — give the app a moment to fetch it.' : 'No items meet this profit filter — try lowering it.'
           ))
         : h('div', {className:'ge-table-wrap'},
-            h('table', {className:'ge-table'},
+            h('table', {className:'ge-table pt-flips'},
               h('thead', null, h('tr', null,
                 h('th', {onClick:()=>tog('name'), style:{cursor:'pointer'}}, 'Item'+arrow('name')),
                 h('th', {onClick:()=>tog('liveSell'), style:{cursor:'pointer'}}, 'Buy'+arrow('liveSell')),
@@ -11948,7 +13832,7 @@ function MoneyMakerTable({rows, onSelect, itemsByName}) {
   if (!rows.length) return h('div', {className:'empty'}, h('div',{className:'icon'},'◎'), h('p',null,'No live price data for this section yet.'));
 
   return h('div', {className:'ge-table-wrap'},
-    h('table', {className:'ge-table'},
+    h('table', {className:'ge-table pt-money'},
       h('thead', null, h('tr', null,
         h('th', null, 'Item'),
         h('th', {onClick:()=>tog('cost'), style:{cursor:'pointer'}}, 'Input Cost'+arrow('cost')),
@@ -12424,12 +14308,13 @@ function MoneyMakersTab({items, onSelect, description}) {
   const constructionRows = useMemo(() => {
     const plankMachine = INVENTION_MACHINES.find(m => m.id === 'plank');
     if (!plankMachine) return [];
+    const chargeGpRate = machineChargeGpRate(items);
     const rows = [];
     for (const c of plankMachine.conversions) {
       const manualStats = computeConversionStats([{name:c.input, qty:1}], {name:c.output, qty:1}, items);
       if (manualStats.missing.length === 0) rows.push({ label: `${c.input} → ${c.output} (Manual, free)`, itemName: c.output, stats: manualStats });
 
-      const chargeCost = plankMachine.chargePerItem * GP_PER_MACHINE_CHARGE;
+      const chargeCost = plankMachine.chargePerItem * chargeGpRate;
       const machineStats = computeConversionStats([{name:c.input, qty:1}], {name:c.output, qty:1}, items);
       if (machineStats.missing.length === 0) {
         const adjusted = { ...machineStats, cost: machineStats.cost + chargeCost, margin: machineStats.margin != null ? machineStats.margin - chargeCost : null };
@@ -12580,7 +14465,7 @@ function MoneyMakersTab({items, onSelect, description}) {
         herbSub === 'potions' && h(HerbloreBuffCheckboxes, {buffs, setBuffs}),
         herbSub === 'herbs' && h(MoneyMakerTable, {rows:herbRows, onSelect:onSelectItem}),
         herbSub === 'potions' && h(MoneyMakerTable, {rows:potionRows, onSelect:onSelectItem}),
-        herbSub === 'decanting' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        herbSub === 'decanting' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
           'Price per dose across (1)/(2)/(3)/(4) and the 6-dose flask (flask price minus an empty Potion flask, so container cost isn\'t counted as potion value). Each row buys the cheapest dose form and decants into the priciest one for resale — both sides need real daily volume or the potion is left off entirely.'
         ),
         herbSub === 'decanting' && h(MoneyMakerTable, {rows:decantingRows, onSelect:onSelectItem}),
@@ -12602,15 +14487,15 @@ function MoneyMakersTab({items, onSelect, description}) {
             }
           }, sub.label))
         ),
-        magicSub === 'grinding' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        magicSub === 'grinding' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
           'Telekinetic Grind — 2 Astral + 1 Law rune per cast (elemental staff covers the rest). Grinds up to 60 of a stackable item per cast.'
         ),
         magicSub === 'grinding' && h(MoneyMakerTable, {rows:grindingRows, onSelect:onSelectItem}),
-        magicSub === 'tanning' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        magicSub === 'tanning' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
           'Make Leather — 2 Astral + 2 Body rune per cast (elemental staff covers the rest). Tans up to 28 hides per cast.'
         ),
         magicSub === 'tanning' && h(MoneyMakerTable, {rows:tanningRows, onSelect:onSelectItem}),
-        magicSub === 'bolts' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        magicSub === 'bolts' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
           'Enchant Crossbow Bolt — only Onyx and Ascendri are worth casting, every other tier runs at a loss. 1 Cosmic + 1 Death rune per cast (elemental staff covers the rest). Enchants 10 bolts per cast.'
         ),
         magicSub === 'bolts' && h(MoneyMakerTable, {rows:boltRows, onSelect:onSelectItem}),
@@ -12621,7 +14506,7 @@ function MoneyMakersTab({items, onSelect, description}) {
             h('span', {style:{color: r.alchemiserProfit>=0 ? T.gold : T.red, fontWeight:'bold'}}, (r.alchemiserProfit>=0?'+':'')+fmt.gp(r.alchemiserProfit)+'gp/bolt'),
           ))
         ),
-        magicSub === 'humidify' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+        magicSub === 'humidify' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
           'Humidify — only worth casting on Porcelain clay → Soft porcelain clay. 1 Astral rune per cast (elemental staff covers the rest).'
         ),
         magicSub === 'humidify' && h(MoneyMakerTable, {rows:humidifyRows, onSelect:onSelectItem}),
@@ -12689,6 +14574,378 @@ function MoneyMakersTab({items, onSelect, description}) {
 }
 
 /* ─── Tab descriptions ───────────────────────────────────────── */
+// ─── Buy Planner ─────────────────────────────────────────────────────────────
+// Goals for slowly accumulating an item under its 4-hour GE buy limit (Ben,
+// 2026-10-06 — born from the dragon hatchet grind, 630 bought and counting).
+// The user only ever enters running totals (total bought + total gp spent,
+// both visible on the GE offer); everything else is derived. Three finish
+// estimates, because "full limit every 4h" is rarely what actually happens:
+//   best case   — a full limit every 4h, around the clock (offers keep
+//                 filling while you're offline, so 6 limits/day)
+//   market      — capped by how much of the item actually trades per day
+//   your pace   — from the user's own timestamped total updates
+const LIMITS_PER_DAY = 6;
+const DAY_MS = 86400000;
+
+function plannerPace(history) {
+  // Needs at least two updates spanning 12h+, or the rate is just noise.
+  if (!history || history.length < 2) return null;
+  const first = history[0], last = history[history.length - 1];
+  const days = (last.t - first.t) / DAY_MS;
+  if (days < 0.5) return null;
+  const perDay = (last.bought - first.bought) / days;
+  return perDay > 0 ? { perDay, updates: history.length } : null;
+}
+
+function plannerFinish(left, perDay) {
+  if (!(perDay > 0)) return null;
+  const days = Math.ceil(left / perDay);
+  return { days, date: new Date(Date.now() + days * DAY_MS) };
+}
+
+// A goal's offers: one row per account buying it (buy limits are per
+// account, so two accounts fill twice as fast). Goals saved before this
+// (Ben, 2026-10-20) have no offers list: their totals are the one offer.
+function goalOffers(goal) {
+  if (goal.offers?.length) return goal.offers;
+  return [{id: 'main', label: '', bought: goal.bought || 0, spent: goal.spent || 0}];
+}
+const offerInputs = offers => offers.map(o => ({...o, bought: o.bought || '', spent: o.spent || ''}));
+
+function BuyGoalCard({goal, item, onUpdate, onEdit, onDelete, onToggle, editor}) {
+  // Editable copy of the offers; numbers stay as typed text until saved.
+  const [rows, setRows] = useState(() => offerInputs(goalOffers(goal)));
+  const [avgVolume, setAvgVolume] = useState(null);
+  useEffect(() => { setRows(offerInputs(goalOffers(goal))); }, [goal.bought, goal.spent, goal.offers]);
+  const accounts = rows.length;
+
+  // Average daily volume over the last 30 days of local history, when it
+  // exists — one day's volume alone swings too much to plan around.
+  useEffect(() => {
+    if (!item?.id) return;
+    let stale = false;
+    window.genius?.getItemHistoryLocal(item.id).then(hist => {
+      if (stale) return;
+      const vols = (hist || []).slice(-30).map(p => p.volume).filter(v => v > 0);
+      setAvgVolume(vols.length >= 5 ? vols.reduce((a, b) => a + b, 0) / vols.length : null);
+    }).catch(() => {});
+    return () => { stale = true; };
+  }, [item?.id]);
+
+  const target = Number(goal.target) || 0;
+  const bought = goal.bought || 0;
+  const spent = goal.spent || 0;
+  const left = Math.max(0, target - bought);
+  const avgCost = bought > 0 ? spent / bought : null;
+  const pctDone = target > 0 ? Math.min(100, bought / target * 100) : 0;
+  const price = item ? (item.liveBuy ?? item.high ?? item.low ?? null) : null;
+  const overMax = goal.max_price && price != null && price > goal.max_price;
+  // Each account has its own buy limit, so the combined limit scales.
+  const limit = item?.limit ? item.limit * accounts : null;
+  const dailyVolume = avgVolume ?? (item?.volume || null);
+  const share = (goal.market_share || 25) / 100;
+  const done = left === 0 && target > 0;
+
+  const best = limit ? plannerFinish(left, limit * LIMITS_PER_DAY) : null;
+  const marketPerDay = dailyVolume ? Math.min(dailyVolume * share, limit ? limit * LIMITS_PER_DAY : Infinity) : null;
+  const market = marketPerDay ? plannerFinish(left, marketPerDay) : null;
+  const pace = plannerPace(goal.history);
+  const yours = pace ? plannerFinish(left, pace.perDay) : null;
+  // The bottleneck is whichever estimate is slowest — that's the real
+  // finish date. "Your pace" counts too: once there's enough history, it's
+  // the ground truth the other two are only predicting.
+  const slowest = [['best', best], ['market', market], ['pace', yours]]
+    .filter(([, e]) => e).sort((a, b) => b[1].days - a[1].days)[0];
+  const bottleneck = slowest && [best, market, yours].filter(Boolean).some(e => e.days < slowest[1].days) ? slowest[0] : null;
+
+  const fmtDate = d => d.toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'});
+  const row = (icon, label, sub, est, highlight) =>
+    h('div',{style:{display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, padding:'8px 10px',
+      border:`1px solid ${highlight ? T.copper : T.borderDim}`, borderRadius:3, background: highlight ? 'rgba(184,115,51,0.08)' : T.inset}},
+      h('div',null,
+        h('div',{style:{fontSize:13, color:T.text}}, icon+' '+label,
+          highlight && h('span',{style:{marginLeft:8, fontSize:10, letterSpacing:1, textTransform:'uppercase', color:T.copper, border:`1px solid ${T.copper}`, borderRadius:3, padding:'1px 6px'}},'Bottleneck')),
+        h('div',{style:{fontSize:11, color:T.textDim, marginTop:2}}, sub)),
+      h('div',{style:{textAlign:'right', whiteSpace:'nowrap'}},
+        est ? [h('div',{key:'d',style:{fontSize:14, color:T.textBright}}, est.days+' day'+(est.days===1?'':'s')),
+               h('div',{key:'t',style:{fontSize:11, color:T.textDim}}, fmtDate(est.date))]
+            : h('div',{style:{fontSize:12, color:T.textDim}}, '—')));
+
+  const nextReset = goal.last_fill_at ? goal.last_fill_at + 4*3600000 - Date.now() : null;
+  const stat = (lbl, val, color) => h('div',{style:{background:T.inset, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'8px 10px'}},
+    h('div',{className:'form-lbl', style:{marginBottom:2}}, lbl),
+    h('div',{style:{fontSize:16, color: color || T.textBright}}, val));
+
+  // Saves every row at once; the backend adds them up into the goal totals.
+  const save = (list = rows) => onUpdate(goal, list.map(r => ({...r,
+    bought: Math.round(parseGpString(r.bought) || 0), spent: parseGpString(r.spent) || 0})));
+  const setRow = (i, k) => e => setRows(rs => rs.map((r, j) => j === i ? {...r, [k]: e.target.value} : r));
+  const addAccount = () => setRows(rs => [...rs.map((r, i) => i === 0 && !r.label ? {...r, label: 'Account 1'} : r),
+    {id: Date.now().toString(), label: 'Account ' + (rs.length + 1), bought: '', spent: ''}]);
+  const removeAccount = i => {
+    const r = rows[i];
+    if ((parseGpString(r.bought) || 0) > 0 && !confirm(`Remove ${r.label || 'this account'}? Its ${r.bought} bought come off the goal's totals.`)) return;
+    const next = rows.filter((_, j) => j !== i);
+    setRows(next); save(next);
+  };
+
+  return h('div',{style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:14, marginBottom:14}},
+    h('div',{style:{display:'flex', justifyContent:'space-between', alignItems:'flex-start', gap:10, flexWrap:'wrap'}},
+      h('div',{style:{display:'flex', alignItems:'center', gap:10}},
+        h(ItemThumb,{name:goal.item_name, size:32}),
+        h('div',null,
+          h('div',{style:{fontSize:16, color:T.gold, fontFamily:"'Cinzel', serif"}}, goal.item_name,
+            done && h('span',{style:{marginLeft:8, fontSize:10, color:T.green, border:`1px solid ${T.green}`, borderRadius:3, padding:'1px 6px', fontFamily:'inherit'}},'COMPLETE')),
+          h('div',{style:{fontSize:11, color:T.textDim}},
+            `Goal ${target.toLocaleString()}`+(goal.max_price ? ` · max ${fmt.gp(goal.max_price)}gp` : '')
+              +(limit ? ` · buy limit ${limit.toLocaleString()}`+(accounts > 1 ? ` (${item.limit.toLocaleString()} × ${accounts} accounts)` : '') : ' · buy limit unknown')))),
+      h('div',{style:{display:'flex', gap:6, flexWrap:'wrap'}},
+        h('button',{className:'ge-btn', title: goal.linked ? "Updating totals also sets this item's Portfolio position (quantity + average cost). Click to unlink." : 'Not linked: the Portfolio is left alone. Click to link.', onClick:()=>onToggle(goal,'linked')}, goal.linked ? '🔗 Linked to portfolio' : 'Not linked'),
+        h('button',{className:'ge-btn', title:'Notify when your 4-hour buy limit should be free again (estimated from your last update)', onClick:()=>onToggle(goal,'notify')}, goal.notify ? '🔔 Notify on' : '🔕 Notify off'),
+        h('button',{className:'ge-btn', onClick:()=>onEdit(goal)}, 'Edit'),
+        h('button',{className:'ge-btn danger', onClick:()=>onDelete(goal)}, 'Del'))),
+    editor && h('div',{style:{marginTop:12, padding:10, border:`1px solid ${T.copper}`, borderRadius:3, background:T.inset}},
+      h('div',{className:'form-lbl', style:{marginBottom:6}}, 'Edit goal'), editor),
+
+    h('div',{style:{display:'flex', justifyContent:'space-between', fontSize:12, color:T.text, margin:'12px 0 4px'}},
+      h('span',null, `${bought.toLocaleString()} / ${target.toLocaleString()} bought`),
+      h('span',{style:{color:T.textDim}}, pctDone.toFixed(1)+'%')),
+    h('div',{style:{height:8, background:T.inset, border:`1px solid ${T.borderDim}`, borderRadius:3, overflow:'hidden'}},
+      h('div',{style:{width:pctDone+'%', height:'100%', background: done ? T.green : T.gold}})),
+
+    h('div',{style:{display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(130px, 1fr))', gap:8, marginTop:12}},
+      stat('Average cost', avgCost != null ? Math.round(avgCost).toLocaleString()+'gp' : '—'),
+      stat('Total spent', fmt.gp(spent)+'gp'),
+      stat('Left to buy', left.toLocaleString()),
+      stat('Current price', price != null ? fmt.gp(price)+'gp' : '—', overMax ? T.red : (avgCost && price != null ? (price <= avgCost ? T.green : T.text) : T.text))),
+    overMax && h('div',{style:{marginTop:8, fontSize:12, color:T.red}}, `⚠ Current price is above your max of ${fmt.gp(goal.max_price)}gp`),
+    goal.max_price && h(PriceTargetOdds,{items: item ? [item] : [], itemName:goal.item_name, target:goal.max_price, direction:'below'}),
+
+    !done && h('div',{style:{marginTop:14}},
+      h('div',{className:'form-lbl'},'Estimated finish'),
+      h('div',{style:{display:'flex', flexDirection:'column', gap:6}},
+        row('⚡','Best case', limit ? `Full limit every 4 hours, around the clock · ${(limit*LIMITS_PER_DAY).toLocaleString()}/day` : 'Buy limit unknown for this item', best, bottleneck === 'best'),
+        row('📊','Market-limited', dailyVolume
+          ? `~${Math.round(dailyVolume).toLocaleString()} trade per day on the whole GE${avgVolume ? ' (30-day avg)' : ''} · assumes you get ${goal.market_share || 25}% · ${Math.round(marketPerDay).toLocaleString()}/day`
+          : 'No volume data for this item', market, bottleneck === 'market'),
+        row('👤','Your pace', pace ? `${pace.perDay.toFixed(1)}/day over your last ${pace.updates} updates` : 'Needs two updates at least 12 hours apart', yours, bottleneck === 'pace'))),
+
+    h('div',{style:{marginTop:14, paddingTop:12, borderTop:`1px solid ${T.borderDim}`}},
+      rows.map((r, i) => h('div',{key:r.id, style:{display:'flex', gap:8, alignItems:'flex-end', flexWrap:'wrap', marginBottom:8}},
+        accounts > 1 && h('div',{style:{flex:'1 1 110px'}},
+          h('label',{className:'form-lbl'},'Account'),
+          h('input',{className:'ge-input', value:r.label, onChange:setRow(i,'label'), placeholder:'Main'})),
+        h('div',{style:{flex:'1 1 120px'}},
+          h('label',{className:'form-lbl'}, accounts > 1 ? 'Bought' : 'Total bought'),
+          h('input',{className:'ge-input', value:r.bought, onChange:setRow(i,'bought'), placeholder:'500'})),
+        h('div',{style:{flex:'1 1 150px'}},
+          h('label',{className:'form-lbl'}, accounts > 1 ? 'Gp spent' : 'Total gp spent'),
+          h('input',{className:'ge-input', value:r.spent, onChange:setRow(i,'spent'), placeholder:'15,000,000 or 15m'})),
+        accounts > 1 && h('button',{className:'ge-btn danger', title:'Remove this account', onClick:()=>removeAccount(i)}, '✕'))),
+      h('div',{style:{display:'flex', gap:8, flexWrap:'wrap'}},
+        h('button',{className:'ge-btn gold', onClick:()=>save()}, 'Update totals'),
+        h('button',{className:'ge-btn', title:'Buying this on another account too? Each account has its own buy limit, so give it its own row.', onClick:addAccount}, '+ Add account'))),
+    h('div',{style:{display:'flex', justifyContent:'space-between', flexWrap:'wrap', gap:6, fontSize:11, color:T.textDim, marginTop:8}},
+      h('span',null, (accounts > 1 ? "Enter each account's numbers from its own GE offer; the goal adds them up." : 'Both numbers are on your GE offer.')+(goal.linked ? ' Saving also updates your Portfolio position.' : '')),
+      h('span',null,
+        goal.notify && nextReset != null && nextReset > 0 ? `Limit free in ~${Math.floor(nextReset/3600000)}h ${Math.floor(nextReset%3600000/60000)}m · ` : '',
+        goal.history?.length ? 'Last updated '+new Date(goal.history[goal.history.length-1].t).toLocaleString(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}) : 'No updates yet')));
+}
+
+function BuyPlannerTab({items, toast, description, userShorthands, onPortfolioChanged}) {
+  const BLANK = {item_name:'', target:'', max_price:'', market_share:'25'};
+  const [goals, setGoals] = useState([]);
+  const [newForm, setForm] = useState(BLANK);
+  const [editId, setEditId] = useState(null);
+  // Edits happen inside the goal's own card (Ben, 2026-10-20: the shared
+  // form at the top was easy to miss), so the edit draft is kept apart from
+  // the New goal form.
+  const [editForm, setEditForm] = useState(BLANK);
+  const goalFields = (f, setF, onSave, saveLabel, onCancel) => {
+    const set = k => e => setF(x=>({...x,[k]:e.target.value}));
+    return h('div',{style:{display:'flex', gap:10, flexWrap:'wrap', alignItems:'flex-end'}},
+      h('div',{style:{flex:'2 1 200px'}}, h('label',{className:'form-lbl'},'Item'),
+        h(ItemAutocomplete,{items, value:f.item_name, onChange:name=>setF(x=>({...x,item_name:name})), placeholder:'Search item...', userShorthands})),
+      h('div',{style:{flex:'1 1 100px'}}, h('label',{className:'form-lbl'},'How many'),
+        h('input',{className:'ge-input', value:f.target, onChange:set('target'), placeholder:'2,000'})),
+      h('div',{style:{flex:'1 1 110px'}}, h('label',{className:'form-lbl', title:'Optional: warns you when the current price is above this'},'Max price (opt.)'),
+        h('input',{className:'ge-input', value:f.max_price, onChange:set('max_price'), placeholder:'33k'})),
+      h('div',{style:{flex:'1 1 90px'}}, h('label',{className:'form-lbl', title:"What share of the item's daily GE volume you expect to win. Lower it for items with lots of competing buyers."},'Market share %'),
+        h('input',{className:'ge-input', type:'number', min:1, max:100, value:f.market_share, onChange:set('market_share')})),
+      h('button',{className:'ge-btn gold', onClick:onSave}, saveLabel),
+      onCancel && h('button',{className:'ge-btn', onClick:onCancel}, 'Cancel'));
+  };
+  const byName = useMemo(() => Object.fromEntries(items.map(it => [it.name.toLowerCase(), it])), [items]);
+
+  const reload = async () => { const g = await window.genius?.getBuyGoals(); if (g) setGoals(g); };
+  useEffect(() => { reload(); }, []);
+
+  const submit = async (editing) => {
+    const form = editing ? editForm : newForm;
+    const item = byName[(form.item_name||'').toLowerCase()];
+    if (!item) { toast('Pick an item from the list','error'); return; }
+    const target = Math.round(parseGpString(form.target));
+    if (!(target > 0)) { toast('Enter how many you want to buy','error'); return; }
+    const share = Math.min(100, Math.max(1, Number(form.market_share) || 25));
+    const goal = { id: editing ? editId : Date.now().toString(), item_name: item.name, item_id: item.id, target,
+      max_price: form.max_price ? parseGpString(form.max_price) : null, market_share: share };
+    await window.genius?.saveBuyGoal(goal);
+    if (editing) { setEditId(null); setEditForm(BLANK); } else setForm(BLANK);
+    await reload();
+    toast(editing ? 'Goal updated' : 'Goal added','success');
+  };
+
+  const onUpdate = async (goal, offers) => {
+    if (offers.some(o => !Number.isInteger(o.bought) || o.bought < 0)) { toast('Enter bought as a whole number','error'); return; }
+    if (offers.some(o => !(o.spent >= 0))) { toast('Enter gp spent','error'); return; }
+    // A single unnamed offer saves as plain totals, exactly as before.
+    const r = offers.length === 1 && !offers[0].label
+      ? await window.genius?.updateBuyGoalTotals({id: goal.id, bought: offers[0].bought, spent: offers[0].spent})
+      : await window.genius?.updateBuyGoalTotals({id: goal.id, offers});
+    if (!r?.success) { toast(r?.error || 'Could not save','error'); return; }
+    await reload();
+    if (goal.linked) onPortfolioChanged?.();
+    toast('Totals updated','success');
+  };
+  const onToggle = async (goal, key) => { await window.genius?.saveBuyGoal({id: goal.id, [key]: !goal[key]}); await reload(); };
+  const onEdit = goal => { setEditId(goal.id); setEditForm({item_name:goal.item_name, target:String(goal.target), max_price:goal.max_price?String(goal.max_price):'', market_share:String(goal.market_share||25)}); };
+  const onDelete = async goal => {
+    if (!confirm(`Delete the ${goal.item_name} goal? Its Portfolio position stays, it just goes back to normal editing.`)) return;
+    await window.genius?.deleteBuyGoal(goal.id);
+    await reload(); onPortfolioChanged?.();
+  };
+
+  return h('div',null,
+    description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div',{style:{padding:14}},
+      h('div',{className:'ge-section-head'}, 'New goal'),
+      h('div',{style:{marginBottom:18}}, goalFields(newForm, setForm, ()=>submit(false), 'Add goal')),
+      h('div',{className:'ge-section-head'}, `Goals (${goals.length})`),
+      goals.length === 0
+        ? h('div',{className:'empty'}, h('div',{className:'icon'},'🛒'),
+            h('p',null,"Add an item you're stocking up on over time, since the GE only lets you buy so many every 4 hours. Then enter your running totals from the GE whenever you check it."))
+        : goals.map(g => h(BuyGoalCard,{key:g.id, goal:g, item:byName[(g.item_name||'').toLowerCase()], onUpdate, onEdit, onDelete, onToggle,
+            editor: g.id === editId ? goalFields(editForm, setEditForm, ()=>submit(true), 'Save goal', ()=>{setEditId(null); setEditForm(BLANK);}) : null}))));
+}
+
+// ─── Opportunity History (Track record) ──────────────────────────────────────
+// (Ben, 2026-10-06) Grades the Opportunity Score: every item that scored
+// 40+ gets recorded (backend recordOpportunities, once per item per day),
+// and this shows what its price actually did 1/7/30 days later. Split by
+// direction, because the score is direction-blind — a crash scores like a
+// spike — so "was it a good opportunity?" really means "did the move keep
+// going, or snap back?".
+const OPP_BUCKETS = [[70, Infinity, '70+'], [60, 70, '60–69'], [50, 60, '50–59'], [40, 50, '40–49']];
+
+function oppChange(r, later) { return later != null && r.p ? (later - r.p) / r.p * 100 : null; }
+function oppDirection(r) {
+  if ((r.g || []).includes('SURGE') || (r.c != null && r.c > 0)) return 'up';
+  if ((r.g || []).includes('DUMP')  || (r.c != null && r.c < 0)) return 'down';
+  // Flat price on heavy volume (ACCUMULATION/DISTRIBUTION): no direction
+  // to judge, so these are graded on whether a real move followed at all.
+  return 'flat';
+}
+const OPP_FLAT_MOVE_PCT = 5;
+
+function OpportunityTrackRecord({onSelect, items}) {
+  const [data, setData] = useState(null);
+  useEffect(() => { window.genius?.getOpportunityHistory().then(setData).catch(() => setData({records: []})); }, []);
+  const byId = useMemo(() => Object.fromEntries((items || []).map(it => [it.id, it])), [items]);
+
+  const summary = useMemo(() => {
+    if (!data) return [];
+    const rows = [];
+    for (const dir of ['up', 'down', 'flat']) {
+      for (const [lo, hi, label] of OPP_BUCKETS) {
+        const recs = data.records.filter(r => r.s >= lo && r.s < hi && oppDirection(r) === dir);
+        const avg = key => {
+          const vals = recs.map(r => oppChange(r, r[key])).filter(v => v != null);
+          return vals.length ? { avg: vals.reduce((a, b) => a + b, 0) / vals.length, n: vals.length } : null;
+        };
+        // "Kept going" = moved further the same way it was moving when flagged.
+        const resolved7 = recs.map(r => oppChange(r, r.d7)).filter(v => v != null);
+        const kept = resolved7.length ? resolved7.filter(v => dir === 'up' ? v > 0 : dir === 'down' ? v < 0 : Math.abs(v) >= OPP_FLAT_MOVE_PCT).length / resolved7.length * 100 : null;
+        rows.push({ dir, label, count: recs.length, d1: avg('d1'), d7: avg('d7'), d30: avg('d30'), kept, keptN: resolved7.length });
+      }
+    }
+    return rows;
+  }, [data]);
+
+  if (!data) return h('div', {className:'empty'}, h('p', null, 'Loading…'));
+
+  const pctCell = v => v == null
+    ? h('td', {style:{color:T.textDim}}, '—')
+    : h('td', {className: v >= 0 ? 'pct-up' : 'pct-down', title: `Average of ${v.n} flag${v.n===1?'':'s'} with a price that many days later`}, fmt.pct(v.avg));
+  const rawPct = v => v == null ? h('td', {style:{color:T.textDim}}, '—') : h('td', {className: v >= 0 ? 'pct-up' : 'pct-down'}, fmt.pct(v));
+  const since = data.since ? new Date(data.since).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
+  const recent = [...data.records].sort((a, b) => b.t - a.t).slice(0, 50);
+
+  return h('div', {style:{padding:14}},
+    h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.6, marginBottom:14}},
+      since ? `Recording since ${since} · ${data.records.length.toLocaleString()} flags so far. ` : 'Nothing recorded yet: the first flags are saved after the next price update. ',
+      `Every item scoring ${data.recordMin}+ is saved once a day with its price, then graded on what the price did 1, 7 and 30 days later. Results fill in as those days pass.`),
+
+    h('div', {className:'ge-section-head'}, 'Score vs. what happened next'),
+    h('table', {className:'ge-table', style:{marginBottom:20}},
+      h('thead', null, h('tr', null,
+        h('th', null, 'Flagged while'), h('th', null, 'Score'), h('th', null, 'Flags'),
+        h('th', null, 'After 1 day'), h('th', null, 'After 7 days'), h('th', null, 'After 30 days'),
+        h('th', {title:`Rising/falling: share whose price kept moving the same way within 7 days. Flat: share that then moved ${OPP_FLAT_MOVE_PCT}%+ either way.`}, 'Kept going (7d)'))),
+      h('tbody', null, summary.filter(row => row.count > 0).map(row => h('tr', {key: row.dir + row.label},
+        h('td', {style:{color: row.dir === 'up' ? T.green : row.dir === 'down' ? T.red : T.textDim},
+          title: row.dir === 'flat' ? `Price flat but volume heavy. "Kept going" here means it then moved ${OPP_FLAT_MOVE_PCT}%+ either way.` : null},
+          row.dir === 'up' ? '▲ Rising' : row.dir === 'down' ? '▼ Falling' : '◆ Flat, heavy volume'),
+        h('td', null, row.label),
+        h('td', null, row.count.toLocaleString()),
+        pctCell(row.d1), pctCell(row.d7), pctCell(row.d30),
+        h('td', {style:{color: row.kept == null ? T.textDim : T.text}}, row.kept == null ? '—' : `${Math.round(row.kept)}% of ${row.keptN}`))))),
+
+    h('div', {className:'ge-section-head'}, 'Recent flags'),
+    recent.length === 0
+      ? h('div', {className:'empty', style:{padding:'20px 0'}}, h('p', null, 'No flags yet.'))
+      : h('table', {className:'ge-table'},
+          h('thead', null, h('tr', null,
+            h('th', null, 'Flagged'), h('th', null, 'Item'), h('th', null, 'Score'), h('th', null, 'Moving'),
+            h('th', null, 'Price then'), h('th', null, '1d'), h('th', null, '7d'), h('th', null, '30d'))),
+          h('tbody', null, recent.map(r => {
+            const dir = oppDirection(r);
+            return h('tr', {key: r.id + '_' + r.t},
+              h('td', {style:{color:T.textDim}}, new Date(r.t).toLocaleDateString(undefined, {month:'short', day:'numeric'})),
+              h('td', {style:{cursor: byId[r.id] ? 'pointer' : 'default', color:T.gold}, onClick: () => byId[r.id] && onSelect(byId[r.id])}, r.n),
+              h('td', null, Math.round(r.s)),
+              h('td', {style:{color: dir === 'up' ? T.green : dir === 'down' ? T.red : T.textDim}},
+                dir === 'up' ? '▲ ' : dir === 'down' ? '▼ ' : '◆ ', r.c != null ? fmt.pct(r.c) : 'flat'),
+              h('td', null, fmt.gp(r.p) + 'gp'),
+              rawPct(oppChange(r, r.d1)), rawPct(oppChange(r, r.d7)), rawPct(oppChange(r, r.d30)));
+          }))));
+}
+
+function OpportunitiesArea(props) {
+  const [view, setView] = useState('today');
+  return h('div', null,
+    h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
+      h('button', {className: view==='today' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('today')}, 'Today'),
+      h('button', {className: view==='record' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('record'), title:'How past high-scoring items actually performed afterwards'}, '📈 Track record')),
+    view === 'today'
+      ? h(OpportunitiesTab, props)
+      : h(OpportunityTrackRecord, {onSelect: props.onSelect, items: props.items}));
+}
+
+// Portfolio tab = Positions + Buy Planner pills (Ben, 2026-10-06). The
+// planner manages Portfolio positions, so it lives beside them rather than
+// as another sidebar entry.
+function PortfolioArea(props) {
+  const [view, setView] = useState('positions');
+  return h('div', null,
+    h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
+      h('button', {className: view==='positions' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('positions')}, 'Positions'),
+      h('button', {className: view==='planner' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('planner')}, '🛒 Buy Planner')),
+    view === 'positions'
+      ? h(PortfolioTab, props)
+      : h(BuyPlannerTab, {items: props.items, toast: props.toast, userShorthands: props.userShorthands,
+          description: TAB_DESCRIPTIONS.buy_planner, onPortfolioChanged: props.onPortfolioChanged}));
+}
+
 const TAB_DESCRIPTIONS = {
   dashboard:      'The big picture. Try not to panic.',
   compare:        'Side-by-side. May the best item win.',
@@ -12699,6 +14956,7 @@ const TAB_DESCRIPTIONS = {
   top_movers:     ['Look at all ', h('s', {key:'s'}, 'those chickens'), ' that movement.'],
   money_makers:   'Some assembly required.',
   portfolio:      'Track positions, profits, losses, and questionable financial decisions.',
+  buy_planner:    'Plan stocking up on an item that the GE only lets you buy so many of every 4 hours: progress, true average cost, and how long it will really take.',
   alch:           'Items where nature runes are paying their own rent.',
   melee:          'For those who solve problems up close and personally.',
   magic:          'Wear a dress, cast spells, do more damage than everyone else.',
@@ -12737,6 +14995,7 @@ const TAB_DESCRIPTIONS = {
 const NAV = [
   {id:'dashboard',      label:'Dashboard',        icon:'◈'},
   {id:'dxp_intel',      label:'GEnius Almanac',   icon:'📅'},
+  {id:'news',           label:'News',             icon:'📰'},
   {id:'watchlist',      label:'Watchlist',        icon:'★'},
   {id:'market',         label:'Market',           icon:'◐'},
   {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
@@ -12777,7 +15036,6 @@ const NAV = [
   {id:'expensive',      label:'High Value',       icon:'💎'},
   {id:'cosmetics',      label:'Cosmetics',        icon:'✦'},
   {id:'materials',      label:'Misc',             icon:'◆'},
-  {id:'news',           label:'News',             icon:'✦'},
   {id:'settings',       label:'Settings',         icon:'⚙'},
   {id:'about',          label:'About',            icon:'ℹ'},
 ];
@@ -12793,6 +15051,9 @@ function App() {
   // and stays permanently visible regardless of this state).
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [items, setItems] = useState([]);
+  // Items Jagex removed from the GE (run.js removedItems): kept out of
+  // `items` so market scans skip them; Watchlist/Portfolio show them labelled.
+  const [removedItems, setRemovedItems] = useState([]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
   const [officialTop100, setOfficialTop100] = useState({byWindow:{}});
@@ -12867,24 +15128,29 @@ function App() {
         .filter(it => it.id && !it.untradeable)
         .sort((a,b) => (b.volume||0) - (a.volume||0));
       const allIds = sorted.map(it => it.id);
-      if (status.isFirstRun || status.stored < allIds.length) {
-        // Always seeded from the REAL persisted stored/total counts,
-        // never from a per-session counter starting at 0 — that's what
-        // made a resume look like lost progress before (see
-        // SESSION_LOG.md, 2026-06-26). initial300Done is persisted in
-        // main.js across restarts, so a real interruption during the
-        // first 300 correctly resumes showing "still on the first 300"
-        // instead of wrongly claiming background mode.
-        setHistoryPopup({stored:status.stored, total:allIds.length,
-          initial300Done:status.initial300Done, fullyComplete:false});
-        window.genius?.startHistoryPopulation(allIds);
-      }
+      // Always ask the backend to queue whichever of THESE items lack
+      // history (it skips ones already on disk) instead of comparing raw
+      // counts — the file count includes delisted items, which hid 33 new
+      // Havenhythe II items with no history at all (FIX 2026-10-11, Ben:
+      // "new items don't download automatically"). The popup only shows
+      // when something was actually queued, seeded from the backend's real
+      // stored-of-these count (never a per-session counter from 0 — see
+      // SESSION_LOG.md, 2026-06-26).
+      window.genius?.startHistoryPopulation(allIds).then(res => {
+        if (!res || !res.queued) return;
+        setHistoryPopup({stored: res.stored ?? status.stored, total: allIds.length, unavailable: res.unavailable || 0,
+          initial300Done: status.initial300Done, fullyComplete: false});
+      }).catch(() => {});
     });
   }, []);
   const [selected, setSelected] = useState(null);
   const [quickAddPos, setQuickAddPos] = useState(null); // pre-filled position from margin calc
   const [fetching, setFetching] = useState(false);
   const [lastUpdate, setLastUpdate] = useState(null);
+  // Re-render every 30s so the header's "Nm ago" status keeps counting
+  // even when nothing else changes on screen.
+  const [, setStatusTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setStatusTick(n => n + 1), 30000); return () => clearInterval(t); }, []);
   const {toasts, add:toast} = useToast();
   const theme = settings.theme || 'dark';
   SHOW_THUMBNAILS = settings.showThumbnails !== false;
@@ -12930,20 +15196,30 @@ function App() {
   useEffect(() => {
     if (!window.genius) { console.error('[GEnius] window.genius is not defined!'); return; }
     console.log('[GEnius] Loading initial data...');
+    // Each piece loads independently, retrying up to 3 times. This used to be
+    // one Promise.all, so a single failed call (portfolio.json rename
+    // EPERM, Ben 2026-10-08) dropped EVERYTHING and the UI showed blank
+    // defaults — settings, watchlist, portfolio all looked wiped, and any
+    // save from that state could have overwritten the real files.
+    const retry = (fn, tries = 3) => fn().catch(e => {
+      if (tries <= 1) throw e;
+      return new Promise(r => setTimeout(r, 500)).then(() => retry(fn, tries - 1));
+    });
     Promise.all([
-      window.genius.getData(),
-      window.genius.getWatchlist(),
-      window.genius.getAlerts(),
-      window.genius.getSettings(),
-      window.genius.getPortfolio(),
-      window.genius.getHidden(),
-      window.genius.getNotes(),
-      window.genius.getShorthands(),
-      window.genius.getReminders(),
-      window.genius.getMonsterShorthands(),
-    ]).then(([data,wl,al,s,pf,hidden,nt,sh,rm,msh]) => {
+      () => window.genius.getData(),
+      () => window.genius.getWatchlist(),
+      () => window.genius.getAlerts(),
+      () => window.genius.getSettings(),
+      () => window.genius.getPortfolio(),
+      () => window.genius.getHidden(),
+      () => window.genius.getNotes(),
+      () => window.genius.getShorthands(),
+      () => window.genius.getReminders(),
+      () => window.genius.getMonsterShorthands(),
+    ].map(fn => retry(fn))).then(([data,wl,al,s,pf,hidden,nt,sh,rm,msh]) => {
       console.log('[GEnius] getData returned:', data?.items?.length ?? 0, 'items, timestamp:', data?.timestamp);
       if (data.items)     setItems(data.items);
+      setRemovedItems(data.removedItems || []);
       if (data.news)      setNews(data.news);
       if (data.indexes)   setIndexes(data.indexes);
       if (data.officialTop100) setOfficialTop100(data.officialTop100);
@@ -12968,7 +15244,12 @@ function App() {
       refreshPopulatedHistoryIds();
     }).catch(e => {
       console.error('[GEnius] Initial load error:', e);
-      document.getElementById('splash')?.remove();
+      // Don't drop into the app with blank defaults — a save from that
+      // state could overwrite the user's real settings/portfolio on disk.
+      const splash = document.getElementById('splash');
+      if (splash) splash.innerHTML = '<div style="color:#e8d5a3;font-family:sans-serif;text-align:center;padding:40px;max-width:420px;margin:auto">'
+        + '<div style="font-size:18px;margin-bottom:12px">GEnius couldn’t load your data</div>'
+        + '<div style="font-size:13px;opacity:.8;line-height:1.5">Your settings and portfolio are safe on disk. Please close GEnius completely (including the tray icon) and open it again.</div></div>';
     });
 
     window.genius.onHistoryProgress(d => {
@@ -12979,8 +15260,10 @@ function App() {
         // the overall catalogue size — keep using prev.total (set once,
         // from the real full item count) for that. Only stored count
         // and the persisted initial300Done flag come from the live tick.
-        const fullyComplete = d.stored >= prev.total;
-        return {...prev, stored: d.stored, initial300Done: d.initial300Done, fullyComplete};
+        // Finished = every item has history OR the queue ran out and the
+        // rest are items with no history available (counted, not stuck).
+        const fullyComplete = d.stored >= prev.total || (d.finished && d.stored + (d.unavailable || 0) >= prev.total);
+        return {...prev, stored: d.stored, unavailable: d.unavailable || 0, initial300Done: d.initial300Done, fullyComplete};
       });
     });
     // Covers fetches the renderer didn't itself initiate (the scheduler's
@@ -12990,11 +15273,13 @@ function App() {
     // slow one, see main.js's runPython comment) was genuinely running.
     window.genius.onFetchStart(() => setFetching(true));
     window.genius.onFetchComplete(d => {
+      window.dispatchEvent(new Event('genius-news-read')); // refresh the News badge
       console.log('[GEnius] fetch-complete received:', d);
       setFetching(false); setLastUpdate(d.timestamp);
       window.genius.getData().then(data => {
         console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
         if (data.items)   setItems(data.items);
+        setRemovedItems(data.removedItems || []);
         if (data.news)    setNews(data.news);
         if (data.indexes) setIndexes(data.indexes);
         if (data.officialTop100) setOfficialTop100(data.officialTop100);
@@ -13182,10 +15467,66 @@ function App() {
     if (res&&!res.success) { setFetching(false); toast('Fetch failed','error'); }
   };
 
+  // Readable ages (Ben, 2026-10-26: the phone said "8341m ago").
+  const ago = mins => mins < 60 ? `${mins}m ago` : mins < 48 * 60 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
+  // Phone: the background checker keeps notifications current while the app
+  // itself is closed, so when the app's data is old, say when it last checked.
+  const [bgLastRun, setBgLastRun] = useState(null);
+  useEffect(() => {
+    if (!window.genius?.getBackgroundLastRun) return;
+    const load = () => window.genius.getBackgroundLastRun().then(setBgLastRun).catch(() => {});
+    load();
+    const t = setInterval(load, 5 * 60000);
+    return () => clearInterval(t);
+  }, []);
   const stale = lastUpdate ? Math.floor((Date.now()-lastUpdate)/60000) : null;
   const statusType = !lastUpdate ? 'none' : stale < 20 ? 'live' : 'stale';
-  const statusText = !lastUpdate ? 'No data' : stale < 1 ? 'Live' : `${stale}m ago`;
+  const bgMins = bgLastRun ? Math.floor((Date.now() - bgLastRun) / 60000) : null;
+  const statusText = (!lastUpdate ? 'No data' : stale < 1 ? 'Live' : ago(stale)) +
+    (bgMins != null && stale != null && stale >= 60 && bgMins < stale ? ` · alerts checked ${bgMins < 1 ? 'just now' : ago(bgMins)}` : '');
   const showDetail = selected && !['settings'].includes(tab);
+
+  // Test-mode command surface (only exists in a --test-mode instance) — lets
+  // test scripts drive the app by intent instead of guessing at buttons:
+  //   __geniusTest.goto('portfolio')      switch sidebar tab (NAV id)
+  //   __geniusTest.openItem('Feather')     open an item's detail panel
+  //   __geniusTest.click('Buy Planner')    click the first button containing text
+  //   __geniusTest.state() / .text()       current tab/item, visible text
+  const [newsBadge, setNewsBadge] = useState(0);
+  useEffect(() => {
+    const load = () => window.genius?.getNewsBadgeCount?.().then(n => setNewsBadge(n || 0)).catch(() => {});
+    load();
+    window.addEventListener('genius-news-read', load);
+    const t = setInterval(load, 5 * 60000);
+    return () => { window.removeEventListener('genius-news-read', load); clearInterval(t); };
+  }, []);
+  const testStateRef = useRef({});
+  testStateRef.current = { tab, selected, items };
+  useEffect(() => {
+    window.genius?.isTestMode?.().then(on => {
+      if (!on) return;
+      document.title = 'GEnius [TEST MODE]';
+      try { localStorage.setItem('genius_seen_welcome_tour', '1'); } catch {}
+      setShowTour(false); // the first-run tour would block every scripted test
+      const wait = ms => new Promise(r => setTimeout(r, ms));
+      window.__geniusTest = {
+        tabs: () => NAV.filter(n => n.id).map(n => n.id),
+        goto: async id => { setTab(id); await wait(500); return testStateRef.current.tab; },
+        openItem: async name => {
+          const it = testStateRef.current.items.find(i => i.name.toLowerCase() === String(name).toLowerCase());
+          if (!it) return false;
+          setSelected(it); await wait(500); return true;
+        },
+        click: async text => {
+          const b = [...document.querySelectorAll('button')].find(x => x.textContent.trim().includes(text));
+          if (!b) return false;
+          b.click(); await wait(400); return true;
+        },
+        state: () => ({ tab: testStateRef.current.tab, selected: testStateRef.current.selected?.name || null }),
+        text: () => document.getElementById('root').innerText,
+      };
+    }).catch(() => {});
+  }, []);
 
   const handleSelect = item => {
     if (selected && item && selected.id === item.id) { setSelected(null); return; }
@@ -13265,7 +15606,8 @@ function App() {
               }
             },
             h('span',{className:'nav-icon'},entry.icon),
-            entry.label
+            entry.label,
+            entry.id === 'news' && newsBadge > 0 && h('span', {style:{marginLeft:'auto', background:T.gold, color:'#1a1209', borderRadius:9, fontSize:10, fontWeight:'bold', padding:'0 6px', fontFamily:'Arial, sans-serif'}, title:'Unread news that matches your News ⚙ settings'}, newsBadge)
           )
       )
     ),
@@ -13302,6 +15644,7 @@ function App() {
         }, '⏻')
       ),
       h('div',{style:{flex:1,display:'flex',overflow:'hidden',position:'relative'}},
+        IS_PHONE && h(TouchTooltips),
         h('div',{className:'scroll-jump-buttons'},
           h('button',{className:'scroll-jump-btn',title:'Scroll to top',onClick:()=>scrollContentTo(0)},'▲'),
           h('button',{className:'scroll-jump-btn',title:'Scroll to bottom',onClick:()=>scrollContentTo(contentRef.current?.scrollHeight||0)},'▼')
@@ -13309,15 +15652,16 @@ function App() {
         h('div',{className:'content',style:{flex:1},ref:contentRef},
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30,officialTop100}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
-          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
-          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems}),
+          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,removedItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
+          tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems,onNavigate:setTab}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
           ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','artisan','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
             h(ItemTable,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
           tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
-          tab==='portfolio'&&h(PortfolioTab,{
-            items, portfolio, toast, dateFormat: settings.dateFormat,
+          tab==='portfolio'&&h(PortfolioArea,{
+            onPortfolioChanged: async () => { const p = await window.genius?.getPortfolio(); if (p) setPortfolio(p); },
+            items, removedItems, portfolio, toast, dateFormat: settings.dateFormat,
             onSavePosition: async pos => {
               await window.genius?.savePosition(pos);
               const p = await window.genius?.getPortfolio();
@@ -13340,11 +15684,11 @@ function App() {
             userShorthands,
           }),
           tab==='market'        &&h(MarketTab,        {items:visibleItems,selected,onSelect:handleSelect,description:TAB_DESCRIPTIONS.market}),
-          tab==='opportunities' &&h(OpportunitiesTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities,overpricedThreshold:settings.overpricedThreshold||30}),
+          tab==='opportunities' &&h(OpportunitiesArea, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.opportunities,overpricedThreshold:settings.overpricedThreshold||30}),
           tab==='flips' &&h(FlipsTab, {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,description:TAB_DESCRIPTIONS.flips}),
           tab==='top_movers' &&h(TopMoversTab, {items:visibleItems,officialTop100,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.top_movers}),
           tab==='money_makers' &&h(MoneyMakersTab, {items:visibleItems,onSelect:handleSelect,description:TAB_DESCRIPTIONS.money_makers}),
-          tab==='news'    &&h(NewsTab,    {news,onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect}),
+          tab==='news'    &&h(NewsTab,    {onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect,toast,onNavigate:setTab}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsTab,  {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
@@ -13356,7 +15700,7 @@ function App() {
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);},onReplayTour:()=>setShowTour(true)}),
           tab==='about'&&h(AboutTab),
-          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect})
+          tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect,userShorthands,toast})
         ),
         showDetail&&h('div',{style:{position:'relative', display:'flex'}},
           h('div',{

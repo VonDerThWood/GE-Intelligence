@@ -629,7 +629,14 @@ function assignCategories(name) {
   //    "rune platebody (g)" with explicit secondary categories aren't short-
   //    circuited by the TT-suffix pre-check below.
   if (nameLower in OVERRIDES) {
-    return _applyExclusive([...OVERRIDES[nameLower]], nameLower, true);
+    // Hand-picked cross-references (Ben, 2026-10-09): an override that lists
+    // Rares PLUS other categories keeps all of them (e.g. hero items:
+    // Guildmaster Tony's mattock = Rares + Archaeology). Name-rule matches
+    // stay exclusive.
+    const ov = OVERRIDES[nameLower];
+    // Same for the other exclusive tabs (Codex + Boss drops, 2026-10-12).
+    if (ov.length > 1 && ov.some(c => EXCLUSIVE_CATEGORIES.has(c))) return [...ov];
+    return _applyExclusive([...ov], nameLower, true);
   }
 
   // 0a. TT suffix patterns — prevents base-item partial matches

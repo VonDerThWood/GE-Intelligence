@@ -28,7 +28,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'  # Electron 44 requires Node >= 22.12
           cache: 'npm'
 
       - name: Install dependencies
@@ -56,19 +56,35 @@ jobs:
 
             ### Install
             1. Download `GEnius-Setup-${{ steps.pkg.outputs.version }}.exe` below
-            2. Run the installer
-            3. Make sure Python 3.10+ is installed: https://python.org
-            4. Run `pip install requests beautifulsoup4` once in a terminal
-            5. Launch GEnius from your desktop shortcut
+            2. Run the installer and launch GEnius from your desktop shortcut
 
-            ### What's included
-            - Full RS3 Grand Exchange market intelligence
-            - Price tracking with RSI, Bollinger Bands, MA signals
-            - Discord webhook alerts
-            - News feed: RS3 official + Wiki + Reddit
+            ### Safe to use
+            - Open source: every line is in this repository, and this installer
+              was built by GitHub Actions from that public code.
+            - Never asks for your RuneScape login and never reads or connects to
+              the game client. It only uses public price data (RuneScape Wiki /
+              WeirdGloop).
+            - No accounts, no servers: your data stays on your device.
+            - Virus scan: see the VirusTotal link below (added automatically).
           files: |
             dist/*.exe
           draft: false
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # Uploads the installer to VirusTotal (~70 antivirus engines) and
+      # appends the public scan link to the release notes, so cautious
+      # players can check it without trusting us (Ben, 2026-10-20).
+      # Needs the repository secret VT_API_KEY (free VirusTotal account ->
+      # profile -> API key; GitHub repo -> Settings -> Secrets and variables
+      # -> Actions -> New repository secret). Without it this step fails but
+      # the release itself is already published.
+      - name: VirusTotal scan
+        uses: crazy-max/ghaction-virustotal@v4
+        with:
+          vt_api_key: ${{ secrets.VT_API_KEY }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          update_release_body: true
+          files: |
+            dist/*.exe

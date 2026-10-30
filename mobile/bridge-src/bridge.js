@@ -18,6 +18,10 @@ const { App } = require('@capacitor/app');
 const { Filesystem, Directory, Encoding } = require('@capacitor/filesystem');
 const { LocalNotifications } = require('@capacitor/local-notifications');
 const { BackgroundRunner } = require('@capacitor/background-runner');
+const { registerPlugin } = require('@capacitor/core');
+// App-local native plugin (android/.../GeniusMonitorPlugin.java): the
+// optional Live monitoring foreground service.
+const GeniusMonitor = registerPlugin('GeniusMonitor');
 
 // Logical root, not a real OS path — storage-capacitor.js strips this
 // exact prefix off every path api.js builds via path.join(dataDir, ...)
@@ -111,14 +115,31 @@ async function ensureNotificationPermission() {
 // main.js's `new Notification({...}).show()`. LocalNotifications needs an
 // integer id; Date.now() truncated to 32 bits is good enough here since
 // IDs only need to not collide with each other, not be globally meaningful.
+const QUIET_DEFAULT = { enabled: false, start: '21:00', end: '07:00' };
+function quietHoursSetting() {
+  return { ...QUIET_DEFAULT, ...(store && store.get('quietHours', {})) };
+}
+function isQuietNow(q = quietHoursSetting()) {
+  if (!q.enabled || !q.start || !q.end) return false;
+  const toMin = t => { const [h, m] = String(t).split(':').map(Number); return (h * 60 + (m || 0)) % 1440; };
+  const d = new Date(), now = d.getHours() * 60 + d.getMinutes();
+  const s = toMin(q.start), e = toMin(q.end);
+  if (s === e) return false;
+  return s < e ? (now >= s && now < e) : (now >= s || now < e);
+}
+
 async function fireNotification(title, body) {
   await ensureNotificationPermission();
   try {
+    // Quiet hours (Ben, 2026-10-18): still shown, but on the silent channel
+    // (created in MainActivity.java) so the phone doesn't buzz all night.
+    const quiet = isQuietNow();
     await LocalNotifications.schedule({
       notifications: [{
         id: Date.now() % 2147483647,
         title, body,
         schedule: { at: new Date(Date.now() + 100) },
+        ...(quiet ? { channelId: 'genius_quiet' } : {}),
       }],
     });
   } catch (e) {
@@ -183,6 +204,13 @@ async function syncRunnerState() {
         portfolioPositions: openPositions,
         portfolioSettings: store.get('portfolioDigestSettings', { enabled: false, intervalHours: 0.25 }),
         reminders: store.get('reminders', []),
+        quietHours: { ...quietHoursSetting(), tzOffsetMin: new Date().getTimezoneOffset() },
+        // Price alerts for the background check (item id resolved here,
+        // same as positions above; active = already hit, so no re-notify).
+        alerts: (await a.getAlerts().catch(() => [])).map(al => ({
+          id: al.id, itemId: idByName[(al.item_name || '').toLowerCase()], name: al.item_name,
+          condition: al.condition || 'above', price: al.price, pct: al.pct, active: !!al.active,
+        })),
         notificationsEnabled: store.get('notifications', true),
       },
     });
@@ -196,27 +224,57 @@ async function syncRunnerState() {
 // descriptor as a real native notification instead of Electron's.
 async function runNotificationChecks() {
   const a = await ensureApi();
+  // Alerts the background already notified about: mark them, don't repeat.
+  try {
+    const r = await BackgroundRunner.dispatchEvent({ label: 'com.vonderthwood.genius.background.task', event: 'collectFiredAlerts', details: {} });
+    await a.markAlertsFiredInBackground((r && r.fired) || []);
+  } catch (e) { console.error('[GEnius] collectFiredAlerts failed:', e.message); }
   for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
   const digest = await a.getWatchlistDigest();
   if (digest) await fireNotification(digest.title, digest.body);
   const portfolioDigest = await a.getPortfolioDigest();
   if (portfolioDigest) await fireNotification(portfolioDigest.title, portfolioDigest.body);
   for (const r of await a.getDueReminders()) await fireNotification(r.title, r.body);
-  for (const al of await a.getTriggeredAlerts()) await fireNotification(al.title, al.body);
+  for (const g of await a.getBuyGoalNotifications()) await fireNotification(g.title, g.body);
+  for (const d of await a.getDxpNewsNotifications()) await fireNotification(d.title, d.body);
+  // Alerts are always evaluated (fired state + Discord); the Settings
+  // checkbox only controls the popup — same as main.js's checkPriceAlerts.
+  const triggered = await a.getTriggeredAlerts();
+  if (store.get('notifications', true)) for (const al of triggered) await fireNotification(al.title, al.body);
 }
 
 // Mirrors main.js's runPython() — runs run.js's main() in-process and emits
 // the same fetch-complete/fetch-error events the desktop build does, so
 // renderer.js's existing onFetchComplete/onFetchError handlers work as-is.
-async function runFetch(mode) {
+// One fetch at a time, same as main.js — overlapping callers share it.
+let fetchInFlight = null;
+let firstFetchResolve;
+const firstFetchDone = new Promise(res => { firstFetchResolve = res; });
+function runFetch(mode) {
+  if (fetchInFlight) return fetchInFlight;
+  fetchInFlight = runFetchOnce(mode).finally(() => { fetchInFlight = null; firstFetchResolve(); });
+  return fetchInFlight;
+}
+async function runFetchOnce(mode) {
+  // Same as main.js: tells the header to show its spinner. Was missing on
+  // mobile, so a running fetch looked identical to an idle one.
+  emit('fetch-start', { mode });
   const a = await ensureApi();
   const { main: runJs } = require('../../src/backend-js/run.js');
   try {
     await a.historyLoadedPromise;
     const argv = [`--mode=${mode || 'prices'}`, `--data-dir=${DATA_DIR}`];
-    await runJs(argv, await a.computeHistoryStats());
-    emit('fetch-complete', { mode, timestamp: Date.now() });
+    const result = await runJs(argv, await a.computeHistoryStats());
+    if (result && result.pricesFailed) throw new Error('Price fetch failed — still showing the previous prices');
     if (mode === 'prices' || !mode) await a.updateSnapshots();
+    if (mode !== 'news') await a.recordOpportunities();
+    await a.archiveNews();
+    // Checks run against this fetch's fresh data, before fetch-complete.
+    await runNotificationChecks().catch(e => console.error('[GEnius] Notification check failed:', e.message));
+    lastFetchOkAt = Date.now();
+    emit('fetch-complete', { mode, timestamp: Date.now() });
+    // Smaller batch than desktop's 500 — mobile data and battery.
+    if (mode !== 'news') a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {});
   } catch (error) {
     emit('fetch-error', { error: error.message });
     throw error;
@@ -236,10 +294,7 @@ async function buildGenius() {
     // Mirrors main.js's fetch-now fix — a manual refresh should re-check
     // alerts/reminders against the fresh data it just pulled, not just
     // whatever the periodic notification check happens to run next.
-    fetchNow: (mode) => runFetch(mode).then(() => {
-      runNotificationChecks().catch(e => console.error('[GEnius] Notification check failed:', e.message));
-      return { success: true };
-    }).catch(e => ({ success: false, error: e.message })),
+    fetchNow: (mode) => runFetch(mode).then(() => ({ success: true })).catch(e => ({ success: false, error: e.message })),
     getDataDir: () => DATA_DIR,
     quitApp: () => ({ success: true }), // no desktop-style "quit" concept on mobile; Android handles backgrounding itself
     getAppVersion: () => require('../../package.json').version,
@@ -250,6 +305,7 @@ async function buildGenius() {
     getItemStats:           (name) => a.getItemStats(name),
     getLiveItemPrice:       (id) => a.getLiveItemPrice(id),
     getItemLiveTimeseries:  (id, lookback) => a.getItemLiveTimeseries(id, lookback),
+    getLaunches:            async () => a.getLaunches(),
     getDropSources:         (name) => a.getDropSources(name),
     searchMonsters:         (query) => a.searchMonsters(query),
     // mode wasn't being passed through at all — Hard Mode never worked on
@@ -262,7 +318,9 @@ async function buildGenius() {
     getItemHistoryLocal:     (id)  => a.getItemHistoryLocal(id),
     getHistoryStatus:        ()    => a.getHistoryStatus(),
     getHistoryPopulatedIds:  ()    => a.getHistoryPopulatedIds(),
-    getSignalTrend:          (limits) => a.getSignalTrend(limits),
+    // Waits for the first price fetch: both scan every history file, and on
+    // the phone running them together doubled the wait for fresh prices.
+    getSignalTrend:          (limits) => firstFetchDone.then(() => a.getSignalTrend(limits)),
     getRealTimeMovers:       (windowDays) => a.getRealTimeMovers(windowDays),
     startHistoryPopulation:  (ids) => a.startHistoryPopulation(ids, (progress) => emit('history-progress', progress)),
     stopHistoryPopulation:   ()    => a.stopHistoryPopulation(),
@@ -281,10 +339,14 @@ async function buildGenius() {
       columnWidths:       store.get('columnWidths', {}),
       showThumbnails:     store.get('showThumbnails', true),
       devMode:            store.get('devMode', false),
+      dateFormat:         store.get('dateFormat', 'MM/DD/YYYY'),
+      overpricedThreshold: store.get('overpricedThreshold', 30),
+      accentColor:        store.get('accentColor', null),
     }),
     saveSettings: (settings) => {
       Object.entries(settings).forEach(([k, v]) => store.set(k, v));
       startScheduler(); // picks up a changed fetchInterval immediately, same as main.js's save-settings handler
+      if (store.get('liveMonitoring', false)) startLiveMonitoring().catch(() => {});
       syncRunnerState();
       return { success: true };
     },
@@ -330,14 +392,42 @@ async function buildGenius() {
 
     // Alerts
     getAlerts: () => a.getAlerts(),
-    saveAlert: (alert) => a.saveAlert(alert),
-    deleteAlert: (id) => a.deleteAlert(id),
+    saveAlert: (alert) => a.saveAlert(alert).then(r => { syncRunnerState(); return r; }),
+    deleteAlert: (id) => a.deleteAlert(id).then(r => { syncRunnerState(); return r; }),
 
     // Portfolio — each mutation re-syncs the background runner's own copy
     // of open positions (see syncRunnerState) so a closed-app portfolio
     // digest never fires against stale/deleted/already-sold positions.
     getPortfolio:   () => a.getPortfolio(),
     savePosition:   (pos) => a.savePosition(pos).then(r => { syncRunnerState(); return r; }),
+    getBuyGoals:         ()       => a.getBuyGoals(),
+    getOpportunityHistory: ()     => a.getOpportunityHistory(),
+    getEvents:              ()      => a.getEvents(),
+    saveEvent:              (ev)    => a.saveEvent(ev),
+    deleteEvent:            (id)    => a.deleteEvent(id),
+    getEventSuggestions:    ()      => a.getEventSuggestions(),
+    dismissEventSuggestion: (url)   => a.dismissEventSuggestion(url),
+    getEventImpact:         (id)    => a.getEventImpact(id),
+    getQuestItems:          (name)  => a.getQuestItems(name),
+    getNewItemsSummary:     ()      => a.getNewItemsSummary(),
+    getContentDrops:        (pages) => a.getContentDrops(pages),
+    getSimilarItems:        (id)    => a.getSimilarItems(id),
+    getChartAnalysis:       (id)    => a.getChartAnalysis(id),
+    askItem:                (id, q) => a.askItem(id, q),
+    listAutoBackups:        ()      => a.listAutoBackups(),
+    restoreAutoBackup:      (f)     => a.restoreAutoBackup(f),
+    getFoodHeal:            (n)     => a.getFoodHeal(n),
+    getDxpNews:             ()      => a.getDxpNewsDetections(),
+    getNewsCalendar:        (opts)  => a.getNewsCalendar(opts),
+    getNewsFeed:            ()      => a.getNewsFeed(),
+    getNewsBadgeCount:      ()      => a.getNewsBadgeCount(),
+    markNewsRead:           (urls)  => a.markNewsRead(urls),
+    getNewsBadgePrefs:      ()      => a.getNewsBadgePrefs(),
+    setNewsBadgePrefs:      (p)     => a.setNewsBadgePrefs(p),
+    resolveDxpNews:         (url, action, dates) => a.resolveDxpNews(url, action, dates),
+    saveBuyGoal:         (goal)   => a.saveBuyGoal(goal),
+    deleteBuyGoal:       (id)     => a.deleteBuyGoal(id),
+    updateBuyGoalTotals: (totals) => a.updateBuyGoalTotals(totals).then(r => { syncRunnerState(); return r; }),
     deletePosition: (id) => a.deletePosition(id).then(r => { syncRunnerState(); return r; }),
     sellPosition:   (opts) => a.sellPosition(opts).then(r => { syncRunnerState(); return r; }),
     convertPosition:(opts) => a.convertPosition(opts).then(r => { syncRunnerState(); return r; }),
@@ -401,6 +491,34 @@ async function buildGenius() {
     },
 
     // Events
+    // Was missing: renderer.js registers this first, so the TypeError also
+    // skipped the onFetchComplete line below and the screen never updated
+    // after a fetch (header stuck on "5703m ago" with fresh data on disk).
+    onFetchStart:      (cb) => on('fetch-start', cb),
+    // Mobile only (renderer shows the setting when these exist).
+    getQuietHours: async () => (await ensureApi(), quietHoursSetting()),
+    setQuietHours: async (q) => {
+      await ensureApi();
+      store.set('quietHours', { ...quietHoursSetting(), ...q });
+      syncRunnerState();
+      return quietHoursSetting();
+    },
+    // When the background checker last ran (ms), for the header status.
+    // Phone only: desktop has no background checker, so preload.js has none.
+    getBackgroundLastRun: async () => {
+      try {
+        const r = await BackgroundRunner.dispatchEvent({ label: 'com.vonderthwood.genius.background.task', event: 'getStatus', details: {} });
+        return (r && r.lastRunAt) || null;
+      } catch { return null; }
+    },
+    getLiveMonitoring: async () => (await ensureApi(), { enabled: store.get('liveMonitoring', false), running: !!(await GeniusMonitor.isRunning().catch(() => ({}))).running }),
+    setLiveMonitoring: async (on) => {
+      await ensureApi();
+      store.set('liveMonitoring', !!on);
+      if (on) { await ensureNotificationPermission(); await startLiveMonitoring(); }
+      else await GeniusMonitor.stop();
+      return { enabled: !!on, running: !!(await GeniusMonitor.isRunning()).running };
+    },
     onFetchComplete:   (cb) => on('fetch-complete', cb),
     onFetchError:      (cb) => on('fetch-error', cb),
     onUpdateAvailable: (cb) => on('update-available', cb),
@@ -431,6 +549,24 @@ window.genius = new Proxy({}, {
 // (app fully closed) are handled separately by mobile/runners/background.js
 // via @capacitor/background-runner's WorkManager-backed scheduling, kept
 // in sync with whatever's set here through syncRunnerState().
+// The service runs the background runner on this interval (see
+// MonitorService.java for why it can't rely on this page's own timers).
+function startLiveMonitoring() {
+  return GeniusMonitor.start({ intervalMinutes: store.get('fetchInterval', 15) });
+}
+
+// The page is frozen while GEnius is off screen, so its 15-minute timer
+// doesn't run then. On returning to the app, fetch straight away if the
+// last successful fetch is older than the interval.
+let lastFetchOkAt = 0;
+App.addListener('appStateChange', ({ isActive }) => {
+  if (!isActive || !store) return;
+  const intervalMs = store.get('fetchInterval', 15) * 60 * 1000;
+  if (Date.now() - lastFetchOkAt >= intervalMs) {
+    runFetch('prices').catch(e => console.error('[GEnius] Resume fetch failed:', e.message));
+  }
+});
+
 let schedulerInterval = null;
 async function startScheduler() {
   if (schedulerInterval) clearInterval(schedulerInterval);
@@ -438,7 +574,6 @@ async function startScheduler() {
   const intervalMinutes = store.get('fetchInterval', 15);
   schedulerInterval = setInterval(() => {
     runFetch('prices').catch(e => console.error('[GEnius] Scheduled fetch failed:', e.message));
-    runNotificationChecks().catch(e => console.error('[GEnius] Notification check failed:', e.message));
     syncRunnerState();
   }, intervalMinutes * 60 * 1000);
 }
@@ -450,9 +585,19 @@ async function startScheduler() {
 // single JS thread, and giving the UI a moment to settle first measurably
 // reduces the "app feels frozen right after opening" complaint, on top of
 // the separate yield-batch-size fix in run.js/dxp_intelligence.js.
+// Ask for notification permission up front (Android 13+). It used to be
+// asked only when the app itself first showed a notification, so the
+// background runner's alerts were silently dropped on a phone that had
+// never been asked (Ben, 2026-10-15: POST_NOTIFICATIONS granted=false).
+// Asked 5s in, once the window is up: asking during startup was dropped by
+// Android (the dialog never appeared).
+setTimeout(() => ensureNotificationPermission(), 5000);
+ensureApi().then(() => {
+  if (store.get('liveMonitoring', false)) startLiveMonitoring().catch(e => console.error('[GEnius] Live monitoring start failed:', e.message));
+});
+
 setTimeout(() => {
   runFetch('prices').catch(e => console.error('[GEnius] Initial fetch failed:', e.message));
-  runNotificationChecks().catch(e => console.error('[GEnius] Notification check failed:', e.message));
   syncRunnerState();
   startScheduler();
 }, 3000);

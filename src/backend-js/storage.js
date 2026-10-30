@@ -58,7 +58,17 @@ function resolveWritable(filePath) {
 async function atomicWrite(filePath, data) {
   const tmp = filePath + '.tmp';
   await fs.promises.writeFile(tmp, data, 'utf8');
-  await fs.promises.rename(tmp, filePath);
+  // Windows: antivirus/indexer briefly holding the file makes rename fail
+  // with EPERM/EBUSY/EACCES. Seen for real (Ben, 2026-10-08): one such
+  // failure on portfolio.json at startup blanked the whole UI. Retry for
+  // up to ~2s before giving up.
+  for (let i = 0; ; i++) {
+    try { await fs.promises.rename(tmp, filePath); return; }
+    catch (e) {
+      if (i >= 9 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      await new Promise(r => setTimeout(r, 50 * (i + 1)));
+    }
+  }
 }
 
 // Reads a single JSON blob file. Returns `fallback` (default null) if the
@@ -139,12 +149,17 @@ async function loadDirBatched(dirPath, { batchSize = 200 } = {}) {
   return out;
 }
 
+// Item files are always <numeric id>.json — refuse anything else so an id
+// can never become a path (e.g. '../x') no matter which caller passed it.
+const isItemFileId = id => /^\d+$/.test(String(id));
 async function writeDirItem(dirPath, id, data) {
+  if (!isItemFileId(id)) return;
   await ensureDir(dirPath);
   await atomicWrite(path.join(dirPath, `${id}.json`), JSON.stringify(data));
 }
 
 async function readDirItem(dirPath, id) {
+  if (!isItemFileId(id)) return null;
   return readJSON(path.join(dirPath, `${id}.json`), null);
 }
 

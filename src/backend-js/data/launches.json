@@ -1,0 +1,37 @@
+{
+  "_about": "Almanac Launches tab (2026-10-28). Cards come AUTOMATICALLY from Game Updates events with a release milestone (new items = first seen -2..+5 days around release, via newItemsFor). This file only CORRECTS that: an entry matching an event (same date, name starts the same) adds watch items, predictions and notes, and can exclude ids that belong elsewhere; an entry with no matching event becomes its own card (e.g. a holiday event). Any id listed in an entry's newItems is claimed by that entry and removed from every other card (the Halloween masks first traded on Blood Knights day). Prices are never stored here: the app fetches live daily curves. predictions status: pending | confirmed | wrong, written before looking.",
+  "releases": [
+    {
+      "name": "Ghrazi Blood Knights",
+      "date": "2026-10-12",
+      "kind": "boss",
+      "watch": [
+        { "id": 63875, "name": "Crimson ichor", "why": "Guaranteed drop on every kill, plus a tertiary roll" },
+        { "id": 28627, "name": "Tectonic energy", "why": "Common drop" },
+        { "id": 57128, "name": "Shard of Genesis Essence", "why": "Common drop" }
+      ],
+      "predictions": [
+        { "text": "Crimson ichor falls (guaranteed drop + tertiary)", "status": "confirmed", "note": "Held about 5 days, then fell ~20%" },
+        { "text": "Tectonic energy: little or no rise vs the market", "status": "confirmed" },
+        { "text": "Malachi's tooth worth more than the claw (EoF/BOLG demand)", "status": "pending" }
+      ],
+      "notes": "Duo boss. Solo encounter due in November."
+    },
+    {
+      "name": "Hallowe'en 2026",
+      "date": "2026-10-12",
+      "kind": "holiday event",
+      "newItems": [
+        { "id": 64135, "name": "Pink hallowe'en mask" },
+        { "id": 64145, "name": "Pink pumpkin" }
+      ],
+      "notes": "Started the same day as Blood Knights."
+    },
+    {
+      "name": "Havenhythe Part II",
+      "date": "2026-09-28",
+      "kind": "area",
+      "notes": "The three ability codexes are made with Crimson ichor, which Blood Knights later flooded."
+    }
+  ]
+}
