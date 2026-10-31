@@ -6441,6 +6441,27 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v2.8.0',
+    items: [
+      'New Chart analysis under every item chart: trend vs the market, where the price sits in its year, tested support/resistance lines, and how dips usually play out on that item. Each reading carries its own track record, and readings that don\'t hold up are shown as Weak instead of being dressed up.',
+      'Alch floor line on charts (high alch minus a nature rune), with exactly how often the price fell below it in the last 3 years.',
+      'New "Ask about this item" in the item panel: 16 fill-in-the-blank questions (last time at a price, biggest drops, how DXPs went, flip odds...) answered from the item\'s own history.',
+      'Almanac: new Game Updates page (how past updates moved prices, with the items each one touched) and a Launches page tracking every new item by update, from launch to its low to today, on live prices.',
+      'News tab redesign: Coming up dates, a real month calendar, unread dots, and tags for DXP, items you hold or watch, and tracked updates. GEnius now reads Double XP announcements and teases from the news by itself and notifies you.',
+      'Items Jagex removes from the GE (springs, Silverhawk feathers, portables in November) stay on your Watchlist and in your Portfolio, labelled "Removed from GE", instead of silently vanishing.',
+      'Invention → Items: "Make it yourself" calculator for Tight springs and Enchanted notepaper, priced from the cheapest live disassembly source, for when springs and magic notepaper leave the GE.',
+      'Portfolio: new Buy Planner for buying up an item across 4-hour limits (several accounts per goal), Break-even and Since bought columns, a High alch sell option, multi-input Convert, and Closed Positions grouped by item.',
+      'Opportunities: new Track record page grading every high-scoring item on what its price did 1, 7 and 30 days later.',
+      'New "Moves with" in the item panel: items whose prices tend to move together (or opposite).',
+      'New SPIKE / SLUMP signals from live prices, alongside SURGE / DUMP from the GE guide. Brand-new items no longer get volume badges on day one.',
+      'Food items show heal amounts and cost per life point. Market tab can hide items under a set price so 1gp junk stops topping the movers.',
+      'Settings: restore any daily auto-backup (your current data is saved first, so a restore can be undone). Daily backups now include your portfolio and alerts.',
+      'Big fix: price history for most items had stopped updating since late June, which threw off volume signals, Opportunity Score and the Almanac. History now refreshes in the background, and the Almanac has been rebuilt.',
+      'Fixed one failed file read at startup making all your settings and data look wiped (your data was safe on disk). Fixed new items not downloading their price history.',
+      'GEnius now checks for updates every 6 hours while running, not only at launch. Many smaller fixes, a security pass, and Electron updated to the latest version.',
+    ]
+  },
+  {
     version: 'v2.7.0',
     items: [
       'New Top Movers tab — Jagex\'s own official GE Top 100 Rises/Falls alongside GEnius\'s real-time equivalent, no longer buried in a Dashboard accordion capped at 30 rows.',
