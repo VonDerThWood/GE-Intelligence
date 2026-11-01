@@ -4200,15 +4200,29 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // rewrites them from the totals (creating the position on first update).
   function syncGoalPosition(p, goal) {
     if (!goal.linked || !(goal.bought > 0)) return;
+    // Units already sold out of this goal's position live on as sold
+    // positions; the open one only holds what's left (Ben, 2026-10-31:
+    // updating totals after selling 20 whips put all 46 back as held).
+    let soldQty = 0, soldCost = 0;
+    for (const x of p.positions) {
+      if (x.planner_goal_id !== goal.id || x.status === 'open') continue;
+      const q = Number(x.sold_quantity ?? x.quantity) || 0;
+      soldQty += q; soldCost += q * (Number(x.cost_basis) || 0);
+    }
+    const heldQty = goal.bought - soldQty;
     let pos = p.positions.find(x => x.planner_goal_id === goal.id && x.status === 'open');
+    if (!(heldQty > 0)) {
+      if (pos) p.positions = p.positions.filter(x => x !== pos);
+      return;
+    }
     if (!pos) {
       pos = { id: Date.now().toString(), item_name: goal.item_name, status: 'open',
         created_at: new Date().toISOString(), date_opened: localDateStr(), planner_goal_id: goal.id,
         target_price: '', target_profit_pct: '', stop_loss: '' };
       p.positions.push(pos);
     }
-    pos.quantity = goal.bought;
-    pos.cost_basis = goal.spent / goal.bought;
+    pos.quantity = heldQty;
+    pos.cost_basis = Math.max(0, goal.spent - soldCost) / heldQty;
     // Date Opened follows the goal's earliest recorded update, so a goal
     // with back-dated totals isn't treated as bought "today". A date the
     // user set earlier than that by hand is kept.
