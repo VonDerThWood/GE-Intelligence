@@ -34,10 +34,12 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # --publish never: build only. Given a token on a tag build,
+      # electron-builder also uploads its own files to the release (v2.8.0
+      # got a stray .blockmap that way); the release step below uploads the
+      # installer itself.
       - name: Build .exe
-        run: npm run build
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npx electron-builder --win --x64 --publish never
 
       - name: Get version from package.json
         id: pkg
@@ -46,26 +48,42 @@ jobs:
           echo "version=$version" >> $env:GITHUB_OUTPUT
         shell: pwsh
 
+      # Patch notes come from RELEASE_NOTES.md, written and committed before
+      # tagging (Ben, 2026-10-31: v2.8.0 went out without them). The build
+      # fails if that file is still the previous version's notes, rather
+      # than publishing stale ones. Install and safety info is added below.
+      - name: Write release notes
+        run: |
+          $version = '${{ steps.pkg.outputs.version }}'
+          $notes = Get-Content RELEASE_NOTES.md -Raw -Encoding utf8
+          if ($notes -notmatch "(?m)^## GEnius v$([regex]::Escape($version))\s*$") {
+            Write-Error "RELEASE_NOTES.md doesn't start with '## GEnius v$version'. Write this version's notes first."
+            exit 1
+          }
+          $footer = @"
+
+          ### Install
+          1. Download ``GEnius.Setup.$version.exe`` below
+          2. Run the installer and launch GEnius from your desktop shortcut
+
+          ### Safe to use
+          - Open source: every line is in this repository, and this installer
+            was built by GitHub Actions from that public code.
+          - Never asks for your RuneScape login and never reads or connects to
+            the game client. It only uses public price data (RuneScape Wiki /
+            WeirdGloop).
+          - No accounts, no servers: your data stays on your device.
+          - Virus scan: see the VirusTotal link below (added automatically).
+          "@
+          Set-Content release_body.md ($notes.TrimEnd() + "`n" + $footer) -Encoding utf8
+        shell: pwsh
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.ref_name }}
           name: "GEnius v${{ steps.pkg.outputs.version }}"
-          body: |
-            ## GEnius v${{ steps.pkg.outputs.version }}
-
-            ### Install
-            1. Download `GEnius-Setup-${{ steps.pkg.outputs.version }}.exe` below
-            2. Run the installer and launch GEnius from your desktop shortcut
-
-            ### Safe to use
-            - Open source: every line is in this repository, and this installer
-              was built by GitHub Actions from that public code.
-            - Never asks for your RuneScape login and never reads or connects to
-              the game client. It only uses public price data (RuneScape Wiki /
-              WeirdGloop).
-            - No accounts, no servers: your data stays on your device.
-            - Virus scan: see the VirusTotal link below (added automatically).
+          body_path: release_body.md
           files: |
             dist/*.exe
           draft: false
