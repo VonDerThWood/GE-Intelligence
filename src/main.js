@@ -555,6 +555,56 @@ ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
 ipcMain.handle('get-live-item-price', async (_, itemId) => api.getLiveItemPrice(itemId));
+// ─── Phone sync: LAN listener (protocol in backend-js/sync.js) ───────────────
+const SYNC_PORT = 48917;
+const SYNC_MAX_BODY = 20 * 1024 * 1024;
+let syncServer = null;
+function startSyncServer() {
+  if (syncServer) return;
+  syncServer = require('http').createServer((req, res) => {
+    const reply = (status, body) => { res.writeHead(status, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(body)); };
+    if (req.method !== 'POST') return reply(405, { error: 'post_only' });
+    const chunks = [];
+    let size = 0;
+    req.on('data', d => {
+      size += d.length;
+      if (size > SYNC_MAX_BODY) { reply(413, { error: 'too_big' }); req.destroy(); return; }
+      chunks.push(d);
+    });
+    req.on('end', async () => {
+      try {
+        const out = await api.sync.handleRequest(req.url, JSON.parse(Buffer.concat(chunks).toString('utf8') || '{}'),
+          () => notifyRenderer('fetch-complete', { mode: 'sync', timestamp: Date.now() }));
+        reply(out.status, out.body);
+      } catch { reply(400, { error: 'bad_request' }); }
+    });
+  });
+  syncServer.on('error', e => { console.error('[sync] Listener failed:', e.message); syncServer = null; });
+  syncServer.listen(SYNC_PORT, '0.0.0.0');
+}
+// Private (home network) IPv4 addresses, best guess first. Adapters from VMs
+// and VPNs tend to use 10.x or 172.x, so 192.168.x comes first.
+function localAddresses() {
+  const out = [];
+  for (const list of Object.values(require('os').networkInterfaces())) {
+    for (const a of list) if (a.family === 'IPv4' && !a.internal && /^(192\.168\.|10\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a.address)) out.push(a.address);
+  }
+  return out.sort((a, b) => b.startsWith('192.168.') - a.startsWith('192.168.'));
+}
+ipcMain.handle('sync-start-pairing', async () => {
+  startSyncServer();
+  const { code, expires } = api.sync.startPairing();
+  const addresses = localAddresses();
+  if (!addresses.length) return { error: 'This PC does not seem to be on a home network.' };
+  const qr = await require('qrcode').toDataURL('genius-sync:' + addresses[0] + ':' + SYNC_PORT + ':' + code, { margin: 2, width: 260 });
+  return { code, expires, host: addresses[0], otherHosts: addresses.slice(1), port: SYNC_PORT, qr };
+});
+ipcMain.handle('sync-cancel-pairing', () => api.sync.cancelPairing());
+ipcMain.handle('sync-list-devices', () => api.sync.listDevices());
+ipcMain.handle('sync-unpair-device', (_, id) => api.sync.unpairDevice(id));
+ipcMain.handle('sync-get-conflicts', () => api.sync.getConflicts());
+ipcMain.handle('sync-clear-conflicts', () => api.sync.clearConflicts());
+
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-launches', async () => api.getLaunches());
@@ -670,6 +720,7 @@ async function prepareTestModeData() {
 }
 
 app.whenReady().then(async () => {
+  setTimeout(() => { if (api?.sync.listDevices().length) startSyncServer(); }, 3000);
   // app.quit() above is asynchronous — without this, a second instance
   // still went on to create a window, load data and run the scheduler
   // (writing the same files) before it exited. Seen 2026-10-08: data

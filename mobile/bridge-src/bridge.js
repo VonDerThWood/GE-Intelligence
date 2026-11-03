@@ -18,7 +18,8 @@ const { App } = require('@capacitor/app');
 const { Filesystem, Directory, Encoding } = require('@capacitor/filesystem');
 const { LocalNotifications } = require('@capacitor/local-notifications');
 const { BackgroundRunner } = require('@capacitor/background-runner');
-const { registerPlugin } = require('@capacitor/core');
+const { registerPlugin, CapacitorHttp } = require('@capacitor/core');
+const { BarcodeScanner } = require('@capacitor-mlkit/barcode-scanning');
 // App-local native plugin (android/.../GeniusMonitorPlugin.java): the
 // optional Live monitoring foreground service.
 const GeniusMonitor = registerPlugin('GeniusMonitor');
@@ -275,11 +276,33 @@ async function runFetchOnce(mode) {
     emit('fetch-complete', { mode, timestamp: Date.now() });
     // Smaller batch than desktop's 500 — mobile data and battery.
     if (mode !== 'news') a.syncLiveHistory().catch(() => {});
+    runSync().catch(() => {});
     if (mode !== 'news') a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {});
   } catch (error) {
     emit('fetch-error', { error: error.message });
     throw error;
   }
+}
+
+// Phone sync (protocol in backend-js/sync.js). Native HTTP: the WebView's own
+// fetch can't reach a plain http:// address from its https page.
+const syncPost = async (url, data) => {
+  const r = await CapacitorHttp.post({ url, data, headers: { 'Content-Type': 'application/json' }, connectTimeout: 8000, readTimeout: 60000 });
+  return { status: r.status, data: typeof r.data === 'string' ? JSON.parse(r.data || '{}') : r.data };
+};
+async function runSync(opts) {
+  const a = await ensureApi();
+  const r = await a.sync.syncNow(syncPost, opts);
+  if (r.changed) emit('fetch-complete', { mode: 'sync', timestamp: Date.now() });
+  return r;
+}
+// Google's scanner runs outside the app, so GEnius needs no camera permission.
+async function scanSyncQr() {
+  const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+  if (!available) { await BarcodeScanner.installGoogleBarcodeScannerModule(); return { error: 'Scanner is downloading. Try again in a moment, or type the code.' }; }
+  const { barcodes } = await BarcodeScanner.scan({ formats: ['QR_CODE'] });
+  const m = String(barcodes[0]?.rawValue || '').match(/^genius-sync:([\d.]+):(\d+):([A-Z0-9]+)$/);
+  return m ? { host: m[1], port: Number(m[2]), code: m[3] } : { canceled: !barcodes.length, error: barcodes.length ? 'That is not a GEnius code.' : null };
 }
 
 async function buildGenius() {
@@ -305,6 +328,16 @@ async function buildGenius() {
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
     getLiveItemPrice:       (id) => a.getLiveItemPrice(id),
+    syncRole: 'phone',
+    syncStatus: async () => (await ensureApi()).sync.clientStatus(),
+    syncScan: scanSyncQr,
+    syncPair: async ({ host, port, code }) => {
+      const a = await ensureApi();
+      try { return await a.sync.pairWith({ host, port: port || 48917, code, name: 'Phone' }, syncPost); }
+      catch { return { error: 'no_reply' }; }
+    },
+    syncNow: (opts) => runSync(opts),
+    syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
     getItemLiveHistory:     (id, days) => a.getItemLiveHistory(id, days),
     getItemLiveTimeseries:  (id, lookback) => a.getItemLiveTimeseries(id, lookback),
     getLaunches:            async () => a.getLaunches(),
@@ -566,6 +599,8 @@ App.addListener('appStateChange', ({ isActive }) => {
   const intervalMs = store.get('fetchInterval', 15) * 60 * 1000;
   if (Date.now() - lastFetchOkAt >= intervalMs) {
     runFetch('prices').catch(e => console.error('[GEnius] Resume fetch failed:', e.message));
+  } else {
+    runSync().catch(() => {});
   }
 });
 

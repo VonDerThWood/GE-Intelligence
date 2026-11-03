@@ -32,6 +32,7 @@ const path = require('path');
 const storage = require('./storage.js');
 const catalogue = require('./catalogue.js');
 const { createLiveHistory } = require('./live-history.js');
+const { createSync } = require('./sync.js');
 
 const SIGNAL_TREND_DAYS = 7;
 
@@ -5110,6 +5111,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDropSources,
     getLiveItemPrice,
     getItemLiveTimeseries,
+    sync: createSync({ dataDir, store, writePortfolio, buildExportBundle }),
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLaunches,

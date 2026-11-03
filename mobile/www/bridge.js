@@ -901,7 +901,7 @@
           return this.request(Object.assign(Object.assign({}, options), { method: "DELETE" }));
         }
       };
-      var CapacitorHttp = registerPlugin2("CapacitorHttp", {
+      var CapacitorHttp2 = registerPlugin2("CapacitorHttp", {
         web: () => new CapacitorHttpPluginWeb()
       });
       exports.SystemBarsStyle = void 0;
@@ -935,7 +935,7 @@
       exports.Capacitor = Capacitor;
       exports.CapacitorCookies = CapacitorCookies;
       exports.CapacitorException = CapacitorException;
-      exports.CapacitorHttp = CapacitorHttp;
+      exports.CapacitorHttp = CapacitorHttp2;
       exports.SystemBars = SystemBars;
       exports.WebPlugin = WebPlugin;
       exports.WebView = WebView;
@@ -22543,6 +22543,412 @@
     }
   });
 
+  // src/backend-js/sync-merge.js
+  var require_sync_merge = __commonJS({
+    "src/backend-js/sync-merge.js"(exports, module) {
+      function stable(v) {
+        if (Array.isArray(v)) return `[${v.map(stable).join(",")}]`;
+        if (v && typeof v === "object") return `{${Object.keys(v).filter((k) => v[k] !== void 0).sort().map((k) => `${JSON.stringify(k)}:${stable(v[k])}`).join(",")}}`;
+        return v === void 0 ? "undefined" : JSON.stringify(v);
+      }
+      var same = (a, b) => stable(a) === stable(b);
+      var FIELD_RULES = {
+        // Both devices sold part of a position: both reductions happened.
+        quantity(baseV, hubV, phoneV, hubRec, phoneRec) {
+          if (typeof baseV !== "number" || hubRec.status !== "open" || phoneRec.status !== "open") return void 0;
+          return Math.max(0, baseV + (hubV - baseV) + (phoneV - baseV));
+        },
+        firedAt: (_, hubV, phoneV) => Math.max(hubV || 0, phoneV || 0) || null,
+        // Buy goal update snapshots: keep every one from both sides.
+        history(_, hubV, phoneV) {
+          if (!Array.isArray(hubV) || !Array.isArray(phoneV)) return void 0;
+          const byT = new Map([...hubV, ...phoneV].map((h) => [h.t, h]));
+          return [...byT.values()].sort((x, y) => x.t - y.t);
+        }
+      };
+      function mergeRecord(kind, base, hub, phone, conflicts) {
+        const out = {};
+        for (const key of /* @__PURE__ */ new Set([...Object.keys(hub), ...Object.keys(phone), ...Object.keys(base)])) {
+          const b = base[key], h = hub[key], p = phone[key];
+          let v;
+          if (same(h, p) || same(p, b)) v = h;
+          else if (same(h, b)) v = p;
+          else {
+            const rule = FIELD_RULES[key] && FIELD_RULES[key](b, h, p, hub, phone);
+            if (rule !== void 0) v = rule;
+            else {
+              v = h;
+              conflicts.push({ kind, id: hub.id, name: hub.item_name || null, field: key, kept: h ?? null, other: p ?? null });
+            }
+          }
+          if (v !== void 0) out[key] = v;
+        }
+        return out;
+      }
+      function mergeRecords(kind, baseList, hubList, phoneList, conflicts) {
+        const index = (list) => new Map((list || []).map((r) => [String(r.id), r]));
+        const base = index(baseList), hub = index(hubList), phone = index(phoneList);
+        const out = [];
+        for (const [id, h] of hub) {
+          const p = phone.get(id), b = base.get(id);
+          if (p && b) out.push(mergeRecord(kind, b, h, p, conflicts));
+          else if (p) {
+            out.push(h);
+            if (!same(h, p)) out.push({ ...p, id: `${id}_p` });
+          } else if (!b) out.push(h);
+          else if (!same(h, b)) {
+            out.push(h);
+            conflicts.push({ kind, id, name: h.item_name || null, field: "deleted on phone", kept: "kept", other: "deleted" });
+          }
+        }
+        for (const [id, p] of phone) {
+          if (hub.has(id)) continue;
+          const b = base.get(id);
+          if (!b) out.push(p);
+          else if (!same(p, b)) {
+            out.push(p);
+            conflicts.push({ kind, id, name: p.item_name || null, field: "deleted on PC", kept: "kept", other: "deleted" });
+          }
+        }
+        return out;
+      }
+      function mergeSet(baseList, hubList, phoneList) {
+        const base = new Set((baseList || []).map(String));
+        const hub = hubList || [], phone = phoneList || [];
+        const hubKeys = new Set(hub.map(String)), phoneKeys = new Set(phone.map(String));
+        const kept = hub.filter((x) => phoneKeys.has(String(x)) || !base.has(String(x)));
+        const added = phone.filter((x) => !hubKeys.has(String(x)) && !base.has(String(x)));
+        return [...kept, ...added];
+      }
+      function mergeMap(kind, base = {}, hub = {}, phone = {}, conflicts) {
+        const out = {};
+        for (const key of /* @__PURE__ */ new Set([...Object.keys(hub), ...Object.keys(phone)])) {
+          const b = base[key], h = hub[key], p = phone[key];
+          let v;
+          if (same(h, p) || same(p, b)) v = h;
+          else if (same(h, b)) v = p;
+          else {
+            v = h;
+            conflicts.push({ kind, id: key, name: key, field: "value", kept: h ?? null, other: p ?? null });
+          }
+          if (v !== void 0) out[key] = v;
+        }
+        return out;
+      }
+      function mergeTax(base, hub, phone) {
+        if (!hub) return phone || null;
+        if (!phone) return hub;
+        if (same(hub, phone)) return hub;
+        const b = base || {};
+        const out = { ...hub, lifetime_tax: Math.max(0, (b.lifetime_tax || 0) + ((hub.lifetime_tax || 0) - (b.lifetime_tax || 0)) + ((phone.lifetime_tax || 0) - (b.lifetime_tax || 0))) };
+        for (const [total, date] of [["today_tax", "day_date"], ["week_tax", "week_date"], ["month_tax", "month_date"]]) {
+          if (hub[date] !== phone[date]) {
+            const newer = (hub[date] || "") > (phone[date] || "") ? hub : phone;
+            out[total] = newer[total] || 0;
+            out[date] = newer[date];
+          } else {
+            const start = b[date] === hub[date] ? b[total] || 0 : 0;
+            out[total] = Math.max(0, start + ((hub[total] || 0) - start) + ((phone[total] || 0) - start));
+            out[date] = hub[date];
+          }
+        }
+        return out;
+      }
+      function mergeEvents(hub, phone) {
+        const byStart = /* @__PURE__ */ new Map();
+        for (const row of [...hub || [], ...phone || []]) if (!byStart.has(row[1])) byStart.set(row[1], row);
+        return [...byStart.values()].sort((x, y) => x[1] < y[1] ? 1 : -1);
+      }
+      function merge({ base, hub, phone }) {
+        for (const [name, s] of [["hub", hub], ["phone", phone]]) {
+          if (!s || !s.portfolio || !Array.isArray(s.portfolio.positions) || !Array.isArray(s.alerts)) throw new Error(`Sync: ${name} data is missing or unreadable`);
+        }
+        const b = base || {};
+        const conflicts = [];
+        const bp = b.portfolio || {}, hp = hub.portfolio, pp = phone.portfolio;
+        const merged = {
+          portfolio: {
+            ...hp,
+            positions: mergeRecords("position", bp.positions, hp.positions, pp.positions, conflicts),
+            buy_goals: mergeRecords("goal", bp.buy_goals, hp.buy_goals, pp.buy_goals, conflicts),
+            tax_stats: mergeTax(bp.tax_stats, hp.tax_stats, pp.tax_stats)
+          },
+          alerts: mergeRecords("alert", b.alerts, hub.alerts, phone.alerts, conflicts),
+          reminders: mergeRecords("reminder", b.reminders, hub.reminders, phone.reminders, conflicts),
+          watchlist: mergeSet(b.watchlist, hub.watchlist, phone.watchlist),
+          hiddenItems: mergeSet(b.hiddenItems, hub.hiddenItems, phone.hiddenItems),
+          dxpWatchlist: mergeSet(b.dxpWatchlist, hub.dxpWatchlist, phone.dxpWatchlist),
+          itemNotes: mergeMap("note", b.itemNotes, hub.itemNotes, phone.itemNotes, conflicts),
+          userShorthands: mergeMap("shorthand", b.userShorthands, hub.userShorthands, phone.userShorthands, conflicts),
+          dxpEvents: mergeEvents(hub.dxpEvents, phone.dxpEvents)
+        };
+        const before = Math.max(hp.positions.length, pp.positions.length);
+        const suspicious = before >= 5 && merged.portfolio.positions.length < before / 2;
+        return { merged, conflicts, suspicious };
+      }
+      module.exports = { merge };
+    }
+  });
+
+  // src/backend-js/sync.js
+  var require_sync = __commonJS({
+    "src/backend-js/sync.js"(exports, module) {
+      var path = require_path_browserify();
+      var storage2 = require_storage_capacitor();
+      var { merge } = require_sync_merge();
+      var PAIR_WINDOW_MS = 2 * 60 * 1e3;
+      var PAIR_MAX_ATTEMPTS = 5;
+      var CLOCK_SKEW_MS = 10 * 60 * 1e3;
+      var BACKUP_DAYS = 15;
+      var CODE_CHARS = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
+      var enc = new TextEncoder();
+      var dec = new TextDecoder();
+      var subtle = () => globalThis.crypto.subtle;
+      var toB64 = (bytes) => {
+        let s = "";
+        for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode(...bytes.subarray(i, i + 32768));
+        return btoa(s);
+      };
+      var fromB64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+      var randomBytes = (n) => globalThis.crypto.getRandomValues(new Uint8Array(n));
+      var newId = () => toB64(randomBytes(12)).replace(/[+/=]/g, "");
+      var importKey = (b64) => subtle().importKey("raw", fromB64(b64), "AES-GCM", false, ["encrypt", "decrypt"]);
+      async function seal(key, obj) {
+        const iv = randomBytes(12);
+        const data = await subtle().encrypt({ name: "AES-GCM", iv }, key, enc.encode(JSON.stringify(obj)));
+        return `${toB64(iv)}.${toB64(new Uint8Array(data))}`;
+      }
+      async function open(key, text) {
+        const [iv, data] = String(text).split(".");
+        return JSON.parse(dec.decode(await subtle().decrypt({ name: "AES-GCM", iv: fromB64(iv) }, key, fromB64(data))));
+      }
+      async function codeKey(code) {
+        const raw = await subtle().importKey("raw", enc.encode(String(code).toUpperCase().replace(/[^A-Z0-9]/g, "")), "PBKDF2", false, ["deriveKey"]);
+        return subtle().deriveKey(
+          { name: "PBKDF2", salt: enc.encode("genius-sync-pair-v1"), iterations: 1e5, hash: "SHA-256" },
+          raw,
+          { name: "AES-GCM", length: 256 },
+          false,
+          ["encrypt", "decrypt"]
+        );
+      }
+      function newCode() {
+        const r = randomBytes(8);
+        return Array.from(r, (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
+      }
+      var fresh = (ts) => Math.abs(Date.now() - Number(ts)) < CLOCK_SKEW_MS;
+      function createSync({ dataDir, store: store2, writePortfolio, buildExportBundle }) {
+        const portfolioFile = path.join(dataDir, "portfolio.json");
+        const alertsFile = path.join(dataDir, "alerts.json");
+        const eventsFile = path.join(dataDir, "dxp_events.json");
+        const syncDir = path.join(dataDir, "sync");
+        const backupDir = path.join(dataDir, "autobackups");
+        const baseFile = (id) => path.join(syncDir, `base-${String(id).replace(/[^\w-]/g, "")}.json`);
+        async function readStrict(file, empty) {
+          const data = await storage2.readJSON(file, null);
+          if (data !== null) return data;
+          if (await storage2.pathExists(file)) throw new Error(`Could not read ${path.basename(file)}`);
+          return empty;
+        }
+        async function readState() {
+          return {
+            portfolio: await readStrict(portfolioFile, { positions: [], buy_goals: [], tax_stats: null }),
+            alerts: await readStrict(alertsFile, []),
+            reminders: store2.get("reminders", []),
+            watchlist: store2.get("watchlist", []),
+            hiddenItems: store2.get("hiddenItems", []),
+            dxpWatchlist: store2.get("dxpWatchlist", []),
+            itemNotes: store2.get("itemNotes", {}),
+            userShorthands: store2.get("userShorthands", {}),
+            dxpEvents: await storage2.readJSON(eventsFile, [])
+          };
+        }
+        async function writeState(s) {
+          await writePortfolio(s.portfolio);
+          await storage2.writeJSON(alertsFile, s.alerts, { pretty: true });
+          for (const k of ["reminders", "watchlist", "hiddenItems", "dxpWatchlist", "itemNotes", "userShorthands"]) store2.set(k, s[k]);
+          await storage2.writeJSON(eventsFile, s.dxpEvents, { pretty: true });
+        }
+        async function backup() {
+          await storage2.ensureDir(backupDir);
+          const stamp = `${(/* @__PURE__ */ new Date()).toISOString().slice(0, 13)}-00`;
+          const file = path.join(backupDir, `pre-restore-${stamp}.json`);
+          if (!await storage2.pathExists(file)) {
+            const now = await buildExportBundle();
+            now.backedUpAt = (/* @__PURE__ */ new Date()).toISOString();
+            await storage2.writeJSON(file, now, { pretty: true });
+          }
+          const cutoff = new Date(Date.now() - BACKUP_DAYS * 864e5).toISOString().slice(0, 10);
+          for (const f of await storage2.listJSONFiles(backupDir)) {
+            const m = f.match(/^pre-restore-(\d{4}-\d{2}-\d{2})T\d{2}-00\.json$/);
+            if (m && m[1] < cutoff) await storage2.deleteFile(path.join(backupDir, f));
+          }
+        }
+        async function applyIfChanged(current, next) {
+          if (JSON.stringify(current) === JSON.stringify(next)) return false;
+          await backup();
+          await writeState(next);
+          return true;
+        }
+        let pairing = null;
+        let queue = Promise.resolve();
+        const inOrder = (fn) => {
+          const run = queue.then(fn, fn);
+          queue = run.catch(() => {
+          });
+          return run;
+        };
+        const devices = () => store2.get("syncDevices", {});
+        function startPairing() {
+          pairing = { code: newCode(), expires: Date.now() + PAIR_WINDOW_MS, attempts: 0 };
+          return { code: pairing.code, expires: pairing.expires };
+        }
+        const cancelPairing = () => {
+          pairing = null;
+        };
+        async function handlePair(body) {
+          if (!pairing || Date.now() > pairing.expires) return { status: 403, body: { error: "not_pairing" } };
+          if (++pairing.attempts > PAIR_MAX_ATTEMPTS) {
+            pairing = null;
+            return { status: 403, body: { error: "not_pairing" } };
+          }
+          const key = await codeKey(pairing.code);
+          let hello;
+          try {
+            hello = await open(key, body.c);
+          } catch {
+            return { status: 403, body: { error: "bad_code" } };
+          }
+          if (!fresh(hello.ts) || !hello.deviceId) return { status: 403, body: { error: "bad_code" } };
+          pairing = null;
+          const secret = toB64(randomBytes(32));
+          store2.set("syncDevices", { ...devices(), [hello.deviceId]: { name: String(hello.name || "Phone").slice(0, 60), key: secret, pairedAt: Date.now(), lastSyncAt: null } });
+          return { status: 200, body: { c: await seal(key, { key: secret }) } };
+        }
+        async function hubSync(deviceId, lastRev, phoneState) {
+          const hubState = await readState();
+          const file = baseFile(deviceId);
+          const saved = await storage2.readJSON(file, null);
+          let merged, conflicts = [];
+          if (lastRev == null) {
+            merged = hubState;
+          } else {
+            const base = saved && [saved.current, saved.previous].find((x) => x && x.rev === lastRev);
+            if (!base) return { error: "out_of_step" };
+            const r = merge({ base: base.state, hub: hubState, phone: phoneState });
+            if (r.suspicious) return { error: "suspicious" };
+            merged = r.merged;
+            conflicts = r.conflicts;
+            await applyIfChanged(hubState, merged);
+          }
+          const unchanged = saved?.current && lastRev === saved.current.rev && JSON.stringify(saved.current.state) === JSON.stringify(merged);
+          const rev = unchanged ? saved.current.rev : newId();
+          if (!unchanged) {
+            await storage2.ensureDir(syncDir);
+            await storage2.writeJSON(file, { current: { rev, state: merged }, previous: saved?.current || null });
+          }
+          if (conflicts.length) {
+            const log = await storage2.readJSON(path.join(syncDir, "conflicts.json"), []);
+            const at = Date.now();
+            await storage2.writeJSON(path.join(syncDir, "conflicts.json"), [...conflicts.map((c) => ({ ...c, at, device: deviceId })), ...log].slice(0, 200), { pretty: true });
+          }
+          return { rev, state: merged, conflicts: conflicts.length, changedHub: lastRev != null && JSON.stringify(hubState) !== JSON.stringify(merged) };
+        }
+        async function handleRequest(route, body, onHubChanged) {
+          if (route === "/ping") return { status: 200, body: { app: "genius-sync", v: 1 } };
+          if (route === "/pair") return inOrder(() => handlePair(body || {}));
+          if (route !== "/sync") return { status: 404, body: { error: "not_found" } };
+          const dev = devices()[body?.d];
+          if (!dev) return { status: 403, body: { error: "not_paired" } };
+          const key = await importKey(dev.key);
+          let msg;
+          try {
+            msg = await open(key, body.c);
+          } catch {
+            return { status: 403, body: { error: "not_paired" } };
+          }
+          if (!fresh(msg.ts)) return { status: 403, body: { error: "clock" } };
+          const out = await inOrder(async () => {
+            try {
+              return await hubSync(body.d, msg.lastRev ?? null, msg.state);
+            } catch (e) {
+              return { error: "hub_failed", detail: e.message };
+            }
+          });
+          if (out.error) return { status: 200, body: { c: await seal(key, out) } };
+          store2.set("syncDevices", { ...devices(), [body.d]: { ...devices()[body.d], lastSyncAt: Date.now() } });
+          if (out.changedHub && onHubChanged) onHubChanged();
+          return { status: 200, body: { c: await seal(key, out) } };
+        }
+        const listDevices = () => Object.entries(devices()).map(([id, d]) => ({ id, name: d.name, pairedAt: d.pairedAt, lastSyncAt: d.lastSyncAt }));
+        async function unpairDevice(id) {
+          const { [id]: _gone, ...rest } = devices();
+          store2.set("syncDevices", rest);
+          await storage2.deleteFile(baseFile(id));
+        }
+        const getConflicts = () => storage2.readJSON(path.join(syncDir, "conflicts.json"), []);
+        const clearConflicts = () => storage2.writeJSON(path.join(syncDir, "conflicts.json"), []);
+        const clientInfo = () => store2.get("syncClient", null);
+        async function pairWith({ host, port, code, name }, post) {
+          const key = await codeKey(code);
+          const deviceId = clientInfo()?.deviceId || newId();
+          const r = await post(`http://${host}:${port}/pair`, { c: await seal(key, { deviceId, name, ts: Date.now() }) });
+          if (r.status !== 200 || !r.data?.c) return { error: r.data?.error || "no_reply" };
+          const { key: secret } = await open(key, r.data.c);
+          store2.set("syncClient", { ...clientInfo() || {}, deviceId, host, port, key: secret, lastRev: clientInfo()?.lastRev ?? null, lastSyncAt: clientInfo()?.lastSyncAt ?? null });
+          return { success: true };
+        }
+        let running = null;
+        async function syncOnce(post, { startOver = false } = {}) {
+          const c = clientInfo();
+          if (!c) return { error: "not_paired" };
+          const key = await importKey(c.key);
+          const mine = await readState();
+          const lastRev = startOver ? null : c.lastRev;
+          let r;
+          try {
+            r = await post(`http://${c.host}:${c.port}/sync`, { d: c.deviceId, c: await seal(key, { ts: Date.now(), lastRev, state: mine }) });
+          } catch {
+            return { error: "unreachable" };
+          }
+          if (r.status !== 200 || !r.data?.c) return { error: r.data?.error || "unreachable" };
+          const out = await open(key, r.data.c);
+          if (out.error) return { error: out.error };
+          const changed = await applyIfChanged(mine, out.state);
+          store2.set("syncClient", { ...clientInfo(), lastRev: out.rev, lastSyncAt: Date.now() });
+          return { success: true, changed, conflicts: out.conflicts || 0 };
+        }
+        function syncNow(post, opts) {
+          if (!running) running = syncOnce(post, opts).catch((e) => ({ error: e.message })).finally(() => {
+            running = null;
+          });
+          return running;
+        }
+        const clientStatus = () => {
+          const c = clientInfo();
+          return c ? { paired: true, host: c.host, port: c.port, lastSyncAt: c.lastSyncAt } : { paired: false };
+        };
+        const unpairClient = () => store2.set("syncClient", null);
+        return {
+          // hub
+          startPairing,
+          cancelPairing,
+          handleRequest,
+          listDevices,
+          unpairDevice,
+          getConflicts,
+          clearConflicts,
+          // phone
+          pairWith,
+          syncNow,
+          clientStatus,
+          unpairClient
+        };
+      }
+      module.exports = { createSync };
+    }
+  });
+
   // src/backend-js/_pyround.js
   var require_pyround = __commonJS({
     "src/backend-js/_pyround.js"(exports, module) {
@@ -24062,6 +24468,7 @@
       var storage2 = require_storage_capacitor();
       var catalogue = require_catalogue();
       var { createLiveHistory } = require_live_history();
+      var { createSync } = require_sync();
       var SIGNAL_TREND_DAYS = 7;
       var DISCORD_WEBHOOK_RE = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+\/?(?:\?[\w=&-]*)?$/;
       function localDateStr(d = /* @__PURE__ */ new Date()) {
@@ -28200,6 +28607,7 @@
           getDropSources,
           getLiveItemPrice,
           getItemLiveTimeseries,
+          sync: createSync({ dataDir, store: store2, writePortfolio, buildExportBundle }),
           syncLiveHistory: () => liveHistory.sync(),
           getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
           getLaunches,
@@ -28567,6 +28975,273 @@
         BackgroundRunnerWeb
       });
       exports.BackgroundRunner = BackgroundRunner2;
+    }
+  });
+
+  // node_modules/@capacitor-mlkit/barcode-scanning/dist/plugin.cjs.js
+  var require_plugin_cjs6 = __commonJS({
+    "node_modules/@capacitor-mlkit/barcode-scanning/dist/plugin.cjs.js"(exports) {
+      "use strict";
+      var core = require_index_cjs();
+      exports.BarcodeFormat = void 0;
+      (function(BarcodeFormat) {
+        BarcodeFormat["Aztec"] = "AZTEC";
+        BarcodeFormat["Codabar"] = "CODABAR";
+        BarcodeFormat["Code39"] = "CODE_39";
+        BarcodeFormat["Code93"] = "CODE_93";
+        BarcodeFormat["Code128"] = "CODE_128";
+        BarcodeFormat["DataMatrix"] = "DATA_MATRIX";
+        BarcodeFormat["Ean8"] = "EAN_8";
+        BarcodeFormat["Ean13"] = "EAN_13";
+        BarcodeFormat["Itf"] = "ITF";
+        BarcodeFormat["Pdf417"] = "PDF_417";
+        BarcodeFormat["QrCode"] = "QR_CODE";
+        BarcodeFormat["UpcA"] = "UPC_A";
+        BarcodeFormat["UpcE"] = "UPC_E";
+      })(exports.BarcodeFormat || (exports.BarcodeFormat = {}));
+      exports.BarcodeValueType = void 0;
+      (function(BarcodeValueType) {
+        BarcodeValueType["CalendarEvent"] = "CALENDAR_EVENT";
+        BarcodeValueType["ContactInfo"] = "CONTACT_INFO";
+        BarcodeValueType["DriversLicense"] = "DRIVERS_LICENSE";
+        BarcodeValueType["Email"] = "EMAIL";
+        BarcodeValueType["Geo"] = "GEO";
+        BarcodeValueType["Isbn"] = "ISBN";
+        BarcodeValueType["Phone"] = "PHONE";
+        BarcodeValueType["Product"] = "PRODUCT";
+        BarcodeValueType["Sms"] = "SMS";
+        BarcodeValueType["Text"] = "TEXT";
+        BarcodeValueType["Url"] = "URL";
+        BarcodeValueType["Wifi"] = "WIFI";
+        BarcodeValueType["Unknown"] = "UNKNOWN";
+      })(exports.BarcodeValueType || (exports.BarcodeValueType = {}));
+      exports.Resolution = void 0;
+      (function(Resolution) {
+        Resolution[Resolution["640x480"] = 0] = "640x480";
+        Resolution[Resolution["1280x720"] = 1] = "1280x720";
+        Resolution[Resolution["1920x1080"] = 2] = "1920x1080";
+        Resolution[Resolution["3840x2160"] = 3] = "3840x2160";
+      })(exports.Resolution || (exports.Resolution = {}));
+      exports.LensFacing = void 0;
+      (function(LensFacing) {
+        LensFacing["Front"] = "FRONT";
+        LensFacing["Back"] = "BACK";
+      })(exports.LensFacing || (exports.LensFacing = {}));
+      exports.GoogleBarcodeScannerModuleInstallState = void 0;
+      (function(GoogleBarcodeScannerModuleInstallState) {
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["UNKNOWN"] = 0] = "UNKNOWN";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["PENDING"] = 1] = "PENDING";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["DOWNLOADING"] = 2] = "DOWNLOADING";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["CANCELED"] = 3] = "CANCELED";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["COMPLETED"] = 4] = "COMPLETED";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["FAILED"] = 5] = "FAILED";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["INSTALLING"] = 6] = "INSTALLING";
+        GoogleBarcodeScannerModuleInstallState[GoogleBarcodeScannerModuleInstallState["DOWNLOAD_PAUSED"] = 7] = "DOWNLOAD_PAUSED";
+      })(exports.GoogleBarcodeScannerModuleInstallState || (exports.GoogleBarcodeScannerModuleInstallState = {}));
+      exports.AddressType = void 0;
+      (function(AddressType) {
+        AddressType[AddressType["HOME"] = 0] = "HOME";
+        AddressType[AddressType["UNKNOWN"] = 1] = "UNKNOWN";
+        AddressType[AddressType["WORK"] = 2] = "WORK";
+      })(exports.AddressType || (exports.AddressType = {}));
+      exports.EmailFormatType = void 0;
+      (function(EmailFormatType) {
+        EmailFormatType[EmailFormatType["HOME"] = 0] = "HOME";
+        EmailFormatType[EmailFormatType["UNKNOWN"] = 1] = "UNKNOWN";
+        EmailFormatType[EmailFormatType["WORK"] = 2] = "WORK";
+      })(exports.EmailFormatType || (exports.EmailFormatType = {}));
+      exports.PhoneFormatType = void 0;
+      (function(PhoneFormatType) {
+        PhoneFormatType[PhoneFormatType["FAX"] = 0] = "FAX";
+        PhoneFormatType[PhoneFormatType["HOME"] = 1] = "HOME";
+        PhoneFormatType[PhoneFormatType["MOBILE"] = 2] = "MOBILE";
+        PhoneFormatType[PhoneFormatType["UNKNOWN"] = 3] = "UNKNOWN";
+        PhoneFormatType[PhoneFormatType["WORK"] = 4] = "WORK";
+      })(exports.PhoneFormatType || (exports.PhoneFormatType = {}));
+      exports.WifiEncryptionType = void 0;
+      (function(WifiEncryptionType) {
+        WifiEncryptionType[WifiEncryptionType["OPEN"] = 1] = "OPEN";
+        WifiEncryptionType[WifiEncryptionType["WEP"] = 2] = "WEP";
+        WifiEncryptionType[WifiEncryptionType["WPA"] = 3] = "WPA";
+      })(exports.WifiEncryptionType || (exports.WifiEncryptionType = {}));
+      var BarcodeScanner2 = core.registerPlugin("BarcodeScanner", {
+        web: () => Promise.resolve().then(function() {
+          return web;
+        }).then((m) => new m.BarcodeScannerWeb())
+      });
+      var BarcodeScannerWeb = class extends core.WebPlugin {
+        constructor() {
+          super(...arguments);
+          this._isSupported = "BarcodeDetector" in window;
+          this.errorVideoElementMissing = "videoElement must be provided.";
+          this.errorBlobMissing = "blob must be provided.";
+          this.eventBarcodesScanned = "barcodesScanned";
+        }
+        async startScan(options) {
+          if (!this._isSupported) {
+            throw this.createUnavailableException();
+          }
+          if (!(options === null || options === void 0 ? void 0 : options.videoElement)) {
+            throw new Error(this.errorVideoElementMissing);
+          }
+          this.videoElement = options.videoElement;
+          this.stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              facingMode: {
+                ideal: (options === null || options === void 0 ? void 0 : options.lensFacing) === exports.LensFacing.Front ? "user" : "environment"
+              }
+            },
+            audio: false
+          });
+          options.videoElement.srcObject = this.stream;
+          await options.videoElement.play();
+          const barcodeDetector = new BarcodeDetector();
+          this.intervalId = window.setInterval(async () => {
+            if (!options.videoElement) {
+              return;
+            }
+            const barcodes = await barcodeDetector.detect(options.videoElement);
+            if (barcodes.length === 0) {
+              return;
+            } else {
+              this.handleScannedBarcodes(barcodes);
+            }
+          }, 500);
+        }
+        async stopScan() {
+          if (!this._isSupported) {
+            throw this.createUnavailableException();
+          }
+          if (this.intervalId) {
+            clearInterval(this.intervalId);
+            this.intervalId = void 0;
+          }
+          if (this.stream) {
+            this.stream.getTracks().forEach((track) => track.stop());
+            this.stream = void 0;
+          }
+          if (this.videoElement) {
+            this.videoElement.srcObject = null;
+            this.videoElement = void 0;
+          }
+        }
+        async readBarcodesFromImage(options) {
+          var _a;
+          if (!this._isSupported) {
+            throw this.createUnavailableException();
+          }
+          if (!options.blob) {
+            throw new Error(this.errorBlobMissing);
+          }
+          const formats = (_a = options.formats) === null || _a === void 0 ? void 0 : _a.map((format) => format.toLowerCase());
+          const barcodeDetector = new BarcodeDetector((formats === null || formats === void 0 ? void 0 : formats.length) ? { formats } : void 0);
+          const imageBitmap = await createImageBitmap(options.blob);
+          const detectedBarcodes = await barcodeDetector.detect(imageBitmap);
+          return {
+            barcodes: this.convertDetectedBarcodesToBarcodes(detectedBarcodes)
+          };
+        }
+        async scan() {
+          throw this.createUnimplementedException();
+        }
+        async isSupported() {
+          return { supported: this._isSupported };
+        }
+        async enableTorch() {
+          throw this.createUnimplementedException();
+        }
+        async disableTorch() {
+          throw this.createUnimplementedException();
+        }
+        async toggleTorch() {
+          throw this.createUnimplementedException();
+        }
+        async isTorchEnabled() {
+          throw this.createUnimplementedException();
+        }
+        async isTorchAvailable() {
+          return { available: false };
+        }
+        async setZoomRatio(_options) {
+          throw this.createUnimplementedException();
+        }
+        async getZoomRatio() {
+          throw this.createUnimplementedException();
+        }
+        async getMinZoomRatio() {
+          throw this.createUnimplementedException();
+        }
+        async getMaxZoomRatio() {
+          throw this.createUnimplementedException();
+        }
+        async openSettings() {
+          throw this.createUnimplementedException();
+        }
+        async isGoogleBarcodeScannerModuleAvailable() {
+          throw this.createUnimplementedException();
+        }
+        async installGoogleBarcodeScannerModule() {
+          throw this.createUnimplementedException();
+        }
+        async checkPermissions() {
+          try {
+            const result = await navigator.permissions.query({
+              name: "camera"
+            });
+            return {
+              camera: result.state
+            };
+          } catch (error) {
+            return {
+              camera: "prompt"
+            };
+          }
+        }
+        async requestPermissions() {
+          try {
+            const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+            stream.getTracks().forEach((track) => track.stop());
+            return {
+              camera: "granted"
+            };
+          } catch (error) {
+            return {
+              camera: "denied"
+            };
+          }
+        }
+        createUnavailableException() {
+          return new core.CapacitorException("This plugin method is not available on this platform.", core.ExceptionCode.Unavailable);
+        }
+        createUnimplementedException() {
+          return new core.CapacitorException("This method is not implemented on web.", core.ExceptionCode.Unimplemented);
+        }
+        handleScannedBarcodes(barcodes) {
+          const result = {
+            barcodes: this.convertDetectedBarcodesToBarcodes(barcodes)
+          };
+          this.notifyListeners(this.eventBarcodesScanned, result);
+        }
+        convertDetectedBarcodesToBarcodes(barcodes) {
+          return barcodes.map((barcode) => ({
+            cornerPoints: [
+              [barcode.cornerPoints[0].x, barcode.cornerPoints[0].y],
+              [barcode.cornerPoints[1].x, barcode.cornerPoints[1].y],
+              [barcode.cornerPoints[2].x, barcode.cornerPoints[2].y],
+              [barcode.cornerPoints[3].x, barcode.cornerPoints[3].y]
+            ],
+            displayValue: barcode.rawValue,
+            rawValue: barcode.rawValue,
+            format: barcode.format.toUpperCase(),
+            valueType: exports.BarcodeValueType.Unknown
+          }));
+        }
+      };
+      var web = /* @__PURE__ */ Object.freeze({
+        __proto__: null,
+        BarcodeScannerWeb
+      });
+      exports.BarcodeScanner = BarcodeScanner2;
     }
   });
 
@@ -30180,6 +30855,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             "assets/**/*",
             "node_modules/**/*",
             "!node_modules/@capacitor/**",
+            "!node_modules/@capacitor-mlkit/**",
             "!node_modules/tslib/**"
           ],
           asarUnpack: [
@@ -30216,13 +30892,15 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
           }
         },
         dependencies: {
+          "@capacitor-mlkit/barcode-scanning": "^8.2.2",
           "@capacitor/android": "^8.4.1",
           "@capacitor/app": "^8.1.0",
           "@capacitor/background-runner": "^3.0.0",
           "@capacitor/core": "^8.4.1",
           "@capacitor/filesystem": "^8.1.2",
           "@capacitor/local-notifications": "^8.2.0",
-          "@capacitor/preferences": "^8.0.1"
+          "@capacitor/preferences": "^8.0.1",
+          qrcode: "^1.5.4"
         }
       };
     }
@@ -30235,7 +30913,8 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
   var { Filesystem, Directory, Encoding } = require_plugin_cjs();
   var { LocalNotifications } = require_plugin_cjs4();
   var { BackgroundRunner } = require_plugin_cjs5();
-  var { registerPlugin } = require_index_cjs();
+  var { registerPlugin, CapacitorHttp } = require_index_cjs();
+  var { BarcodeScanner } = require_plugin_cjs6();
   var GeniusMonitor = registerPlugin("GeniusMonitor");
   var DATA_DIR = "genius-data";
   if (storage.setDataDirPrefix) storage.setDataDirPrefix(DATA_DIR);
@@ -30458,12 +31137,34 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       emit("fetch-complete", { mode, timestamp: Date.now() });
       if (mode !== "news") a.syncLiveHistory().catch(() => {
       });
+      runSync().catch(() => {
+      });
       if (mode !== "news") a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {
       });
     } catch (error) {
       emit("fetch-error", { error: error.message });
       throw error;
     }
+  }
+  var syncPost = async (url, data) => {
+    const r = await CapacitorHttp.post({ url, data, headers: { "Content-Type": "application/json" }, connectTimeout: 8e3, readTimeout: 6e4 });
+    return { status: r.status, data: typeof r.data === "string" ? JSON.parse(r.data || "{}") : r.data };
+  };
+  async function runSync(opts) {
+    const a = await ensureApi();
+    const r = await a.sync.syncNow(syncPost, opts);
+    if (r.changed) emit("fetch-complete", { mode: "sync", timestamp: Date.now() });
+    return r;
+  }
+  async function scanSyncQr() {
+    const { available } = await BarcodeScanner.isGoogleBarcodeScannerModuleAvailable();
+    if (!available) {
+      await BarcodeScanner.installGoogleBarcodeScannerModule();
+      return { error: "Scanner is downloading. Try again in a moment, or type the code." };
+    }
+    const { barcodes } = await BarcodeScanner.scan({ formats: ["QR_CODE"] });
+    const m = String(barcodes[0]?.rawValue || "").match(/^genius-sync:([\d.]+):(\d+):([A-Z0-9]+)$/);
+    return m ? { host: m[1], port: Number(m[2]), code: m[3] } : { canceled: !barcodes.length, error: barcodes.length ? "That is not a GEnius code." : null };
   }
   async function buildGenius() {
     const a = await ensureApi();
@@ -30483,6 +31184,19 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       // Item stats from RS Wiki
       getItemStats: (name) => a.getItemStats(name),
       getLiveItemPrice: (id) => a.getLiveItemPrice(id),
+      syncRole: "phone",
+      syncStatus: async () => (await ensureApi()).sync.clientStatus(),
+      syncScan: scanSyncQr,
+      syncPair: async ({ host, port, code }) => {
+        const a2 = await ensureApi();
+        try {
+          return await a2.sync.pairWith({ host, port: port || 48917, code, name: "Phone" }, syncPost);
+        } catch {
+          return { error: "no_reply" };
+        }
+      },
+      syncNow: (opts) => runSync(opts),
+      syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
       getItemLiveHistory: (id, days) => a.getItemLiveHistory(id, days),
       getItemLiveTimeseries: (id, lookback) => a.getItemLiveTimeseries(id, lookback),
       getLaunches: async () => a.getLaunches(),
@@ -30782,6 +31496,9 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     const intervalMs = store.get("fetchInterval", 15) * 60 * 1e3;
     if (Date.now() - lastFetchOkAt >= intervalMs) {
       runFetch("prices").catch((e) => console.error("[GEnius] Resume fetch failed:", e.message));
+    } else {
+      runSync().catch(() => {
+      });
     }
   });
   var schedulerInterval = null;

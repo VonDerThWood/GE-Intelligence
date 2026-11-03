@@ -2373,6 +2373,142 @@ function AskItem({item}) {
         recent.slice(1).map((r, i) => { const t = r.lines.filter(l => !/:$/.test(l) && !/ — released /.test(l)).join(' '); return h('div', {key:i, title:r.lines.join(' '), style:{fontSize:10, color:T.textDim, marginTop:3}}, `· ${r.label} — ${t.length > 150 ? t.slice(0, 147) + '…' : t}`); }))));
 }
 
+// Phone <-> PC sync over home Wi-Fi (Ben, 2026-11-02). The PC shows a QR and
+// lists paired phones; the phone scans it (or types it) and syncs.
+const SYNC_ERRORS = {
+  unreachable: "Couldn't reach your PC. Is GEnius open on it, on the same Wi-Fi? If the PC's address changed, pair again.",
+  no_reply: "Couldn't reach your PC. Check the address, and that it's on the same Wi-Fi.",
+  not_pairing: 'Your PC is not showing a code right now, or it expired. Start pairing on the PC again.',
+  bad_code: "That code doesn't match. Check it against your PC.",
+  not_paired: 'This phone is no longer paired with your PC. Pair again.',
+  clock: "This phone's clock and your PC's are too far apart.",
+  suspicious: 'Stopped: this sync would have removed much of your portfolio. Nothing was changed. Check your data, then use Replace with PC data if the PC is right.',
+  out_of_step: 'This phone and your PC have lost track of each other (a restored backup can do this). Nothing was changed. Use Replace with PC data to start over from the PC.',
+  hub_failed: 'Your PC could not read its data, so nothing was changed.',
+};
+const syncErrorText = e => SYNC_ERRORS[e] || String(e);
+const syncWhen = t => t ? new Date(t).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : 'never';
+
+function SyncHub({toast}) {
+  const [devices, setDevices] = useState([]);
+  const [conflicts, setConflicts] = useState([]);
+  const [pair, setPair] = useState(null);
+  const load = async () => {
+    setDevices(await window.genius.syncListDevices() || []);
+    setConflicts(await window.genius.syncGetConflicts() || []);
+  };
+  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    if (!pair) return;
+    // Close the code once it's used or expired.
+    const t = setInterval(async () => {
+      const list = await window.genius.syncListDevices() || [];
+      if (list.some(d => d.pairedAt > pair.startedAt)) { setPair(null); setDevices(list); toast('Phone paired','success'); }
+      else if (Date.now() > pair.expires) setPair(null);
+    }, 2000);
+    return () => clearInterval(t);
+  }, [pair]);
+  const start = async () => {
+    const r = await window.genius.syncStartPairing();
+    if (r?.error) { toast(r.error,'error'); return; }
+    setPair({...r, startedAt: Date.now()});
+  };
+  return h('div', null,
+    pair
+      ? h('div', {style:{marginBottom:12}},
+          h('img', {src:pair.qr, alt:'Pairing QR code', width:260, height:260, style:{display:'block', borderRadius:4, marginBottom:8}}),
+          h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.6}},
+            'In GEnius on your phone: Settings → Phone sync → Scan QR code. Or type it in:', h('br'),
+            'PC address ', h('b', {style:{color:T.text}}, pair.host), ' · code ', h('b', {style:{color:T.text}}, pair.code), h('br'),
+            pair.otherHosts.length ? 'If that address fails, try: ' + pair.otherHosts.join(', ') : null, pair.otherHosts.length ? h('br') : null,
+            'Windows may ask to allow GEnius through the firewall. Allow it on private networks. This code lasts 2 minutes.'),
+          h('button', {className:'ge-btn', style:{marginTop:8}, onClick:()=>{ window.genius.syncCancelPairing(); setPair(null); }}, 'Cancel'))
+      : h('button', {className:'ge-btn gold', onClick:start}, '📱 Pair a phone'),
+    devices.length > 0 && h('div', {style:{marginTop:12}},
+      devices.map(d => h('div', {key:d.id, style:{display:'flex', alignItems:'center', gap:10, fontSize:12, padding:'4px 0'}},
+        h('span', {style:{flex:1}}, d.name, h('span', {style:{color:T.textDim}}, ' · last sync ', syncWhen(d.lastSyncAt))),
+        h('button', {className:'ge-btn', onClick:async()=>{
+          if (!confirm('Unpair ' + d.name + '? It keeps its data but stops syncing.')) return;
+          await window.genius.syncUnpairDevice(d.id); load();
+        }}, 'Unpair')))),
+    conflicts.length > 0 && h('div', {style:{marginTop:12}},
+      h('div', {style:{fontSize:12, color:T.gold, marginBottom:4}}, 'Changed on both devices. The PC version was kept; check these:'),
+      conflicts.slice(0, 20).map((c, i) => h('div', {key:i, style:{fontSize:11, color:T.textDim, lineHeight:1.6}},
+        syncWhen(c.at), ' · ', c.name || c.kind, ' · ', c.field, ': kept ', String(c.kept), ', phone had ', String(c.other))),
+      h('button', {className:'ge-btn', style:{marginTop:6}, onClick:async()=>{ await window.genius.syncClearConflicts(); load(); }}, 'Clear list')));
+}
+
+function SyncPhone({toast}) {
+  const [status, setStatus] = useState(null);
+  const [typing, setTyping] = useState(false);
+  const [host, setHost] = useState('');
+  const [code, setCode] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const load = async () => setStatus(await window.genius.syncStatus());
+  useEffect(() => { load(); }, []);
+  const sync = async (opts) => {
+    setBusy(true); setError(null);
+    const r = await window.genius.syncNow(opts);
+    setBusy(false); await load();
+    if (r?.error) setError(syncErrorText(r.error));
+    else toast(r.changed ? 'Synced with your PC' : 'Already up to date','success');
+  };
+  const pairWith = async p => {
+    setBusy(true); setError(null);
+    const r = await window.genius.syncPair(p);
+    setBusy(false);
+    if (r?.error) { setError(syncErrorText(r.error)); return; }
+    setTyping(false); await load();
+    toast('Paired with your PC','success');
+    await sync();
+  };
+  const scan = async () => {
+    setError(null);
+    try {
+      const r = await window.genius.syncScan();
+      if (r?.host) await pairWith(r);
+      else if (r?.error) setError(r.error);
+    } catch { setError('The scanner did not open. You can type the code instead.'); }
+  };
+  if (!status) return null;
+  const pairing = h('div', null,
+    h('div', {style:{display:'flex', gap:8, flexWrap:'wrap'}},
+      h('button', {className:'ge-btn gold', disabled:busy, onClick:scan}, '📷 Scan QR code'),
+      h('button', {className:'ge-btn', onClick:()=>setHost(host || ' ')}, 'Type it in')),
+    host !== '' && h('div', {style:{marginTop:10, display:'flex', flexDirection:'column', gap:8, maxWidth:280}},
+      h('input', {className:'ge-input', placeholder:'PC address, like 192.168.1.5', value:host.trim(), onChange:e=>setHost(e.target.value.trim() || ' ')}),
+      h('input', {className:'ge-input', placeholder:'Code', value:code, onChange:e=>setCode(e.target.value.toUpperCase())}),
+      h('button', {className:'ge-btn gold', disabled:busy || !host.trim() || !code, onClick:()=>pairWith({host:host.trim(), code})}, 'Pair')));
+  return h('div', null,
+    status.paired
+      ? h('div', null,
+          h('div', {style:{fontSize:12, color:T.textDim, marginBottom:8}}, 'Paired with your PC (', status.host, ') · last sync ', syncWhen(status.lastSyncAt)),
+          h('div', {style:{display:'flex', gap:8, flexWrap:'wrap'}},
+            h('button', {className:'ge-btn gold', disabled:busy, onClick:()=>sync()}, busy ? 'Syncing…' : '🔄 Sync now'),
+            h('button', {className:'ge-btn', onClick:()=>setTyping(!typing)}, 'Pair again'),
+            h('button', {className:'ge-btn', disabled:busy, onClick:()=>{
+              if (confirm("Replace this phone's portfolio, alerts, watchlists, notes and reminders with your PC's? A backup is saved first.")) sync({startOver:true});
+            }}, 'Replace with PC data'),
+            h('button', {className:'ge-btn', onClick:async()=>{
+              if (!confirm('Unpair from your PC? This phone keeps its data but stops syncing.')) return;
+              await window.genius.syncUnpair(); load();
+            }}, 'Unpair')),
+          typing && h('div', {style:{marginTop:10}}, pairing))
+      : pairing,
+    error && h('div', {style:{fontSize:12, color:T.red, marginTop:8, lineHeight:1.5}}, error));
+}
+
+function SyncSettings({toast}) {
+  const role = window.genius?.syncRole;
+  if (!role) return null;
+  return h('div', {style:{marginBottom:20}},
+    h('div', {className:'ge-section-head'}, 'Phone sync'),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:12, lineHeight:1.5}},
+      'Keeps your portfolio, alerts, watchlists, notes, reminders and shorthands the same on your phone and PC, directly over your home Wi-Fi. No account, no server. GEnius must be open on the PC. Your data is saved as a backup before a sync changes anything.'),
+    role === 'hub' ? h(SyncHub, {toast}) : h(SyncPhone, {toast}));
+}
+
 // Restore from a daily auto-backup (Ben, 2026-10-11). Lists the backups in
 // autobackups/ with what each holds; restoring first saves the current data
 // as a "pre-restore" snapshot (listed here too), so any restore can be
@@ -10065,6 +10201,8 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       h(AutoBackupRestore, {toast}),
     ),
 
+    h(SyncSettings, {toast}),
+
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Custom Shorthands'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:12,lineHeight:1.5}},
@@ -15300,6 +15438,16 @@ function App() {
     // slow one, see main.js's runPython comment) was genuinely running.
     window.genius.onFetchStart(() => setFetching(true));
     window.genius.onFetchComplete(d => {
+      // A sync changed user data, not prices: re-read what it writes, which
+      // otherwise only loads at startup (Ben had to restart the app to see it).
+      if (d.mode === 'sync') {
+        Promise.all([window.genius.getWatchlist(), window.genius.getAlerts(), window.genius.getPortfolio(), window.genius.getHidden(), window.genius.getNotes(), window.genius.getShorthands(), window.genius.getReminders()])
+          .then(([wl, al, pf, hidden, nt, sh, rm]) => {
+            setWatchlist(wl || []); setAlerts(al || []); if (pf) setPortfolio(pf);
+            setHiddenItems(hidden || []); setNotes(nt || {}); setUserShorthands(sh || {}); setReminders(rm || []);
+          }).catch(e => console.error('[GEnius] Reload after sync error:', e));
+        return;
+      }
       window.dispatchEvent(new Event('genius-news-read')); // refresh the News badge
       console.log('[GEnius] fetch-complete received:', d);
       setFetching(false); setLastUpdate(d.timestamp);

@@ -14,6 +14,13 @@ contextBridge.exposeInMainWorld('genius', {
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
   getLiveItemPrice:      (id) => ipcRenderer.invoke('get-live-item-price', id),
+  syncRole: 'hub',
+  syncStartPairing: () => ipcRenderer.invoke('sync-start-pairing'),
+  syncCancelPairing: () => ipcRenderer.invoke('sync-cancel-pairing'),
+  syncListDevices: () => ipcRenderer.invoke('sync-list-devices'),
+  syncUnpairDevice: (id) => ipcRenderer.invoke('sync-unpair-device', id),
+  syncGetConflicts: () => ipcRenderer.invoke('sync-get-conflicts'),
+  syncClearConflicts: () => ipcRenderer.invoke('sync-clear-conflicts'),
   getItemLiveHistory: (id, days) => ipcRenderer.invoke('get-item-live-history', id, days),
   getItemLiveTimeseries: (id, lookback) => ipcRenderer.invoke('get-item-live-timeseries', id, lookback),
   getLaunches:           () => ipcRenderer.invoke('get-launches'),
