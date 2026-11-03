@@ -5367,7 +5367,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       )
     ),
 
-    h(UpdateRisksPanel, {scope:'yours'}),
+    h(UpdateRisksBar, {scope:'yours'}),
     h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
     h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
@@ -5849,7 +5849,7 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
   };
 
   return h('div', null,
-    h(UpdateRisksPanel, {scope:'watched'}),
+    h(UpdateRisksBar, {scope:'watched'}),
     description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
 
     // ── Mode pills ──────────────────────────────────────────────────────────
@@ -15126,39 +15126,66 @@ function useUpdateRisks() {
   useEffect(() => { let live = true; loadUpdateRisks().then(r => { if (live) setRisks(r); }); return () => { live = false; }; }, []);
   return risks;
 }
-// scope: 'all' (Portfolio tab), 'yours' (held + watched), 'watched' (Watchlist).
-function UpdateRisksPanel({scope = 'all'}) {
-  const [allRisks, setRisks] = useState([]);
-  const [open, setOpen] = useState(false);
+// The bar on Dashboard, Portfolio and Watchlist. Clicking opens the full page.
+// scope: 'yours' (held + watched), 'watched' (Watchlist).
+function UpdateRisksBar({scope = 'yours'}) {
+  const allRisks = useUpdateRisks();
+  const risks = allRisks.filter(r => scope === 'yours' ? r.group !== 'other' : r.watched);
+  if (!risks.length) return null;
+  const exposed = risks.reduce((sum, r) => sum + (r.value || 0), 0);
+  const updates = new Set(risks.map(r => r.updateId)).size;
+  return h('div', {
+    style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
+    title:'See everything that may be affected',
+    onClick:()=>window.dispatchEvent(new CustomEvent('genius-goto', {detail:'update_risks'})),
+  },
+    h('span', {style:{flex:1}}, '⚠️ ', h('b', {style:{color:T.gold}}, 'Upcoming updates'), ' may affect '+risks.length+' of your item'+(risks.length===1?'':'s'),
+      exposed > 0 ? ' · '+fmt.gp(exposed)+'gp held' : '', updates > 1 ? ' · '+updates+' updates' : ''),
+    h('span', {style:{color:T.gold}}, 'View all →'));
+}
+
+// Everything upcoming updates may affect (Ben, 2026-11-03): your holdings, then
+// your watchlists, then every other item the posts name.
+function UpdateRisksTab({items, onSelect, description}) {
+  const [risks, setRisks] = useState(null);
+  const [update, setUpdate] = useState('all');
   const load = fresh => loadUpdateRisks(fresh).then(setRisks);
   useEffect(() => { load(); }, []);
-  const risks = allRisks.filter(r => scope === 'all' || (scope === 'yours' ? r.group !== 'other' : r.watched));
-  if (!risks.length) return null;
-  const exposed = risks.reduce((s, r) => s + (r.value || 0), 0);
-  const yours = risks.filter(r => r.group !== 'other');
-  const updates = new Set(risks.map(r => r.updateId)).size;
-  const riskRow = r => h('div', {key:r.key, style:{padding:'6px 0', borderTop:'1px solid '+T.borderDim, lineHeight:1.5}},
-    h('div', {style:{display:'flex', gap:8, alignItems:'baseline', flexWrap:'wrap'}},
-      h('b', {style:{color:T.text}}, r.itemName),
-      h('span', {style:{color:T.textDim, flex:1}}, r.group === 'held' ? r.quantity.toLocaleString()+' held · '+fmt.gp(r.value)+'gp' : ''),
-      h('button', {className:'ge-btn', onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(true); }}, 'Dismiss')),
-    h('div', {style:{color:T.textDim}}, r.kind === 'mention' ? 'Mentioned: ' : '', r.effect),
-    h('div', {style:{fontSize:11, color:T.textDim}}, r.updateTitle, r.when ? ' · '+r.when : ''));
-  const groupHead = text => h('div', {style:{fontSize:11, color:T.gold, margin:'10px 0 2px', textTransform:'uppercase', letterSpacing:1}}, text);
-  const inGroup = g => risks.filter(r => r.group === g);
-  return h('div', {style:{margin:'8px 12px 0', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12}},
-    h('div', {style:{padding:'8px 10px', cursor:'pointer', display:'flex', gap:8, alignItems:'center'}, onClick:()=>setOpen(!open)},
-      h('span', {style:{flex:1}}, '⚠️ ', h('b', {style:{color:T.gold}}, 'Upcoming updates'), ' may affect '+(yours.length ? yours.length+' of your item'+(yours.length===1?'':'s') : risks.length+' item'+(risks.length===1?'':'s')),
-        exposed > 0 ? ' · '+fmt.gp(exposed)+'gp held' : '', updates > 1 ? ' · '+updates+' updates' : ''),
-      h('span', {style:{color:T.textDim}}, open ? '▲' : '▼')),
-    open && h('div', {style:{padding:'0 10px 8px'}},
-      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6, lineHeight:1.5}}, 'What may change, not advice. Mentioned means the item is named in a news post about future plans. Related means the post discusses a skill the item is tied to. Either could be big or nothing.'),
-      inGroup('held').length > 0 && groupHead('Portfolio'),
-      inGroup('held').map(riskRow),
-      inGroup('watched').length > 0 && groupHead('Watchlist'),
-      inGroup('watched').map(riskRow),
-      inGroup('other').length > 0 && groupHead('Named in update posts ('+inGroup('other').length+')'),
-      inGroup('other').length > 0 && h('div', {style:{maxHeight:320, overflowY:'auto'}}, inGroup('other').map(riskRow))));
+  if (!risks) return h('div', {className:'empty'}, h('p', null, 'Loading…'));
+  const updateList = [...new Map(risks.map(r => [r.updateId, r.updateTitle])).entries()];
+  const shown = risks.filter(r => update === 'all' || r.updateId === update);
+  const byName = name => (items || []).find(it => it.name.toLowerCase() === name.toLowerCase());
+  const row = r => {
+    const item = byName(r.itemName);
+    return h('div', {key:r.key, style:{padding:'10px 0', borderTop:'1px solid '+T.borderDim, lineHeight:1.5, fontSize:13}},
+      h('div', {style:{display:'flex', gap:10, alignItems:'center', flexWrap:'wrap'}},
+        h('b', {style:{color:T.gold, cursor:item?'pointer':'default'}, onClick:()=>item&&onSelect(item)}, r.itemName),
+        r.kind === 'known' && h('span', {className:'cat-tag'}, 'Confirmed in preview'),
+        r.kind === 'mention' && h('span', {className:'cat-tag'}, 'Named'),
+        r.kind === 'related' && h('span', {className:'cat-tag', style:{opacity:0.7}}, 'Related'),
+        h('span', {style:{color:T.textDim, flex:1, fontSize:12}}, r.quantity ? r.quantity.toLocaleString()+' held · '+fmt.gp(r.value)+'gp' : ''),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px', fontSize:11}, onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(true); }}, 'Dismiss')),
+      h('div', {style:{color:T.text, marginTop:2}}, r.effect),
+      h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, r.updateTitle, r.when ? ' · '+r.when : '',
+        r.url && h('span', {style:{color:T.gold, cursor:'pointer', marginLeft:8}, onClick:()=>window.genius?.openExternal(r.url)}, 'Read post →')));
+  };
+  const section = (title, list) => list.length > 0 && h('div', {style:{marginBottom:22}},
+    h('div', {className:'ge-section-head'}, title+' ('+list.length+')'), list.map(row));
+  const held = shown.filter(r => r.group === 'held');
+  const exposed = held.reduce((sum, r) => sum + (r.value || 0), 0);
+  return h('div', null,
+    description && h('div', {style:{padding:'8px 14px', borderBottom:'1px solid '+T.border, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
+    h('div', {style:{padding:14}},
+      h('div', {style:{fontSize:12, color:T.textDim, marginBottom:12, lineHeight:1.6}},
+        'What may change, not advice. Confirmed means the preview states the effect. Named means a post about future plans names the item, which could mean a lot or nothing. Related means the post discusses a skill the item is tied to, so it\'s the weakest signal.',
+        exposed > 0 ? ' You hold '+fmt.gp(exposed)+'gp in these items.' : ''),
+      updateList.length > 1 && h('select', {className:'ge-input', style:{marginBottom:16, maxWidth:420}, value:update, onChange:ev=>setUpdate(ev.target.value)},
+        h('option', {value:'all'}, 'All updates ('+updateList.length+')'),
+        updateList.map(([id, title]) => h('option', {key:id, value:id}, title))),
+      shown.length === 0 && h('div', {className:'empty'}, h('p', null, 'Nothing flagged right now.')),
+      section('Your portfolio', held),
+      section('Your watchlists', shown.filter(r => r.group === 'watched')),
+      section('Named in update posts', shown.filter(r => r.group === 'other'))));
 }
 
 function PortfolioArea(props) {
@@ -15167,7 +15194,7 @@ function PortfolioArea(props) {
     h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
       h('button', {className: view==='positions' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('positions')}, 'Positions'),
       h('button', {className: view==='planner' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('planner')}, '🛒 Buy Planner')),
-    h(UpdateRisksPanel),
+    h(UpdateRisksBar),
     view === 'positions'
       ? h(PortfolioTab, props)
       : h(BuyPlannerTab, {items: props.items, toast: props.toast, userShorthands: props.userShorthands,
@@ -15175,6 +15202,7 @@ function PortfolioArea(props) {
 }
 
 const TAB_DESCRIPTIONS = {
+  update_risks:   'Everything upcoming game updates may touch, yours first.',
   dashboard:      'The big picture. Try not to panic.',
   compare:        'Side-by-side. May the best item win.',
   watchlist:      'The items you\'ve decided are worth obsessing over.',
@@ -15224,6 +15252,7 @@ const NAV = [
   {id:'dashboard',      label:'Dashboard',        icon:'◈'},
   {id:'dxp_intel',      label:'GEnius Almanac',   icon:'📅'},
   {id:'news',           label:'News',             icon:'📰'},
+  {id:'update_risks',   label:'Upcoming Changes', icon:'⚠'},
   {id:'watchlist',      label:'Watchlist',        icon:'★'},
   {id:'market',         label:'Market',           icon:'◐'},
   {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
@@ -15271,6 +15300,11 @@ const NAV = [
 /* ─── App ─────────────────────────────────────────────────────── */
 function App() {
   const [tab, setTab] = useState('dashboard');
+  useEffect(() => {
+    const go = e => { setTab(e.detail); setSelected(null); };
+    window.addEventListener('genius-goto', go);
+    return () => window.removeEventListener('genius-goto', go);
+  }, []);
   const contentRef = useRef(null);
   const scrollContentTo = pos => contentRef.current?.scrollTo({top: pos, behavior:'smooth'});
   // Sidebar starts closed — only actually matters on a narrow/mobile
@@ -15937,6 +15971,7 @@ function App() {
             onDeleteReminder: id=>setReminders(rl=>rl.filter(r=>r.id!==id)),
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);},onReplayTour:()=>setShowTour(true)}),
+          tab==='update_risks'&&h(UpdateRisksTab,{items,onSelect:handleSelect,description:TAB_DESCRIPTIONS.update_risks}),
           tab==='about'&&h(AboutTab),
           tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect,userShorthands,toast})
         ),
