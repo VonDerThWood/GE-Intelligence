@@ -85,7 +85,7 @@ function buildNotifications(risks, notified, { includeWatched = true } = {}) {
     const top = list.slice(0, 3).map(r => `${r.itemName} (${r.quantity ? 'held' : 'watching'})`).join(', ');
     const more = list.length > 3 ? ` and ${list.length - 3} more` : '';
     const when = list[0].when ? ` (${list[0].when})` : '';
-    return { keys: list.map(r => r.key), title: '⚠️ Upcoming update affects your holdings',
+    return { keys: list.map(r => r.key), title: '⚠️ Upcoming update may affect your items',
       body: `${list[0].updateTitle}${when} may affect ${top}${more}. See Portfolio for details.` };
   });
 }
