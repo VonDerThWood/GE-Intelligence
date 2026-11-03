@@ -39,7 +39,7 @@ const SKILL_ITEMS = {
   Cooking: /^raw /i,
   Prayer: /\b(bones|ashes)$/i,
   Summoning: /\b(pouch|charm)e?s?$|^spirit shards?$/i,
-  Runecrafting: /\b(rune|essence)s?$/i,
+  Runecrafting: /\brunes?$|^(pure|rune) essence$/i,
   Divination: /\benergy$/i,
   Necromancy: /\b(ink|necroplasm)$/i,
   Archaeology: /\b(artefact|soil)s?$/i,
