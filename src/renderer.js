@@ -15130,7 +15130,6 @@ function useUpdateRisks() {
 function UpdateRisksPanel({scope = 'all'}) {
   const [allRisks, setRisks] = useState([]);
   const [open, setOpen] = useState(false);
-  const [showOther, setShowOther] = useState(false);
   const load = fresh => loadUpdateRisks(fresh).then(setRisks);
   useEffect(() => { load(); }, []);
   const risks = allRisks.filter(r => scope === 'all' || (scope === 'yours' ? r.group !== 'other' : r.watched));
@@ -15158,10 +15157,8 @@ function UpdateRisksPanel({scope = 'all'}) {
       inGroup('held').map(riskRow),
       inGroup('watched').length > 0 && groupHead('Watchlist'),
       inGroup('watched').map(riskRow),
-      inGroup('other').length > 0 && h('div', {style:{margin:'10px 0 2px'}},
-        h('span', {style:{fontSize:11, color:T.gold, cursor:'pointer', textTransform:'uppercase', letterSpacing:1}, onClick:()=>setShowOther(!showOther)},
-          (showOther ? '▲ ' : '▼ ')+'Everything else ('+inGroup('other').length+')')),
-      showOther && inGroup('other').map(riskRow)));
+      inGroup('other').length > 0 && groupHead('Named in update posts ('+inGroup('other').length+')'),
+      inGroup('other').length > 0 && h('div', {style:{maxHeight:320, overflowY:'auto'}}, inGroup('other').map(riskRow))));
 }
 
 function PortfolioArea(props) {

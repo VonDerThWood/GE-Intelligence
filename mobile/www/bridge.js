@@ -22991,7 +22991,7 @@
       function daysOld(date, now) {
         return (now - Date.parse(date)) / 864e5;
       }
-      function findRisks({ updates = [], posts = [], holdings = [], watched = [], dismissed = [], now = Date.now() }) {
+      function findRisks({ updates = [], posts = [], holdings = [], watched = [], catalogue = [], dismissed = [], now = Date.now() }) {
         const risks = [];
         const heldByName = /* @__PURE__ */ new Map();
         for (const h of holdings) {
@@ -23041,13 +23041,21 @@
             const line = lines.find((l) => re.test(l));
             if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), "mention");
           }
+          const lowerText = lines.join("\n").toLowerCase();
+          for (const name of catalogue) {
+            if (tracked.has(name.toLowerCase()) || !name.includes(" ") || !lowerText.includes(name.toLowerCase())) continue;
+            const re = nameRegex(name);
+            const line = lines.find((l) => re.test(l));
+            if (line) add(source, { name, quantity: 0, value: 0 }, line.trim().slice(0, SNIPPET_LENGTH), "mention");
+          }
           for (const skill of skillsDiscussed(post)) {
             for (const item of tracked.values()) {
               if (SKILL_ITEMS[skill].test(item.name)) add(source, item, `Related to ${skill}, which this post discusses. The item itself isn't named.`, "related");
             }
           }
         }
-        return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || b.value - a.value || a.itemName.localeCompare(b.itemName));
+        const named = (r) => r.kind === "related" ? 1 : 0;
+        return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || named(a) - named(b) || b.value - a.value || a.itemName.localeCompare(b.itemName));
       }
       function buildNotifications(risks, notified, { includeWatched = true } = {}) {
         const fresh = risks.filter((r) => (r.value >= MIN_NOTIFY_GP || includeWatched && r.watched && r.kind !== "related") && !notified.includes(r.key));
@@ -25855,7 +25863,14 @@
           const holdings = portfolio.positions.filter((p) => p.status === "open" && p.quantity > 0).map((p) => ({ name: p.item_name, quantity: p.quantity, value: p.quantity * price(p.item_name) }));
           const idToName = new Map((latest.items || []).map((it) => [String(it.id), it.name]));
           const watched = [...store2.get("watchlist", []), ...store2.get("dxpWatchlist", [])].map((id) => idToName.get(String(id))).filter(Boolean);
-          return findRisks({ updates: require_upcoming_updates().updates, posts: await loadUpdateRiskPosts(), holdings, watched, dismissed: store2.get("updateRiskDismissed", []) });
+          return findRisks({
+            updates: require_upcoming_updates().updates,
+            posts: await loadUpdateRiskPosts(),
+            holdings,
+            watched,
+            catalogue: (latest.items || []).filter((it) => !it.untradeable).map((it) => it.name),
+            dismissed: store2.get("updateRiskDismissed", [])
+          });
         }
         async function dismissUpdateRisk(key) {
           store2.set("updateRiskDismissed", [.../* @__PURE__ */ new Set([...store2.get("updateRiskDismissed", []), key])]);

@@ -102,4 +102,10 @@ run('related items you only watch are listed but do not notify', () => {
   assert.strictEqual(r.length, 1);
   assert.strictEqual(buildNotifications(r, []).length, 0);
 });
+run('named items come first, and the catalogue adds ones you do not track', () => {
+  const p = post({ title: 'Construction Design Preview', url: 'https://x/n', lines: ['The Memory dowser and Abyssal whip change.', 'A Spring appeared.'] });
+  const r = findRisks({ posts: [p], holdings: [frames, whips], catalogue: ['Memory dowser', 'Spring', 'Runic attuner', 'Abyssal whip'], now });
+  assert.deepStrictEqual(r.map(x => x.itemName + ':' + x.kind), ['Abyssal whip:mention', 'Magic frame:related', 'Memory dowser:mention']);
+  assert.strictEqual(buildNotifications(r.filter(x => x.group === 'other'), []).length, 0);
+});
 console.log('All update risk tests passed');

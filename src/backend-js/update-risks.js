@@ -61,7 +61,9 @@ function daysOld(date, now) {
 }
 
 // holdings: [{ name, quantity, value }] from open positions. watched: names.
-function findRisks({ updates = [], posts = [], holdings = [], watched = [], dismissed = [], now = Date.now() }) {
+// catalogue: every item name. Names of 2+ words found in a post are listed even
+// if you don't hold or watch them; one-word names are too often ordinary words.
+function findRisks({ updates = [], posts = [], holdings = [], watched = [], catalogue = [], dismissed = [], now = Date.now() }) {
   const risks = [];
   const heldByName = new Map();
   for (const h of holdings) {
@@ -106,6 +108,13 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
       const line = lines.find(l => re.test(l));
       if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), 'mention');
     }
+    const lowerText = lines.join('\n').toLowerCase();
+    for (const name of catalogue) {
+      if (tracked.has(name.toLowerCase()) || !name.includes(' ') || !lowerText.includes(name.toLowerCase())) continue;
+      const re = nameRegex(name);
+      const line = lines.find(l => re.test(l));
+      if (line) add(source, { name, quantity: 0, value: 0 }, line.trim().slice(0, SNIPPET_LENGTH), 'mention');
+    }
     // After exact effects and name mentions, so those always win.
     for (const skill of skillsDiscussed(post)) {
       for (const item of tracked.values()) {
@@ -113,8 +122,10 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
       }
     }
   }
-  // Holdings, then watched, then everything else; biggest exposure first.
-  return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || b.value - a.value || a.itemName.localeCompare(b.itemName));
+  // Holdings, then watched, then the rest. Within each, items a post actually
+  // names come before merely related ones (Ben, 2026-11-03), biggest exposure first.
+  const named = r => (r.kind === 'related' ? 1 : 0);
+  return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || named(a) - named(b) || b.value - a.value || a.itemName.localeCompare(b.itemName));
 }
 
 // One notification per update, listing what's newly exposed. `notified` is the

@@ -1804,7 +1804,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       .map(p => ({ name: p.item_name, quantity: p.quantity, value: p.quantity * price(p.item_name) }));
     const idToName = new Map((latest.items || []).map(it => [String(it.id), it.name]));
     const watched = [...store.get('watchlist', []), ...store.get('dxpWatchlist', [])].map(id => idToName.get(String(id))).filter(Boolean);
-    return findRisks({ updates: require('./data/upcoming_updates.json').updates, posts: await loadUpdateRiskPosts(), holdings, watched, dismissed: store.get('updateRiskDismissed', []) });
+    return findRisks({ updates: require('./data/upcoming_updates.json').updates, posts: await loadUpdateRiskPosts(), holdings, watched,
+      catalogue: (latest.items || []).filter(it => !it.untradeable).map(it => it.name), dismissed: store.get('updateRiskDismissed', []) });
   }
   async function dismissUpdateRisk(key) {
     store.set('updateRiskDismissed', [...new Set([...store.get('updateRiskDismissed', []), key])]);
