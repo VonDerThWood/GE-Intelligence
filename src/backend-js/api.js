@@ -3675,7 +3675,10 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // whenever the item isn't tracked live or has no live price yet, so
         // the total is never missing a row just because live data is thin.
         const liveItem = liveItemsByName[item.toLowerCase()];
-        const livePricePerUnit = liveItem ? (liveItem.liveBuy ?? liveItem.liveSell ?? null) : null;
+        // Drops get sold, so they're worth the live sell price, unless it's obviously broken.
+        const liveGe = liveItem ? (liveItem.high ?? liveItem.low ?? null) : null;
+        const liveSale = liveItem ? (liveItem.liveSell ?? null) : null;
+        const livePricePerUnit = liveSale && (!liveGe || (liveSale <= liveGe * 5 && liveSale >= liveGe / 5)) ? liveSale : null;
         const effectivePricePerUnit = livePricePerUnit != null ? livePricePerUnit : gePricePerUnit;
 
         if (gePricePerUnit === null) untradeableDropCount++;

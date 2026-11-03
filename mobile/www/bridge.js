@@ -27597,7 +27597,9 @@
               const perUnitMatch = cellAttrs[4].match(/title="([\d,]+(?:\.\d+)?)\s*coins each"/i);
               const gePricePerUnit = perUnitMatch ? parseFloat(perUnitMatch[1].replace(/,/g, "")) : geValueText === quantity ? 1 : Number.isFinite(parseFloat(geValueText.replace(/,/g, ""))) ? parseFloat(geValueText.replace(/,/g, "")) : null;
               const liveItem = liveItemsByName[item.toLowerCase()];
-              const livePricePerUnit = liveItem ? liveItem.liveBuy ?? liveItem.liveSell ?? null : null;
+              const liveGe = liveItem ? liveItem.high ?? liveItem.low ?? null : null;
+              const liveSale = liveItem ? liveItem.liveSell ?? null : null;
+              const livePricePerUnit = liveSale && (!liveGe || liveSale <= liveGe * 5 && liveSale >= liveGe / 5) ? liveSale : null;
               const effectivePricePerUnit = livePricePerUnit != null ? livePricePerUnit : gePricePerUnit;
               if (gePricePerUnit === null) untradeableDropCount++;
               else if (probability == null) {

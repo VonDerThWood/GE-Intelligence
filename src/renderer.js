@@ -3438,8 +3438,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             ...(foodHeal && !foodHeal.total && foodHeal.text ? (() => {
               const m = foodHeal.text.match(/^([0-9,]+)\s*\+\s*([0-9.]+)%$/);
               const at99 = m ? Number(m[1].replace(/,/g, '')) + Number(m[2]) / 100 * 9900 : null;
-              const live = item.liveBuy != null && item.liveSell != null ? (item.liveBuy + item.liveSell) / 2 : (item.liveBuy ?? item.liveSell);
-              const p = live || item.high || item.low;
+              const live = item.liveBuy != null ? item.liveBuy : null;
+              const p = liveBuyOf(item);
               return [
                 ['Heals', h('span', {title:'Life points healed (from the item\'s RuneScape Wiki page). The % part is of your max life points; the ≈ figure assumes 99 Constitution (9,900 base LP, no boosts).'},
                   foodHeal.text + ' LP' + (at99 ? ` (≈ ${Math.round(at99).toLocaleString()} at 99)` : ''))],
@@ -3452,8 +3452,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
               const healTxt = multi
                 ? (foodHeal.over ? `${foodHeal.use.toLocaleString()} + ${foodHeal.over.toLocaleString()} over time` : `${foodHeal.use.toLocaleString()} per bite · ${foodHeal.total.toLocaleString()} total`)
                 : `${tot.toLocaleString()} LP`;
-              const live = item.liveBuy != null && item.liveSell != null ? (item.liveBuy + item.liveSell) / 2 : (item.liveBuy ?? item.liveSell);
-              const p = live || item.high || item.low;
+              const live = item.liveBuy != null ? item.liveBuy : null;
+              const p = liveBuyOf(item);
               return [
                 ['Heals', h('span', {title:'Life points healed (RuneScape Wiki food table)'}, healTxt)],
                 ['Cost per LP', h('span', {title:`${live ? 'Live' : 'GE guide'} price ÷ ${tot.toLocaleString()} total LP`}, p ? (p / tot).toFixed(2) + ' gp' : '—')],
@@ -6239,7 +6239,7 @@ function MachineCalculators({items, onSelect, onNavigate}) {
     const inPrice = inItem ? (liveBuyOf(inItem) || 0) : null;
     const outPrice = outItem ? (liveSellOf(outItem) || 0) : null;
     const totalCost = inPrice != null ? inPrice + extraCost + chargeCost : null;
-    const profit = (inPrice != null && outPrice != null) ? outPrice - totalCost : null;
+    const profit = (inPrice != null && outPrice != null) ? applyTax(outPrice) - totalCost : null;
     const roi = (profit != null && totalCost) ? (profit / totalCost) * 100 : null;
     const hourly = profit != null ? profit * machine.itemsPerHour : null;
     const daily = hourly != null ? hourly * 24 : null;
@@ -11446,13 +11446,24 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   const [tierModal,   setTierModal]   = useState(null); // 'investor' | 'tradeCount' | null
 
   // Same shared GE/Live toggle as ItemTable/MarketTab/AlchTab/Monster
-const positions  = portfolio?.positions || [];
+  // Live (what selling gets you) unless switched; saved separately from the
+  // price toggle on other tabs.
+  const [priceMode, setPriceMode] = useState(() => {
+    try { return localStorage.getItem('genius_portfolio_price_mode') === 'ge' ? 'ge' : 'live'; } catch { return 'live'; }
+  });
+  const togglePriceMode = () => setPriceMode(m => {
+    const next = m === 'ge' ? 'live' : 'ge';
+    try { localStorage.setItem('genius_portfolio_price_mode', next); } catch {}
+    return next;
+  });
+
+  const positions  = portfolio?.positions || [];
   const taxStats   = portfolio?.tax_stats  || {};
 
   const enriched = useMemo(() => positions.map(pos => {
     const item = items.find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
     // What selling really gets you right now (Ben, 2026-11-03).
-    const currentPrice = liveSellOf(item) || 0;
+    const currentPrice = priceMode === 'live' ? (liveSellOf(item) || 0) : (item ? (item.high || item.low || 0) : 0);
     // Removed from the GE: worth 0 here (Ben, 2026-10-28: it can't be sold
     // any more, so -100% is honest), but labelled so it doesn't look like a bug.
     const removed = !item && (removedItems || []).find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
@@ -11466,7 +11477,7 @@ const positions  = portfolio?.positions || [];
     const stopDist     = pos.stop_loss    ? currentPrice - pos.stop_loss    : null;
     const category      = item?.categories?.[0] || 'misc';
     return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category, removedItem: removed || null};
-  }), [positions, items, removedItems]);
+  }), [positions, items, removedItems, priceMode]);
 
   const openPos   = enriched.filter(p => p.status !== 'sold' && p.status !== 'converted');
   const closedPos = enriched.filter(p => p.status === 'sold' || p.status === 'converted');
@@ -11936,7 +11947,7 @@ const positions  = portfolio?.positions || [];
     // Overview
     h('div', {className:'overview-grid'},
       h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalInvested)+'gp'), h('div',{className:'ov-lbl'},'Total Invested')),
-      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},'Current Value (Live)')),
+      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},priceMode === 'live' ? 'Current Value (Live)' : 'Current Value (GE)')),
       h('div',{className:'ov-card'},
         h('div',{className:'ov-val '+(unrealizedPL>=0?'pct-up':'pct-down')},
           (unrealizedPL>=0?'+':'')+fmt.gp(unrealizedPL)+'gp'),
@@ -11954,6 +11965,11 @@ const positions  = portfolio?.positions || [];
     h('div',{style:{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}},
       h('div', {style:{display:'flex', alignItems:'center', gap:10}},
         h('span',{style:{fontSize:12,color:T.textDim}},`${openPos.length} open position${openPos.length!==1?'s':''}`),
+        h('button', {
+          className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
+          onClick: togglePriceMode,
+          title: priceMode === 'ge' ? 'Valuing positions at the GE (listed) price. Click for live sell prices.' : 'Valuing positions at live sell prices. Click for the GE (listed) price.',
+        }, priceMode === 'ge' ? 'GE Price' : 'Live Price'),
       ),
       h('button',{className:'ge-btn gold',onClick:()=>{setEditPos(null);setShowModal(true);}}, '+ Add Position')
     ),
@@ -11972,7 +11988,7 @@ const positions  = portfolio?.positions || [];
       : h('table',{className:'ge-table pt-portfolio'},
           h('thead',null, h('tr',null,
             h('th',null,'Item'), h('th',{title:'Quantity, and what you paid per item'},'Qty @ cost'),
-            h('th',{title:'Live sell price per item, and the whole position\'s value'}, 'Price / value (Live)'),
+            h('th',{title:(priceMode === 'live' ? 'Live sell' : 'GE (listed)') + ' price per item, and the whole position\'s value'}, priceMode === 'live' ? 'Price / value (Live)' : 'Price / value (GE)'),
             h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'},'Net P&L'),
             h('th',{title:'The sell price that breaks even after GE tax, how far away it is, and when the item last traded that high'},'Break-even'),
             h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
