@@ -22955,6 +22955,7 @@
       var FORWARD_TITLE = /\b(preview|rebalance|rework|remaster(ed)?|level increase|1[1-9]0|week ahead|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
       var POST_MAX_AGE_DAYS = 60;
       var MIN_NAME_LENGTH = 5;
+      var IGNORED_MENTION_NAMES = /* @__PURE__ */ new Set(["spring"]);
       var MIN_NOTIFY_GP = 1e6;
       var SNIPPET_LENGTH = 180;
       var NOTIFY_NAMES_PER_GROUP = 3;
@@ -23036,7 +23037,7 @@
           const source = knownUrls.get(post.url) || { id: post.url, title: post.title, when: null, url: post.url };
           const lines = post.lines || [];
           for (const item of tracked.values()) {
-            if (item.name.length < MIN_NAME_LENGTH) continue;
+            if (item.name.length < MIN_NAME_LENGTH || IGNORED_MENTION_NAMES.has(item.name.toLowerCase())) continue;
             const re = nameRegex(item.name);
             const line = lines.find((l) => re.test(l));
             if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), "mention");

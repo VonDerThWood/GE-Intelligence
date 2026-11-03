@@ -108,4 +108,8 @@ run('named items come first, and the catalogue adds ones you do not track', () =
   assert.deepStrictEqual(r.map(x => x.itemName + ':' + x.kind), ['Abyssal whip:mention', 'Magic frame:related', 'Memory dowser:mention']);
   assert.strictEqual(buildNotifications(r.filter(x => x.group === 'other'), []).length, 0);
 });
+run('Spring is not matched as a word in a post', () => {
+  const p = post({ lines: ['Trees near the Radiant Wisp Spring moved.'] });
+  assert.strictEqual(findRisks({ posts: [p], watched: ['Spring'], now }).length, 0);
+});
 console.log('All update risk tests passed');

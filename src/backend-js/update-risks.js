@@ -16,6 +16,8 @@
 const FORWARD_TITLE = /\b(preview|rebalance|rework|remaster(ed)?|level increase|1[1-9]0|week ahead|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
 const POST_MAX_AGE_DAYS = 60;
 const MIN_NAME_LENGTH = 5;
+// Item names that are mostly ordinary words in posts ("spring to life").
+const IGNORED_MENTION_NAMES = new Set(['spring']);
 const MIN_NOTIFY_GP = 1000000;
 const SNIPPET_LENGTH = 180;
 const NOTIFY_NAMES_PER_GROUP = 3;
@@ -103,7 +105,7 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], cata
     const source = knownUrls.get(post.url) || { id: post.url, title: post.title, when: null, url: post.url };
     const lines = post.lines || [];
     for (const item of tracked.values()) {
-      if (item.name.length < MIN_NAME_LENGTH) continue;
+      if (item.name.length < MIN_NAME_LENGTH || IGNORED_MENTION_NAMES.has(item.name.toLowerCase())) continue;
       const re = nameRegex(item.name);
       const line = lines.find(l => re.test(l));
       if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), 'mention');
