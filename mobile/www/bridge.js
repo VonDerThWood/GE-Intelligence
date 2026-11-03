@@ -28741,7 +28741,7 @@
             const it = itemsByName[(pos.item_name || "").toLowerCase()];
             if (!it) continue;
             const gePrice = it.high ?? it.low ?? 0;
-            const curPrice = it.liveBuy ?? it.liveSell ?? gePrice;
+            const curPrice = it.liveSell && gePrice && it.liveSell <= gePrice * 5 && it.liveSell >= gePrice / 5 ? it.liveSell : gePrice;
             const value = curPrice * pos.quantity;
             const pl = value - pos.cost_basis * pos.quantity;
             totalValue += value;
@@ -30727,11 +30727,16 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         const ratio = Math.max(gePrice0, liveRef) / Math.min(gePrice0, liveRef);
         return ratio <= LIVE_SANITY_BAND;
       }
+      function liveBuyPrice(item) {
+        const ge = item.high || item.low || 0;
+        const live = item.liveBuy;
+        return live && (!ge || live <= ge * 5 && live >= ge / 5) ? live : ge;
+      }
       function runSignals(items) {
         let natureRunePrice = 0;
         for (const item of items) {
           if ((item.name || "").toLowerCase() === "nature rune") {
-            natureRunePrice = item.high || item.low || 0;
+            natureRunePrice = liveBuyPrice(item);
             break;
           }
         }
@@ -30791,7 +30796,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             signals.push("HIGH_VOL");
           }
           if (alch && gePrice0) {
-            if (alch > gePrice0 * 0.98 + natureRunePrice) signals.push("ALCH");
+            if (alch > liveBuyPrice(item) + natureRunePrice) signals.push("ALCH");
           }
           item.natureRunePrice = natureRunePrice;
           item.signals = signals;
@@ -30811,8 +30816,9 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
           if (signals.includes("FRENZY")) score += 10;
           const gePrice1 = high || low;
           if (alch && gePrice1 && natureRunePrice) {
-            const profit = alch - gePrice1 * 0.98 - natureRunePrice;
-            if (profit > 0) score += Math.min(10, profit / gePrice1 * 100);
+            const buy = liveBuyPrice(item);
+            const profit = alch - buy - natureRunePrice;
+            if (profit > 0) score += Math.min(10, profit / buy * 100);
           }
           const scoreCap = signals.includes("OVERPRICED") ? 50 : 100;
           item.score = pyRound(Math.min(scoreCap, score), 1);

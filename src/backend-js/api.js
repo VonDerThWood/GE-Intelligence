@@ -5114,7 +5114,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       const it = itemsByName[(pos.item_name || '').toLowerCase()];
       if (!it) continue;
       const gePrice = it.high ?? it.low ?? 0;
-      const curPrice = it.liveBuy ?? it.liveSell ?? gePrice;
+      // What selling really gets you, unless that price is obviously broken.
+      const curPrice = it.liveSell && gePrice && it.liveSell <= gePrice * 5 && it.liveSell >= gePrice / 5 ? it.liveSell : gePrice;
       const value = curPrice * pos.quantity;
       const pl = value - pos.cost_basis * pos.quantity;
       totalValue += value; totalPL += pl;

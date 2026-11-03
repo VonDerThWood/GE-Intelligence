@@ -649,12 +649,20 @@ function isLiveTrusted(item, gePrice0) {
   return ratio <= LIVE_SANITY_BAND;
 }
 
+// What buying an item really costs right now: live unless that price is more
+// than 5x off the guide price, which means a broken or one-off trade.
+function liveBuyPrice(item) {
+  const ge = item.high || item.low || 0;
+  const live = item.liveBuy;
+  return live && (!ge || (live <= ge * 5 && live >= ge / 5)) ? live : ge;
+}
+
 function runSignals(items) {
   // Tag items with market signals based on price change and volume behavior.
   let natureRunePrice = 0;
   for (const item of items) {
     if ((item.name || '').toLowerCase() === 'nature rune') {
-      natureRunePrice = item.high || item.low || 0;
+      natureRunePrice = liveBuyPrice(item);
       break;
     }
   }
@@ -764,9 +772,9 @@ function runSignals(items) {
       signals.push('HIGH_VOL');
     }
 
-    // ALCH: alch profit beats GE sell (after 2% tax) + nature rune cost
+    // ALCH: alching beats buying the item at its live price + a nature rune
     if (alch && gePrice0) {
-      if (alch > (gePrice0 * 0.98 + natureRunePrice)) signals.push('ALCH');
+      if (alch > liveBuyPrice(item) + natureRunePrice) signals.push('ALCH');
     }
 
     item.natureRunePrice = natureRunePrice;
@@ -789,8 +797,9 @@ function runSignals(items) {
     if (signals.includes('FRENZY')) score += 10;
     const gePrice1 = high || low;
     if (alch && gePrice1 && natureRunePrice) {
-      const profit = alch - (gePrice1 * 0.98) - natureRunePrice;
-      if (profit > 0) score += Math.min(10, profit / gePrice1 * 100);
+      const buy = liveBuyPrice(item);
+      const profit = alch - buy - natureRunePrice;
+      if (profit > 0) score += Math.min(10, profit / buy * 100);
     }
     // Ben, 2026-08-09: an OVERPRICED item (GE price diverged significantly
     // above the real live price) could still hit 100/100 here — the

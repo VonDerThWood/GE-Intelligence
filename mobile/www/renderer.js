@@ -2767,7 +2767,7 @@ function RecipeSection({item, allItems}) {
 
   const rows = recipe.ingredients.map(ing => {
     const ingItem = findIngItem(ing.name);
-    const price = ingItem ? (ingItem.high || ingItem.low || null) : null;
+    const price = ingItem ? liveBuyOf(ingItem) : null;
     return {...ing, price, isUntrade: ingItem?.untradeable};
   });
 
@@ -2951,8 +2951,9 @@ function ScoreInfoPopup({item, onClose, pos}) {
   if (sigs.includes('ACCUMULATION') || sigs.includes('DISTRIBUTION')) sigPts += 10;
   if (sigs.includes('FRENZY')) sigPts += 10;
 
-  const alchProfit = alch && price && nature ? alch - (price * 0.98) - nature : 0;
-  const alchPts    = alchProfit > 0 ? Math.round(Math.min(10, alchProfit / price * 100) * 10) / 10 : 0;
+  const alchBuy = liveBuyOf(item) || 0;
+  const alchProfit = alch && alchBuy && nature ? alch - alchBuy - nature : 0;
+  const alchPts    = alchProfit > 0 ? Math.round(Math.min(10, alchProfit / alchBuy * 100) * 10) / 10 : 0;
 
   const rowStyle = {display:'flex', justifyContent:'space-between', alignItems:'baseline', padding:'3px 0', gap:10};
   const ptsStyle = pts => ({fontSize:12, fontWeight:'bold', color: pts > 0 ? T.green : T.textDim, flexShrink:0});
@@ -4859,7 +4860,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     let inv = 0, cur = 0;
     for (const pos of openPositions) {
       const it = items.find(i => i.name.toLowerCase() === (pos.item_name||'').toLowerCase());
-      const price = it ? (it.high || it.low || 0) : 0;
+      const price = liveSellOf(it) || 0;
       inv += pos.cost_basis * pos.quantity;
       cur += price * pos.quantity;
     }
@@ -6014,7 +6015,7 @@ function RecipePane({allItems}) {
   const getPrice = name => {
     const it = findItem(name);
     if (!it) return null;
-    return it.high || it.low || null;
+    return liveBuyOf(it);
   };
 
   const calcTotal = ingredients => {
@@ -6032,7 +6033,7 @@ function RecipePane({allItems}) {
       const isOpen   = expanded === recipe.name;
       const total    = calcTotal(recipe.ingredients);
       const wikiItem = findItem(recipe.name);
-      const wikiCost = wikiItem ? (wikiItem.high || wikiItem.low) : null;
+      const wikiCost = wikiItem ? liveBuyOf(wikiItem) : null;
       const doses    = recipe.name.match(/\((\d)\)/)?.[1] || 4;
 
       return h('div', {key:recipe.name, style:{borderBottom:`1px solid ${T.borderDim}`}},
@@ -6142,7 +6143,7 @@ function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
 const MACHINE_CHARGES_PER_DIVINE_CHARGE = 3000;
 function machineChargeGpRate(items) {
   const dc = (items || []).find(it => it.name && it.name.toLowerCase() === 'divine charge');
-  const price = dc ? (dc.high || dc.low || 0) : 0; // same source as the Alch tab's divineChargePrice
+  const price = liveBuyOf(dc) || 0;
   // Divine charge hidden or unpriced — fall back to the last known rate
   // rather than 0, which would make every machine look like free profit.
   return price > 0 ? price / MACHINE_CHARGES_PER_DIVINE_CHARGE : FALLBACK_GP_PER_MACHINE_CHARGE;
@@ -6230,13 +6231,13 @@ function MachineCalculators({items, onSelect, onNavigate}) {
   const machine = INVENTION_MACHINES.find(m => m.id === active) || INVENTION_MACHINES[0];
   const chargeGpRate = machineChargeGpRate(items);
   const chargeCost = machine.chargePerItem * chargeGpRate;
-  const extraCost = machine.extraInput ? (byName[machine.extraInput.toLowerCase()]?.high || byName[machine.extraInput.toLowerCase()]?.low || 0) : 0;
+  const extraCost = machine.extraInput ? (liveBuyOf(byName[machine.extraInput.toLowerCase()]) || 0) : 0;
 
   const rows = useMemo(() => machine.conversions.map(c => {
     const inItem = byName[c.input.toLowerCase()];
     const outItem = byName[c.output.toLowerCase()];
-    const inPrice = inItem ? (inItem.high || inItem.low || 0) : null;
-    const outPrice = outItem ? (outItem.high || outItem.low || 0) : null;
+    const inPrice = inItem ? (liveBuyOf(inItem) || 0) : null;
+    const outPrice = outItem ? (liveSellOf(outItem) || 0) : null;
     const totalCost = inPrice != null ? inPrice + extraCost + chargeCost : null;
     const profit = (inPrice != null && outPrice != null) ? outPrice - totalCost : null;
     const roi = (profit != null && totalCost) ? (profit / totalCost) * 100 : null;
@@ -6361,8 +6362,8 @@ function InventionCraftCalc({items}) {
   const [rateText, setRateText] = useState('');
   const craft = INVENTION_CRAFTS.find(c => c.id === active);
   const byName = n => (items || []).find(it => (it.name || '').toLowerCase() === n.toLowerCase());
-  const priceOf = it => it ? (it.high || it.low || 0) : 0;
-  const livePrice = it => it ? (it.liveBuy || it.high || it.low || 0) : 0; // what buying actually costs
+  const priceOf = it => liveBuyOf(it) || 0;
+  const livePrice = priceOf; // what buying actually costs
 
   const inputs = craft.inputs.map(inp => {
     const label = inp.item || inp.component;
@@ -7772,7 +7773,7 @@ function computeRecommendationCandidates(data, priceById) {
     const entry = data[id];
     const liveItem = priceById[id];
     if (isDebunkedDxpItem(entry.name || liveItem?.name)) continue;
-    const price = liveItem ? (liveItem.high || liveItem.low || 0) : 0;
+    const price = liveBuyOf(liveItem) || 0;
     if (!price || !entry.timing) continue;
     const limit = entry.limit || liveItem?.limit || null;
     const trade = buildTradeIdea(entry.timing, price, limit);
@@ -8128,7 +8129,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     const score = dominant === 'rise' ? ph.rise : (dominant === 'drop' ? ph.drop : 0);
     const total = ph?.total || 0;
     const ratio = total ? score / total : 0;
-    const price = liveItem ? (liveItem.high || liveItem.low || 0) : 0;
+    const price = liveBuyOf(liveItem) || 0;
     const medianPct = ph?.median_pct ?? ph?.avg_pct ?? 0;
     const limit = entry.limit || liveItem?.limit || null;
     const trade = buildTradeIdea(entry.timing, price, limit);
@@ -9096,7 +9097,7 @@ function _daysUntilNextEvent(event, now = new Date()) {
 // Returns null if we can't compute a useful number.
 function buildSeasonalTrade(research, liveItem) {
   if (!liveItem || !research) return null;
-  const price = liveItem.high || liveItem.low;
+  const price = liveBuyOf(liveItem);
   const limit = liveItem.limit;
   if (!price) return null;
 
@@ -10483,36 +10484,14 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
   const [sort, setSort] = useState({key:'alchProfit', dir:-1});
   const cols = useTableColumns('genius_alch_col_widths', ALCH_DEFAULT_COL_WIDTHS, null, ['name', 'high', 'alchProfit']);
 
-  // Same shared GE/Live toggle as every other price column in the app
-  // (ItemTable's 'high' column, same localStorage key) — rather than a
-  // separate Live Profit column cluttering the table, the existing price
-  // column itself toggles, and every price-derived column recomputes off
-  // whichever one's active (Ben, 2026-07-31: "it's clogging up the
-  // screen... the columns change math depending on what you're
-  // selecting"). Caught for real on Magic Skull Mask: a low GE price
-  // flagged it as alch-worthy, but its real live buy price was 56-75k —
-  // a completely different profit picture depending on which price you
-  // actually trust.
-  const [priceMode, setPriceMode] = useState(() => {
-    try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
-  });
-  const togglePriceMode = e => {
-    e.stopPropagation();
-    setPriceMode(m => {
-      const next = m === 'ge' ? 'live' : 'ge';
-      try { localStorage.setItem('genius_price_col_mode', next); } catch {}
-      return next;
-    });
-  };
-
-  const natureRunePrice = useMemo(() => {
+const natureRunePrice = useMemo(() => {
     const nr = items.find(it => it.natureRunePrice);
     return nr ? nr.natureRunePrice : 0;
   }, [items]);
 
   const divineChargePrice = useMemo(() => {
     const dc = items.find(it => it.name && it.name.toLowerCase() === 'divine charge');
-    return dc ? (dc.high || dc.low || 0) : 0;
+    return liveBuyOf(dc) || 0;
   }, [items]);
 
   const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
@@ -10521,19 +10500,14 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
     return items
       .filter(it => it.signals && it.signals.includes('ALCH'))
       .map(it => {
-        const gePrice = it.high || it.low || 0;
-        // Falls back to GE price when there's no live buy data at all, so
-        // switching to Live mode doesn't just blank out items that don't
-        // have live data yet.
-        const livePrice = it.liveBuy ?? gePrice;
-        const price = priceMode === 'live' ? livePrice : gePrice;
+        const price = liveBuyOf(it) || 0;
         const alch = it.alch || 0;
         const afterTax = applyTax(price);
         const alchProfit = alch - price - natureRunePrice;
         const alchemiserProfit = alch - price - natureRunePrice - chargePerItem;
         return {...it, price, afterTax, alchProfit, alchemiserProfit};
       });
-  }, [items, natureRunePrice, chargePerItem, priceMode]);
+  }, [items, natureRunePrice, chargePerItem]);
 
   const Th = ({k, label}) => h('th', {
     className:'sortable', style:{cursor:'pointer', userSelect:'none'},
@@ -10585,12 +10559,7 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
           switch (k) {
             case 'name':       return sortTh('Item');
             case 'high':       return cols.th(k, {onClick:()=>setSort(s => ({key:'high', dir: s.key==='high' ? -s.dir : -1}))},
-              (priceMode==='ge' ? 'GE Price' : 'Live Price') + (sort.key==='high' ? (sort.dir>0 ? ' ↑' : ' ↓') : ''),
-              h('button', {
-                onClick: togglePriceMode,
-                title: priceMode==='ge' ? 'Showing GE (listed) price — click to price everything off live buy instead' : 'Showing live buy price — click to price everything off GE instead',
-                style: {marginLeft:6, fontSize:9, padding:'1px 5px', cursor:'pointer', borderRadius:3, border:`1px solid ${T.border}`, background:'rgba(255,255,255,0.05)', color:T.textDim, textTransform:'none', letterSpacing:0, fontWeight:'normal'}
-              }, '⇄')
+              'Live Price' + (sort.key==='high' ? (sort.dir>0 ? ' ↑' : ' ↓') : '')
             );
             case 'limit':      return sortTh('Buy Limit');
             case 'afterTax':   return sortTh('After Tax');
@@ -10620,7 +10589,7 @@ function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, descripti
             case 'name': return h('td', {key:k}, it.name);
             case 'high': {
               const hasLive = it.liveBuy != null || it.liveSell != null;
-              if (priceMode === 'live' && hasLive) {
+              if (hasLive) {
                 return h('td', {key:k},
                   h('div', {style:{display:'flex', gap:6, fontSize:11}},
                     it.liveBuy  != null && h('span', null, h('span',{style:{color:T.green}},'B '), fmt.gp(it.liveBuy)+'gp'),
@@ -11477,26 +11446,13 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   const [tierModal,   setTierModal]   = useState(null); // 'investor' | 'tradeCount' | null
 
   // Same shared GE/Live toggle as ItemTable/MarketTab/AlchTab/Monster
-  // Lookup — GE is the listed market price, Live is GEnius's own live
-  // buy/sell (closer to what you'd actually get instant-selling right
-  // now). Affects current value, P&L, and everything derived from it.
-  const [priceMode, setPriceMode] = useState(() => {
-    try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
-  });
-  const togglePriceMode = () => setPriceMode(m => {
-    const next = m === 'ge' ? 'live' : 'ge';
-    try { localStorage.setItem('genius_price_col_mode', next); } catch {}
-    return next;
-  });
-
-  const positions  = portfolio?.positions || [];
+const positions  = portfolio?.positions || [];
   const taxStats   = portfolio?.tax_stats  || {};
 
   const enriched = useMemo(() => positions.map(pos => {
     const item = items.find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
-    const currentPrice = item
-      ? (priceMode === 'live' ? (item.liveBuy ?? item.liveSell ?? item.high ?? item.low ?? 0) : (item.high || item.low || 0))
-      : 0;
+    // What selling really gets you right now (Ben, 2026-11-03).
+    const currentPrice = liveSellOf(item) || 0;
     // Removed from the GE: worth 0 here (Ben, 2026-10-28: it can't be sold
     // any more, so -100% is honest), but labelled so it doesn't look like a bug.
     const removed = !item && (removedItems || []).find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
@@ -11510,7 +11466,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     const stopDist     = pos.stop_loss    ? currentPrice - pos.stop_loss    : null;
     const category      = item?.categories?.[0] || 'misc';
     return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category, removedItem: removed || null};
-  }), [positions, items, removedItems, priceMode]);
+  }), [positions, items, removedItems]);
 
   const openPos   = enriched.filter(p => p.status !== 'sold' && p.status !== 'converted');
   const closedPos = enriched.filter(p => p.status === 'sold' || p.status === 'converted');
@@ -11980,7 +11936,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     // Overview
     h('div', {className:'overview-grid'},
       h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalInvested)+'gp'), h('div',{className:'ov-lbl'},'Total Invested')),
-      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},`Current Value (${priceMode==='ge'?'GE':'Live'})`)),
+      h('div',{className:'ov-card'}, h('div',{className:'ov-val'},fmt.gp(totalCurrent)+'gp'),  h('div',{className:'ov-lbl'},'Current Value (Live)')),
       h('div',{className:'ov-card'},
         h('div',{className:'ov-val '+(unrealizedPL>=0?'pct-up':'pct-down')},
           (unrealizedPL>=0?'+':'')+fmt.gp(unrealizedPL)+'gp'),
@@ -11998,11 +11954,6 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     h('div',{style:{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}},
       h('div', {style:{display:'flex', alignItems:'center', gap:10}},
         h('span',{style:{fontSize:12,color:T.textDim}},`${openPos.length} open position${openPos.length!==1?'s':''}`),
-        h('button', {
-          className:'ge-btn', style:{fontSize:11, padding:'3px 10px'},
-          onClick: togglePriceMode,
-          title: priceMode==='ge' ? 'Valuing positions off the GE (listed) price — click to use live buy/sell instead' : 'Valuing positions off live buy/sell — click to use the GE (listed) price instead',
-        }, priceMode==='ge' ? 'GE Price' : 'Live Price'),
       ),
       h('button',{className:'ge-btn gold',onClick:()=>{setEditPos(null);setShowModal(true);}}, '+ Add Position')
     ),
@@ -12021,7 +11972,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
       : h('table',{className:'ge-table pt-portfolio'},
           h('thead',null, h('tr',null,
             h('th',null,'Item'), h('th',{title:'Quantity, and what you paid per item'},'Qty @ cost'),
-            h('th',{title: (priceMode==='ge' ? 'GE (listed)' : 'Live buy/sell') + ' price per item, and the whole position\'s value'}, priceMode==='ge'?'Price / value (GE)':'Price / value (Live)'),
+            h('th',{title:'Live sell price per item, and the whole position\'s value'}, 'Price / value (Live)'),
             h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'},'Net P&L'),
             h('th',{title:'The sell price that breaks even after GE tax, how far away it is, and when the item last traded that high'},'Break-even'),
             h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
@@ -12799,8 +12750,9 @@ function ScoreBreakdown({it}) {
   if (sigs.includes('ACCUMULATION') || sigs.includes('DISTRIBUTION')) sigPts += 10;
   if (sigs.includes('FRENZY')) sigPts += 10;
 
-  const alchProfit = alch && price && nature ? alch - (price * 0.98) - nature : 0;
-  const alchPts    = alchProfit > 0 ? Math.round(Math.min(10, alchProfit / price * 100) * 10) / 10 : 0;
+  const alchBuy = liveBuyOf(it) || 0;
+  const alchProfit = alch && alchBuy && nature ? alch - alchBuy - nature : 0;
+  const alchPts    = alchProfit > 0 ? Math.round(Math.min(10, alchProfit / alchBuy * 100) * 10) / 10 : 0;
 
   const cardStyle = {background:'rgba(0,0,0,0.3)', border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'8px 10px', flex:'1 1 0'};
   const labelStyle = {fontSize:10, color:T.textDim, marginBottom:4, textTransform:'uppercase', letterSpacing:'0.05em'};
@@ -12939,7 +12891,7 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
   const accum    = useMemo(() => withSignal('ACCUMULATION').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,20), [items]);
   const distrib  = useMemo(() => withSignal('DISTRIBUTION').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,20), [items]);
   const alchItems= useMemo(() => withSignal('ALCH').sort((a,b) => {
-    const profit = it => (it.alch||0) - ((it.high||it.low||0)*0.98) - (it.natureRunePrice||0);
+    const profit = it => (it.alch||0) - (liveBuyOf(it)||0) - (it.natureRunePrice||0);
     return profit(b) - profit(a);
   }).slice(0,20), [items]);
   const frenzy   = useMemo(() => withSignal('FRENZY').sort((a,b)=>((b.volume||0)/(b.avgVolume||1))-((a.volume||0)/(a.avgVolume||1))).slice(0,15), [items]);
@@ -13210,9 +13162,9 @@ function OpportunitiesTab({items, selected, onSelect, description, watchlist, on
       desc:'— alch profit exceeds GE sell after tax + nature rune',
       rows:alchItems,
       headers:['Item','GE Price','Alch Value','Profit / Ea','GE Limit'],
-      sortKeys:['name',it=>it.high||it.low,'alch',it=>Math.round((it.alch||0)-(it.high||it.low||0)*0.98-(it.natureRunePrice||0)),'limit'],
+      sortKeys:['name',it=>it.high||it.low,'alch',it=>Math.round((it.alch||0)-(liveBuyOf(it)||0)-(it.natureRunePrice||0)),'limit'],
       renderRow: it => {
-        const profit = Math.round((it.alch||0) - (it.high||it.low||0)*0.98 - (it.natureRunePrice||0));
+        const profit = Math.round((it.alch||0) - (liveBuyOf(it)||0) - (it.natureRunePrice||0));
         return [
           h('td',{key:'n'},it.name),
           h('td',{key:'p',style:{color:T.gold}},fmt.gp(it.high||it.low)+'gp', h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell})),
@@ -13790,6 +13742,19 @@ function _sanityLivePrice(live, gePrice) {
   if (live == null) return null;
   if (gePrice == null || gePrice <= 0) return live;
   return (live <= gePrice * 5 && live >= gePrice / 5) ? live : null;
+}
+// What buying or selling an item really gets you right now, for every profit
+// calculation (Ben, 2026-11-03: always live, never the guide price). Falls back
+// to the guide price only when there's no believable live price.
+function liveBuyOf(it) {
+  if (!it) return null;
+  const ge = it.high ?? it.low ?? null;
+  return _sanityLivePrice(it.liveBuy, ge) ?? ge ?? null;
+}
+function liveSellOf(it) {
+  if (!it) return null;
+  const ge = it.high ?? it.low ?? null;
+  return _sanityLivePrice(it.liveSell, ge) ?? ge ?? null;
 }
 function findItemBuyPrice(items, name) {
   if (!name) return null;
@@ -14536,7 +14501,7 @@ function MoneyMakersTab({items, onSelect, description}) {
   const boltAlchRows = useMemo(() => {
     const natureRunePrice = (items.find(it => it.natureRunePrice) || {}).natureRunePrice || 0;
     const divineChargeItem = items.find(it => it.name && it.name.toLowerCase() === 'divine charge');
-    const divineChargePrice = divineChargeItem ? (divineChargeItem.high || divineChargeItem.low || 0) : 0;
+    const divineChargePrice = liveBuyOf(divineChargeItem) || 0;
     const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
     return ENCHANT_BOLT_RECIPES.map(r => {
       const inputCost = findItemBuyPrice(items, r.input);
