@@ -15110,10 +15110,20 @@ function UpdateRisksPanel() {
   useEffect(() => { load(); }, []);
   if (!risks.length) return null;
   const exposed = risks.reduce((s, r) => s + (r.value || 0), 0);
+  const yours = risks.filter(r => r.group !== 'other');
   const updates = new Set(risks.map(r => r.updateId)).size;
+  const riskRow = r => h('div', {key:r.key, style:{padding:'6px 0', borderTop:'1px solid '+T.borderDim, lineHeight:1.5}},
+    h('div', {style:{display:'flex', gap:8, alignItems:'baseline', flexWrap:'wrap'}},
+      h('b', {style:{color:T.text}}, r.itemName),
+      h('span', {style:{color:T.textDim, flex:1}}, r.group === 'held' ? r.quantity.toLocaleString()+' held · '+fmt.gp(r.value)+'gp' : ''),
+      h('button', {className:'ge-btn', onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(); }}, 'Dismiss')),
+    h('div', {style:{color:T.textDim}}, r.kind === 'mention' ? 'Mentioned: ' : '', r.effect),
+    h('div', {style:{fontSize:11, color:T.textDim}}, r.updateTitle, r.when ? ' · '+r.when : ''));
+  const groupHead = text => h('div', {style:{fontSize:11, color:T.gold, margin:'10px 0 2px', textTransform:'uppercase', letterSpacing:1}}, text);
+  const inGroup = g => risks.filter(r => r.group === g);
   return h('div', {style:{margin:'8px 12px 0', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12}},
     h('div', {style:{padding:'8px 10px', cursor:'pointer', display:'flex', gap:8, alignItems:'center'}, onClick:()=>setOpen(!open)},
-      h('span', {style:{flex:1}}, '⚠️ ', h('b', {style:{color:T.gold}}, 'Upcoming updates'), ' may affect '+risks.length+' item'+(risks.length===1?'':'s'),
+      h('span', {style:{flex:1}}, '⚠️ ', h('b', {style:{color:T.gold}}, 'Upcoming updates'), ' may affect '+(yours.length ? yours.length+' of your item'+(yours.length===1?'':'s') : risks.length+' item'+(risks.length===1?'':'s')),
         exposed > 0 ? ' · '+fmt.gp(exposed)+'gp held' : '', updates > 1 ? ' · '+updates+' updates' : ''),
       h('span', {style:{color:T.textDim}}, open ? '▲' : '▼')),
     open && h('div', {style:{padding:'0 10px 8px'}},

@@ -60,9 +60,24 @@ run('notifies once per update, large holdings only', () => {
 run('watched items notify and say so, unless switched off', () => {
   const r = findRisks({ updates: [known], holdings: [], watched: ['Abyssal whip'], now });
   const [n] = buildNotifications(r, []);
-  assert.ok(n.body.includes('Abyssal whip (watching)'));
+  assert.ok(n.body.includes('Watchlist: Abyssal whip'));
   assert.strictEqual(buildNotifications(r, [], { includeWatched: false }).length, 0);
   const held = findRisks({ updates: [known], holdings: [whips], watched: ['Abyssal whip'], now });
-  assert.ok(buildNotifications(held, [], { includeWatched: false })[0].body.includes('Abyssal whip (held)'));
+  assert.ok(buildNotifications(held, [], { includeWatched: false })[0].body.includes('Portfolio: Abyssal whip'));
+});
+run('known effects list untracked items last, and they never notify', () => {
+  const u = { ...known, items: [{ name: 'Draconic visage', effect: 'More common.' }, { name: 'Abyssal whip', effect: 'Stat increase.' }, { name: 'Dark bow', effect: 'Buff.' }] };
+  const r = findRisks({ updates: [u], holdings: [whips], watched: ['Dark bow'], now });
+  assert.deepStrictEqual(r.map(x => x.group), ['held', 'watched', 'other']);
+  const [n] = buildNotifications(r, []);
+  assert.ok(n.body.includes('Portfolio: Abyssal whip') && n.body.includes('Watchlist: Dark bow') && !n.body.includes('Draconic'));
+  const onlyOther = findRisks({ updates: [u], now });
+  assert.strictEqual(buildNotifications(onlyOther, []).length, 0);
+});
+run('long lists are shortened in the notification', () => {
+  const names = ['Aaaaa', 'Bbbbb', 'Ccccc', 'Ddddd', 'Eeeee'];
+  const u = { ...known, items: names.map(name => ({ name, effect: 'x' })) };
+  const [n] = buildNotifications(findRisks({ updates: [u], watched: names, now }), []);
+  assert.ok(n.body.includes('+2 more'));
 });
 console.log('All update risk tests passed');

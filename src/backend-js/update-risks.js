@@ -18,6 +18,8 @@ const POST_MAX_AGE_DAYS = 60;
 const MIN_NAME_LENGTH = 5;
 const MIN_NOTIFY_GP = 1000000;
 const SNIPPET_LENGTH = 180;
+const NOTIFY_NAMES_PER_GROUP = 3;
+const GROUP_ORDER = { held: 0, watched: 1, other: 2 };
 
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const nameRegex = name => new RegExp(`\\b${escapeRe(name)}s?\\b`, 'i');
@@ -45,15 +47,19 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
     const key = `${source.id}|${item.name.toLowerCase()}`;
     if (seen.has(key) || dismissed.includes(key)) return;
     seen.add(key);
+    const watchedItem = watchedNames.has(item.name.toLowerCase());
     risks.push({ key, kind, updateId: source.id, updateTitle: source.title, when: source.when, url: source.url,
-      itemName: item.name, quantity: item.quantity, value: item.value, watched: watchedNames.has(item.name.toLowerCase()), effect });
+      itemName: item.name, quantity: item.quantity, value: item.value, watched: watchedItem,
+      group: item.quantity > 0 ? 'held' : watchedItem ? 'watched' : 'other', effect });
   };
 
   for (const u of updates) {
     if (u.until && new Date(now).toISOString().slice(0, 10) > u.until) continue;
     for (const entry of u.items || []) {
-      const item = tracked.get(entry.name.toLowerCase());
-      if (item) add(u, item, entry.effect, 'known');
+      // Hand-kept entries are exact, so they're listed even for items you
+      // don't hold or watch ("Everything else" on the panel).
+      const item = tracked.get(entry.name.toLowerCase()) || { name: entry.name, quantity: 0, value: 0 };
+      add(u, item, entry.effect, 'known');
     }
   }
   // Known entries come first, so a mention never replaces an exact effect
@@ -70,8 +76,8 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
       if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), 'mention');
     }
   }
-  // Biggest exposure first; held before merely watched.
-  return risks.sort((a, b) => b.value - a.value || a.itemName.localeCompare(b.itemName));
+  // Holdings, then watched, then everything else; biggest exposure first.
+  return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || b.value - a.value || a.itemName.localeCompare(b.itemName));
 }
 
 // One notification per update, listing what's newly exposed. `notified` is the
@@ -82,11 +88,15 @@ function buildNotifications(risks, notified, { includeWatched = true } = {}) {
   const byUpdate = new Map();
   for (const r of fresh) byUpdate.set(r.updateId, [...(byUpdate.get(r.updateId) || []), r]);
   return [...byUpdate.values()].map(list => {
-    const top = list.slice(0, 3).map(r => `${r.itemName} (${r.quantity ? 'held' : 'watching'})`).join(', ');
-    const more = list.length > 3 ? ` and ${list.length - 3} more` : '';
+    const names = (label, group) => {
+      const items = list.filter(r => r.group === group).map(r => r.itemName);
+      if (!items.length) return null;
+      const extra = items.length - NOTIFY_NAMES_PER_GROUP;
+      return `${label}: ${items.slice(0, NOTIFY_NAMES_PER_GROUP).join(', ')}${extra > 0 ? ` +${extra} more` : ''}`;
+    };
     const when = list[0].when ? ` (${list[0].when})` : '';
-    return { keys: list.map(r => r.key), title: '⚠️ Upcoming update may affect your items',
-      body: `${list[0].updateTitle}${when} may affect ${top}${more}. See Portfolio for details.` };
+    return { keys: list.map(r => r.key), title: '⚠️ Upcoming update may affect these items',
+      body: [`${list[0].updateTitle}${when}`, names('Portfolio', 'held'), names('Watchlist', 'watched')].filter(Boolean).join('\n') };
   });
 }
 
