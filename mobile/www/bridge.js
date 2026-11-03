@@ -22972,6 +22972,7 @@
           heldByName.set(k, { name: old.name, quantity: old.quantity + h.quantity, value: old.value + h.value });
         }
         const tracked = new Map(heldByName);
+        const watchedNames = new Set(watched.map((n) => n.toLowerCase()));
         for (const name of watched) if (!tracked.has(name.toLowerCase())) tracked.set(name.toLowerCase(), { name, quantity: 0, value: 0 });
         const seen = /* @__PURE__ */ new Set();
         const add = (source, item, effect, kind) => {
@@ -22988,6 +22989,7 @@
             itemName: item.name,
             quantity: item.quantity,
             value: item.value,
+            watched: watchedNames.has(item.name.toLowerCase()),
             effect
           });
         };
@@ -23012,12 +23014,12 @@
         }
         return risks.sort((a, b) => b.value - a.value || a.itemName.localeCompare(b.itemName));
       }
-      function buildNotifications(risks, notified) {
-        const fresh = risks.filter((r) => r.value >= MIN_NOTIFY_GP && !notified.includes(r.key));
+      function buildNotifications(risks, notified, { includeWatched = true } = {}) {
+        const fresh = risks.filter((r) => (r.value >= MIN_NOTIFY_GP || includeWatched && r.watched) && !notified.includes(r.key));
         const byUpdate = /* @__PURE__ */ new Map();
         for (const r of fresh) byUpdate.set(r.updateId, [...byUpdate.get(r.updateId) || [], r]);
         return [...byUpdate.values()].map((list) => {
-          const top = list.slice(0, 3).map((r) => r.itemName).join(", ");
+          const top = list.slice(0, 3).map((r) => `${r.itemName} (${r.quantity ? "held" : "watching"})`).join(", ");
           const more = list.length > 3 ? ` and ${list.length - 3} more` : "";
           const when = list[0].when ? ` (${list[0].when})` : "";
           return {
@@ -25813,16 +25815,23 @@
           const portfolio = await readPortfolio();
           const holdings = portfolio.positions.filter((p) => p.status === "open" && p.quantity > 0).map((p) => ({ name: p.item_name, quantity: p.quantity, value: p.quantity * price(p.item_name) }));
           const idToName = new Map((latest.items || []).map((it) => [String(it.id), it.name]));
-          const watched = store2.get("watchlist", []).map((id) => idToName.get(String(id))).filter(Boolean);
+          const watched = [...store2.get("watchlist", []), ...store2.get("dxpWatchlist", [])].map((id) => idToName.get(String(id))).filter(Boolean);
           return findRisks({ updates: require_upcoming_updates().updates, posts: await loadUpdateRiskPosts(), holdings, watched, dismissed: store2.get("updateRiskDismissed", []) });
         }
         async function dismissUpdateRisk(key) {
           store2.set("updateRiskDismissed", [.../* @__PURE__ */ new Set([...store2.get("updateRiskDismissed", []), key])]);
         }
+        function getUpdateRiskSettings() {
+          return { enabled: true, includeWatched: true, ...store2.get("updateRiskSettings", {}) };
+        }
+        async function setUpdateRiskSettings(s) {
+          store2.set("updateRiskSettings", s);
+        }
         async function getUpdateRiskNotifications() {
-          if (store2.get("updateRiskAlerts", true) === false) return [];
+          const settings = getUpdateRiskSettings();
+          if (!settings.enabled) return [];
           const notified = store2.get("updateRiskNotified", []);
-          const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified);
+          const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified, { includeWatched: settings.includeWatched });
           if (out.length) store2.set("updateRiskNotified", [...notified, ...out.flatMap((n) => n.keys)]);
           return out;
         }
@@ -28797,6 +28806,8 @@
           getUpdateRisks,
           dismissUpdateRisk,
           getUpdateRiskNotifications,
+          getUpdateRiskSettings,
+          setUpdateRiskSettings,
           syncLiveHistory: () => liveHistory.sync(),
           getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
           getLaunches,
@@ -31374,6 +31385,8 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       // Item stats from RS Wiki
       getItemStats: (name) => a.getItemStats(name),
       getLiveItemPrice: (id) => a.getLiveItemPrice(id),
+      getUpdateRiskSettings: async () => (await ensureApi()).getUpdateRiskSettings(),
+      setUpdateRiskSettings: async (s) => (await ensureApi()).setUpdateRiskSettings(s),
       getUpdateRisks: async () => (await ensureApi()).getUpdateRisks(),
       dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
       syncRole: "phone",

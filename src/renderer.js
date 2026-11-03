@@ -2499,6 +2499,21 @@ function SyncPhone({toast}) {
     error && h('div', {style:{fontSize:12, color:T.red, marginTop:8, lineHeight:1.5}}, error));
 }
 
+function UpdateRiskSettings() {
+  const [s, setS] = useState(null);
+  useEffect(() => { window.genius?.getUpdateRiskSettings?.().then(setS).catch(() => {}); }, []);
+  if (!s) return null;
+  const toggle = key => { const next = {...s, [key]: !s[key]}; setS(next); window.genius.setUpdateRiskSettings(next); };
+  const row = (key, label, disabled) => h('label', {style:{display:'flex', gap:8, alignItems:'center', fontSize:12, padding:'3px 0', opacity:disabled?0.5:1}},
+    h('input', {type:'checkbox', checked:!!s[key], disabled, onChange:()=>toggle(key)}), label);
+  return h('div', {style:{marginBottom:20}},
+    h('div', {className:'ge-section-head'}, 'Upcoming update alerts'),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8, lineHeight:1.5}},
+      'Notifies you when an upcoming update may affect your items. These are warnings about what may change, not advice. The list stays on the Portfolio tab either way.'),
+    row('enabled', 'Notify me about items I hold'),
+    row('includeWatched', 'Also notify for my Watchlist and DXP watchlist', !s.enabled));
+}
+
 function SyncSettings({toast}) {
   const role = window.genius?.syncRole;
   if (!role) return null;
@@ -10200,6 +10215,8 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       ),
       h(AutoBackupRestore, {toast}),
     ),
+
+    h(UpdateRiskSettings),
 
     h(SyncSettings, {toast}),
 

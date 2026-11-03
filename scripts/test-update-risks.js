@@ -57,4 +57,12 @@ run('notifies once per update, large holdings only', () => {
   const small = findRisks({ updates: [known], holdings: [{ ...whips, value: 5 }], now });
   assert.strictEqual(buildNotifications(small, []).length, 0);
 });
+run('watched items notify and say so, unless switched off', () => {
+  const r = findRisks({ updates: [known], holdings: [], watched: ['Abyssal whip'], now });
+  const [n] = buildNotifications(r, []);
+  assert.ok(n.body.includes('Abyssal whip (watching)'));
+  assert.strictEqual(buildNotifications(r, [], { includeWatched: false }).length, 0);
+  const held = findRisks({ updates: [known], holdings: [whips], watched: ['Abyssal whip'], now });
+  assert.ok(buildNotifications(held, [], { includeWatched: false })[0].body.includes('Abyssal whip (held)'));
+});
 console.log('All update risk tests passed');

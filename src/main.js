@@ -611,6 +611,8 @@ ipcMain.handle('sync-unpair-device', (_, id) => api.sync.unpairDevice(id));
 ipcMain.handle('sync-get-conflicts', () => api.sync.getConflicts());
 ipcMain.handle('sync-clear-conflicts', () => api.sync.clearConflicts());
 
+ipcMain.handle('get-update-risk-settings', () => api.getUpdateRiskSettings());
+ipcMain.handle('set-update-risk-settings', (_, s) => api.setUpdateRiskSettings(s));
 ipcMain.handle('get-update-risks', () => api.getUpdateRisks());
 ipcMain.handle('dismiss-update-risk', (_, key) => api.dismissUpdateRisk(key));
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));

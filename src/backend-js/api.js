@@ -1803,16 +1803,21 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const holdings = portfolio.positions.filter(p => p.status === 'open' && p.quantity > 0)
       .map(p => ({ name: p.item_name, quantity: p.quantity, value: p.quantity * price(p.item_name) }));
     const idToName = new Map((latest.items || []).map(it => [String(it.id), it.name]));
-    const watched = store.get('watchlist', []).map(id => idToName.get(String(id))).filter(Boolean);
+    const watched = [...store.get('watchlist', []), ...store.get('dxpWatchlist', [])].map(id => idToName.get(String(id))).filter(Boolean);
     return findRisks({ updates: require('./data/upcoming_updates.json').updates, posts: await loadUpdateRiskPosts(), holdings, watched, dismissed: store.get('updateRiskDismissed', []) });
   }
   async function dismissUpdateRisk(key) {
     store.set('updateRiskDismissed', [...new Set([...store.get('updateRiskDismissed', []), key])]);
   }
+  function getUpdateRiskSettings() {
+    return { enabled: true, includeWatched: true, ...store.get('updateRiskSettings', {}) };
+  }
+  async function setUpdateRiskSettings(s) { store.set('updateRiskSettings', s); }
   async function getUpdateRiskNotifications() {
-    if (store.get('updateRiskAlerts', true) === false) return [];
+    const settings = getUpdateRiskSettings();
+    if (!settings.enabled) return [];
     const notified = store.get('updateRiskNotified', []);
-    const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified);
+    const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified, { includeWatched: settings.includeWatched });
     if (out.length) store.set('updateRiskNotified', [...notified, ...out.flatMap(n => n.keys)]);
     return out;
   }
@@ -5161,7 +5166,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getLiveItemPrice,
     getItemLiveTimeseries,
     sync: createSync({ dataDir, store, writePortfolio, buildExportBundle }),
-    getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications,
+    getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications, getUpdateRiskSettings, setUpdateRiskSettings,
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLaunches,

@@ -37,6 +37,7 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
     heldByName.set(k, { name: old.name, quantity: old.quantity + h.quantity, value: old.value + h.value });
   }
   const tracked = new Map(heldByName);
+  const watchedNames = new Set(watched.map(n => n.toLowerCase()));
   for (const name of watched) if (!tracked.has(name.toLowerCase())) tracked.set(name.toLowerCase(), { name, quantity: 0, value: 0 });
 
   const seen = new Set();
@@ -45,7 +46,7 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
     if (seen.has(key) || dismissed.includes(key)) return;
     seen.add(key);
     risks.push({ key, kind, updateId: source.id, updateTitle: source.title, when: source.when, url: source.url,
-      itemName: item.name, quantity: item.quantity, value: item.value, effect });
+      itemName: item.name, quantity: item.quantity, value: item.value, watched: watchedNames.has(item.name.toLowerCase()), effect });
   };
 
   for (const u of updates) {
@@ -74,14 +75,14 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
 }
 
 // One notification per update, listing what's newly exposed. `notified` is the
-// list of keys already told about; only real holdings of some size notify, so
-// a mention of something you merely watch stays on the Portfolio panel.
-function buildNotifications(risks, notified) {
-  const fresh = risks.filter(r => r.value >= MIN_NOTIFY_GP && !notified.includes(r.key));
+// list of keys already told about. Holdings of some size always notify; watched
+// items (Ben, 2026-11-02: he may be about to trade them) unless switched off.
+function buildNotifications(risks, notified, { includeWatched = true } = {}) {
+  const fresh = risks.filter(r => (r.value >= MIN_NOTIFY_GP || (includeWatched && r.watched)) && !notified.includes(r.key));
   const byUpdate = new Map();
   for (const r of fresh) byUpdate.set(r.updateId, [...(byUpdate.get(r.updateId) || []), r]);
   return [...byUpdate.values()].map(list => {
-    const top = list.slice(0, 3).map(r => r.itemName).join(', ');
+    const top = list.slice(0, 3).map(r => `${r.itemName} (${r.quantity ? 'held' : 'watching'})`).join(', ');
     const more = list.length > 3 ? ` and ${list.length - 3} more` : '';
     const when = list[0].when ? ` (${list[0].when})` : '';
     return { keys: list.map(r => r.key), title: '⚠️ Upcoming update affects your holdings',

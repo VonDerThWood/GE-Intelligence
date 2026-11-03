@@ -14,6 +14,8 @@ contextBridge.exposeInMainWorld('genius', {
   // Item stats from RS Wiki
   getItemStats:          (name) => ipcRenderer.invoke('get-item-stats', name),
   getLiveItemPrice:      (id) => ipcRenderer.invoke('get-live-item-price', id),
+  getUpdateRiskSettings: () => ipcRenderer.invoke('get-update-risk-settings'),
+  setUpdateRiskSettings: (s) => ipcRenderer.invoke('set-update-risk-settings', s),
   getUpdateRisks: () => ipcRenderer.invoke('get-update-risks'),
   dismissUpdateRisk: (key) => ipcRenderer.invoke('dismiss-update-risk', key),
   syncRole: 'hub',

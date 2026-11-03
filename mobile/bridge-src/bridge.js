@@ -329,6 +329,8 @@ async function buildGenius() {
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
     getLiveItemPrice:       (id) => a.getLiveItemPrice(id),
+    getUpdateRiskSettings: async () => (await ensureApi()).getUpdateRiskSettings(),
+    setUpdateRiskSettings: async (s) => (await ensureApi()).setUpdateRiskSettings(s),
     getUpdateRisks: async () => (await ensureApi()).getUpdateRisks(),
     dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
     syncRole: 'phone',
