@@ -22,11 +22,9 @@
     --red:       #e53935;
     --blue:      #64b5f6;
   }
-  /* Mirrors the app's own "Black" theme (Settings -> Theme -> Black) —
-     same gold/text/signal colors, backgrounds swapped to near-black.
-     This only recolors the SITE's own chrome; the screenshots further
-     down are static images of the app's default theme regardless of
-     this toggle — see the note next to the theme button. */
+  /* Mirrors the app's own "Black" theme (Settings -> Theme -> Black):
+     same gold/text/signal colors, backgrounds swapped to near-black. The
+     screenshots swap with it (see applyTheme). */
   :root[data-theme="black"] {
     --bg:        #000000;
     --panel:     #0a0a0a;
@@ -167,6 +165,12 @@
   .sig.over  { background: rgba(229,57,53,0.12); border-color: rgba(229,57,53,0.4); color: #ef9a9a; }
   .sig.under { background: rgba(76,175,80,0.12); border-color: rgba(76,175,80,0.4); color: #81c784; }
   .sig.alch  { background: rgba(156,39,176,0.15); border-color: rgba(156,39,176,0.5); color: #ce93d8; }
+  .sig.spike { background: #14261a; border-color: #4caf50; color: #81c784; }
+  .sig.slump { background: #2a1414; border-color: #e53935; color: #ef9a9a; }
+  .sig.accum { background: #1a2a3a; border-color: #64b5f6; color: #64b5f6; }
+  .sig.distrib { background: #2a1a3a; border-color: #ce93d8; color: #ce93d8; }
+  .sig.highvol { background: #2a2a1a; border-color: #c9a84c; color: #c9a84c; }
+  .sig.wide  { background: #2a2a2a; border-color: #bdbdbd; color: #bdbdbd; }
 
   /* Screenshots */
   .shots {
@@ -174,6 +178,13 @@
     max-width: 940px; margin: 0 auto;
   }
   .shot figure { margin: 0; }
+  .shot-group {
+    font-family: 'Cinzel', 'Georgia', serif;
+    font-size: 19px;
+    color: var(--gold);
+    text-align: center;
+    margin: 18px 0 -18px;
+  }
   .shot img {
     width: 100%; display: block;
     border-radius: 8px;
@@ -267,7 +278,7 @@
     <div class="meta-line" id="version-line">Free &middot; No account, no server, everything stays on your machine</div>
     <div class="theme-toggle-wrap">
       <button class="btn btn-secondary theme-toggle-btn" id="theme-toggle-btn" onclick="toggleSiteTheme()">🌑 Try Black Theme</button>
-      <div class="meta-line theme-note">Recolors this page to match GEnius's Black theme — the screenshots below always show the app's default look.</div>
+      <div class="meta-line theme-note">GEnius has two themes. This switches the page and all its screenshots between them.</div>
     </div>
   </div>
 
@@ -283,7 +294,7 @@
       <div class="card">
         <span class="icon">⚡</span>
         <h3>Market Signals</h3>
-        <p>Automatic flags for surges, dumps, volume frenzies, suspected manipulation, and listed-price/live-price discrepancies.</p>
+        <p>Automatic flags for surges, dumps, live price spikes and slumps, volume frenzies, suspected manipulation, and listed-price/live-price gaps.</p>
       </div>
       <div class="card">
         <span class="icon">🐲</span>
@@ -293,7 +304,7 @@
       <div class="card">
         <span class="icon">💰</span>
         <h3>Portfolio Tracker</h3>
-        <p>Log real positions, track unrealised P&amp;L, GE tax handled automatically, and see your full closed-trade history.</p>
+        <p>Log real positions, track profit and loss after GE tax, see break-even prices, and browse closed trades grouped by item.</p>
       </div>
       <div class="card">
         <span class="icon">🔔</span>
@@ -313,21 +324,42 @@
       <div class="card">
         <span class="icon">🎯</span>
         <h3>Opportunity Scoring</h3>
-        <p>Every item gets a 0–100 score from momentum, volume behaviour, active signals, and alch profitability — sortable at a glance.</p>
+        <p>Every item gets a 0-100 score, and a public track record grades high scorers on what their price did next.</p>
       </div>
       <div class="card">
         <span class="icon">🌦️</span>
         <h3>GEnius Almanac</h3>
-        <p>Historical DXP-event intelligence — see how items have actually moved across past Double XP Weekends, with buy/sell timing suggestions.</p>
+        <p>See how items actually moved around past Double XP events, how game updates moved prices, and how every new item has done since launch.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔬</span>
+        <h3>Chart Analysis</h3>
+        <p>Trend vs the market, tested support and resistance, and how dips usually play out. Each reading shows its own track record, and weak ones are marked Weak.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🛒</span>
+        <h3>Buy Planner</h3>
+        <p>Stock up across 4-hour buy limits and several accounts, with your true average cost and a realistic finish estimate.</p>
+      </div>
+      <div class="card">
+        <span class="icon">📰</span>
+        <h3>News and DXP Watch</h3>
+        <p>A calendar of upcoming dates, tags for items you care about, and a notification when Double XP is announced or teased.</p>
       </div>
     </div>
     <div class="sig-row">
       <span class="sig surge">SURGE</span>
       <span class="sig dump">DUMP</span>
+      <span class="sig spike">SPIKE</span>
+      <span class="sig slump">SLUMP</span>
+      <span class="sig accum">ACCUMULATION</span>
+      <span class="sig distrib">DISTRIBUTION</span>
       <span class="sig frenzy">FRENZY</span>
+      <span class="sig highvol">HIGH_VOL</span>
       <span class="sig manip">MANIPULATED</span>
       <span class="sig over">OVERPRICED</span>
       <span class="sig under">UNDERPRICED</span>
+      <span class="sig wide">WIDE_SPREAD</span>
       <span class="sig alch">ALCH</span>
     </div>
   </section>
@@ -336,82 +368,142 @@
     <h2 class="section-title">See it in action</h2>
     <p class="section-sub">Real screens, straight from the app.</p>
     <div class="shots">
+      <h3 class="shot-group">Market overview</h3>
       <div class="shot">
         <figure>
-          <img src="assets/ss-01-dashboard-1.png" alt="GEnius Dashboard showing market pulse, active signals, top movers, and sector heat map">
-          <figcaption>Dashboard — market pulse, active signals, top movers, and the sector heat map at a glance.</figcaption>
+          <img loading="lazy" src="assets/shots/dashboard-dark.png" data-shot="dashboard" alt="GEnius Dashboard with market weather, coming-up dates, top movers and sector heat map">
+          <figcaption>Dashboard: market weather, upcoming dates, top movers and the sector heat map at a glance.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-02-dashboard-2.png" alt="GEnius Dashboard, further down showing more market overview widgets">
-          <figcaption>Dashboard — Item of the Day, Mood of the Market, and more.</figcaption>
+          <img loading="lazy" src="assets/shots/market-dark.png" data-shot="market" alt="GEnius Market tab with top movers and unusual volume">
+          <figcaption>Market: the day's top movers and unusual volume, with live buy and sell prices.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-03-market.png" alt="GEnius Market tab showing a sortable item table with live buy/sell prices and signal badges">
-          <figcaption>Market — every tradeable item, with live buy/sell prices and signal badges under each price.</figcaption>
+          <img loading="lazy" src="assets/shots/category-dark.png" data-shot="category" alt="GEnius Runes category table with live prices and volume">
+          <figcaption>Category tabs: 30+ groups of items, each with live prices, daily change and volume against the average.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-04-opportunities.png" alt="GEnius Opportunities tab showing signal summary counts and a top-20 opportunity score table">
-          <figcaption>Opportunities — signal counts at a glance, ranked by a composite 0–100 opportunity score.</figcaption>
+          <img loading="lazy" src="assets/shots/top-movers-dark.png" data-shot="top-movers" alt="GEnius Top Movers tab">
+          <figcaption>Top Movers: official GE risers and fallers beside real-time ones.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-05-watchlist.png" alt="GEnius Watchlist tab showing starred items">
-          <figcaption>Watchlist — every item you've starred, in one focused view.</figcaption>
+          <img loading="lazy" src="assets/shots/news-dark.png" data-shot="news" alt="GEnius News tab with dates and tags">
+          <figcaption>News: upcoming dates, unread markers, and tags for DXP, items you hold or watch, and tracked updates.</figcaption>
+        </figure>
+      </div>
+      <h3 class="shot-group">Item research</h3>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/item-dark.png" data-shot="item" alt="GEnius item panel with a price chart for Dragon dart tip">
+          <figcaption>Item panel: chart analysis that shows its own track record and marks weak readings as Weak. Example watchlist shown.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-06-portfolio.png" alt="GEnius Portfolio tab showing tracked positions and profit/loss">
-          <figcaption>Portfolio — real positions, unrealised P&amp;L, and full closed-trade history.</figcaption>
+          <img loading="lazy" src="assets/shots/item-chart-dark.png" data-shot="item-chart" alt="GEnius expanded price chart with volume and live price detail for Dragon dart tip">
+          <figcaption>Expanded charts: 7 days to all-time, volume, and instant buy and sell prices in fine detail.</figcaption>
+        </figure>
+      </div>
+      <h3 class="shot-group">Finding opportunities</h3>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/opportunities-dark.png" data-shot="opportunities" alt="GEnius Opportunities tab with signal counts and scores">
+          <figcaption>Opportunities: signal counts and a composite 0-100 score.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-07-alch.png" alt="GEnius Alch tab showing high alchemy profit calculations across items">
-          <figcaption>Alch — every item where high alchemy beats the GE sell price, ranked by profit.</figcaption>
+          <img loading="lazy" src="assets/shots/track-record-dark.png" data-shot="track-record" alt="GEnius Opportunities track record table">
+          <figcaption>Track record: every high-scoring item graded on what its price did 1, 7 and 30 days later.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-08-almanac-1.png" alt="GEnius Almanac tab showing historical DXP event intelligence">
-          <figcaption>GEnius Almanac — historical DXP-event intelligence, confirmed vs. speculative patterns.</figcaption>
+          <img loading="lazy" src="assets/shots/flips-dark.png" data-shot="flips" alt="GEnius Flips tab">
+          <figcaption>Flips: live spreads after tax, with realistic profit based on actual volume.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-09-almanac-2.png" alt="GEnius Almanac tab, further detail on DXP event trade timing">
-          <figcaption>GEnius Almanac — buy/sell day timing suggestions for individual items.</figcaption>
+          <img loading="lazy" src="assets/shots/money-makers-dark.png" data-shot="money-makers" alt="GEnius Money Makers tab">
+          <figcaption>Money Makers: processing margins from live buy and sell prices.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-10-monster-lookup.png" alt="GEnius Monster Lookup tab showing General Graardor's drop table, combat stats, and Normal/Hard Mode toggle">
-          <figcaption>Monster Lookup — drop tables, gp/kill estimates, and combat stats straight from the wiki.</figcaption>
+          <img loading="lazy" src="assets/shots/alch-dark.png" data-shot="alch" alt="GEnius Alch tab">
+          <figcaption>Alch: items where high alchemy beats buying them on the GE, priced live.</figcaption>
+        </figure>
+      </div>
+      <h3 class="shot-group">Your money</h3>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/watchlist-dark.png" data-shot="watchlist" alt="GEnius Watchlist tab">
+          <figcaption>Watchlist: everything you have starred, in one view.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-11-item-graph.png" alt="GEnius item detail panel with an expanded price chart, seasonal averages, and support/resistance">
-          <figcaption>Item price charts — 7d to all-time views, seasonal averages, and all-time high/low with dates.</figcaption>
+          <img loading="lazy" src="assets/shots/portfolio-dark.png" data-shot="portfolio" alt="GEnius Portfolio tab with an example portfolio">
+          <figcaption>Portfolio: positions, profit and loss after tax, break-even and more. Example data shown.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-12-invention-1.png" alt="GEnius Invention tab showing Invention components and their GE prices">
-          <figcaption>Invention — components, untradeable items, and machine profit calculators.</figcaption>
+          <img loading="lazy" src="assets/shots/buy-planner-dark.png" data-shot="buy-planner" alt="GEnius Buy Planner with a goal across two accounts">
+          <figcaption>Buy Planner: stock up across 4-hour limits and several accounts, with your true average cost. Example data shown.</figcaption>
+        </figure>
+      </div>
+      <h3 class="shot-group">GEnius Almanac</h3>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/almanac-dxp-dark.png" data-shot="almanac-dxp" alt="GEnius Almanac DXP Weekend page">
+          <figcaption>DXP Weekend: how items have actually moved around past Double XP events, with evidence for each pattern.</figcaption>
         </figure>
       </div>
       <div class="shot">
         <figure>
-          <img src="assets/ss-13-invention-2.png" alt="GEnius Invention tab Plank Maker machine calculator showing profit per log type">
-          <figcaption>Invention — Plank Maker, Hide Tanner, and Partial Potion Producer calculators with live prices.</figcaption>
+          <img loading="lazy" src="assets/shots/game-updates-dark.png" data-shot="game-updates" alt="GEnius Almanac Game Updates page">
+          <figcaption>Game Updates: how past updates moved prices, and the items each one touched.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/launches-dark.png" data-shot="launches" alt="GEnius Almanac Launches page">
+          <figcaption>Launches: every new item tracked by update, from launch to its low to today.</figcaption>
+        </figure>
+      </div>
+      <h3 class="shot-group">Tools</h3>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/monster-lookup-dark.png" data-shot="monster-lookup" alt="GEnius Monster Lookup tab">
+          <figcaption>Monster Lookup: drop tables, gp/kill estimates and combat stats from the wiki.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/invention-make-dark.png" data-shot="invention-make" alt="GEnius Invention Make it yourself calculator">
+          <figcaption>Invention: components, plus a Make it yourself calculator for items leaving the GE.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/invention-machines-dark.png" data-shot="invention-machines" alt="GEnius Invention machine calculators">
+          <figcaption>Invention machines: profit calculators priced from live data, after tax.</figcaption>
+        </figure>
+      </div>
+      <div class="shot">
+        <figure>
+          <img loading="lazy" src="assets/shots/food-dark.png" data-shot="food" alt="GEnius Food tab">
+          <figcaption>Food: heal amounts and cost per life point.</figcaption>
         </figure>
       </div>
     </div>
@@ -478,11 +570,14 @@
   </script>
 
   <script>
-    // Site-chrome-only theme toggle, mirroring the app's own Black theme —
-    // screenshots are static images of the default theme and never change.
+    // Theme toggle mirroring the app's own themes, screenshots included.
     // Persisted so a repeat visitor keeps their choice.
     function applyTheme(theme) {
       document.documentElement.setAttribute('data-theme', theme);
+      const suffix = theme === 'black' ? 'black' : 'dark';
+      document.querySelectorAll('img[data-shot]').forEach(img => {
+        img.src = 'assets/shots/' + img.dataset.shot + '-' + suffix + '.png';
+      });
       const btn = document.getElementById('theme-toggle-btn');
       if (btn) btn.textContent = theme === 'black' ? '☀ Back to Default Theme' : '🌑 Try Black Theme';
     }
