@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>GEnius: RS3 Grand Exchange Market Intelligence</title>
-<meta name="description" content="A desktop market intelligence tool for RuneScape 3's Grand Exchange. Live prices, signals, portfolio tracking, and more.">
+<meta name="description" content="A free market intelligence app for RuneScape 3's Grand Exchange, on Windows and Android. Live prices, signals, portfolio tracking, phone sync, and more.">
 <link rel="icon" href="assets/favicon.ico">
 <style>
   :root {
@@ -178,6 +178,15 @@
     max-width: 940px; margin: 0 auto;
   }
   .shot figure { margin: 0; }
+  .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; max-width: 760px; margin: 0 auto 50px; }
+  @media (max-width: 540px) { .phones { grid-template-columns: 1fr; max-width: 300px; } }
+  .phones figure { margin: 0; }
+  .phones img, .sync-shot img { width: 100%; display: block; border-radius: 8px; border: 1px solid var(--border-dim); cursor: zoom-in; }
+  .phones figcaption { text-align: center; font-size: 13px; color: var(--text-dim); margin-top: 10px; }
+  .sync-shot { max-width: 520px; margin: 0 auto; }
+  .beta { margin-top: 50px; }
+  .sync-head { margin: 0 0 8px; }
+  .android-head { margin-top: 40px; }
   .shot-group {
     font-family: 'Cinzel', 'Georgia', serif;
     font-size: 19px;
@@ -273,9 +282,10 @@
     <p class="tagline">Track prices, spot opportunities, manage your portfolio, and get a feel for the market, all in one place.</p>
     <div class="btn-row">
       <a class="btn btn-primary" href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest" id="download-btn">⬇ Download for Windows</a>
+      <a class="btn btn-primary" href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest">⬇ Download for Android</a>
       <a class="btn btn-secondary" href="https://github.com/VonDerThWood/GE-Intelligence">View on GitHub</a>
     </div>
-    <div class="meta-line" id="version-line">Free &middot; No account, no server, everything stays on your machine</div>
+    <div class="meta-line" id="version-line">Free &middot; No account, no server, everything stays on your devices</div>
     <div class="theme-toggle-wrap">
       <button class="btn btn-secondary theme-toggle-btn" id="theme-toggle-btn" onclick="toggleSiteTheme()">🌑 Try Black Theme</button>
       <div class="meta-line theme-note">GEnius has two themes. This switches the page and all its screenshots between them.</div>
@@ -345,6 +355,21 @@
         <span class="icon">📰</span>
         <h3>News and DXP Watch</h3>
         <p>A calendar of upcoming dates, tags for items you care about, and a notification when Double XP is announced or teased.</p>
+      </div>
+      <div class="card">
+        <span class="icon">📱</span>
+        <h3>Android App</h3>
+        <p>The full app on your phone, with price alerts and digests that keep working in the background.</p>
+      </div>
+      <div class="card">
+        <span class="icon">🔄</span>
+        <h3>Phone and PC Sync</h3>
+        <p>Scan a QR code once, and your portfolio, alerts and watchlists stay matched over your home Wi-Fi. No account, no cloud.</p>
+      </div>
+      <div class="card">
+        <span class="icon">⚠️</span>
+        <h3>Upcoming Update Alerts</h3>
+        <p>A warning when a previewed game update may affect what you hold or watch, with how much gp is exposed. It never tells you to buy or sell.</p>
       </div>
     </div>
     <div class="sig-row">
@@ -510,12 +535,32 @@
   </section>
 
   <section class="alt">
+    <h2 class="section-title">On your phone too</h2>
+    <p class="section-sub">The same GEnius on Android, in your pocket while you play. Example data shown.</p>
+    <div class="phones">
+      <figure><img loading="lazy" src="assets/shots/phone-dashboard-dark.png" data-shot="phone-dashboard" alt="GEnius Dashboard on a phone"><figcaption>Dashboard</figcaption></figure>
+      <figure><img loading="lazy" src="assets/shots/phone-portfolio-dark.png" data-shot="phone-portfolio" alt="GEnius Portfolio on a phone"><figcaption>Portfolio</figcaption></figure>
+      <figure><img loading="lazy" src="assets/shots/phone-market-dark.png" data-shot="phone-market" alt="GEnius Watchlist on a phone"><figcaption>Watchlist</figcaption></figure>
+    </div>
+    <h3 class="shot-group sync-head">Phone and PC sync</h3>
+    <p class="section-sub">Pair once with a QR code. Your data goes straight between your own devices, encrypted, over your home Wi-Fi. Your PC needs to be on with GEnius open, and a backup is saved before a sync changes anything.</p>
+    <div class="sync-shot"><img loading="lazy" src="assets/shots/sync-dark.png" data-shot="sync" alt="GEnius Phone sync settings with a Pair a phone button"></div>
+    <!-- Play Store beta signup. Remove "hidden" and set the href to the Google Form link. -->
+    <div class="beta" id="beta" hidden>
+      <h3 class="shot-group sync-head">Join the Play Store beta</h3>
+      <p class="section-sub">GEnius is coming to Google Play. Beta testers get in first. Your email is only used to invite you to the beta. This form is separate from the app, which never collects your data.</p>
+      <div class="btn-row"><a class="btn btn-primary" href="#">Join the Android beta</a></div>
+    </div>
+  </section>
+
+  <section>
     <h2 class="section-title">Getting started</h2>
     <p class="section-sub">No account. No subscription. No server GEnius talks to besides public price data.</p>
+    <h3 class="shot-group sync-head">Windows</h3>
     <div class="steps">
       <div class="step">
         <div class="num">1</div>
-        <p><strong>Download</strong> the latest <code>GEnius Setup x.x.x.exe</code> from the button above, or the <a href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest">Releases page</a>.</p>
+        <p><strong>Download</strong> the latest <code>GEnius.Setup.x.x.x.exe</code> from the button above, or the <a href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest">Releases page</a>.</p>
       </div>
       <div class="step">
         <div class="num">2</div>
@@ -528,6 +573,21 @@
       <div class="step">
         <div class="num">4</div>
         <p>That's it. Prices refresh automatically every 15 minutes after that.</p>
+      </div>
+    </div>
+    <h3 class="shot-group sync-head android-head">Android</h3>
+    <div class="steps">
+      <div class="step">
+        <div class="num">1</div>
+        <p><strong>Download</strong> the APK from the <a href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest">Releases page</a> on your phone.</p>
+      </div>
+      <div class="step">
+        <div class="num">2</div>
+        <p><strong>Install it.</strong> Android will warn you because it isn't from the Play Store. You'll need to allow installs from your browser, and Play Protect may ask you to confirm too.</p>
+      </div>
+      <div class="step">
+        <div class="num">3</div>
+        <p><strong>Optional: sync with your PC.</strong> On the PC, go to Settings → Phone sync → Pair a phone. On the phone, open the same section and scan the code. Your PC's data replaces the phone's on the first sync, with a backup saved first.</p>
       </div>
     </div>
   </section>
@@ -560,7 +620,7 @@
       document.getElementById('lightbox').classList.remove('open');
     }
     document.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('.shots img').forEach(img => {
+      document.querySelectorAll('.shots img, .phones img, .sync-shot img').forEach(img => {
         img.addEventListener('click', () => openLightbox(img.src, img.alt));
       });
     });
@@ -600,7 +660,7 @@
       .then(data => {
         if (!data || !data.tag_name) return;
         document.getElementById('version-line').textContent =
-          `Latest: ${data.tag_name} · No account, no server, everything stays on your machine`;
+          `Latest: ${data.tag_name} · No account, no server, everything stays on your devices`;
       })
       .catch(() => {});
   </script>

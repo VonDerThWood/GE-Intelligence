@@ -3857,6 +3857,7 @@ function useTableColumns(storageKey, defaultWidths, visibleCols, phoneCols) {
   const [wrapNode, setWrapNode] = useState(null);
   const tableWrapRef = useCallback(node => setWrapNode(node), []);
   const [handleLefts, setHandleLefts] = useState({});
+  const [handleTop, setHandleTop] = useState(0);
 
   useEffect(() => {
     if (!wrapNode) return;
@@ -3873,6 +3874,9 @@ function useTableColumns(storageKey, defaultWidths, visibleCols, phoneCols) {
         if (i < colOrder.length - 1) lefts[k] = cumulative;
       });
       setHandleLefts(lefts);
+      // The wrapper also holds the tab's description and toolbar, so the handles
+      // start at the header row or their lines run up through those.
+      setHandleTop(ths[0].getBoundingClientRect().top - wrapNode.getBoundingClientRect().top + wrapNode.scrollTop);
     };
     measure();
     window.addEventListener('resize', measure);
@@ -3920,7 +3924,7 @@ function useTableColumns(storageKey, defaultWidths, visibleCols, phoneCols) {
         onMouseDown: startColResize(key),
         className: 'col-resize-handle',
         style:{
-          position:'absolute', top:0, bottom:0,
+          position:'absolute', top: handleTop, bottom:0,
           left: handleLefts[key] - 4,
           width:8, cursor:'col-resize', zIndex:10,
         },
