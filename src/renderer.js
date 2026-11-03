@@ -15106,6 +15106,7 @@ function OpportunitiesArea(props) {
 function UpdateRisksPanel() {
   const [risks, setRisks] = useState([]);
   const [open, setOpen] = useState(false);
+  const [showOther, setShowOther] = useState(false);
   const load = () => window.genius?.getUpdateRisks?.().then(r => setRisks(r || [])).catch(() => {});
   useEffect(() => { load(); }, []);
   if (!risks.length) return null;
@@ -15128,13 +15129,14 @@ function UpdateRisksPanel() {
       h('span', {style:{color:T.textDim}}, open ? '▲' : '▼')),
     open && h('div', {style:{padding:'0 10px 8px'}},
       h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6, lineHeight:1.5}}, 'What may change, not advice. Mentioned means the item is named in a news post about future plans; the effect could be big or nothing.'),
-      risks.map(r => h('div', {key:r.key, style:{padding:'6px 0', borderTop:'1px solid '+T.borderDim, lineHeight:1.5}},
-        h('div', {style:{display:'flex', gap:8, alignItems:'baseline', flexWrap:'wrap'}},
-          h('b', {style:{color:T.text}}, r.itemName),
-          h('span', {style:{color:T.textDim, flex:1}}, r.quantity ? r.quantity.toLocaleString()+' held · '+fmt.gp(r.value)+'gp' : 'watching'),
-          h('button', {className:'ge-btn', onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(); }}, 'Dismiss')),
-        h('div', {style:{color:T.textDim}}, r.kind === 'mention' ? 'Mentioned: ' : '', r.effect),
-        h('div', {style:{fontSize:11, color:T.textDim}}, r.updateTitle, r.when ? ' · '+r.when : '')))));
+      inGroup('held').length > 0 && groupHead('Portfolio'),
+      inGroup('held').map(riskRow),
+      inGroup('watched').length > 0 && groupHead('Watchlist'),
+      inGroup('watched').map(riskRow),
+      inGroup('other').length > 0 && h('div', {style:{margin:'10px 0 2px'}},
+        h('span', {style:{fontSize:11, color:T.gold, cursor:'pointer', textTransform:'uppercase', letterSpacing:1}, onClick:()=>setShowOther(!showOther)},
+          (showOther ? '▲ ' : '▼ ')+'Everything else ('+inGroup('other').length+')')),
+      showOther && inGroup('other').map(riskRow)));
 }
 
 function PortfolioArea(props) {
