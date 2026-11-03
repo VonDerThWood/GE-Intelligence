@@ -6,7 +6,7 @@ const now = Date.parse('2026-11-03T12:00:00Z');
 const frames = { name: 'Magic frame', quantity: 93354, value: 4e9 };
 const whips = { name: 'Abyssal whip', quantity: 26, value: 2e6 };
 const known = { id: 'u', title: 'Rebalance', when: 'late Nov', until: '2026-12-15', url: 'https://x/u', items: [{ name: 'Abyssal whip', effect: 'Stat increase.' }] };
-const post = (over = {}) => ({ title: 'Construction Design Preview', date: '2026-10-20', url: 'https://x/p', lines: ['New frames are coming.', 'Magic frames will change a lot.'], ...over });
+const post = (over = {}) => ({ title: 'Big Design Preview', date: '2026-10-20', url: 'https://x/p', lines: ['New frames are coming.', 'Magic frames will change a lot.'], ...over });
 const run = (name, fn) => { fn(); console.log(`ok  ${name}`); };
 
 run('known update flags a held item with its exact effect', () => {
@@ -79,5 +79,27 @@ run('long lists are shortened in the notification', () => {
   const u = { ...known, items: names.map(name => ({ name, effect: 'x' })) };
   const [n] = buildNotifications(findRisks({ updates: [u], watched: names, now }), []);
   assert.ok(n.body.includes('+2 more'));
+});
+const rework = (over = {}) => post({ title: 'Player-Owned House Rework & 120 Construction', url: 'https://x/c', lines: ['Build a bigger house.'], ...over });
+run('a post about a skill flags its materials without naming them', () => {
+  const [r] = findRisks({ posts: [rework()], holdings: [frames], now });
+  assert.strictEqual(r.kind, 'related');
+  assert.ok(r.effect.includes('Construction'));
+  assert.strictEqual(buildNotifications([r], []).length, 1);
+});
+run('a passing mention of a skill is not enough, three are', () => {
+  const p = t => post({ title: 'Combat Design Preview', url: 'https://x/d', lines: [t] });
+  assert.strictEqual(findRisks({ posts: [p('Also some Construction tweaks.')], holdings: [frames], now }).length, 0);
+  assert.strictEqual(findRisks({ posts: [p('Construction. Construction. More Construction.')], holdings: [frames], now }).length, 1);
+});
+run('a named mention beats a related flag; unrelated items stay out', () => {
+  const r = findRisks({ posts: [rework({ lines: ['Magic frames change.'] })], holdings: [frames, { name: 'Soul rune', quantity: 1, value: 1e7 }], now });
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(r[0].kind, 'mention');
+});
+run('related items you only watch are listed but do not notify', () => {
+  const r = findRisks({ posts: [rework()], watched: ['Magic frame'], now });
+  assert.strictEqual(r.length, 1);
+  assert.strictEqual(buildNotifications(r, []).length, 0);
 });
 console.log('All update risk tests passed');

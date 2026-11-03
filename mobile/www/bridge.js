@@ -22952,11 +22952,39 @@
   // src/backend-js/update-risks.js
   var require_update_risks = __commonJS({
     "src/backend-js/update-risks.js"(exports, module) {
-      var FORWARD_TITLE = /\b(preview|rebalance|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
+      var FORWARD_TITLE = /\b(preview|rebalance|rework|remaster(ed)?|level increase|1[1-9]0|week ahead|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
       var POST_MAX_AGE_DAYS = 60;
       var MIN_NAME_LENGTH = 5;
       var MIN_NOTIFY_GP = 1e6;
       var SNIPPET_LENGTH = 180;
+      var NOTIFY_NAMES_PER_GROUP = 3;
+      var GROUP_ORDER = { held: 0, watched: 1, other: 2 };
+      var RELATED_MIN_MENTIONS = 3;
+      var SKILL_ITEMS = {
+        Construction: /\b(frame|plank|nail|limestone brick|marble block|bolt of cloth)s?$/i,
+        Smithing: /\b(bar|ore)s?$/i,
+        Mining: /\b(ore|stone spirit)s?$/i,
+        Woodcutting: /\blogs?$/i,
+        Fletching: /\b(bolts?|arrows?|arrowheads?|bolt tips?|dart tips?|headless shaft|arrow shaft|\(unstrung\))( \(e\)| \(unf\))?$/i,
+        Crafting: /\b(dragonhide|leather|cut \w+|uncut \w+)$/i,
+        Herblore: /\b(potion|flask|herb|vial)s?\b|^(grimy|clean) /i,
+        Farming: /\bseeds?$/i,
+        Fishing: /^raw /i,
+        Cooking: /^raw /i,
+        Prayer: /\b(bones|ashes)$/i,
+        Summoning: /\b(pouch|charm)e?s?$|^spirit shards?$/i,
+        Runecrafting: /\b(rune|essence)s?$/i,
+        Divination: /\benergy$/i,
+        Necromancy: /\b(ink|necroplasm)$/i,
+        Archaeology: /\b(artefact|soil)s?$/i
+      };
+      function skillsDiscussed(post) {
+        const title = post.title || "", text = (post.lines || []).join(" ");
+        return Object.keys(SKILL_ITEMS).filter((skill) => {
+          const re = new RegExp("\\b" + skill + "\\b", "gi");
+          return re.test(title) || (text.match(re) || []).length >= RELATED_MIN_MENTIONS;
+        });
+      }
       var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
       var nameRegex = (name) => new RegExp(`\\b${escapeRe(name)}s?\\b`, "i");
       var isForwardPost = (post) => FORWARD_TITLE.test(post.title || "");
@@ -22979,6 +23007,7 @@
           const key = `${source.id}|${item.name.toLowerCase()}`;
           if (seen.has(key) || dismissed.includes(key)) return;
           seen.add(key);
+          const watchedItem = watchedNames.has(item.name.toLowerCase());
           risks.push({
             key,
             kind,
@@ -22989,15 +23018,16 @@
             itemName: item.name,
             quantity: item.quantity,
             value: item.value,
-            watched: watchedNames.has(item.name.toLowerCase()),
+            watched: watchedItem,
+            group: item.quantity > 0 ? "held" : watchedItem ? "watched" : "other",
             effect
           });
         };
         for (const u of updates) {
           if (u.until && new Date(now).toISOString().slice(0, 10) > u.until) continue;
           for (const entry of u.items || []) {
-            const item = tracked.get(entry.name.toLowerCase());
-            if (item) add(u, item, entry.effect, "known");
+            const item = tracked.get(entry.name.toLowerCase()) || { name: entry.name, quantity: 0, value: 0 };
+            add(u, item, entry.effect, "known");
           }
         }
         const knownUrls = new Map(updates.filter((u) => u.url).map((u) => [u.url, u]));
@@ -23011,25 +23041,34 @@
             const line = lines.find((l) => re.test(l));
             if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), "mention");
           }
+          for (const skill of skillsDiscussed(post)) {
+            for (const item of tracked.values()) {
+              if (SKILL_ITEMS[skill].test(item.name)) add(source, item, `Related to ${skill}, which this post discusses. The item itself isn't named.`, "related");
+            }
+          }
         }
-        return risks.sort((a, b) => b.value - a.value || a.itemName.localeCompare(b.itemName));
+        return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || b.value - a.value || a.itemName.localeCompare(b.itemName));
       }
       function buildNotifications(risks, notified, { includeWatched = true } = {}) {
-        const fresh = risks.filter((r) => (r.value >= MIN_NOTIFY_GP || includeWatched && r.watched) && !notified.includes(r.key));
+        const fresh = risks.filter((r) => (r.value >= MIN_NOTIFY_GP || includeWatched && r.watched && r.kind !== "related") && !notified.includes(r.key));
         const byUpdate = /* @__PURE__ */ new Map();
         for (const r of fresh) byUpdate.set(r.updateId, [...byUpdate.get(r.updateId) || [], r]);
         return [...byUpdate.values()].map((list) => {
-          const top = list.slice(0, 3).map((r) => `${r.itemName} (${r.quantity ? "held" : "watching"})`).join(", ");
-          const more = list.length > 3 ? ` and ${list.length - 3} more` : "";
+          const names = (label, group) => {
+            const items = list.filter((r) => r.group === group).map((r) => r.itemName);
+            if (!items.length) return null;
+            const extra = items.length - NOTIFY_NAMES_PER_GROUP;
+            return `${label}: ${items.slice(0, NOTIFY_NAMES_PER_GROUP).join(", ")}${extra > 0 ? ` +${extra} more` : ""}`;
+          };
           const when = list[0].when ? ` (${list[0].when})` : "";
           return {
             keys: list.map((r) => r.key),
-            title: "\u26A0\uFE0F Upcoming update affects your holdings",
-            body: `${list[0].updateTitle}${when} may affect ${top}${more}. See Portfolio for details.`
+            title: "\u26A0\uFE0F Upcoming update may affect these items",
+            body: [`${list[0].updateTitle}${when}`, names("Portfolio", "held"), names("Watchlist", "watched")].filter(Boolean).join("\n")
           };
         });
       }
-      module.exports = { findRisks, buildNotifications, isForwardPost };
+      module.exports = { findRisks, buildNotifications, isForwardPost, skillsDiscussed };
     }
   });
 

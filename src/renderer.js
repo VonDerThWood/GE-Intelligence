@@ -3079,6 +3079,7 @@ function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast
 }
 
 function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem, onSaveAlert, onSaveReminder, toast}) {
+  const updateRisksForPanel = useUpdateRisks();
   const [chartOpen, setChartOpen]     = useState(false);
   const [chartDxpMode, setChartDxpMode] = useState(false);
   const [imageOpen, setImageOpen]     = useState(false);
@@ -3260,6 +3261,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     return slot;
   };
 
+  const itemUpdateRisks = updateRisksForPanel.filter(r => r.itemName.toLowerCase() === (item.name || '').toLowerCase());
+
   return h('div', {className:'detail-panel', style: panelWidth ? {width:panelWidth, minWidth:260} : undefined},
     chartOpen && h(ChartModal, {item, onClose:()=>{setChartOpen(false);setChartDxpMode(false);}, dateFormat, populatedHistoryIds, showDxpOverlay:chartDxpMode}),
     imageOpen && h(ImageModal, {name: item.name, detailUrl: item.iconDetailUrl, fallbackUrl: iconUrl, onClose:()=>setImageOpen(false)}),
@@ -3318,6 +3321,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           h('button', {className:'ge-btn', style:{padding:'3px 8px',fontSize:12}, onClick:onClose}, 'X')
         )
       ),
+      itemUpdateRisks.length > 0 && h('div', {style:{margin:'6px 0', padding:'6px 8px', borderLeft:'3px solid '+T.gold, background:'rgba(201,168,76,0.08)', fontSize:11, lineHeight:1.45}},
+        itemUpdateRisks.map(r => h('div', {key:r.key}, '⚠️ ', h('b', {style:{color:T.gold}}, r.updateTitle), r.when ? ' ('+r.when+')' : '', ': ', r.kind === 'mention' ? 'Mentioned: ' : '', r.effect))),
       item.categories && h('div', {className:'detail-cats'},
         item.categories.map(c => h('span',{key:c,className:'cat-tag'}, CAT_LABEL[c] || c)),
         !item.untradeable && h('span',{
@@ -5362,6 +5367,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
       )
     ),
 
+    h(UpdateRisksPanel, {scope:'yours'}),
     h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
     h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
@@ -5810,6 +5816,7 @@ function CompareTab({compareList, onRemove, onClear, allItems, description, user
 
 /* ─── Tab views ──────────────────────────────────────────────── */
 function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
+  const updateRisks = useUpdateRisks();
   // Three-pill Normal/DXP/Seasonal switcher — no longer dev-mode gated
   // (Ben, 2026-07-29: "those should not be behind dev mode, my apologies").
   const [view, setView] = useState('normal');
@@ -5842,6 +5849,7 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
   };
 
   return h('div', null,
+    h(UpdateRisksPanel, {scope:'watched'}),
     description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
 
     // ── Mode pills ──────────────────────────────────────────────────────────
@@ -5953,7 +5961,8 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
         : h('div', {className:'offer-grid'},
             watched.map(it =>
               h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it), style: it.removedFromGe ? {opacity:0.6} : undefined},
-                h('div', {className:'offer-slot-name'}, it.name),
+                h('div', {className:'offer-slot-name'}, it.name,
+                  updateRisks.some(r => r.itemName.toLowerCase() === it.name.toLowerCase()) && h('span', {title:'An upcoming update may affect this item. See the list above.', style:{marginLeft:5}}, '⚠️')),
                 it.removedFromGe && h(RemovedFromGeTag, {item: it}),
                 h('div', {className:'offer-slot-price'}, fmt.gp(it.high||it.low)+'gp'),
                 !it.removedFromGe && h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
@@ -15103,12 +15112,28 @@ function OpportunitiesArea(props) {
 // as another sidebar entry.
 // Upcoming updates that could affect what you hold or watch (Ben, 2026-11-02).
 // Says what's changing and how much is exposed, never what to do about it.
-function UpdateRisksPanel() {
+// Shared by the panel and the per-item warnings; one short-lived copy so opening
+// items doesn't re-read the news files each time.
+let updateRisksCache = null;
+function loadUpdateRisks(fresh) {
+  if (fresh || !updateRisksCache || Date.now() - updateRisksCache.at > 300000) {
+    updateRisksCache = { at: Date.now(), list: Promise.resolve(window.genius?.getUpdateRisks?.()).then(r => r || []).catch(() => []) };
+  }
+  return updateRisksCache.list;
+}
+function useUpdateRisks() {
   const [risks, setRisks] = useState([]);
+  useEffect(() => { let live = true; loadUpdateRisks().then(r => { if (live) setRisks(r); }); return () => { live = false; }; }, []);
+  return risks;
+}
+// scope: 'all' (Portfolio tab), 'yours' (held + watched), 'watched' (Watchlist).
+function UpdateRisksPanel({scope = 'all'}) {
+  const [allRisks, setRisks] = useState([]);
   const [open, setOpen] = useState(false);
   const [showOther, setShowOther] = useState(false);
-  const load = () => window.genius?.getUpdateRisks?.().then(r => setRisks(r || [])).catch(() => {});
+  const load = fresh => loadUpdateRisks(fresh).then(setRisks);
   useEffect(() => { load(); }, []);
+  const risks = allRisks.filter(r => scope === 'all' || (scope === 'yours' ? r.group !== 'other' : r.watched));
   if (!risks.length) return null;
   const exposed = risks.reduce((s, r) => s + (r.value || 0), 0);
   const yours = risks.filter(r => r.group !== 'other');
@@ -15117,7 +15142,7 @@ function UpdateRisksPanel() {
     h('div', {style:{display:'flex', gap:8, alignItems:'baseline', flexWrap:'wrap'}},
       h('b', {style:{color:T.text}}, r.itemName),
       h('span', {style:{color:T.textDim, flex:1}}, r.group === 'held' ? r.quantity.toLocaleString()+' held · '+fmt.gp(r.value)+'gp' : ''),
-      h('button', {className:'ge-btn', onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(); }}, 'Dismiss')),
+      h('button', {className:'ge-btn', onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(true); }}, 'Dismiss')),
     h('div', {style:{color:T.textDim}}, r.kind === 'mention' ? 'Mentioned: ' : '', r.effect),
     h('div', {style:{fontSize:11, color:T.textDim}}, r.updateTitle, r.when ? ' · '+r.when : ''));
   const groupHead = text => h('div', {style:{fontSize:11, color:T.gold, margin:'10px 0 2px', textTransform:'uppercase', letterSpacing:1}}, text);
@@ -15128,7 +15153,7 @@ function UpdateRisksPanel() {
         exposed > 0 ? ' · '+fmt.gp(exposed)+'gp held' : '', updates > 1 ? ' · '+updates+' updates' : ''),
       h('span', {style:{color:T.textDim}}, open ? '▲' : '▼')),
     open && h('div', {style:{padding:'0 10px 8px'}},
-      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6, lineHeight:1.5}}, 'What may change, not advice. Mentioned means the item is named in a news post about future plans; the effect could be big or nothing.'),
+      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6, lineHeight:1.5}}, 'What may change, not advice. Mentioned means the item is named in a news post about future plans. Related means the post discusses a skill the item is tied to. Either could be big or nothing.'),
       inGroup('held').length > 0 && groupHead('Portfolio'),
       inGroup('held').map(riskRow),
       inGroup('watched').length > 0 && groupHead('Watchlist'),

@@ -13,13 +13,44 @@
 
 // Titles that talk about what's coming. Patch notes and weekly posts mostly
 // describe things already live, so they'd only add noise.
-const FORWARD_TITLE = /\b(preview|rebalance|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
+const FORWARD_TITLE = /\b(preview|rebalance|rework|remaster(ed)?|level increase|1[1-9]0|week ahead|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
 const POST_MAX_AGE_DAYS = 60;
 const MIN_NAME_LENGTH = 5;
 const MIN_NOTIFY_GP = 1000000;
 const SNIPPET_LENGTH = 180;
 const NOTIFY_NAMES_PER_GROUP = 3;
 const GROUP_ORDER = { held: 0, watched: 1, other: 2 };
+
+// Items tied to a skill, so a post about the skill flags them without naming
+// them (Ben, 2026-11-03: a Construction post should have flagged his magic
+// frames). A passing mention doesn't count: the skill must be in the post's
+// title, or named at least RELATED_MIN_MENTIONS times.
+const RELATED_MIN_MENTIONS = 3;
+const SKILL_ITEMS = {
+  Construction: /\b(frame|plank|nail|limestone brick|marble block|bolt of cloth)s?$/i,
+  Smithing: /\b(bar|ore)s?$/i,
+  Mining: /\b(ore|stone spirit)s?$/i,
+  Woodcutting: /\blogs?$/i,
+  Fletching: /\b(bolts?|arrows?|arrowheads?|bolt tips?|dart tips?|headless shaft|arrow shaft|\(unstrung\))( \(e\)| \(unf\))?$/i,
+  Crafting: /\b(dragonhide|leather|cut \w+|uncut \w+)$/i,
+  Herblore: /\b(potion|flask|herb|vial)s?\b|^(grimy|clean) /i,
+  Farming: /\bseeds?$/i,
+  Fishing: /^raw /i,
+  Cooking: /^raw /i,
+  Prayer: /\b(bones|ashes)$/i,
+  Summoning: /\b(pouch|charm)e?s?$|^spirit shards?$/i,
+  Runecrafting: /\b(rune|essence)s?$/i,
+  Divination: /\benergy$/i,
+  Necromancy: /\b(ink|necroplasm)$/i,
+  Archaeology: /\b(artefact|soil)s?$/i,
+};
+function skillsDiscussed(post) {
+  const title = post.title || '', text = (post.lines || []).join(' ');
+  return Object.keys(SKILL_ITEMS).filter(skill => {
+    const re = new RegExp('\\b' + skill + '\\b', 'gi');
+    return re.test(title) || (text.match(re) || []).length >= RELATED_MIN_MENTIONS;
+  });
+}
 
 const escapeRe = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const nameRegex = name => new RegExp(`\\b${escapeRe(name)}s?\\b`, 'i');
@@ -75,6 +106,12 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
       const line = lines.find(l => re.test(l));
       if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), 'mention');
     }
+    // After exact effects and name mentions, so those always win.
+    for (const skill of skillsDiscussed(post)) {
+      for (const item of tracked.values()) {
+        if (SKILL_ITEMS[skill].test(item.name)) add(source, item, `Related to ${skill}, which this post discusses. The item itself isn't named.`, 'related');
+      }
+    }
   }
   // Holdings, then watched, then everything else; biggest exposure first.
   return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || b.value - a.value || a.itemName.localeCompare(b.itemName));
@@ -83,8 +120,9 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], dism
 // One notification per update, listing what's newly exposed. `notified` is the
 // list of keys already told about. Holdings of some size always notify; watched
 // items (Ben, 2026-11-02: he may be about to trade them) unless switched off.
+// A merely related watched item stays quiet: there can be a lot of those.
 function buildNotifications(risks, notified, { includeWatched = true } = {}) {
-  const fresh = risks.filter(r => (r.value >= MIN_NOTIFY_GP || (includeWatched && r.watched)) && !notified.includes(r.key));
+  const fresh = risks.filter(r => (r.value >= MIN_NOTIFY_GP || (includeWatched && r.watched && r.kind !== 'related')) && !notified.includes(r.key));
   const byUpdate = new Map();
   for (const r of fresh) byUpdate.set(r.updateId, [...(byUpdate.get(r.updateId) || []), r]);
   return [...byUpdate.values()].map(list => {
@@ -100,4 +138,4 @@ function buildNotifications(risks, notified, { includeWatched = true } = {}) {
   });
 }
 
-module.exports = { findRisks, buildNotifications, isForwardPost };
+module.exports = { findRisks, buildNotifications, isForwardPost, skillsDiscussed };
