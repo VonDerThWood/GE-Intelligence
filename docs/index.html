@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>GEnius — RS3 Grand Exchange Market Intelligence</title>
+<title>GEnius: RS3 Grand Exchange Market Intelligence</title>
 <meta name="description" content="A desktop market intelligence tool for RuneScape 3's Grand Exchange. Live prices, signals, portfolio tracking, and more.">
 <link rel="icon" href="assets/favicon.ico">
 <style>
@@ -123,7 +123,7 @@
     font-size: 15px;
   }
 
-  /* Feature grid — fixed 3 columns on wide screens (9 cards = clean 3x3),
+  /* Feature grid: fixed 3 columns on wide screens (9 cards = clean 3x3),
      stepping down to 2 then 1 rather than auto-fit, which packed 5 across
      at this container width and left the last row lopsided. */
   .grid {
@@ -270,7 +270,7 @@
   <div class="hero">
     <img class="logo" src="assets/logo-full.png" alt="GEnius logo">
     <h1>RuneScape 3 &middot; Grand Exchange Market Intelligence</h1>
-    <p class="tagline">Track prices, spot opportunities, manage your portfolio, and get a feel for the market — all in one place.</p>
+    <p class="tagline">Track prices, spot opportunities, manage your portfolio, and get a feel for the market, all in one place.</p>
     <div class="btn-row">
       <a class="btn btn-primary" href="https://github.com/VonDerThWood/GE-Intelligence/releases/latest" id="download-btn">⬇ Download for Windows</a>
       <a class="btn btn-secondary" href="https://github.com/VonDerThWood/GE-Intelligence">View on GitHub</a>
@@ -299,7 +299,7 @@
       <div class="card">
         <span class="icon">🐲</span>
         <h3>Monster Lookup</h3>
-        <p>Search any monster for its drop table, an estimated gp/kill, and combat stats — straight from the wiki, including Normal/Hard mode splits.</p>
+        <p>Search any monster for its drop table, an estimated gp/kill, and combat stats, straight from the wiki, including Normal/Hard mode splits.</p>
       </div>
       <div class="card">
         <span class="icon">💰</span>
@@ -309,7 +309,7 @@
       <div class="card">
         <span class="icon">🔔</span>
         <h3>Alerts &amp; Watchlist</h3>
-        <p>Star items to watch, and set alerts on price thresholds, percent moves, or specific market signals — with optional Discord notifications.</p>
+        <p>Star items to watch, and set alerts on price thresholds, percent moves, or specific market signals, with optional Discord notifications.</p>
       </div>
       <div class="card">
         <span class="icon">📊</span>
@@ -519,11 +519,11 @@
       </div>
       <div class="step">
         <div class="num">2</div>
-        <p><strong>Run the installer.</strong> Windows may show a SmartScreen warning since the app isn't code-signed — click "More info" → "Run anyway."</p>
+        <p><strong>Run the installer.</strong> Windows may show a SmartScreen warning since the app isn't code-signed. Click "More info" → "Run anyway."</p>
       </div>
       <div class="step">
         <div class="num">3</div>
-        <p><strong>Launch GEnius.</strong> On first run it fetches current prices and starts building historical data in the background — this can take 10+ minutes for the full catalogue, but the app is usable while it finishes.</p>
+        <p><strong>Launch GEnius.</strong> On first run it fetches current prices and starts building historical data in the background. This can take 10+ minutes for the full catalogue, but the app is usable while it finishes.</p>
       </div>
       <div class="step">
         <div class="num">4</div>
@@ -547,7 +547,7 @@
   </div>
 
   <script>
-    // Screenshot lightbox — click any .shot img to view it enlarged, click
+    // Screenshot lightbox: click any .shot img to view it enlarged, click
     // again/Esc/the X to close. Event delegation on .shots so this works
     // for all screenshots without an onclick on each individual <img>.
     function openLightbox(src, alt) {
@@ -593,7 +593,7 @@
     })();
 
     // Best-effort: show the actual latest release tag instead of generic copy.
-    // Fails silently (rate-limited or offline) — the button/link above already
+    // Fails silently (rate-limited or offline); the button/link above already
     // works fine without this, it's a nice-to-have, not load-bearing.
     fetch('https://api.github.com/repos/VonDerThWood/GE-Intelligence/releases/latest')
       .then(r => r.ok ? r.json() : null)
