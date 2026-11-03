@@ -30446,18 +30446,19 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       var LIVE_MIN_HOUR_UNITS = 20;
       var LIVE_MIN_HOUR_SHARE = 0.01;
       var LIVE_MIN_DAY_UNITS = 3;
+      var wholeGp = (gp) => Math.max(1, Math.round(gp));
       function representativeLivePrices(live) {
         const hourOk = (avg, units, dayUnits) => avg && units >= LIVE_MIN_HOUR_UNITS && units >= (dayUnits || 0) * LIVE_MIN_HOUR_SHARE;
         if (hourOk(live.lastHourHigh, live.lastHourHighUnits, live.dayHighUnits) && hourOk(live.lastHourLow, live.lastHourLowUnits, live.dayLowUnits)) {
-          return { buy: live.lastHourHigh, sell: live.lastHourLow };
+          return { buy: wholeGp(live.lastHourHigh), sell: wholeGp(live.lastHourLow) };
         }
         const dayOk = (avg, units) => avg && units >= LIVE_MIN_DAY_UNITS;
         if (dayOk(live.dayHigh, live.dayHighUnits) && dayOk(live.dayLow, live.dayLowUnits)) {
-          return { buy: live.dayHigh, sell: live.dayLow };
+          return { buy: wholeGp(live.dayHigh), sell: wholeGp(live.dayLow) };
         }
         return {
-          buy: dayOk(live.dayHigh, live.dayHighUnits) ? live.dayHigh : live.high ?? null,
-          sell: dayOk(live.dayLow, live.dayLowUnits) ? live.dayLow : live.low ?? null
+          buy: dayOk(live.dayHigh, live.dayHighUnits) ? wholeGp(live.dayHigh) : live.high ?? null,
+          sell: dayOk(live.dayLow, live.dayLowUnits) ? wholeGp(live.dayLow) : live.low ?? null
         };
       }
       async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, historyStatsOverride = null) {

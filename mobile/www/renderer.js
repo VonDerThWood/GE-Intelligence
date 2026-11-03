@@ -387,7 +387,7 @@ select.ge-input option { background: ${T.panel}; }
   .ge-table td, .ge-table td * { white-space: normal !important; }
   /* Portfolio row actions: 2x2 grid instead of four squashed buttons. */
   .pt-portfolio td:last-child > div { display: grid !important; grid-template-columns: 1fr 1fr; gap: 4px !important; }
-  .pt-portfolio td:last-child .ge-btn { min-width: 28px; min-height: 28px; padding: 2px 4px !important; }
+  .pt-portfolio td:last-child .ge-btn { min-width: 34px; min-height: 28px; padding: 2px 2px !important; letter-spacing: 0; font-size: 10px !important; }
   .ge-table td img { width: 20px !important; height: 20px !important; margin-left: 4px; }
   .col-resize-handle { display: none; }
   /* Summary cards: 2 per row instead of 4 squeezed off the right edge;
@@ -3276,7 +3276,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           }),
           h('div', {className:'detail-name', title:item.name, style:{overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, item.name)
         ),
-        h('div', {className:'row', style:{gap:4, flexShrink:0}},
+        h('div', {className:'row', style:{gap:4, flexWrap:'wrap', minWidth:0, maxWidth:'100%'}},
           h('button', {
             className:'star-btn',
             title: inWatch ? 'Remove from watchlist' : 'Add to watchlist',
@@ -3289,13 +3289,13 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
           h('button', {
             className:'ge-btn',
             title: 'Hide this item from all tabs',
-            style:{padding:'3px 8px', fontSize:12, color:T.textDim},
+            style:{padding:'3px 5px', fontSize:11, color:T.textDim},
             onClick: () => onToggleHide && onToggleHide(item.id)
           }, '🚫 Hide'),
           onSaveAlert && h('button', {
             className:'ge-btn',
             title: 'Set an alert or reminder for this item',
-            style:{padding:'3px 8px', fontSize:12},
+            style:{padding:'3px 5px', fontSize:11},
             onClick: e => {
               e.stopPropagation();
               if (quickAlertPos) { setQuickAlertPos(null); return; }
@@ -4565,7 +4565,7 @@ function SectorCard({sector, onClick}) {
     onClick,
     style:{
       background:T.panel, border:`1px solid ${T.border}`, borderRadius:4,
-      padding:'8px 10px', flex:'1 1 100px', minWidth:100,
+      padding:'8px 10px', flex:'1 1 130px', minWidth:130,
       cursor:'pointer', position:'relative',
       borderLeft:`3px solid ${heat.color}`,
       transition:'border-color 0.15s',
