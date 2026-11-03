@@ -30389,6 +30389,10 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
                 const hp = v.avgHighPrice || 0, lp = v.avgLowPrice || 0;
                 out[id].units = hv + lv;
                 out[id].turnover = hv * hp + lv * lp;
+                out[id].dayHigh = v.avgHighPrice ?? null;
+                out[id].dayLow = v.avgLowPrice ?? null;
+                out[id].dayHighUnits = hv;
+                out[id].dayLowUnits = lv;
               }
             }
           } catch (e) {
@@ -30419,12 +30423,13 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             if (res1h.ok) {
               const j1 = await res1h.json();
               for (const [id, v] of Object.entries(j1.data || {})) {
-                if (!out[id] || !v.avgHighPrice || !v.avgLowPrice) continue;
-                out[id].lastHourMid = (v.avgHighPrice + v.avgLowPrice) / 2;
-                out[id].lastHourHigh = v.avgHighPrice;
-                out[id].lastHourLow = v.avgLowPrice;
+                if (!out[id]) continue;
+                out[id].lastHourHigh = v.avgHighPrice ?? null;
+                out[id].lastHourLow = v.avgLowPrice ?? null;
                 out[id].lastHourHighUnits = v.highPriceVolume || 0;
                 out[id].lastHourLowUnits = v.lowPriceVolume || 0;
+                if (!v.avgHighPrice || !v.avgLowPrice) continue;
+                out[id].lastHourMid = (v.avgHighPrice + v.avgLowPrice) / 2;
                 out[id].lastHourUnits = (v.highPriceVolume || 0) + (v.lowPriceVolume || 0);
               }
             }
@@ -30437,6 +30442,23 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
           console.log(`[prices] Live price fetch failed (non-fatal): ${e.message}`);
           return null;
         }
+      }
+      var LIVE_MIN_HOUR_UNITS = 20;
+      var LIVE_MIN_HOUR_SHARE = 0.01;
+      var LIVE_MIN_DAY_UNITS = 3;
+      function representativeLivePrices(live) {
+        const hourOk = (avg, units, dayUnits) => avg && units >= LIVE_MIN_HOUR_UNITS && units >= (dayUnits || 0) * LIVE_MIN_HOUR_SHARE;
+        if (hourOk(live.lastHourHigh, live.lastHourHighUnits, live.dayHighUnits) && hourOk(live.lastHourLow, live.lastHourLowUnits, live.dayLowUnits)) {
+          return { buy: live.lastHourHigh, sell: live.lastHourLow };
+        }
+        const dayOk = (avg, units) => avg && units >= LIVE_MIN_DAY_UNITS;
+        if (dayOk(live.dayHigh, live.dayHighUnits) && dayOk(live.dayLow, live.dayLowUnits)) {
+          return { buy: live.dayHigh, sell: live.dayLow };
+        }
+        return {
+          buy: dayOk(live.dayHigh, live.dayHighUnits) ? live.dayHigh : live.high ?? null,
+          sell: dayOk(live.dayLow, live.dayLowUnits) ? live.dayLow : live.low ?? null
+        };
       }
       async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, historyStatsOverride = null) {
         const HEADERS = { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" };
@@ -30616,15 +30638,15 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             change_1d: changeOneDay,
             examine,
             members,
-            liveBuy: live?.high ?? null,
+            liveBuy: live ? representativeLivePrices(live).buy : null,
             liveBuyTime: live?.highTime ?? null,
-            liveSell: live?.low ?? null,
+            liveSell: live ? representativeLivePrices(live).sell : null,
             liveSellTime: live?.lowTime ?? null,
             liveUnits: live?.units ?? 0,
             liveTurnover: live?.turnover ?? 0,
             livePrevDayAvg: live?.prevDayAvg ?? null,
             liveLastHourMid: live?.lastHourMid ?? null,
-            liveSides: live?.prevDayHigh && live?.lastHourHigh ? { pH: live.prevDayHigh, pL: live.prevDayLow, nH: live.lastHourHigh, nL: live.lastHourLow, uH: live.lastHourHighUnits || 0, uL: live.lastHourLowUnits || 0 } : null
+            liveSides: live?.prevDayHigh && live?.lastHourHigh && live?.lastHourLow ? { pH: live.prevDayHigh, pL: live.prevDayLow, nH: live.lastHourHigh, nL: live.lastHourLow, uH: live.lastHourHighUnits || 0, uL: live.lastHourLowUnits || 0 } : null
           });
         }
         console.log(`[prices] Processed ${itemsOut.length} tradeable items`);
