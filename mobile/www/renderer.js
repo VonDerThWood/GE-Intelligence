@@ -15174,7 +15174,7 @@ function UpdateRisksTab({items, onSelect, description}) {
   const held = shown.filter(r => r.group === 'held');
   const exposed = held.reduce((sum, r) => sum + (r.value || 0), 0);
   return h('div', null,
-    description && h('div', {style:{padding:'8px 14px', borderBottom:'1px solid '+T.border, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description, ' ', h('sup', {style:{fontSize:'0.65em', opacity:0.85}}, 'Ayo...')),
+    description && h('div', {style:{padding:'8px 14px', borderBottom:'1px solid '+T.border, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description, ' ', h('sup', {style:{fontSize:'0.8em'}}, 'Ayo...')),
     h('div', {style:{padding:14}},
       h('div', {style:{fontSize:12, color:T.textDim, marginBottom:12, lineHeight:1.6}},
         'What may change, not advice. Confirmed means the preview states the effect. Named means a post about future plans names the item, which could mean a lot or nothing. Related means the post discusses a skill the item is tied to, so it\'s the weakest signal.',
