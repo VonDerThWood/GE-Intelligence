@@ -274,6 +274,7 @@ async function runFetchOnce(mode) {
     lastFetchOkAt = Date.now();
     emit('fetch-complete', { mode, timestamp: Date.now() });
     // Smaller batch than desktop's 500 — mobile data and battery.
+    if (mode !== 'news') a.syncLiveHistory().catch(() => {});
     if (mode !== 'news') a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {});
   } catch (error) {
     emit('fetch-error', { error: error.message });
@@ -304,6 +305,7 @@ async function buildGenius() {
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
     getLiveItemPrice:       (id) => a.getLiveItemPrice(id),
+    getItemLiveHistory:     (id, days) => a.getItemLiveHistory(id, days),
     getItemLiveTimeseries:  (id, lookback) => a.getItemLiveTimeseries(id, lookback),
     getLaunches:            async () => a.getLaunches(),
     getDropSources:         (name) => a.getDropSources(name),

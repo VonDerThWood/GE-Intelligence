@@ -22438,6 +22438,111 @@
     }
   });
 
+  // src/backend-js/live-history.js
+  var require_live_history = __commonJS({
+    "src/backend-js/live-history.js"(exports, module) {
+      var path = require_path_browserify();
+      var storage2 = require_storage_capacitor();
+      var BASE_URL = "https://prices.runescape.wiki/api/v2/rs/24h";
+      var HEADERS = { "User-Agent": "GEnius/1.3 (github.com/VonDerThWood/GE-Intelligence)" };
+      var DAY_MS = 864e5;
+      var REQUEST_GAP_MS = 400;
+      var FLOOR_MIN_AGE_DAYS = 30;
+      var LIMITS = {
+        desktop: { maxDaysPerRun: 200, lookbackDays: 200 },
+        mobile: { maxDaysPerRun: 5, lookbackDays: 30 }
+      };
+      var dayStr = (ms) => new Date(ms).toISOString().slice(0, 10);
+      function createLiveHistory({ dataDir, platform = "desktop" }) {
+        const dir = path.join(dataDir, "live_history");
+        const metaFile = path.join(dir, "meta.json");
+        const monthFile = (month) => path.join(dir, `${month}.json`);
+        const limits = LIMITS[platform] || LIMITS.desktop;
+        let running = null;
+        async function fetchDay(startMs) {
+          try {
+            const res = await fetch(`${BASE_URL}?timestamp=${startMs / 1e3}`, { headers: HEADERS, signal: AbortSignal.timeout(3e4) });
+            if (!res.ok) return null;
+            const out = {};
+            const data = (await res.json()).data;
+            if (!data) return null;
+            for (const [id, v] of Object.entries(data)) {
+              out[id] = [v.avgHighPrice ?? null, v.highPriceVolume || 0, v.avgLowPrice ?? null, v.lowPriceVolume || 0];
+            }
+            return out;
+          } catch {
+            return null;
+          }
+        }
+        async function syncOnce() {
+          await storage2.ensureDir(dir);
+          const meta = await storage2.readJSON(metaFile, {});
+          const today = Math.floor(Date.now() / DAY_MS) * DAY_MS;
+          let month = null, doc = null, dirty = false, saved = 0, fetched = 0;
+          const flush = async () => {
+            if (doc && dirty) await storage2.writeJSON(monthFile(month), doc);
+            dirty = false;
+          };
+          for (let i = 1; i <= limits.lookbackDays && fetched < limits.maxDaysPerRun; i++) {
+            const start = today - i * DAY_MS;
+            const day = dayStr(start);
+            if (meta.floor && day <= meta.floor) break;
+            if (day.slice(0, 7) !== month) {
+              await flush();
+              month = day.slice(0, 7);
+              doc = await storage2.readJSON(monthFile(month), { days: {} });
+            }
+            if (doc.days[day]) continue;
+            if (fetched) await new Promise((r) => setTimeout(r, REQUEST_GAP_MS));
+            fetched++;
+            const items = await fetchDay(start);
+            if (!items) break;
+            if (!Object.keys(items).length) {
+              if (i > FLOOR_MIN_AGE_DAYS) {
+                meta.floor = day;
+                await storage2.writeJSON(metaFile, meta);
+                break;
+              }
+              continue;
+            }
+            doc.days[day] = items;
+            dirty = true;
+            saved++;
+            if (saved % 10 === 0) await flush();
+          }
+          await flush();
+          if (saved) console.log(`[live-history] Saved ${saved} day(s)`);
+          return { saved };
+        }
+        function sync() {
+          if (!running) running = syncOnce().catch((e) => {
+            console.log(`[live-history] Sync failed (non-fatal): ${e.message}`);
+            return { saved: 0 };
+          }).finally(() => {
+            running = null;
+          });
+          return running;
+        }
+        async function getItem(itemId, days = 365) {
+          const key = String(itemId);
+          const cutoff = dayStr(Date.now() - days * DAY_MS);
+          const months = (await storage2.listJSONFiles(dir)).filter((f) => /^\d{4}-\d{2}\.json$/.test(f)).map((f) => f.slice(0, 7)).filter((m) => m >= cutoff.slice(0, 7)).sort();
+          const out = [];
+          for (const m of months) {
+            const doc = await storage2.readJSON(monthFile(m), { days: {} });
+            for (const date of Object.keys(doc.days).sort()) {
+              const row = doc.days[date][key];
+              if (row && date >= cutoff) out.push({ date, buy: row[0], buyVol: row[1], sell: row[2], sellVol: row[3] });
+            }
+          }
+          return out;
+        }
+        return { sync, getItem };
+      }
+      module.exports = { createLiveHistory };
+    }
+  });
+
   // src/backend-js/_pyround.js
   var require_pyround = __commonJS({
     "src/backend-js/_pyround.js"(exports, module) {
@@ -23907,12 +24012,56 @@
     }
   });
 
+  // src/backend-js/data/launches.json
+  var require_launches = __commonJS({
+    "src/backend-js/data/launches.json"(exports, module) {
+      module.exports = {
+        _about: "Almanac Launches tab (2026-10-28). Cards come AUTOMATICALLY from Game Updates events with a release milestone (new items = first seen -2..+5 days around release, via newItemsFor). This file only CORRECTS that: an entry matching an event (same date, name starts the same) adds watch items, predictions and notes, and can exclude ids that belong elsewhere; an entry with no matching event becomes its own card (e.g. a holiday event). Any id listed in an entry's newItems is claimed by that entry and removed from every other card (the Halloween masks first traded on Blood Knights day). Prices are never stored here: the app fetches live daily curves. predictions status: pending | confirmed | wrong, written before looking.",
+        releases: [
+          {
+            name: "Ghrazi Blood Knights",
+            date: "2026-10-12",
+            kind: "boss",
+            watch: [
+              { id: 63875, name: "Crimson ichor", why: "Guaranteed drop on every kill, plus a tertiary roll" },
+              { id: 28627, name: "Tectonic energy", why: "Common drop" },
+              { id: 57128, name: "Shard of Genesis Essence", why: "Common drop" }
+            ],
+            predictions: [
+              { text: "Crimson ichor falls (guaranteed drop + tertiary)", status: "confirmed", note: "Held about 5 days, then fell ~20%" },
+              { text: "Tectonic energy: little or no rise vs the market", status: "confirmed" },
+              { text: "Malachi's tooth worth more than the claw (EoF/BOLG demand)", status: "pending" }
+            ],
+            notes: "Duo boss. Solo encounter due in November."
+          },
+          {
+            name: "Hallowe'en 2026",
+            date: "2026-10-12",
+            kind: "holiday event",
+            newItems: [
+              { id: 64135, name: "Pink hallowe'en mask" },
+              { id: 64145, name: "Pink pumpkin" }
+            ],
+            notes: "Started the same day as Blood Knights."
+          },
+          {
+            name: "Havenhythe Part II",
+            date: "2026-09-28",
+            kind: "area",
+            notes: "The three ability codexes are made with Crimson ichor, which Blood Knights later flooded."
+          }
+        ]
+      };
+    }
+  });
+
   // src/backend-js/api.js
   var require_api = __commonJS({
     "src/backend-js/api.js"(exports, module) {
       var path = require_path_browserify();
       var storage2 = require_storage_capacitor();
       var catalogue = require_catalogue();
+      var { createLiveHistory } = require_live_history();
       var SIGNAL_TREND_DAYS = 7;
       var DISCORD_WEBHOOK_RE = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+\/?(?:\?[\w=&-]*)?$/;
       function localDateStr(d = /* @__PURE__ */ new Date()) {
@@ -24026,6 +24175,7 @@
           if (data) historyData[key] = data;
           return data;
         }
+        const liveHistory = createLiveHistory({ dataDir, platform });
         const historySummaryFile = path.join(dataDir, "history_summary_cache.json");
         let historySummary = null;
         const median = (arr) => {
@@ -26353,6 +26503,47 @@
           out.sort((a, b) => b.first - a.first);
           return out;
         }
+        const LAUNCHES_FROM = "2026-07-15";
+        let launchesCache = null;
+        async function getLaunches() {
+          if (launchesCache && Date.now() - launchesCache.at < 30 * 6e4) return launchesCache.releases;
+          const curated = require_launches().releases;
+          const parsed = await storage2.readJSON(dataFile, null);
+          const sameRelease = (c, name, date) => c.date === date && (c.name.toLowerCase().startsWith(name.toLowerCase()) || name.toLowerCase().startsWith(c.name.toLowerCase()));
+          const out = [], used = /* @__PURE__ */ new Set();
+          for (const ev of await getEvents()) {
+            const rel = (ev.milestones || []).find((m) => m.type === "release");
+            if (!rel || rel.date < LAUNCHES_FROM) continue;
+            const c = curated.find((c2) => !used.has(c2) && sameRelease(c2, ev.name, rel.date));
+            if (c) used.add(c);
+            const auto = await newItemsFor(ev, parsed?.items || []) || [];
+            out.push({
+              ...c || {},
+              id: ev.id,
+              name: ev.name,
+              date: rel.date,
+              kind: c?.kind || ev.type,
+              newItems: [...c?.newItems || [], ...auto.map((r) => ({ id: r.id, name: r.name }))]
+            });
+          }
+          for (const c of curated) if (!used.has(c)) out.push({ ...c, id: c.id || c.name, newItems: c.newItems || [] });
+          const claimedBy = /* @__PURE__ */ new Map();
+          for (const c of curated) for (const it of c.newItems || []) claimedBy.set(it.id, c);
+          for (const r of out) {
+            const mine = curated.find((c) => sameRelease(c, r.name, r.date));
+            const exclude = new Set(mine?.exclude || []);
+            const seen = /* @__PURE__ */ new Set();
+            r.newItems = r.newItems.filter((it) => {
+              if (seen.has(it.id) || exclude.has(it.id)) return false;
+              seen.add(it.id);
+              const owner = claimedBy.get(it.id);
+              return !owner || owner === mine;
+            });
+          }
+          const releases = out.filter((r) => r.newItems.length || (r.watch || []).length).sort((a, b) => b.date.localeCompare(a.date));
+          launchesCache = { at: Date.now(), releases };
+          return releases;
+        }
         async function getNewItemsSummary() {
           const parsed = await storage2.readJSON(dataFile, null);
           const all = [];
@@ -27201,7 +27392,19 @@
         }
         function syncGoalPosition(p, goal) {
           if (!goal.linked || !(goal.bought > 0)) return;
+          let soldQty = 0, soldCost = 0;
+          for (const x of p.positions) {
+            if (x.planner_goal_id !== goal.id || x.status === "open") continue;
+            const q = Number(x.sold_quantity ?? x.quantity) || 0;
+            soldQty += q;
+            soldCost += q * (Number(x.cost_basis) || 0);
+          }
+          const heldQty = goal.bought - soldQty;
           let pos = p.positions.find((x) => x.planner_goal_id === goal.id && x.status === "open");
+          if (!(heldQty > 0)) {
+            if (pos) p.positions = p.positions.filter((x) => x !== pos);
+            return;
+          }
           if (!pos) {
             pos = {
               id: Date.now().toString(),
@@ -27216,8 +27419,8 @@
             };
             p.positions.push(pos);
           }
-          pos.quantity = goal.bought;
-          pos.cost_basis = goal.spent / goal.bought;
+          pos.quantity = heldQty;
+          pos.cost_basis = Math.max(0, goal.spent - soldCost) / heldQty;
           const firstT = (goal.history || []).reduce((m, h) => Math.min(m, h.t), Infinity);
           if (Number.isFinite(firstT)) {
             const firstDate = localDateStr(new Date(firstT));
@@ -27799,6 +28002,13 @@
           const watchlist = store2.get("dxpWatchlist", []);
           const dxpData = watchlist.length ? await storage2.readJSON(path.join(dataDir, "dxp_intelligence.json"), null) : null;
           const daysBetween = (a, b) => Math.round((b - a) / 864e5);
+          const dxpDayLabel = (n, lastDay) => {
+            const days = (c) => `${c} day${c === 1 ? "" : "s"}`;
+            if (n < 0) return `${days(-n)} before DXP starts`;
+            if (n === 0) return "the day DXP starts";
+            if (n <= lastDay) return `day ${n + 1} of DXP`;
+            return `${days(n - lastDay)} after DXP ended`;
+          };
           for (const [announced, start, end] of events) {
             if (settings.announceAlerts && todayStr === announced) {
               fire(
@@ -27813,7 +28023,8 @@
             const baselineDt = new Date(startDt.getTime() - 21 * 864e5);
             const afterDt = new Date(endDt.getTime() + 21 * 864e5);
             if (today < baselineDt || today > afterDt) continue;
-            const dayOffset = daysBetween(startDt, today);
+            const dayOffset = daysBetween(startDt, /* @__PURE__ */ new Date(todayStr + "T00:00:00Z"));
+            const lastDay = daysBetween(startDt, endDt);
             for (const itemId of dxpData ? watchlist : []) {
               const entry = dxpData[itemId];
               const timing = entry?.timing;
@@ -27825,7 +28036,7 @@
                   fire(
                     `${itemId}_buy_${start}_${todayStr}`,
                     "\u{1F4C5} DXP Buy Window",
-                    `${name} is at its historical best-buy day (day ${dayOffset} of the event).`
+                    `${name} is in its usual best-buy window: ${dxpDayLabel(dayOffset, lastDay)}.`
                   );
                 }
               }
@@ -27835,7 +28046,7 @@
                   fire(
                     `${itemId}_sell_${start}_${todayStr}`,
                     "\u{1F4C5} DXP Sell Window",
-                    `${name} is at its historical best-sell day (day ${dayOffset} of the event).`
+                    `${name} is in its usual best-sell window: ${dxpDayLabel(dayOffset, lastDay)}.`
                   );
                 }
               }
@@ -27989,6 +28200,9 @@
           getDropSources,
           getLiveItemPrice,
           getItemLiveTimeseries,
+          syncLiveHistory: () => liveHistory.sync(),
+          getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
+          getLaunches,
           // monster lookup
           searchMonsters,
           getMonsterDrops,
@@ -29873,8 +30087,32 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             console.log(`[icons] Error: ${e.message}`);
           }
         }
+        let missingItems = existing.missingItems || {};
+        let removedItems = existing.removedItems || [];
+        const prevTradeable = (existing.items || []).filter((it) => !it.untradeable && it.id);
+        if ((args.mode === "full" || args.mode === "prices") && !usedFallbackItems && items.filter((it) => !it.untradeable).length >= prevTradeable.length * 0.9) {
+          const now = Date.now();
+          const present = new Set(items.map((it) => it.id));
+          const nextMissing = {};
+          for (const [id, m] of Object.entries(missingItems)) if (!present.has(Number(id))) nextMissing[id] = m;
+          for (const it of prevTradeable) {
+            if (!present.has(it.id) && !nextMissing[it.id]) nextMissing[it.id] = { since: now, item: it };
+          }
+          removedItems = removedItems.filter((r) => !present.has(r.id));
+          for (const [id, m] of Object.entries(nextMissing)) {
+            if (now - m.since < 24 * 36e5) continue;
+            if (!removedItems.some((r) => r.id === Number(id))) {
+              removedItems.push({ ...m.item, removedFromGe: true, removedAt: m.since });
+              console.log(`[run] ${m.item.name} has been missing from the GE data for a day: marked removed from the GE`);
+            }
+            delete nextMissing[id];
+          }
+          missingItems = nextMissing;
+        }
         const output = {
           items,
+          missingItems,
+          removedItems,
           news,
           indexes,
           officialTop100,
@@ -29909,7 +30147,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "2.7.0",
+        version: "2.8.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",
@@ -30218,6 +30456,8 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       await runNotificationChecks().catch((e) => console.error("[GEnius] Notification check failed:", e.message));
       lastFetchOkAt = Date.now();
       emit("fetch-complete", { mode, timestamp: Date.now() });
+      if (mode !== "news") a.syncLiveHistory().catch(() => {
+      });
       if (mode !== "news") a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {
       });
     } catch (error) {
@@ -30243,7 +30483,9 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       // Item stats from RS Wiki
       getItemStats: (name) => a.getItemStats(name),
       getLiveItemPrice: (id) => a.getLiveItemPrice(id),
+      getItemLiveHistory: (id, days) => a.getItemLiveHistory(id, days),
       getItemLiveTimeseries: (id, lookback) => a.getItemLiveTimeseries(id, lookback),
+      getLaunches: async () => a.getLaunches(),
       getDropSources: (name) => a.getDropSources(name),
       searchMonsters: (query) => a.searchMonsters(query),
       // mode wasn't being passed through at all — Hard Mode never worked on

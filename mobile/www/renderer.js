@@ -326,6 +326,8 @@ select.ge-input option { background: ${T.panel}; }
    it permanently to nav. */
 @media (max-width: 700px) {
   .sidebar-toggle { display: inline-flex; align-items: center; }
+  /* Almanac Launches: drop the sparkline column on phones */
+  .launch-table .launch-col-spark { display: none; }
   /* The header (hamburger + logo + search + status + Fetch Now + quit)
      has nowhere near enough room on a ~360-400 CSS-px-wide phone screen
      for all of that — confirmed for real: the search input was getting
@@ -556,6 +558,13 @@ const applyTax = price => price < 50 ? price : Math.floor(price * 0.98);
 // Net proceeds of a whole sale (price × qty) after GE tax — must match
 // saleNet() in backend-js/api.js, which records the actual sale.
 const saleNet = (price, qty) => price >= 50 ? Math.round(price * qty * 0.98) : price * qty;
+
+// Label for an item Jagex removed from the GE (run.js removedItems).
+function RemovedFromGeTag({item}) {
+  const d = item.removedAt ? new Date(item.removedAt).toLocaleDateString(undefined, {month:'short', day:'numeric', year:'numeric'}) : null;
+  return h('div', {style:{fontSize:10, color:T.red, marginTop:2}, title:'No longer on the Grand Exchange. Last known price shown.'},
+    `Removed from GE${d ? ' · ' + d : ''}`);
+}
 
 // ── Fun features ─────────────────────────────────────────────────────────────
 
@@ -5644,7 +5653,7 @@ function CompareTab({compareList, onRemove, onClear, allItems, description, user
 }
 
 /* ─── Tab views ──────────────────────────────────────────────── */
-function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
+function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onToggleWatch, description, devMode}) {
   // Three-pill Normal/DXP/Seasonal switcher — no longer dev-mode gated
   // (Ben, 2026-07-29: "those should not be behind dev mode, my apologies").
   const [view, setView] = useState('normal');
@@ -5662,7 +5671,9 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
 
   const activeList   = view === 'dxp' ? dxpWatchlist : watchlist;
   const activeToggle = view === 'dxp' ? toggleDxpWatch : onToggleWatch;
-  const watched      = items.filter(it => activeList.map(String).includes(String(it.id)));
+  // Watched items Jagex removed from the GE stay listed (last price, labelled)
+  // instead of silently vanishing.
+  const watched      = [...items, ...(removedItems || [])].filter(it => activeList.map(String).includes(String(it.id)));
 
   // ── Seasonal view helpers ────────────────────────────────────────────────
   const seasonalRows = view === 'seasonal'
@@ -5785,18 +5796,19 @@ function WatchlistTab({items, watchlist, selected, onSelect, onToggleWatch, desc
           )
         : h('div', {className:'offer-grid'},
             watched.map(it =>
-              h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it)},
+              h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it), style: it.removedFromGe ? {opacity:0.6} : undefined},
                 h('div', {className:'offer-slot-name'}, it.name),
+                it.removedFromGe && h(RemovedFromGeTag, {item: it}),
                 h('div', {className:'offer-slot-price'}, fmt.gp(it.high||it.low)+'gp'),
-                h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
-                h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
+                !it.removedFromGe && h(LivePriceLine, {liveBuy: it.liveBuy, liveSell: it.liveSell}),
+                !it.removedFromGe && h('div', {className:'offer-slot-change '+pctClass(it.change_1d)}, h(ChangeDisplay, {change_1d:it.change_1d, price:it.high||it.low})),
                 h('div', {className:'offer-slot-star'},
                   h('button', {
                     className:'star-btn',
                     onClick: e => { e.stopPropagation(); activeToggle(it.id); }
                   }, h('span', {className:'star-on'}, '★'))
                 ),
-                it.signals && it.signals.map(s => h(SignalBadge, {key:s, signal:s, style:{marginTop:4, marginRight:2}}))
+                !it.removedFromGe && it.signals && it.signals.map(s => h(SignalBadge, {key:s, signal:s, style:{marginTop:4, marginRight:2}}))
               )
             )
           )
@@ -5945,6 +5957,9 @@ function SplitTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
       showMachines && h('button', {className: view==='machines' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('machines')},
         'Machines')
     ),
+    // Invention's Items pill also carries the "make it yourself" calculators
+    // (Tight springs, Enchanted notepaper) above the item table.
+    view === 'items' && showMachines && h(InventionCraftCalc, {items: allItems || items}),
     view === 'machines' ? h(MachineCalculators, {items: allItems || items, onSelect, onNavigate}) : h(ItemTable, {items:displayItems, selected, onSelect, watchlist, onToggleWatch, onToggleHide, onAddCompare})
   );
 }
@@ -6061,7 +6076,7 @@ function MachineCalculators({items, onSelect, onNavigate}) {
     (items||[]).forEach(it => { if (it.name) m[it.name.toLowerCase()] = it; });
     return m;
   }, [items]);
-  const machine = INVENTION_MACHINES.find(m => m.id === active);
+  const machine = INVENTION_MACHINES.find(m => m.id === active) || INVENTION_MACHINES[0];
   const chargeGpRate = machineChargeGpRate(items);
   const chargeCost = machine.chargePerItem * chargeGpRate;
   const extraCost = machine.extraInput ? (byName[machine.extraInput.toLowerCase()]?.high || byName[machine.extraInput.toLowerCase()]?.low || 0) : 0;
@@ -6111,6 +6126,7 @@ function MachineCalculators({items, onSelect, onNavigate}) {
         className:'ge-btn', title:'Go to the Alch tab',
       }, 'Alchemiser →')
     ),
+    h(React.Fragment, null,
     h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:4, lineHeight:1.5}}, machine.note),
     h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10}},
       `Machine charge cost: ${machine.chargePerItem} charge/item (${fmt.gp(Math.round(chargeCost))}gp/item, divine charges at ${chargeGpRate.toFixed(2)}gp/charge, live)`,
@@ -6144,7 +6160,116 @@ function MachineCalculators({items, onSelect, onNavigate}) {
         ))),
       ),
       cols.handles(),
-    )
+    ))
+  );
+}
+
+// ─── Invention crafting calculators (Ben, 2026-10-28) ─────────────────────
+// Springs and magic notepaper leave the GE in November, so their Invention-
+// made versions (Tight springs, Enchanted notepaper) become the only source.
+// Shown on the Invention tab's Items pill. Recipes from the RS Wiki
+// (runescape.wiki/w/Tight_spring, /w/Enchanted_notepaper, checked
+// 2026-10-28). Component prices are the wiki's material prices GEnius
+// already loads (untradeable.js), except where liveSources is given: then
+// the component is priced from the cheapest item to disassemble at its LIVE
+// instant-buy price (Ben: guide prices understate it, tensile ~632 vs ~740).
+// Tensile parts per disassembly, no junk reduction ("rate per item" on the
+// wiki's Calculator:Disassembly by material/Tensile, checked 2026-10-28).
+const TENSILE_SOURCES = [
+  ['Black salamander', 2.77], ['Magic longbow', 3.52], ['Yew shortbow', 2.77], ['Acadia longbow', 1.98],
+  ['Magic shortbow', 3.52], ['Yew longbow', 2.77], ['Maple longbow', 1.58], ['Elder longbow', 3.60],
+];
+const INVENTION_CRAFTS = [
+  {
+    id: 'spring', name: 'Tight springs', geItem: 'Spring', level: 43, perCraft: 20,
+    // Wiki estimate of disassembly time to gather one batch's components.
+    minutesPerCraft: 6.88,
+    use: 'Charge the Spring cleaner (1 spring = 1 charge).',
+    unlock: 'Spring cleaner and Tight springs discovery.',
+    inputs: [
+      { component: 'Tensile parts', qty: 120, liveSources: TENSILE_SOURCES },
+      { component: 'Subtle components', qty: 1 },
+    ],
+  },
+  {
+    id: 'notepaper', name: 'Enchanted notepaper', geItem: 'Magic notepaper', level: 97, perCraft: 20,
+    use: 'Note items, like magic notepaper (1 per item).',
+    unlock: 'Blueprint from the Daemonheim rewards shop (200,000 Dungeoneering tokens).',
+    inputs: [
+      { item: 'Elder logs', qty: 1 },
+      { item: 'Astral rune', qty: 5 },
+      { component: 'Magic parts', qty: 15 },
+      { component: 'Ethereal components', qty: 1 },
+    ],
+  },
+];
+
+function InventionCraftCalc({items}) {
+  const [active, setActive] = useState(INVENTION_CRAFTS[0].id);
+  const [needText, setNeedText] = useState('1000');
+  const [rateText, setRateText] = useState('');
+  const craft = INVENTION_CRAFTS.find(c => c.id === active);
+  const byName = n => (items || []).find(it => (it.name || '').toLowerCase() === n.toLowerCase());
+  const priceOf = it => it ? (it.high || it.low || 0) : 0;
+  const livePrice = it => it ? (it.liveBuy || it.high || it.low || 0) : 0; // what buying actually costs
+
+  const inputs = craft.inputs.map(inp => {
+    const label = inp.item || inp.component;
+    let each = 0, note = null;
+    if (inp.item) { each = livePrice(byName(inp.item)); note = 'live GE buy'; }
+    else {
+      for (const [src, perItem] of inp.liveSources || []) {
+        const p = livePrice(byName(src)) / perItem;
+        if (p > 0 && (!each || p < each)) { each = p; note = `cheapest live source: ${src}`; }
+      }
+      if (!each) { each = priceOf(byName(inp.component)); note = 'wiki material price'; }
+    }
+    return { label, qty: inp.qty, each, total: each * inp.qty, note };
+  });
+  const missing = inputs.some(i => !i.each);
+  const perCraft = inputs.reduce((s, i) => s + i.total, 0);
+  const perUnit = perCraft / craft.perCraft;
+  const geP = livePrice(byName(craft.geItem));
+  const need = Math.max(0, Math.round(parseGpString(needText) || 0));
+  const crafts = Math.ceil(need / craft.perCraft);
+  const minutes = craft.minutesPerCraft ? crafts * craft.minutesPerCraft : 0;
+  const rate = Math.max(0, parseGpString(rateText) || 0); // gp/hour your time is worth
+  const timeCost = rate * minutes / 60;
+  const total = crafts * perCraft;
+
+  const row = (label, value, sub) => h('div', {style:{display:'flex', justifyContent:'space-between', gap:12, padding:'6px 0', borderBottom:`1px solid ${T.borderDim}`, fontSize:12}},
+    h('span', {style:{color:T.textDim}}, label),
+    h('span', {style:{color:T.text, textAlign:'right'}}, value, sub && h('div', {style:{fontSize:10, color:T.textDim}}, sub)));
+  const input = (value, set, placeholder) => h('input', {className:'ge-input', value, placeholder, onChange:e => set(e.target.value), style:{width:120}});
+  const hrs = m => m >= 60 ? `${(m / 60).toFixed(1)} hours` : `${Math.round(m)} minutes`;
+  const recipe = craft.inputs.map(i => `${i.qty} ${i.item || i.component}`).join(' + ') + ` = ${craft.perCraft} ${craft.name}`;
+
+  return h('div', {style:{padding:'12px 14px', borderBottom:`1px solid ${T.border}`}},
+    h('div', {style:{display:'flex', gap:6, alignItems:'center', flexWrap:'wrap', marginBottom:8}},
+      h('span', {style:{fontSize:12, color:T.gold, marginRight:4}}, 'Make it yourself:'),
+      INVENTION_CRAFTS.map(c => h('button', {key:c.id, onClick:()=>setActive(c.id), className: active===c.id ? 'ge-btn gold' : 'ge-btn'}, c.name))),
+    h('div', {style:{maxWidth:600}},
+      h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', marginBottom:8, lineHeight:1.5}},
+        `${craft.use} Invention ${craft.level}, at an Inventor's workbench: `,
+        h('b', {style:{color:T.text, fontStyle:'normal'}}, recipe), `. Needs: ${craft.unlock}`),
+      missing && h('div', {style:{color:T.red, fontSize:12, marginBottom:8}}, 'Some prices are not loaded yet: fetch prices and try again.'),
+      inputs.map(i => h(React.Fragment, {key:i.label}, row(i.label, `${fmt.gp(Math.round(i.each))}gp each`, `× ${i.qty} = ${fmt.gp(Math.round(i.total))}gp · ${i.note}`))),
+      row(`Cost per craft (${craft.perCraft})`, h('b', null, fmt.gp(Math.round(perCraft)) + 'gp')),
+      row('Cost each', h('b', {style:{color:T.goldBright}}, fmt.gp(Math.round(perUnit)) + 'gp'),
+        geP ? `GE ${craft.geItem} (live buy): ${fmt.gp(geP)}gp · ${perUnit <= geP ? 'making is cheaper'
+              : perUnit / geP >= 2 ? `making costs ${(perUnit / geP).toFixed(1)}× as much` : `making costs ${Math.round((perUnit / geP - 1) * 100)}% more`}`
+            : `${craft.geItem} is no longer on the GE`),
+      h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', alignItems:'center', margin:'12px 0 6px', fontSize:12, color:T.textDim}},
+        h('label', null, 'How many ', input(needText, setNeedText, '1000')),
+        craft.minutesPerCraft && h('label', {title:'Optional: what an hour of your time is worth, to price the disassembly time'}, 'Your time (gp/hour) ', input(rateText, setRateText, 'e.g. 1m'))),
+      need > 0 && h('div', null,
+        row('Crafts', crafts.toLocaleString(), `${(crafts * craft.perCraft).toLocaleString()} ${craft.name}`),
+        row('Materials', craft.inputs.map(i => `${(crafts * i.qty).toLocaleString()} ${i.item || i.component}`).join(', ')),
+        row('Total cost', h('b', null, fmt.gp(Math.round(total)) + 'gp')),
+        minutes > 0 && row('Disassembly time (wiki estimate)', hrs(minutes), `~${craft.minutesPerCraft} minutes per craft`),
+        rate > 0 && minutes > 0 && row('Including your time', h('b', {style:{color:T.goldBright}}, fmt.gp(Math.round(total + timeCost)) + 'gp'),
+          `${fmt.gp(Math.round((total + timeCost) / (crafts * craft.perCraft)))}gp each`)),
+      h('div', {style:{fontSize:10, color:T.textDim, marginTop:10}}, 'Recipes and yields: RuneScape Wiki (checked 28 Oct 2026). Disassembly sources assume no junk reduction, bought at live instant-buy prices; junk reduction makes them cheaper.'))
   );
 }
 
@@ -6315,6 +6440,33 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 }
 
 const APP_NEWS = [
+  {
+    version: 'v2.8.0',
+    items: [
+      'A pretty ridiculous amount of research, a much smarter Almanac, and your data is still there.',
+      'Chart analysis is now available under every item chart. See how an item compares to the market, where its price sits in its yearly range, tested support/resistance levels, and how its dips usually play out. Every reading comes with its own track record. If something doesn\'t hold up, it gets marked Weak instead of being dressed up as a sure thing.',
+      'Alch floor line shows high alch minus a nature rune, along with exactly how often the item\'s price fell below it over the last 3 years.',
+      'Ask about this item gives you 16 fill-in-the-blank questions about an item\'s own history: when it last hit a price, its biggest drops, how it behaved around DXP, flip odds, and more. Less guessing, more receipts.',
+      'Moves with finds items whose prices tend to move together, or in opposite directions. Your portfolio may have some interesting relationships.',
+      'Almanac → Game Updates digs into how past updates moved prices and which items were affected. History has a habit of repeating itself, especially when Jagex changes something.',
+      'Almanac → Launches tracks every new item by update, from launch through its lowest price to today, using live prices.',
+      'News got a redesign: upcoming dates, a monthly calendar, unread dots, and tags for DXP, items you hold or watch, and tracked updates. Finding the stuff that matters to you should take less digging.',
+      'DXP alerts: GEnius now spots Double XP announcements and teases in the news automatically and notifies you. No more relying entirely on your ability to notice Jagex hinting at something.',
+      'Portfolio → Buy Planner helps you buy up an item across multiple 4-hour limits, including goals spread across several accounts. Keeping track of your true average cost across accounts is a major pain; this does it for you.',
+      'Portfolio: added Break-even and Since bought columns, a High alch sell option, and multi-input Convert.',
+      'Closed Positions are now grouped by item, so they\'re easier to follow when you\'ve bought, sold, and bought the same item again. Your money has a history, and now it\'s easier to read.',
+      'Items Jagex removes from the GE, including springs, Silverhawk feathers, and portables, stay on your Watchlist and in your Portfolio. They\'re labelled "Removed from GE" instead of disappearing like they owe you money.',
+      'Invention → Items now includes a Make it yourself calculator for Tight springs and Enchanted notepaper, priced using the cheapest live disassembly source.',
+      'Opportunities → Track record grades every high-scoring item based on what its price actually did 1, 7, and 30 days later. A high score is a lead, not a prophecy.',
+      'New SPIKE / SLUMP signals based on live prices. Brand-new items no longer get volume badges on day one: having a price and having meaningful trading volume are two different things.',
+      'Food now shows heal amounts and cost per life point. The Market tab can hide items below a price you set. Less scrolling past pocket change.',
+      'Big fix: price history is updating again. History for most items had stopped refreshing in late June, throwing off volume signals, Opportunity Score, and the Almanac. Background refresh is back, and the Almanac has been rebuilt. If some of those features seemed to have lost their minds, this is why.',
+      'Fixed a failed file read at startup that made all your data look wiped. Your data was safe on disk the entire time; the app just did a spectacularly bad job of showing it.',
+      'Fixed new items failing to download their price history, and the Buy Planner counting items you\'d already sold as still held when you updated your totals.',
+      'Restore a daily backup from Settings. Your current data is saved first, so you can undo a restore if needed. Backups now include your portfolio and alerts, too.',
+      'Update checks now run every 6 hours while GEnius is open. Security pass completed, Electron updated, and a whole pile of smaller fixes and improvements.',
+    ]
+  },
   {
     version: 'v2.7.0',
     items: [
@@ -8176,6 +8328,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         {id:'dxp',      label:'📅 DXP Weekend'},
         {id:'seasonal', label:'🗓️ Seasonal Events'},
         {id:'updates',  label:'📜 Game Updates'},
+        {id:'launches', label:'🚀 Launches'},
       ].map(v => h('button', {
         key: v.id,
         onClick: () => setActiveView(v.id),
@@ -8188,6 +8341,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       }, v.label))
     ),
     activeView === 'seasonal' && h(SeasonalEventsTab, {items, onSelect}),
+    activeView === 'launches' && h(LaunchesTab, {items, onSelect}),
     activeView === 'updates' && h(EventsView, {items, onSelect, userShorthands, toast, onOpen: url => window.genius?.openExternal(url)}),
     activeView === 'dxp' && h(DxpNewsBanner, {toast}),
     activeView === 'dxp' && h('div', null,
@@ -8488,6 +8642,157 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           )
     ), // end dxp view wrapper div
     ),
+  );
+}
+
+/* ─── GEnius Almanac — Launches ─────────────────────────────────────────────
+   How new releases move the market (2026-10-28). One card per release from
+   the curated list in backend-js/data/launches.json: its new items and the
+   existing items it was expected to move, each with launch -> low -> now
+   from the wiki's LIVE daily prices (they only exist from 2026-07-22). Mid
+   = average of instant-buy and instant-sell. Evidence, not advice: it shows
+   what happened, never "buy now". */
+const _launchDayMs = date => Date.parse(date + 'T00:00:00Z');
+function launchCurve(days, releaseDate) {
+  const from = _launchDayMs(releaseDate);
+  const pts = (days || [])
+    .filter(p => p.timestamp >= from)
+    .map(p => {
+      const b = p.instabuy, s = p.instasell;
+      const raw = b != null && s != null ? (b + s) / 2 : (b ?? s);
+      // Whole gp, except sub-10gp items where the decimals still matter.
+      const mid = raw != null && raw >= 10 ? Math.round(raw) : raw;
+      return { day: Math.round((p.timestamp - from) / 86400000), mid };
+    })
+    .filter(p => p.mid > 0);
+  if (!pts.length) return null;
+  let low = pts[0];
+  for (const p of pts) if (p.mid < low.mid) low = p;
+  const launch = pts[0], now = pts[pts.length - 1];
+  // Trade activity: share of days since its first trade that had live
+  // trades. Ben (2026-10-28): filter on this, not on price (Crimson ichor
+  // never passed 1m but is one of the most telling items).
+  const today = Math.floor((Date.now() - _launchDayMs(releaseDate)) / 86400000);
+  const activity = new Set(pts.map(p => p.day)).size / Math.max(1, today - launch.day + 1);
+  return { pts, launch: launch.mid, launchDay: launch.day, low: low.mid, lowDay: low.day, now: now.mid, activity };
+}
+// "Actively traded": live trades on at least 70% of days since its first trade.
+const LAUNCH_ACTIVE_SHARE = 0.7;
+
+function LaunchItemRow({entry, curve, items, onSelect, isWatch}) {
+  const item = (items || []).find(i => i.id === entry.id);
+  const pctOf = (a, b) => (a && b) ? (a / b - 1) * 100 : null;
+  const vsLaunch = curve ? pctOf(curve.now, curve.launch) : null;
+  const offLow = curve ? pctOf(curve.now, curve.low) : null;
+  const cell = {padding:'6px 8px', borderBottom:`1px solid ${T.borderDim}`, fontSize:12, whiteSpace:'nowrap'};
+  return h('tr', null,
+    h('td', {style:{...cell, whiteSpace:'normal'}},
+      h('span', {
+        onClick: item && onSelect ? () => onSelect(item) : undefined,
+        style:{color:T.text, cursor:item && onSelect ? 'pointer' : 'default'},
+        title: item ? 'Open item' : undefined,
+      }, entry.name),
+      isWatch && entry.why && h('div', {style:{fontSize:10, color:T.textDim}}, entry.why)
+    ),
+    curve === undefined
+      ? h('td', {colSpan:5, style:{...cell, color:T.textDim}}, 'Loading live prices…')
+      : curve === null
+        ? h('td', {colSpan:5, style:{...cell, color:T.textDim}}, 'No live trade data yet')
+        : [
+          h('td', {key:'l', className:'launch-col-launch', style:{...cell, textAlign:'right'}}, fmt.gp(curve.launch),
+            curve.launchDay > 0 && h('div', {style:{fontSize:10, color:T.textDim}}, `first trade day ${curve.launchDay}`)),
+          h('td', {key:'lo', style:{...cell, textAlign:'right'}}, fmt.gp(curve.low),
+            h('div', {style:{fontSize:10, color:T.textDim}}, `day ${curve.lowDay}`)),
+          h('td', {key:'n', style:{...cell, textAlign:'right'}}, fmt.gp(curve.now),
+            offLow != null && offLow >= 0.5 && h('div', {style:{fontSize:10, color:T.textDim}}, `${fmt.pct(offLow)} off low`)),
+          h('td', {key:'v', className:pctClass(vsLaunch), style:{...cell, textAlign:'right'}}, vsLaunch == null ? '—' : fmt.pct(vsLaunch)),
+          h('td', {key:'s', className:'launch-col-spark', style:{...cell, width:120}},
+            h(SparklineSVG, {data:curve.pts.map(p => p.mid), color: vsLaunch != null && vsLaunch < 0 ? T.red : T.green, w:120, ht:30})),
+        ]
+  );
+}
+
+function LaunchCard({release, items, onSelect}) {
+  const day = Math.floor((Date.now() - _launchDayMs(release.date)) / 86400000);
+  const [curves, setCurves] = useState(null); // id -> curve (null = no live data)
+  const [showAll, setShowAll] = useState(false);
+  useEffect(() => {
+    let stale = false;
+    const ids = [...new Set([...(release.newItems || []), ...(release.watch || [])].map(e => e.id))];
+    Promise.all(ids.map(id => loadLiveDaily(id).then(d => [id, launchCurve(d, release.date)]).catch(() => [id, null])))
+      .then(pairs => { if (!stale) setCurves(new Map(pairs)); });
+    return () => { stale = true; };
+  }, [release.id, release.date]);
+  // New items: actively traded ones first (by launch price), the rest folded.
+  const active = [], quiet = [];
+  if (curves) {
+    for (const e of release.newItems || []) {
+      const c = curves.get(e.id);
+      (c && c.activity >= LAUNCH_ACTIVE_SHARE ? active : quiet).push(e);
+    }
+    const launchOf = e => curves.get(e.id)?.launch || 0;
+    active.sort((a, b) => launchOf(b) - launchOf(a));
+    quiet.sort((a, b) => launchOf(b) - launchOf(a));
+  }
+  const th = {padding:'4px 8px', fontSize:10, color:T.textDim, fontWeight:'normal', textAlign:'right', borderBottom:`1px solid ${T.border}`};
+  const statusColor = {confirmed:T.green, wrong:T.red, pending:T.textDim};
+  const table = (rows, isWatch, title) => rows.length > 0 && h('div', {style:{marginTop:10}},
+    h('div', {style:{fontSize:11, color:T.gold, marginBottom:4}}, title),
+    h('div', {style:{overflowX:'auto'}},
+      h('table', {className:'launch-table', style:{width:'100%', borderCollapse:'collapse'}},
+        h('thead', null, h('tr', null,
+          h('th', {style:{...th, textAlign:'left'}}, 'Item'),
+          h('th', {className:'launch-col-launch', style:th}, isWatch ? 'Release day' : 'Launch'),
+          h('th', {style:th}, 'Low'),
+          h('th', {style:th}, 'Now'),
+          h('th', {style:th}, isWatch ? 'vs release day' : 'vs launch'),
+          h('th', {className:'launch-col-spark', style:th}, 'Since release'),
+        )),
+        h('tbody', null, rows.map(e => h(LaunchItemRow, {key:e.id, entry:e, curve:curves.get(e.id) ?? null, items, onSelect, isWatch})))
+      )
+    )
+  );
+  const newRows = showAll ? [...active, ...quiet] : active;
+  return h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:6, padding:'12px 14px', marginBottom:14}},
+    h('div', {style:{display:'flex', alignItems:'baseline', gap:10, flexWrap:'wrap'}},
+      h('div', {style:{fontSize:15, color:T.goldBright, fontWeight:'bold'}}, release.name),
+      h('div', {style:{fontSize:11, color:T.textDim}},
+        `${release.date} · day ${day}${release.kind ? ' · ' + release.kind : ''}`)
+    ),
+    release.notes && h('div', {style:{fontSize:11, color:T.textDim, marginTop:4}}, release.notes),
+    !curves && h('div', {style:{fontSize:12, color:T.textDim, marginTop:10}}, `Loading live prices for ${(release.newItems || []).length + (release.watch || []).length} items…`),
+    curves && table(newRows, false, `New items (${(release.newItems || []).length})`),
+    curves && quiet.length > 0 && h('button', {
+      onClick: () => setShowAll(s => !s),
+      style:{marginTop:6, background:'transparent', border:`1px solid ${T.borderDim}`, color:T.textDim, borderRadius:4, padding:'3px 10px', fontSize:11, cursor:'pointer'},
+    }, showAll ? 'Hide rarely traded items' : `Show ${quiet.length} more (rarely traded)`),
+    curves && table(release.watch || [], true, 'Existing items it was expected to move'),
+    (release.predictions || []).length > 0 && h('div', {style:{marginTop:10}},
+      h('div', {style:{fontSize:11, color:T.gold, marginBottom:4}}, 'Predictions (written on release day)'),
+      release.predictions.map((p, i) => h('div', {key:i, style:{fontSize:12, color:T.text, marginBottom:3}},
+        h('span', {style:{color:statusColor[p.status] || T.textDim, fontSize:10, border:`1px solid ${statusColor[p.status] || T.borderDim}`, borderRadius:3, padding:'0 5px', marginRight:6, textTransform:'uppercase'}}, p.status || 'pending'),
+        p.text,
+        p.note && h('span', {style:{color:T.textDim}}, ` (${p.note})`)
+      ))
+    )
+  );
+}
+
+function LaunchesTab({items, onSelect}) {
+  const [releases, setReleases] = useState(null);
+  useEffect(() => {
+    window.genius?.getLaunches?.().then(r => setReleases(r || [])).catch(() => setReleases([]));
+  }, []);
+  return h('div', null,
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:14, lineHeight:1.5}},
+      'How new releases moved the market: each release\'s new items and the existing items it was expected to move, from live instant-trade prices (mid of buy and sell). ',
+      h('span', {style:{color:T.gold}}, 'Early data: '),
+      releases ? `${releases.length} release${releases.length === 1 ? '' : 's'} tracked so far. ` : '',
+      'Live prices only go back to 22 July 2026. This shows what happened, not what will.'
+    ),
+    releases === null && h('div', {style:{color:T.textDim, fontSize:12}}, 'Loading…'),
+    releases && releases.length === 0 && h('div', {style:{color:T.textDim, fontSize:12}}, 'No releases tracked yet.'),
+    (releases || []).map(r => h(LaunchCard, {key:r.id, release:r, items, onSelect}))
   );
 }
 
@@ -10978,7 +11283,7 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
-function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
+function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
   // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
   // chart already respects (Ben, 2026-09-09: "can we add dates to the
   // sales too" — the existing "Sold At / Converted" column was misnamed;
@@ -11037,6 +11342,9 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const currentPrice = item
       ? (priceMode === 'live' ? (item.liveBuy ?? item.liveSell ?? item.high ?? item.low ?? 0) : (item.high || item.low || 0))
       : 0;
+    // Removed from the GE: worth 0 here (Ben, 2026-10-28: it can't be sold
+    // any more, so -100% is honest), but labelled so it doesn't look like a bug.
+    const removed = !item && (removedItems || []).find(it => it.name.toLowerCase() === (pos.item_name||'').toLowerCase());
     const currentValue = currentPrice * pos.quantity;
     const costValue    = pos.cost_basis * pos.quantity;
     const grossPL      = currentValue - costValue;
@@ -11046,8 +11354,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
     const targetDist   = pos.target_price ? pos.target_price - currentPrice : null;
     const stopDist     = pos.stop_loss    ? currentPrice - pos.stop_loss    : null;
     const category      = item?.categories?.[0] || 'misc';
-    return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category};
-  }), [positions, items, priceMode]);
+    return {...pos, currentPrice, currentValue, costValue, grossPL, tax, netPL, plPct, targetDist, stopDist, category, removedItem: removed || null};
+  }), [positions, items, removedItems, priceMode]);
 
   const openPos   = enriched.filter(p => p.status !== 'sold' && p.status !== 'converted');
   const closedPos = enriched.filter(p => p.status === 'sold' || p.status === 'converted');
@@ -11570,7 +11878,8 @@ function PortfolioTab({items, portfolio, onSavePosition, onDeletePosition, onSel
                 style: onSelect ? {cursor:'pointer', color:T.gold} : null,
                 onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
               }, pos.item_name,
-                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER')),
+                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER'),
+                pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem})),
               h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
               h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
               h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
@@ -14769,6 +15078,9 @@ function App() {
   // and stays permanently visible regardless of this state).
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [items, setItems] = useState([]);
+  // Items Jagex removed from the GE (run.js removedItems): kept out of
+  // `items` so market scans skip them; Watchlist/Portfolio show them labelled.
+  const [removedItems, setRemovedItems] = useState([]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
   const [officialTop100, setOfficialTop100] = useState({byWindow:{}});
@@ -14934,6 +15246,7 @@ function App() {
     ].map(fn => retry(fn))).then(([data,wl,al,s,pf,hidden,nt,sh,rm,msh]) => {
       console.log('[GEnius] getData returned:', data?.items?.length ?? 0, 'items, timestamp:', data?.timestamp);
       if (data.items)     setItems(data.items);
+      setRemovedItems(data.removedItems || []);
       if (data.news)      setNews(data.news);
       if (data.indexes)   setIndexes(data.indexes);
       if (data.officialTop100) setOfficialTop100(data.officialTop100);
@@ -14993,6 +15306,7 @@ function App() {
       window.genius.getData().then(data => {
         console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
         if (data.items)   setItems(data.items);
+        setRemovedItems(data.removedItems || []);
         if (data.news)    setNews(data.news);
         if (data.indexes) setIndexes(data.indexes);
         if (data.officialTop100) setOfficialTop100(data.officialTop100);
@@ -15365,7 +15679,7 @@ function App() {
         h('div',{className:'content',style:{flex:1},ref:contentRef},
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30,officialTop100}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
-          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
+          tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,removedItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
           tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems,onNavigate:setTab}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
           ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','artisan','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
@@ -15374,7 +15688,7 @@ function App() {
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioArea,{
             onPortfolioChanged: async () => { const p = await window.genius?.getPortfolio(); if (p) setPortfolio(p); },
-            items, portfolio, toast, dateFormat: settings.dateFormat,
+            items, removedItems, portfolio, toast, dateFormat: settings.dateFormat,
             onSavePosition: async pos => {
               await window.genius?.savePosition(pos);
               const p = await window.genius?.getPortfolio();

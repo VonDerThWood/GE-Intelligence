@@ -31,6 +31,7 @@
 const path = require('path');
 const storage = require('./storage.js');
 const catalogue = require('./catalogue.js');
+const { createLiveHistory } = require('./live-history.js');
 
 const SIGNAL_TREND_DAYS = 7;
 
@@ -276,6 +277,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // file is rewritten (invalidated in saveHistory) or as its 90-day window
   // slides, so entries also expire after 7-14 days, staggered so they don't
   // all expire on the same fetch.
+  const liveHistory = createLiveHistory({ dataDir, platform });
   const historySummaryFile = path.join(dataDir, 'history_summary_cache.json');
   let historySummary = null;
   const median = arr => { const v = arr.filter(x => x !== null && x !== undefined).sort((a, b) => a - b); if (!v.length) return null; const m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : Math.floor((v[m - 1] + v[m]) / 2); };
@@ -5108,6 +5110,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDropSources,
     getLiveItemPrice,
     getItemLiveTimeseries,
+    syncLiveHistory: () => liveHistory.sync(),
+    getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLaunches,
     // monster lookup
     searchMonsters, getMonsterDrops, getMonsterInfo,

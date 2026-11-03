@@ -217,6 +217,8 @@ function runPython(mode = 'prices') {
       // Keeps per-item history current in the background (up to 500 of the
       // most out-of-date items per fetch). Deliberately not awaited — it
       // takes a few minutes and must never hold up the fetch itself.
+      // Same idea for the daily live price archive (live-history.js).
+      if (mode !== 'news') api.syncLiveHistory().catch(() => {});
       if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(() => {});
     } catch (error) {
       console.error('[run.js] Error:', error.message);
@@ -553,6 +555,7 @@ ipcMain.handle('reopen-position', (_, id) => api.reopenPosition(id));
 
 ipcMain.handle('get-item-stats', async (_, itemName) => api.getItemStats(itemName));
 ipcMain.handle('get-live-item-price', async (_, itemId) => api.getLiveItemPrice(itemId));
+ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-launches', async () => api.getLaunches());
 ipcMain.handle('get-drop-sources', async (_, itemName) => api.getDropSources(itemName));

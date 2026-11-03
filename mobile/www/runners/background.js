@@ -217,6 +217,15 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       }
 
       const daysBetween = (a, b) => Math.round((b - a) / 86400000);
+      // Where a day sits relative to the event, for alert text. Counts whole game
+      // days (UTC, the daily reset): rounding the exact time gap flipped at noon.
+      const dxpDayLabel = (n, lastDay) => {
+        const days = c => `${c} day${c === 1 ? '' : 's'}`;
+        if (n < 0) return `${days(-n)} before DXP starts`;
+        if (n === 0) return 'the day DXP starts';
+        if (n <= lastDay) return `day ${n + 1} of DXP`;
+        return `${days(n - lastDay)} after DXP ended`;
+      };
       for (const [announced, start, end] of dxpEvents) {
         if (dxpSettings.announceAlerts && todayStr === announced) {
           fire(`announce_${announced}`, '📅 DXP Announced',
@@ -228,7 +237,8 @@ addEventListener('checkNotifications', async (resolve, reject) => {
         const baselineDt = new Date(startDt.getTime() - 21 * 86400000);
         const afterDt = new Date(endDt.getTime() + 21 * 86400000);
         if (today < baselineDt || today > afterDt) continue;
-        const dayOffset = daysBetween(startDt, today);
+        const dayOffset = daysBetween(startDt, new Date(todayStr + 'T00:00:00Z'));
+        const lastDay = daysBetween(startDt, endDt);
 
         for (const w of dxpWatchlist) {
           const timing = dxpTiming[w.id];
@@ -237,14 +247,14 @@ addEventListener('checkNotifications', async (resolve, reject) => {
             const std = Math.max(timing.best_buy_day_std || 0, 0.5);
             if (Math.abs(dayOffset - timing.best_buy_day_offset) <= std) {
               fire(`${w.id}_buy_${start}_${todayStr}`, '📅 DXP Buy Window',
-                `${w.name} is at its historical best-buy day (day ${dayOffset} of the event).`);
+                `${w.name} is in its usual best-buy window: ${dxpDayLabel(dayOffset, lastDay)}.`);
             }
           }
           if (dxpSettings.sellAlerts && timing.best_sell_day_offset != null) {
             const std = Math.max(timing.best_sell_day_std || 0, 0.5);
             if (Math.abs(dayOffset - timing.best_sell_day_offset) <= std) {
               fire(`${w.id}_sell_${start}_${todayStr}`, '📅 DXP Sell Window',
-                `${w.name} is at its historical best-sell day (day ${dayOffset} of the event).`);
+                `${w.name} is in its usual best-sell window: ${dxpDayLabel(dayOffset, lastDay)}.`);
             }
           }
         }
