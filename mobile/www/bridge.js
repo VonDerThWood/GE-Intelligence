@@ -22949,6 +22949,88 @@
     }
   });
 
+  // src/backend-js/update-risks.js
+  var require_update_risks = __commonJS({
+    "src/backend-js/update-risks.js"(exports, module) {
+      var FORWARD_TITLE = /\b(preview|rebalance|design|roadmap|beta|coming|future|upcoming|dev ?blog|sneak|consultation|proposal|plans?)\b/i;
+      var POST_MAX_AGE_DAYS = 60;
+      var MIN_NAME_LENGTH = 5;
+      var MIN_NOTIFY_GP = 1e6;
+      var SNIPPET_LENGTH = 180;
+      var escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      var nameRegex = (name) => new RegExp(`\\b${escapeRe(name)}s?\\b`, "i");
+      var isForwardPost = (post) => FORWARD_TITLE.test(post.title || "");
+      function daysOld(date, now) {
+        return (now - Date.parse(date)) / 864e5;
+      }
+      function findRisks({ updates = [], posts = [], holdings = [], watched = [], dismissed = [], now = Date.now() }) {
+        const risks = [];
+        const heldByName = /* @__PURE__ */ new Map();
+        for (const h of holdings) {
+          const k = h.name.toLowerCase();
+          const old = heldByName.get(k) || { name: h.name, quantity: 0, value: 0 };
+          heldByName.set(k, { name: old.name, quantity: old.quantity + h.quantity, value: old.value + h.value });
+        }
+        const tracked = new Map(heldByName);
+        for (const name of watched) if (!tracked.has(name.toLowerCase())) tracked.set(name.toLowerCase(), { name, quantity: 0, value: 0 });
+        const seen = /* @__PURE__ */ new Set();
+        const add = (source, item, effect, kind) => {
+          const key = `${source.id}|${item.name.toLowerCase()}`;
+          if (seen.has(key) || dismissed.includes(key)) return;
+          seen.add(key);
+          risks.push({
+            key,
+            kind,
+            updateId: source.id,
+            updateTitle: source.title,
+            when: source.when,
+            url: source.url,
+            itemName: item.name,
+            quantity: item.quantity,
+            value: item.value,
+            effect
+          });
+        };
+        for (const u of updates) {
+          if (u.until && new Date(now).toISOString().slice(0, 10) > u.until) continue;
+          for (const entry of u.items || []) {
+            const item = tracked.get(entry.name.toLowerCase());
+            if (item) add(u, item, entry.effect, "known");
+          }
+        }
+        const knownUrls = new Map(updates.filter((u) => u.url).map((u) => [u.url, u]));
+        for (const post of posts) {
+          if (!isForwardPost(post) || daysOld(post.date, now) > POST_MAX_AGE_DAYS) continue;
+          const source = knownUrls.get(post.url) || { id: post.url, title: post.title, when: null, url: post.url };
+          const lines = post.lines || [];
+          for (const item of tracked.values()) {
+            if (item.name.length < MIN_NAME_LENGTH) continue;
+            const re = nameRegex(item.name);
+            const line = lines.find((l) => re.test(l));
+            if (line) add(source, item, line.trim().slice(0, SNIPPET_LENGTH), "mention");
+          }
+        }
+        return risks.sort((a, b) => b.value - a.value || a.itemName.localeCompare(b.itemName));
+      }
+      function buildNotifications(risks, notified) {
+        const fresh = risks.filter((r) => r.value >= MIN_NOTIFY_GP && !notified.includes(r.key));
+        const byUpdate = /* @__PURE__ */ new Map();
+        for (const r of fresh) byUpdate.set(r.updateId, [...byUpdate.get(r.updateId) || [], r]);
+        return [...byUpdate.values()].map((list) => {
+          const top = list.slice(0, 3).map((r) => r.itemName).join(", ");
+          const more = list.length > 3 ? ` and ${list.length - 3} more` : "";
+          const when = list[0].when ? ` (${list[0].when})` : "";
+          return {
+            keys: list.map((r) => r.key),
+            title: "\u26A0\uFE0F Upcoming update affects your holdings",
+            body: `${list[0].updateTitle}${when} may affect ${top}${more}. See Portfolio for details.`
+          };
+        });
+      }
+      module.exports = { findRisks, buildNotifications, isForwardPost };
+    }
+  });
+
   // src/backend-js/_pyround.js
   var require_pyround = __commonJS({
     "src/backend-js/_pyround.js"(exports, module) {
@@ -23471,6 +23553,61 @@
           console.log(`[dxp_intelligence] ${itemCount} items with a usable signal, tracking ${events.length} DXP events, written to ${outFile}`);
         })();
       }
+    }
+  });
+
+  // src/backend-js/data/upcoming_updates.json
+  var require_upcoming_updates = __commonJS({
+    "src/backend-js/data/upcoming_updates.json"(exports, module) {
+      module.exports = {
+        updates: [
+          {
+            id: "late-game-rebalance-2026",
+            title: "Late-Game Rebalance",
+            when: "late November 2026, details may change",
+            until: "2026-12-15",
+            url: "https://secure.runescape.com/m=news/late-game-rebalance-design-preview",
+            items: [
+              {
+                name: "Abyssal whip",
+                effect: "Stat increase planned."
+              },
+              {
+                name: "Dark bow",
+                effect: "Stat increase planned."
+              },
+              {
+                name: "Granite maul",
+                effect: "Stat increase planned."
+              },
+              {
+                name: "Draconic visage",
+                effect: "King Black Dragon drop rate 1/5,000 to 1/252."
+              },
+              {
+                name: "Dragon rider gloves",
+                effect: "Drop rate 1/2,000 to 1/100."
+              },
+              {
+                name: "Dragon rider boots",
+                effect: "Drop rate 1/2,000 to 1/100."
+              },
+              {
+                name: "Amulet of the forsaken",
+                effect: "Barrows drop rate 1/480 to 1/240."
+              },
+              {
+                name: "Wyvern crossbow",
+                effect: "Off-task drop rate 1/10,000 to 1/2,048."
+              },
+              {
+                name: "Dinosaur hide",
+                effect: "Big Game Hunter drop rate 1/10 to 1/6."
+              }
+            ]
+          }
+        ]
+      };
     }
   });
 
@@ -24469,6 +24606,7 @@
       var catalogue = require_catalogue();
       var { createLiveHistory } = require_live_history();
       var { createSync } = require_sync();
+      var { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require_update_risks();
       var SIGNAL_TREND_DAYS = 7;
       var DISCORD_WEBHOOK_RE = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+\/?(?:\?[\w=&-]*)?$/;
       function localDateStr(d = /* @__PURE__ */ new Date()) {
@@ -25640,6 +25778,54 @@
           }
         }
         const CAL_PRIORITY = ["dxp", "release", "seasonal", "marketplace", "livestream", "maintenance", "other"];
+        const updateRiskPostsFile = path.join(dataDir, "update_risk_posts.json");
+        async function loadUpdateRiskPosts() {
+          const saved = await storage2.readJSON(updateRiskPostsFile, {});
+          const arch = await storage2.readJSON(newsArchiveFile, { posts: {} });
+          const since = localDateStr(new Date(Date.now() - 60 * 864e5));
+          const known = require_upcoming_updates().updates.filter((u) => u.url).map((u) => ({ url: u.url, title: u.title + " preview", date: localDateStr() }));
+          const candidates = [...Object.values(arch.posts).filter((p) => p.date >= since && isForwardPost(p)), ...known];
+          let changed = false, fetched = 0;
+          for (const p of candidates) {
+            if (saved[p.url] || fetched >= 5) continue;
+            fetched++;
+            const page = await fetchNewsPage(p.url);
+            if (page) {
+              saved[p.url] = { title: p.title, date: p.date, url: p.url, lines: page.lines };
+              changed = true;
+            }
+          }
+          for (const [url, p] of Object.entries(saved)) if (p.date < since) {
+            delete saved[url];
+            changed = true;
+          }
+          if (changed) await storage2.writeJSON(updateRiskPostsFile, saved);
+          return Object.values(saved);
+        }
+        async function getUpdateRisks() {
+          const latest = await storage2.readJSON(path.join(dataDir, "latest.json"), {});
+          const byName = new Map((latest.items || []).map((it) => [it.name.toLowerCase(), it]));
+          const price = (name) => {
+            const it = byName.get(name.toLowerCase());
+            if (!it) return 0;
+            return it.liveBuy && it.liveSell ? (it.liveBuy + it.liveSell) / 2 : it.high || 0;
+          };
+          const portfolio = await readPortfolio();
+          const holdings = portfolio.positions.filter((p) => p.status === "open" && p.quantity > 0).map((p) => ({ name: p.item_name, quantity: p.quantity, value: p.quantity * price(p.item_name) }));
+          const idToName = new Map((latest.items || []).map((it) => [String(it.id), it.name]));
+          const watched = store2.get("watchlist", []).map((id) => idToName.get(String(id))).filter(Boolean);
+          return findRisks({ updates: require_upcoming_updates().updates, posts: await loadUpdateRiskPosts(), holdings, watched, dismissed: store2.get("updateRiskDismissed", []) });
+        }
+        async function dismissUpdateRisk(key) {
+          store2.set("updateRiskDismissed", [.../* @__PURE__ */ new Set([...store2.get("updateRiskDismissed", []), key])]);
+        }
+        async function getUpdateRiskNotifications() {
+          if (store2.get("updateRiskAlerts", true) === false) return [];
+          const notified = store2.get("updateRiskNotified", []);
+          const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified);
+          if (out.length) store2.set("updateRiskNotified", [...notified, ...out.flatMap((n) => n.keys)]);
+          return out;
+        }
         async function getNewsCalendar(opts = {}) {
           const cal = await storage2.readJSON(calendarFile, { entries: [], processed: {} });
           const pastDays = Math.max(0, Math.min(400, Number(opts && opts.pastDays) || 0));
@@ -28608,6 +28794,9 @@
           getLiveItemPrice,
           getItemLiveTimeseries,
           sync: createSync({ dataDir, store: store2, writePortfolio, buildExportBundle }),
+          getUpdateRisks,
+          dismissUpdateRisk,
+          getUpdateRiskNotifications,
           syncLiveHistory: () => liveHistory.sync(),
           getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
           getLaunches,
@@ -31096,6 +31285,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     } catch (e) {
       console.error("[GEnius] collectFiredAlerts failed:", e.message);
     }
+    for (const n of await a.getUpdateRiskNotifications()) await fireNotification(n.title, n.body);
     for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
     const digest = await a.getWatchlistDigest();
     if (digest) await fireNotification(digest.title, digest.body);
@@ -31184,6 +31374,8 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       // Item stats from RS Wiki
       getItemStats: (name) => a.getItemStats(name),
       getLiveItemPrice: (id) => a.getLiveItemPrice(id),
+      getUpdateRisks: async () => (await ensureApi()).getUpdateRisks(),
+      dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
       syncRole: "phone",
       syncStatus: async () => (await ensureApi()).sync.clientStatus(),
       syncScan: scanSyncQr,

@@ -1,0 +1,49 @@
+{
+  "updates": [
+    {
+      "id": "late-game-rebalance-2026",
+      "title": "Late-Game Rebalance",
+      "when": "late November 2026, details may change",
+      "until": "2026-12-15",
+      "url": "https://secure.runescape.com/m=news/late-game-rebalance-design-preview",
+      "items": [
+        {
+          "name": "Abyssal whip",
+          "effect": "Stat increase planned."
+        },
+        {
+          "name": "Dark bow",
+          "effect": "Stat increase planned."
+        },
+        {
+          "name": "Granite maul",
+          "effect": "Stat increase planned."
+        },
+        {
+          "name": "Draconic visage",
+          "effect": "King Black Dragon drop rate 1/5,000 to 1/252."
+        },
+        {
+          "name": "Dragon rider gloves",
+          "effect": "Drop rate 1/2,000 to 1/100."
+        },
+        {
+          "name": "Dragon rider boots",
+          "effect": "Drop rate 1/2,000 to 1/100."
+        },
+        {
+          "name": "Amulet of the forsaken",
+          "effect": "Barrows drop rate 1/480 to 1/240."
+        },
+        {
+          "name": "Wyvern crossbow",
+          "effect": "Off-task drop rate 1/10,000 to 1/2,048."
+        },
+        {
+          "name": "Dinosaur hide",
+          "effect": "Big Game Hunter drop rate 1/10 to 1/6."
+        }
+      ]
+    }
+  ]
+}

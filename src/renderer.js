@@ -15099,12 +15099,39 @@ function OpportunitiesArea(props) {
 // Portfolio tab = Positions + Buy Planner pills (Ben, 2026-10-06). The
 // planner manages Portfolio positions, so it lives beside them rather than
 // as another sidebar entry.
+// Upcoming updates that could affect what you hold or watch (Ben, 2026-11-02).
+// Says what's changing and how much is exposed, never what to do about it.
+function UpdateRisksPanel() {
+  const [risks, setRisks] = useState([]);
+  const [open, setOpen] = useState(false);
+  const load = () => window.genius?.getUpdateRisks?.().then(r => setRisks(r || [])).catch(() => {});
+  useEffect(() => { load(); }, []);
+  if (!risks.length) return null;
+  const exposed = risks.reduce((s, r) => s + (r.value || 0), 0);
+  const updates = new Set(risks.map(r => r.updateId)).size;
+  return h('div', {style:{margin:'8px 12px 0', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12}},
+    h('div', {style:{padding:'8px 10px', cursor:'pointer', display:'flex', gap:8, alignItems:'center'}, onClick:()=>setOpen(!open)},
+      h('span', {style:{flex:1}}, '⚠️ ', h('b', {style:{color:T.gold}}, 'Upcoming updates'), ' may affect '+risks.length+' item'+(risks.length===1?'':'s'),
+        exposed > 0 ? ' · '+fmt.gp(exposed)+'gp held' : '', updates > 1 ? ' · '+updates+' updates' : ''),
+      h('span', {style:{color:T.textDim}}, open ? '▲' : '▼')),
+    open && h('div', {style:{padding:'0 10px 8px'}},
+      h('div', {style:{fontSize:11, color:T.textDim, marginBottom:6, lineHeight:1.5}}, 'What may change, not advice. Mentioned means the item is named in a news post about future plans; the effect could be big or nothing.'),
+      risks.map(r => h('div', {key:r.key, style:{padding:'6px 0', borderTop:'1px solid '+T.borderDim, lineHeight:1.5}},
+        h('div', {style:{display:'flex', gap:8, alignItems:'baseline', flexWrap:'wrap'}},
+          h('b', {style:{color:T.text}}, r.itemName),
+          h('span', {style:{color:T.textDim, flex:1}}, r.quantity ? r.quantity.toLocaleString()+' held · '+fmt.gp(r.value)+'gp' : 'watching'),
+          h('button', {className:'ge-btn', onClick:async()=>{ await window.genius.dismissUpdateRisk(r.key); load(); }}, 'Dismiss')),
+        h('div', {style:{color:T.textDim}}, r.kind === 'mention' ? 'Mentioned: ' : '', r.effect),
+        h('div', {style:{fontSize:11, color:T.textDim}}, r.updateTitle, r.when ? ' · '+r.when : '')))));
+}
+
 function PortfolioArea(props) {
   const [view, setView] = useState('positions');
   return h('div', null,
     h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`}},
       h('button', {className: view==='positions' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('positions')}, 'Positions'),
       h('button', {className: view==='planner' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('planner')}, '🛒 Buy Planner')),
+    h(UpdateRisksPanel),
     view === 'positions'
       ? h(PortfolioTab, props)
       : h(BuyPlannerTab, {items: props.items, toast: props.toast, userShorthands: props.userShorthands,

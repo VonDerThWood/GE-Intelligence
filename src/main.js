@@ -288,9 +288,15 @@ async function checkBuyGoals() {
   }
 }
 
+async function checkUpdateRisks() {
+  for (const n of await api.getUpdateRiskNotifications()) {
+    new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
 async function runAllChecks() {
   if (isTestMode) return; // no notifications or Discord from a test instance
-  for (const check of [checkDxpNotifications, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews]) {
+  for (const check of [checkUpdateRisks, checkDxpNotifications, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews]) {
     try { await check(); } catch (e) { console.error(`[Checks] ${check.name} failed:`, e.message); }
   }
 }
@@ -605,6 +611,8 @@ ipcMain.handle('sync-unpair-device', (_, id) => api.sync.unpairDevice(id));
 ipcMain.handle('sync-get-conflicts', () => api.sync.getConflicts());
 ipcMain.handle('sync-clear-conflicts', () => api.sync.clearConflicts());
 
+ipcMain.handle('get-update-risks', () => api.getUpdateRisks());
+ipcMain.handle('dismiss-update-risk', (_, key) => api.dismissUpdateRisk(key));
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-launches', async () => api.getLaunches());

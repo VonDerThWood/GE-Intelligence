@@ -230,6 +230,7 @@ async function runNotificationChecks() {
     const r = await BackgroundRunner.dispatchEvent({ label: 'com.vonderthwood.genius.background.task', event: 'collectFiredAlerts', details: {} });
     await a.markAlertsFiredInBackground((r && r.fired) || []);
   } catch (e) { console.error('[GEnius] collectFiredAlerts failed:', e.message); }
+  for (const n of await a.getUpdateRiskNotifications()) await fireNotification(n.title, n.body);
   for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
   const digest = await a.getWatchlistDigest();
   if (digest) await fireNotification(digest.title, digest.body);
@@ -328,6 +329,8 @@ async function buildGenius() {
     // Item stats from RS Wiki
     getItemStats:           (name) => a.getItemStats(name),
     getLiveItemPrice:       (id) => a.getLiveItemPrice(id),
+    getUpdateRisks: async () => (await ensureApi()).getUpdateRisks(),
+    dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
     syncRole: 'phone',
     syncStatus: async () => (await ensureApi()).sync.clientStatus(),
     syncScan: scanSyncQr,

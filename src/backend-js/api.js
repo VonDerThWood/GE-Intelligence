@@ -33,6 +33,7 @@ const storage = require('./storage.js');
 const catalogue = require('./catalogue.js');
 const { createLiveHistory } = require('./live-history.js');
 const { createSync } = require('./sync.js');
+const { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require('./update-risks.js');
 
 const SIGNAL_TREND_DAYS = 7;
 
@@ -1768,6 +1769,54 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   const CAL_PRIORITY = ['dxp', 'release', 'seasonal', 'marketplace', 'livestream', 'maintenance', 'other'];
   // pastDays (Ben, 2026-10-18): the calendar's month view also shows dates
   // earlier in the month; everything else wants upcoming only (default 0).
+  // ─── Upcoming update risks (update-risks.js) ──────────────────────────────
+  // Page text of forward-looking posts, kept so each is only downloaded once.
+  const updateRiskPostsFile = path.join(dataDir, 'update_risk_posts.json');
+  async function loadUpdateRiskPosts() {
+    const saved = await storage.readJSON(updateRiskPostsFile, {});
+    const arch = await storage.readJSON(newsArchiveFile, { posts: {} });
+    const since = localDateStr(new Date(Date.now() - 60 * 86400000));
+    const known = require('./data/upcoming_updates.json').updates.filter(u => u.url)
+      .map(u => ({ url: u.url, title: u.title + ' preview', date: localDateStr() }));
+    const candidates = [...Object.values(arch.posts).filter(p => p.date >= since && isForwardPost(p)), ...known];
+    let changed = false, fetched = 0;
+    for (const p of candidates) {
+      if (saved[p.url] || fetched >= 5) continue;
+      fetched++;
+      const page = await fetchNewsPage(p.url);
+      if (page) { saved[p.url] = { title: p.title, date: p.date, url: p.url, lines: page.lines }; changed = true; }
+    }
+    for (const [url, p] of Object.entries(saved)) if (p.date < since) { delete saved[url]; changed = true; }
+    if (changed) await storage.writeJSON(updateRiskPostsFile, saved);
+    return Object.values(saved);
+  }
+
+  async function getUpdateRisks() {
+    const latest = await storage.readJSON(path.join(dataDir, 'latest.json'), {});
+    const byName = new Map((latest.items || []).map(it => [it.name.toLowerCase(), it]));
+    const price = name => {
+      const it = byName.get(name.toLowerCase());
+      if (!it) return 0;
+      return it.liveBuy && it.liveSell ? (it.liveBuy + it.liveSell) / 2 : (it.high || 0);
+    };
+    const portfolio = await readPortfolio();
+    const holdings = portfolio.positions.filter(p => p.status === 'open' && p.quantity > 0)
+      .map(p => ({ name: p.item_name, quantity: p.quantity, value: p.quantity * price(p.item_name) }));
+    const idToName = new Map((latest.items || []).map(it => [String(it.id), it.name]));
+    const watched = store.get('watchlist', []).map(id => idToName.get(String(id))).filter(Boolean);
+    return findRisks({ updates: require('./data/upcoming_updates.json').updates, posts: await loadUpdateRiskPosts(), holdings, watched, dismissed: store.get('updateRiskDismissed', []) });
+  }
+  async function dismissUpdateRisk(key) {
+    store.set('updateRiskDismissed', [...new Set([...store.get('updateRiskDismissed', []), key])]);
+  }
+  async function getUpdateRiskNotifications() {
+    if (store.get('updateRiskAlerts', true) === false) return [];
+    const notified = store.get('updateRiskNotified', []);
+    const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified);
+    if (out.length) store.set('updateRiskNotified', [...notified, ...out.flatMap(n => n.keys)]);
+    return out;
+  }
+
   async function getNewsCalendar(opts = {}) {
     const cal = await storage.readJSON(calendarFile, { entries: [], processed: {} });
     const pastDays = Math.max(0, Math.min(400, Number(opts && opts.pastDays) || 0));
@@ -5112,6 +5161,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getLiveItemPrice,
     getItemLiveTimeseries,
     sync: createSync({ dataDir, store, writePortfolio, buildExportBundle }),
+    getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications,
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLaunches,
