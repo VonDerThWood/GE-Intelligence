@@ -25964,7 +25964,8 @@
             if (m.url) eventByUrl[m.url] = ev.name;
             if (m.title) eventByTitle[norm(m.title)] = ev.name;
           }
-          const RELEASE_TITLE = /\b(is|are) here\b|out now|now live|is live|\blaunch(es|ed)?\b|\breleased?\b|has arrived|available now/i;
+          const RELEASE_TITLE = /\b(is|are) here\b|out now|now live|is live|\blaunch(es|ed)?\b|\breleased\b|has arrived|available now/i;
+          const NOT_GAME_RELEASE = /\bname release\b/i;
           let snapStart = Infinity;
           for (const arr of Object.values(snapshotData)) if (arr.length && arr[0].t < snapStart) snapStart = arr[0].t;
           const firstSeenMs = (it) => {
@@ -25988,7 +25989,7 @@
             const dates = datesByPost[pst.url] || [];
             const det = dxpByUrl[pst.url];
             const mentions = pst.mentions || [];
-            const release = RELEASE_TITLE.test(pst.title || "") || dates.some((d) => d.category === "release");
+            const release = !NOT_GAME_RELEASE.test(pst.title || "") && (RELEASE_TITLE.test(pst.title || "") || dates.some((d) => d.category === "release"));
             return {
               url: pst.url,
               title: pst.title,

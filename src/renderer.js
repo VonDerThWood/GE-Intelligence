@@ -7343,7 +7343,7 @@ function NewsTab({onOpen, description, items, onSelect, toast, onNavigate}) {
             if (p.watch.length) tags.push(h('span', {key:'w', style:newsTagStyle('#c9a84c'), title:p.watch.join(', ')}, `★ Mentions ${p.watch.length === 1 ? p.watch[0] : p.watch.length + ' watched items'}`));
             if (p.dates.some(d => d.category === 'seasonal')) tags.push(h('span', {key:'s', style:{...newsTagStyle('#4caf50'), cursor:'pointer'}, title:'Open Seasonal Events in the Almanac', onClick:toAlmanac('seasonal')}, '🎉 Event → Seasonal Almanac'));
             if (p.linked) tags.push(h('span', {key:'l', style:{...newsTagStyle('#c39bd3'), cursor:'pointer'}, title:'Open this update in Almanac → Game Updates', onClick:toAlmanac('updates', p.linked)}, `📜 ${p.linked} → price impact`));
-            else if (p.release || p.dates.some(d => d.category === 'release')) tags.push(h('span', {key:'t', style:{...newsTagStyle('#c39bd3'), cursor:'pointer'}, onClick:() => trackAsUpdate(p)}, '📜 Track as update'));
+            else if (p.release) tags.push(h('span', {key:'t', style:{...newsTagStyle('#c39bd3'), cursor:'pointer'}, onClick:() => trackAsUpdate(p)}, '📜 Track as update'));
             return h('div', {key:p.url, style:{padding:'10px 0', borderBottom:`1px solid ${T.borderDim}`}},
               h('div', {style:{display:'flex', gap:8, alignItems:'baseline'}},
                 h('span', {style:{width:8, height:8, borderRadius:'50%', background: p.unread ? T.gold : 'transparent', display:'inline-block', flexShrink:0}}),
