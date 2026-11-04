@@ -19,6 +19,8 @@ contextBridge.exposeInMainWorld('genius', {
   getUpdateRisks: () => ipcRenderer.invoke('get-update-risks'),
   dismissUpdateRisk: (key) => ipcRenderer.invoke('dismiss-update-risk', key),
   getAlmanacSignals: () => ipcRenderer.invoke('get-almanac-signals'),
+  onGeReader: (cb) => { ipcRenderer.removeAllListeners('ge-reader-result'); ipcRenderer.on('ge-reader-result', (_, offer) => cb(offer)); },
+  testGeReader: (file) => ipcRenderer.invoke('test-ge-reader', file),
   getInbox: () => ipcRenderer.invoke('get-inbox'),
   testSeedInbox: (list) => ipcRenderer.invoke('test-seed-inbox', list),
   markInboxRead: (kind, upTo) => ipcRenderer.invoke('mark-inbox-read', kind, upTo),

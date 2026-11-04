@@ -9992,6 +9992,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         onClick:handleVersionTap,
       }, `Version ${appVersion}`),
       s.devMode && h('div',{style:{fontSize:10, color:T.gold, marginTop:4, letterSpacing:'0.05em'}}, '⚙ DEVELOPER MODE'),
+      s.devMode && !IS_PHONE && h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Shift+PrtSc reads your screen once to log an open GE offer. It only runs when you press it, stays on this PC, and the image isn\'t saved.'),
       h('div',{style:{display:'flex', gap:10, marginTop:12}},
         h('button',{
           className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
@@ -15393,6 +15394,110 @@ function AlertsArea(props) {
     pill === 'mine' && h(AlertsTab, props));
 }
 
+// GE offer reader (dev mode, desktop): check what was read from the screen, then
+// save it. Totals on the offer are running totals, so buys replace the offer's
+// numbers and sells only log what's new since the last read of that offer.
+const geSoldLog = () => { try { return JSON.parse(localStorage.getItem('genius_ge_sold_log') || '{}'); } catch { return {}; } };
+function GeReaderModal({offer, items, toast, onClose, onSaved}) {
+  const [f, setF] = useState(() => ({side:offer.side || 'buy', name:offer.name || '', quantity:offer.quantity ?? '', price:offer.price ?? '', filled:offer.filled ?? 0, coins:offer.coins ?? 0}));
+  const [goals, setGoals] = useState([]);
+  const [portfolio, setPortfolio] = useState({positions:[]});
+  const [offerId, setOfferId] = useState(null);
+  const [posId, setPosId] = useState(null);
+  useEffect(() => {
+    window.genius.getBuyGoals().then(setGoals);
+    window.genius.getPortfolio().then(p => p && setPortfolio(p));
+  }, []);
+  const set = k => e => setF(x => ({...x, [k]:e.target.value}));
+  const nameLow = String(f.name).trim().toLowerCase();
+  const filled = Number(f.filled) || 0, coins = Number(f.coins) || 0;
+  const goal = goals.find(g => g.item_name.toLowerCase() === nameLow);
+  const known = (items || []).find(i => i.name.toLowerCase() === nameLow);
+  // The offer these totals most likely belong to: the fullest that isn't past them.
+  const offers = goal?.offers || [];
+  const guessOffer = offers.filter(o => o.bought <= filled).sort((a, b) => b.bought - a.bought)[0] || offers[0];
+  const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
+  const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
+  const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
+  const logKey = [nameLow, f.quantity, f.price].join('|');
+  const alreadySold = geSoldLog()[logKey] || 0;
+  const newSold = Math.max(0, filled - alreadySold);
+  const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
+  const requireItem = () => { if (!known) { toast('Pick an item name GEnius knows', 'error'); return false; } if (!(filled > 0)) { toast('Nothing filled yet', 'error'); return false; } return true; };
+
+  const saveToGoal = async () => {
+    if (!requireItem()) return;
+    const body = offers.length
+      ? {id:goal.id, offers:offers.map(o => o.id === chosenOffer.id ? {...o, bought:filled, spent:coins} : o)}
+      : {id:goal.id, bought:filled, spent:coins};
+    const r = await window.genius.updateBuyGoalTotals(body);
+    if (!r?.success) { toast(r?.error || 'Could not save', 'error'); return; }
+    finish(known.name + ' planner updated');
+  };
+  const newGoal = async () => {
+    if (!requireItem()) return;
+    const id = Date.now().toString();
+    await window.genius.saveBuyGoal({id, item_name:known.name, item_id:known.id, target:Number(f.quantity) || filled, max_price:Number(f.price) || 0});
+    await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
+    finish(known.name + ' added to the Buy Planner');
+  };
+  const newPosition = async () => {
+    if (!requireItem()) return;
+    await window.genius.savePosition({id:Date.now().toString(), item_name:known.name, quantity:filled, cost_basis:coins / filled, status:'open',
+      created_at:new Date().toISOString(), date_opened:new Date().toISOString().slice(0, 10), target_price:'', target_profit_pct:'', stop_loss:''});
+    finish(known.name + ' added to your Portfolio');
+  };
+  const saveSale = async () => {
+    if (!requireItem() || !chosenPos) return;
+    if (!(newSold > 0)) { toast('Those sales are already logged', 'error'); return; }
+    const qty = Math.min(newSold, chosenPos.quantity);
+    const r = await window.genius.sellPosition({id:chosenPos.id, sell_price:coins / filled, quantity:qty});
+    if (!r?.success) { toast('Could not save', 'error'); return; }
+    try { localStorage.setItem('genius_ge_sold_log', JSON.stringify({...geSoldLog(), [logKey]:alreadySold + qty})); } catch {}
+    finish('Logged '+qty.toLocaleString()+' '+known.name+' sold');
+  };
+
+  const field = (label, key, type='text') => h('label', {style:{display:'block', fontSize:11, color:T.textDim}}, label,
+    h('input', {className:'ge-input', type, value:f[key], onChange:set(key), style:{display:'block', width:'100%', marginTop:2}}));
+  const avg = filled > 0 ? coins / filled : 0;
+  return h('div', {style:{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16}, onClick:e=>{ if (e.target === e.currentTarget) onClose(); }},
+    h('div', {style:{background:T.bg || '#14100a', border:'1px solid '+T.gold, borderRadius:6, padding:18, width:460, maxWidth:'100%', maxHeight:'90vh', overflow:'auto'}},
+      h('div', {className:'ge-section-head'}, 'Read from the GE'),
+      offer.error ? h('p', {style:{color:'#e05050', fontSize:13}}, 'Could not read the screen: '+offer.error) :
+      h('div', {style:{fontSize:12, color:T.textDim, marginBottom:10}}, 'Check these. OCR can misread numbers.'),
+      h('div', {style:{display:'flex', gap:6, marginBottom:10}},
+        ['buy','sell'].map(s => h('button', {key:s, className:f.side===s ? 'ge-btn gold' : 'ge-btn', onClick:()=>setF(x=>({...x, side:s}))}, s === 'buy' ? 'Buy offer' : 'Sell offer'))),
+      h('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}},
+        h('div', {style:{gridColumn:'1 / -1'}}, field('Item', 'name')),
+        field('Offer quantity', 'quantity', 'number'), field('Offer price', 'price', 'number'),
+        field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', 'number'), field('Coins so far', 'coins', 'number')),
+      !known && f.name && h('div', {style:{color:'#f0a030', fontSize:12, marginBottom:8}}, 'GEnius doesn\'t know that item name.'),
+      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ', before GE tax.' : '.')),
+
+      f.side === 'buy' && (goal
+        ? h('div', null,
+            offers.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which offer in the planner',
+              h('select', {className:'ge-input', value:chosenOffer?.id, onChange:e=>setOfferId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
+                offers.map(o => h('option', {key:o.id, value:o.id}, (o.label || 'Offer')+' ('+o.bought.toLocaleString()+' bought)')))),
+            h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+(offers.length ? (chosenOffer?.bought || 0) : goal.bought).toLocaleString()+' to '+filled.toLocaleString()+' bought.'),
+            h('button', {className:'ge-btn gold', onClick:saveToGoal}, 'Update planner'))
+        : h('div', {style:{display:'flex', gap:6}},
+            h('button', {className:'ge-btn gold', onClick:newGoal}, 'New planner goal'),
+            h('button', {className:'ge-btn', onClick:newPosition}, 'Add to Portfolio'))),
+
+      f.side === 'sell' && (chosenPos
+        ? h('div', null,
+            open.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which position',
+              h('select', {className:'ge-input', value:chosenPos.id, onChange:e=>setPosId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
+                open.map(p => h('option', {key:p.id, value:p.id}, p.quantity.toLocaleString()+' at '+fmt.gp(Math.round(p.cost_basis)))))),
+            h('div', {style:{fontSize:12, color:T.text, marginBottom:10}},
+              alreadySold ? alreadySold.toLocaleString()+' already logged from this offer. ' : '', 'Logs '+Math.min(newSold, chosenPos.quantity).toLocaleString()+' sold.'),
+            h('button', {className:'ge-btn gold', onClick:saveSale}, 'Log sale'))
+        : h('div', {style:{fontSize:12, color:'#f0a030'}}, 'No open position for this item to sell from.')),
+
+      h('div', {style:{marginTop:10}}, h('button', {className:'ge-btn', onClick:onClose}, 'Cancel'))));
+}
+
 function PortfolioArea(props) {
   const [view, setView] = useState('positions');
   return h('div', null,
@@ -15511,6 +15616,8 @@ function App() {
     return () => window.removeEventListener('genius-goto', go);
   }, []);
   const navMarks = unreadMarks(useInbox());
+  const [geOffer, setGeOffer] = useState(null);
+  useEffect(() => { window.genius?.onGeReader?.(o => setGeOffer({...o, readAt:Date.now()})); }, []);
   const contentRef = useRef(null);
   const scrollContentTo = pos => contentRef.current?.scrollTo({top: pos, behavior:'smooth'});
   // Sidebar starts closed — only actually matters on a narrow/mobile
@@ -16092,6 +16199,8 @@ function App() {
       )
     ),
 
+    geOffer && h(GeReaderModal, {key:geOffer.readAt, offer:geOffer, items, toast, onClose:()=>setGeOffer(null),
+      onSaved:async()=>{ const p = await window.genius?.getPortfolio(); if (p) setPortfolio(p); }}),
     h('div',{className:'main'},
       h('div',{className:'ge-header'},
         h('button',{

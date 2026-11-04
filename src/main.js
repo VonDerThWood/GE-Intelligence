@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, globalShortcut, desktopCapturer, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const storage = require('./backend-js/storage.js');
@@ -288,6 +288,65 @@ async function checkBuyGoals() {
   }
 }
 
+// ─── GE offer reader (dev mode) ─────────────────────────────────────────────
+// Shift+PrtSc reads the screen once, on this machine only. The image is never
+// saved or sent anywhere. Parsing lives in backend-js/ge-reader.js.
+const GE_READER_KEY = 'Shift+PrintScreen';
+let geOcrWorker = null;
+let geReadBusy = false;
+async function geOcr(png) {
+  if (!geOcrWorker) {
+    const { createWorker } = require('tesseract.js');
+    const dataDir = path.join(__dirname, 'backend-js', 'data', 'ocr').replace('app.asar', 'app.asar.unpacked');
+    geOcrWorker = await createWorker('eng', 1, { langPath: dataDir, gzip: false, cacheMethod: 'none' });
+  }
+  return (await geOcrWorker.recognize(png)).data.text;
+}
+async function readGeImage(image) {
+  const { parseOffer } = require('./backend-js/ge-reader.js');
+  // Small text reads better enlarged.
+  const { width } = image.getSize();
+  const scaled = width < 2400 ? image.resize({ width: 2400, quality: 'best' }) : image;
+  const text = await geOcr(scaled.toPNG());
+  const data = await api.getData();
+  return parseOffer(text, (data.items || []).map(i => i.name));
+}
+async function captureGeOffer() {
+  if (geReadBusy) return;
+  geReadBusy = true;
+  try {
+    const display = screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const size = { width: Math.round(display.size.width * display.scaleFactor), height: Math.round(display.size.height * display.scaleFactor) };
+    const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
+    const source = sources.find(s => String(s.display_id) === String(display.id)) || sources[0];
+    if (!source) throw new Error('No screen to read');
+    const offer = await readGeImage(source.thumbnail);
+    notifyRenderer('ge-reader-result', offer);
+    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
+  } catch (e) {
+    console.error('[GE reader] failed:', e.message);
+    notifyRenderer('ge-reader-result', { error: e.message });
+  } finally {
+    geReadBusy = false;
+  }
+}
+function updateGeReaderShortcut() {
+  if (isTestMode) return;
+  const on = !!store.get('devMode', false);
+  if (on && !globalShortcut.isRegistered(GE_READER_KEY)) {
+    if (!globalShortcut.register(GE_READER_KEY, captureGeOffer)) console.error('[GE reader] shortcut unavailable');
+  } else if (!on && globalShortcut.isRegistered(GE_READER_KEY)) {
+    globalShortcut.unregister(GE_READER_KEY);
+  }
+}
+// Test mode reads a saved image instead of the screen.
+ipcMain.handle('test-ge-reader', async (_, file) => {
+  if (!isTestMode) return null;
+  const offer = await readGeImage(nativeImage.createFromPath(file));
+  notifyRenderer('ge-reader-result', offer);
+  return offer;
+});
+
 async function checkAlmanacDigest() {
   for (const n of await api.getAlmanacNotifications()) {
     new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
@@ -423,6 +482,7 @@ ipcMain.handle('save-settings', async (_, settings) => {
     if (k === 'discordWebhook' && v && !isValidDiscordWebhook(v)) return;
     store.set(k, v);
   });
+  updateGeReaderShortcut();
   await store.flush();
   startScheduler();
   return { success: true };
@@ -759,6 +819,7 @@ app.whenReady().then(async () => {
     ...(isTestMode ? { historyDirOverride: path.join(REAL_USER_DATA, 'data', 'history'), readOnlyHistory: true } : {}) });
 
   createWindow();
+  updateGeReaderShortcut();
   if (isTestMode) {
     mainWindow.setTitle('GEnius [TEST MODE]');
     api.loadHistory();
@@ -818,6 +879,6 @@ app.on('before-quit', (event) => {
 });
 
 // Allow installer/Windows shutdown to close the app properly
-app.on('will-quit', () => { isQuitting = true; });
+app.on('will-quit', () => { isQuitting = true; globalShortcut.unregisterAll(); });
 process.on('SIGTERM', () => { isQuitting = true; app.quit(); });
 process.on('SIGINT',  () => { isQuitting = true; app.quit(); });

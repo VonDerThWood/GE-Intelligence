@@ -38,7 +38,9 @@
       "!node_modules/tslib/**"
     ],
     "asarUnpack": [
-      "src/backend-js/data/**/*"
+      "src/backend-js/data/**/*",
+      "node_modules/tesseract.js/**/*",
+      "node_modules/tesseract.js-core/**/*"
     ],
     "extraResources": [
       {
@@ -79,6 +81,7 @@
     "@capacitor/filesystem": "^8.1.2",
     "@capacitor/local-notifications": "^8.2.0",
     "@capacitor/preferences": "^8.0.1",
-    "qrcode": "^1.5.4"
+    "qrcode": "^1.5.4",
+    "tesseract.js": "^7.0.0"
   }
 }
