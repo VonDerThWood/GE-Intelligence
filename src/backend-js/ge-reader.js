@@ -54,6 +54,20 @@ function parseOffer(text, itemNames = []) {
     out.filled = toNum(fills[2]);
     out.coins = toNum(fills[3]);
     if (!out.side) out.side = /sold/i.test(fills[1]) ? 'sell' : 'buy';
+    // If the quantity line didn't read, the progress bar has it: "8,173 / 16,097".
+    if (out.quantity == null) {
+      for (const m of String(text).matchAll(/([\d,]{1,})\s*[\/|]\s*([\d,]{3,})/g)) {
+        if (toNum(m[1]) === out.filled && toNum(m[2]) >= out.filled) { out.quantity = toNum(m[2]); break; }
+      }
+    }
+  }
+  // Last resort for the price: the total shown under the quantity and price.
+  if (out.price == null && out.quantity) {
+    const total = String(text).match(/([\d,]{4,})\s+coins\s*$/im);
+    if (total) {
+      const each = toNum(total[1]) / out.quantity;
+      out.price = Math.round(out.side === 'sell' ? each / 0.98 : each);
+    }
   }
   return out;
 }

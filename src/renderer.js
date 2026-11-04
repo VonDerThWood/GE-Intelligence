@@ -15419,7 +15419,9 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
   const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
   const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
-  const logKey = [nameLow, f.quantity, f.price].join('|');
+  // Identifies the offer, so re-reading it only logs what's new. Price stays out of
+  // it since an offer's price can be edited in-game.
+  const logKey = [nameLow, f.quantity].join('|');
   const alreadySold = geSoldLog()[logKey] || 0;
   const newSold = Math.max(0, filled - alreadySold);
   const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
@@ -15449,6 +15451,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   };
   const saveSale = async () => {
     if (!requireItem() || !chosenPos) return;
+    if (!(Number(f.quantity) > 0)) { toast('Enter the offer quantity first', 'error'); return; }
     if (!(newSold > 0)) { toast('Those sales are already logged', 'error'); return; }
     const qty = Math.min(newSold, chosenPos.quantity);
     // The GE shows coins after its 2% tax, and sellPosition takes the tax off itself,
