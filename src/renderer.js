@@ -15471,7 +15471,8 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
     h('div', {style:{background:T.bg || '#14100a', border:'1px solid '+T.gold, borderRadius:6, padding:18, width:460, maxWidth:'100%', maxHeight:'90vh', overflow:'auto'}},
       h('div', {className:'ge-section-head'}, 'Read from the GE'),
       offer.error ? h('p', {style:{color:'#e05050', fontSize:13}}, 'Could not read the screen: '+offer.error) :
-      h('div', {style:{fontSize:12, color:T.textDim, marginBottom:10}}, 'Check these. OCR can misread numbers.'),
+      h('div', {style:{fontSize:12, color:offer.confirmed ? '#4caf50' : '#f0a030', marginBottom:10}},
+        offer.confirmed ? 'Read twice, and the numbers add up. Still worth a glance.' : 'Couldn\'t confirm these. Compare every number with the GE before saving.'),
       h('div', {style:{display:'flex', gap:6, marginBottom:10}},
         ['buy','sell'].map(s => h('button', {key:s, className:f.side===s ? 'ge-btn gold' : 'ge-btn', onClick:()=>setF(x=>({...x, side:s}))}, s === 'buy' ? 'Buy offer' : 'Sell offer'))),
       h('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}},

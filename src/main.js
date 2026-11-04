@@ -302,14 +302,33 @@ async function geOcr(png) {
   }
   return (await geOcrWorker.recognize(png)).data.text;
 }
+// Greyscale with stretched contrast. Tested on real GE screens (2026-11-04): this
+// read every number at 1.5x and 2x, where color often missed or misread them.
+function greyContrast(image) {
+  const size = image.getSize();
+  const px = Buffer.from(image.toBitmap());
+  let lo = 255, hi = 0;
+  for (let i = 0; i < px.length; i += 4) {
+    const y = Math.round(0.114 * px[i] + 0.587 * px[i + 1] + 0.299 * px[i + 2]);
+    px[i] = y;
+    if (y < lo) lo = y;
+    if (y > hi) hi = y;
+  }
+  const range = Math.max(1, hi - lo);
+  for (let i = 0; i < px.length; i += 4) {
+    const y = Math.round((px[i] - lo) * 255 / range);
+    px[i] = y; px[i + 1] = y; px[i + 2] = y; px[i + 3] = 255;
+  }
+  return nativeImage.createFromBitmap(px, size);
+}
 async function readGeImage(image) {
-  const { parseOffer } = require('./backend-js/ge-reader.js');
-  // Small text reads better enlarged.
+  const { parseOffer, readOfferPasses } = require('./backend-js/ge-reader.js');
+  const names = ((await api.getData()).items || []).map(i => i.name);
   const { width } = image.getSize();
-  const scaled = width < 2400 ? image.resize({ width: 2400, quality: 'best' }) : image;
-  const text = await geOcr(scaled.toPNG());
-  const data = await api.getData();
-  return parseOffer(text, (data.items || []).map(i => i.name));
+  return readOfferPasses(async scale => {
+    const scaled = image.resize({ width: Math.round(width * scale), quality: 'best' });
+    return parseOffer(await geOcr(greyContrast(scaled).toPNG()), names);
+  }, [1.5, 2, 1]);
 }
 async function captureGeOffer() {
   if (geReadBusy) return;
