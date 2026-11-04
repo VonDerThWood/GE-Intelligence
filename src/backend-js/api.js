@@ -1878,6 +1878,10 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return out;
   }
 
+  // A Name Release frees up player names, so it's an event on the calendar, not a
+  // game release. Fixed when read, so dates already saved are covered too.
+  const fixCalendarCategory = e => (/\bname release\b/i.test(e.postTitle || '') && e.category === 'release' ? { ...e, category: 'seasonal' } : e);
+
   async function getNewsCalendar(opts = {}) {
     const cal = await storage.readJSON(calendarFile, { entries: [], processed: {} });
     const pastDays = Math.max(0, Math.min(400, Number(opts && opts.pastDays) || 0));
@@ -1886,7 +1890,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const escRe = x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const mentions = (name, text) => new RegExp('\\b' + escRe(name) + '\\b', 'i').test(text);
     const isCancelled = e => cancelled.some(c => String(e.postDate) < String(c.postDate) && mentions(c.name, e.label + ' ' + e.postTitle));
-    const upcoming = cal.entries.filter(e => (e.end || e.start) >= today && !isCancelled(e));
+    const upcoming = cal.entries.map(fixCalendarCategory).filter(e => (e.end || e.start) >= today && !isCancelled(e));
     // A "list-style" label is only trusted if it reads like a name: not a
     // stray time fragment ("00 game time, as Mod Yuey…"), not a long
     // sentence, not a generic section/category word ("Community").
@@ -1940,6 +1944,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       store.set('newsRead', read);
     }
     const cal = await storage.readJSON(calendarFile, { entries: [], processed: {} });
+    cal.entries = cal.entries.map(fixCalendarCategory);
     const datesByPost = {};
     for (const e of cal.entries) (datesByPost[e.postUrl] = datesByPost[e.postUrl] || []).push(e);
     const dxpByUrl = Object.fromEntries(store.get('dxpNewsDetections', []).map(d => [d.url, d]));
