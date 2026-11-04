@@ -236,7 +236,13 @@ async function runNotificationChecks() {
   } catch (e) { console.error('[GEnius] collectFiredAlerts failed:', e.message); }
   for (const n of await a.getUpdateRiskNotifications()) await fireNotification(n.title, n.body);
   for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
-  for (const n of await a.getAlmanacNotifications()) await fireNotification(n.title, n.body);
+  // Isolated so an Almanac problem can't stop the checks below it.
+  try {
+    const almanac = await a.getAlmanacNotifications();
+    for (const n of almanac) await fireNotification(n.title, n.body);
+    // Tell the background now, or it sends this same digest again.
+    if (almanac.length) await syncRunnerState();
+  } catch (e) { console.error('[GEnius] Almanac check failed:', e.message); }
   const digest = await a.getWatchlistDigest();
   if (digest) await fireNotification(digest.title, digest.body);
   const portfolioDigest = await a.getPortfolioDigest();
@@ -340,7 +346,7 @@ async function buildGenius() {
     dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
     getAlmanacSignals: async () => (await ensureApi()).getAlmanacSignals(),
     getInbox: async () => { const a = await ensureApi(); await collectBackgroundInbox(a); return a.getInbox(); },
-    markInboxRead: async (kind) => (await ensureApi()).markInboxRead(kind),
+    markInboxRead: async (kind, upTo) => (await ensureApi()).markInboxRead(kind, upTo),
     clearInbox: async (id) => (await ensureApi()).clearInbox(id),
     syncRole: 'phone',
     syncStatus: async () => (await ensureApi()).sync.clientStatus(),

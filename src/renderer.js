@@ -15219,7 +15219,13 @@ function useInbox() {
   const [inbox, setInbox] = useState([]);
   useEffect(() => {
     let live = true;
-    const load = () => window.genius?.getInbox?.().then(l => { if (live && l) setInbox(l); }).catch(() => {});
+    // Same list keeps the same state, or the whole app redraws on every poll.
+    let shown = '';
+    const load = () => window.genius?.getInbox?.().then(l => {
+      if (!live || !l) return;
+      const next = JSON.stringify(l);
+      if (next !== shown) { shown = next; setInbox(l); }
+    }).catch(() => {});
     load();
     const timer = setInterval(load, 30000);
     window.addEventListener('genius-inbox-changed', load);
@@ -15245,10 +15251,23 @@ function NotifMark({marks, style}) {
 
 function InboxView({onOpenPill}) {
   const [list, setList] = useState(null);
-  const load = () => window.genius.getInbox().then(setList);
+  // What was unread when it appeared, so it stays highlighted while you're here.
+  const fresh = useRef(new Set());
+  const load = async () => {
+    const l = await window.genius.getInbox();
+    setList(l);
+    const unread = l.filter(e => !e.read);
+    if (!unread.length) return;
+    unread.forEach(e => fresh.current.add(e.id));
+    // Only what's on screen counts as seen; anything newer stays unread.
+    await window.genius.markInboxRead(null, Math.max(...unread.map(e => e.at)));
+    refreshInbox();
+  };
   useEffect(() => {
-    // Show what's unread on arrival, then count it as seen.
-    load().then(() => window.genius.markInboxRead()).then(refreshInbox);
+    load();
+    window.addEventListener('genius-inbox-changed', load);
+    const timer = setInterval(load, 30000);
+    return () => { window.removeEventListener('genius-inbox-changed', load); clearInterval(timer); };
   }, []);
   const clear = async id => { await window.genius.clearInbox(id); await load(); refreshInbox(); };
   return h('div', null,
@@ -15261,9 +15280,9 @@ function InboxView({onOpenPill}) {
       (list || []).map(e => {
         const pill = NOTIF_MARKS[e.kind] ? e.kind : null;
         return h('div', {key:e.id, style:{padding:'10px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:10, alignItems:'flex-start'}},
-          h('span', {style:{width:14, paddingTop:5, flexShrink:0}}, !e.read && h(NotifMark, {marks:[pill || 'notifications']})),
+          h('span', {style:{width:14, paddingTop:5, flexShrink:0}}, fresh.current.has(e.id) && h(NotifMark, {marks:[pill || 'notifications']})),
           h('div', {style:{flex:1, minWidth:0}},
-            h('div', {style:{color:e.read ? T.text : T.textBright, fontWeight:e.read ? 'normal' : 'bold', cursor:pill ? 'pointer' : 'default'}, onClick:()=>pill && onOpenPill(pill)}, e.title),
+            h('div', {style:{color:fresh.current.has(e.id) ? T.textBright : T.text, fontWeight:fresh.current.has(e.id) ? 'bold' : 'normal', cursor:pill ? 'pointer' : 'default'}, onClick:()=>pill && onOpenPill(pill)}, e.title),
             h('div', {style:{color:T.textDim, whiteSpace:'pre-line'}}, e.body),
             h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, new Date(e.at).toLocaleString())),
           h('button', {className:'ge-btn', style:{padding:'2px 8px', fontSize:11}, onClick:()=>clear(e.id)}, 'Clear'));

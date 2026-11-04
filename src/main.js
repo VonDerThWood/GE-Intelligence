@@ -625,7 +625,7 @@ ipcMain.handle('get-almanac-signals', () => api.getAlmanacSignals());
 ipcMain.handle('get-inbox', () => api.getInbox());
 // Test mode skips the checks that fill the Inbox, so tests seed it directly.
 ipcMain.handle('test-seed-inbox', (_, list) => { if (isTestMode) store.set('inbox', list); });
-ipcMain.handle('mark-inbox-read', (_, kind) => api.markInboxRead(kind));
+ipcMain.handle('mark-inbox-read', (_, kind, upTo) => api.markInboxRead(kind, upTo));
 ipcMain.handle('clear-inbox', (_, id) => api.clearInbox(id));
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));

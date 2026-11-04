@@ -1774,15 +1774,43 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // pastDays (Ben, 2026-10-18): the calendar's month view also shows dates
   // earlier in the month; everything else wants upcoming only (default 0).
   // ─── Almanac buy and sell flags (almanac-signals.js) ──────────────────────
-  async function getAlmanacSignals() {
-    const { loadEvents } = require('./dxp_intelligence.js');
-    const intel = await storage.readJSON(path.join(dataDir, 'dxp_intelligence.json'), null);
+  // dxp_intelligence.json is about 30 MB, so it's read at most hourly and only
+  // what the flags need is kept (each phase's per-DXP list is most of the file).
+  let almanacIntel = null, almanacIntelAt = 0;
+  async function loadAlmanacIntel() {
+    if (almanacIntel && Date.now() - almanacIntelAt < 3600000) return almanacIntel;
+    const full = await storage.readJSON(path.join(dataDir, 'dxp_intelligence.json'), null);
+    if (!full) return null;
+    const slim = {};
+    for (const [id, e] of Object.entries(full)) {
+      if (id === '_meta' || !e || !e.timing) continue;
+      const phases = {};
+      for (const [name, p] of Object.entries(e.phases || {})) phases[name] = p && { rise: p.rise, drop: p.drop, total: p.total };
+      slim[id] = { name: e.name, timing: e.timing, phases };
+    }
+    almanacIntel = slim;
+    almanacIntelAt = Date.now();
+    return slim;
+  }
+
+  // Callers close together share one result.
+  let almanacSignals = null, almanacSignalsAt = 0;
+  function getAlmanacSignals() {
+    if (!almanacSignals || Date.now() - almanacSignalsAt > 60000) {
+      almanacSignalsAt = Date.now();
+      almanacSignals = computeAlmanacSignals().catch(e => { almanacSignals = null; throw e; });
+    }
+    return almanacSignals;
+  }
+
+  async function computeAlmanacSignals() {
+    const intel = await loadAlmanacIntel();
     if (!intel) return { now: [], soon: [], nextDxp: null, lastDxp: null };
     const latest = await storage.readJSON(path.join(dataDir, 'latest.json'), {});
     const portfolio = await readPortfolio();
     const held = new Map();
-    for (const p of portfolio.positions) {
-      if (p.status !== 'open' || !(p.quantity > 0)) continue;
+    for (const p of portfolio.positions || []) {
+      if (p.status !== 'open' || !(p.quantity > 0) || !p.item_name) continue;
       const k = p.item_name.toLowerCase();
       const h = held.get(k) || { name: p.item_name, quantity: 0, spent: 0 };
       h.quantity += p.quantity;
@@ -1790,7 +1818,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       held.set(k, h);
     }
     const holdings = [...held.values()].map(h => ({ name: h.name, quantity: h.quantity, cost: h.spent / h.quantity }));
-    const events = (await loadEvents(dataDir)).filter(e => e[1] >= ALMANAC_STATS_SINCE);
+    const events = (await storage.readJSON(path.join(dataDir, 'dxp_events.json'), [])).filter(e => e[1] >= ALMANAC_STATS_SINCE);
     const out = computeSignals({ intel, events, items: latest.items || [], holdings,
       watched: [...store.get('watchlist', []), ...store.get('dxpWatchlist', [])] });
     // Live price check: has it already used up half its usual rise?
@@ -1880,7 +1908,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // A Name Release frees up player names, so it's an event on the calendar, not a
   // game release. Fixed when read, so dates already saved are covered too.
-  const fixCalendarCategory = e => (/\bname release\b/i.test(e.postTitle || '') && e.category === 'release' ? { ...e, category: 'seasonal' } : e);
+  // Goes by the date's own line, or a post that's only about the Name Release, so
+  // a real update sharing a post keeps its release dates.
+  const isNameReleaseDate = e => /\bname release\b|\brelease\b.*\bnames\b/i.test(e.label || '')
+    || /^name release\b(?!.*(?:\band\b|&))/i.test(e.postTitle || '');
+  const fixCalendarCategory = e => (e.category === 'release' && isNameReleaseDate(e) ? { ...e, category: 'seasonal' } : e);
 
   async function getNewsCalendar(opts = {}) {
     const cal = await storage.readJSON(calendarFile, { entries: [], processed: {} });
@@ -5186,9 +5218,10 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     store.set('inbox', inbox.slice(0, INBOX_MAX));
     store.set('almanacDigestLog', log);
   }
-  // No kind marks everything read (opening the Inbox pill).
-  function markInboxRead(kind) {
-    store.set('inbox', store.get('inbox', []).map(e => (!kind || e.kind === kind) ? { ...e, read: true } : e));
+  // No kind marks everything read (opening the Inbox pill). upTo leaves anything
+  // newer than what's on screen unread.
+  function markInboxRead(kind, upTo) {
+    store.set('inbox', store.get('inbox', []).map(e => ((!kind || e.kind === kind) && (!upTo || e.at <= upTo)) ? { ...e, read: true } : e));
     return { success: true };
   }
   // No id clears everything.

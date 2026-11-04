@@ -46,11 +46,28 @@ function uniqueEvents(events) {
 }
 
 // Next DXP from the usual gap between recent ones. Only used until dates are announced.
-function estimateNextStart(events) {
+function estimateNextStart(events, today) {
   const starts = events.map(e => toMs(e[1])).slice(-9);
   const gaps = starts.slice(1).map((s, i) => s - starts[i]);
   if (!gaps.length) return null;
-  return starts[starts.length - 1] + median(gaps);
+  const gap = median(gaps);
+  let next = starts[starts.length - 1] + gap;
+  // Data that's behind (a phone missing a DXP) mustn't give a date in the past.
+  while (next <= today) next += gap;
+  return next;
+}
+
+// One flag per item, so nothing says sell and buy on the same day. Holdings lean
+// toward selling. Rows must already be sorted with the preferred order for ties.
+function onePerItem(rows) {
+  const best = new Map();
+  for (const r of rows) {
+    const had = best.get(r.id);
+    if (!had) { best.set(r.id, r); continue; }
+    const score = x => (x.group === 'held' && x.action === 'sell' ? Infinity : x.strength);
+    if (score(r) > score(had)) best.set(r.id, r);
+  }
+  return rows.filter(r => best.get(r.id) === r);
 }
 
 function rate(phases, names, side) {
@@ -113,7 +130,7 @@ function computeSignals({ intel, events, items, holdings = [], watched = [], tod
   const list = uniqueEvents(events);
   const upcoming = list.filter(e => toMs(e[1]) > dayMs);
   const started = list.filter(e => toMs(e[1]) <= dayMs);
-  const est = upcoming.length ? null : estimateNextStart(list);
+  const est = upcoming.length ? null : estimateNextStart(list, dayMs);
   const next = upcoming.length ? upcoming[0] : null;
   const nextStart = next ? toMs(next[1]) : est;
   const nextEstimated = !next;
@@ -172,9 +189,19 @@ function computeSignals({ intel, events, items, holdings = [], watched = [], tod
     let others = 0;
     return rows.filter(r => r.group !== 'other' || ++others <= cap);
   };
+  const nowRows = onePerItem(now.sort(order));
+  const flaggedNow = new Set(nowRows.map(r => r.id));
+  // Coming up: each item's next step only, and nothing already flagged above.
+  const soonRows = [];
+  const soonSeen = new Set();
+  for (const r of soon.sort((a, b) => rank[a.group] - rank[b.group] || a.inDays - b.inDays || b.strength - a.strength)) {
+    if (flaggedNow.has(r.id) || soonSeen.has(r.id)) continue;
+    soonSeen.add(r.id);
+    soonRows.push(r);
+  }
   return {
-    now: capOthers(now.sort(order), OTHER_NOW_CAP),
-    soon: capOthers(soon.sort((a, b) => rank[a.group] - rank[b.group] || a.inDays - b.inDays || b.strength - a.strength), OTHER_SOON_CAP),
+    now: capOthers(nowRows, OTHER_NOW_CAP),
+    soon: capOthers(soonRows, OTHER_SOON_CAP),
     nextDxp: nextStart ? { start: toDate(nextStart), end: next ? next[2] : null, estimated: nextEstimated } : null,
     lastDxp: last ? { start: last[1], end: last[2] } : null,
   };

@@ -21,7 +21,7 @@ contextBridge.exposeInMainWorld('genius', {
   getAlmanacSignals: () => ipcRenderer.invoke('get-almanac-signals'),
   getInbox: () => ipcRenderer.invoke('get-inbox'),
   testSeedInbox: (list) => ipcRenderer.invoke('test-seed-inbox', list),
-  markInboxRead: (kind) => ipcRenderer.invoke('mark-inbox-read', kind),
+  markInboxRead: (kind, upTo) => ipcRenderer.invoke('mark-inbox-read', kind, upTo),
   clearInbox: (id) => ipcRenderer.invoke('clear-inbox', id),
   syncRole: 'hub',
   syncStartPairing: () => ipcRenderer.invoke('sync-start-pairing'),
