@@ -47,7 +47,9 @@ function parseOffer(text, itemNames = []) {
     }
   }
 
-  const fills = text && String(text).match(/\b(bought|sold)\s+([\d,]+)\s+so\s+far\s+for\s+([\d,]+)\s+coins/i);
+  // "bought 12,397 so far for 71,282,750 coins", "sold 8,173 so far and received
+  // 24,429,097 coins". The sold figure is after GE tax.
+  const fills = text && String(text).match(/\b(bought|sold)\s+([\d,]+)\s+so\s+far\s+(?:for|and\s+received)\s+([\d,]+)\s+coins/i);
   if (fills) {
     out.filled = toNum(fills[2]);
     out.coins = toNum(fills[3]);

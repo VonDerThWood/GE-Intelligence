@@ -15451,7 +15451,11 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
     if (!requireItem() || !chosenPos) return;
     if (!(newSold > 0)) { toast('Those sales are already logged', 'error'); return; }
     const qty = Math.min(newSold, chosenPos.quantity);
-    const r = await window.genius.sellPosition({id:chosenPos.id, sell_price:coins / filled, quantity:qty});
+    // The GE shows coins after its 2% tax, and sellPosition takes the tax off itself,
+    // so it gets the price before tax. Items under 50gp aren't taxed.
+    const received = coins / filled;
+    const sellPrice = received / 0.98 >= 50 ? received / 0.98 : received;
+    const r = await window.genius.sellPosition({id:chosenPos.id, sell_price:sellPrice, quantity:qty});
     if (!r?.success) { toast('Could not save', 'error'); return; }
     try { localStorage.setItem('genius_ge_sold_log', JSON.stringify({...geSoldLog(), [logKey]:alreadySold + qty})); } catch {}
     finish('Logged '+qty.toLocaleString()+' '+known.name+' sold');
@@ -15470,9 +15474,9 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
       h('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}},
         h('div', {style:{gridColumn:'1 / -1'}}, field('Item', 'name')),
         field('Offer quantity', 'quantity', 'number'), field('Offer price', 'price', 'number'),
-        field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', 'number'), field('Coins so far', 'coins', 'number')),
+        field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', 'number'), field(f.side === 'buy' ? 'Coins spent so far' : 'Coins received so far', 'coins', 'number')),
       !known && f.name && h('div', {style:{color:'#f0a030', fontSize:12, marginBottom:8}}, 'GEnius doesn\'t know that item name.'),
-      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ', before GE tax.' : '.')),
+      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
 
       f.side === 'buy' && (goal
         ? h('div', null,
