@@ -288,6 +288,12 @@ async function checkBuyGoals() {
   }
 }
 
+async function checkAlmanacDigest() {
+  for (const n of await api.getAlmanacNotifications()) {
+    new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
 async function checkUpdateRisks() {
   for (const n of await api.getUpdateRiskNotifications()) {
     new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
@@ -296,7 +302,7 @@ async function checkUpdateRisks() {
 
 async function runAllChecks() {
   if (isTestMode) return; // no notifications or Discord from a test instance
-  for (const check of [checkUpdateRisks, checkDxpNotifications, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews]) {
+  for (const check of [checkUpdateRisks, checkDxpNotifications, checkAlmanacDigest, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews]) {
     try { await check(); } catch (e) { console.error(`[Checks] ${check.name} failed:`, e.message); }
   }
 }
@@ -615,6 +621,12 @@ ipcMain.handle('get-update-risk-settings', () => api.getUpdateRiskSettings());
 ipcMain.handle('set-update-risk-settings', (_, s) => api.setUpdateRiskSettings(s));
 ipcMain.handle('get-update-risks', () => api.getUpdateRisks());
 ipcMain.handle('dismiss-update-risk', (_, key) => api.dismissUpdateRisk(key));
+ipcMain.handle('get-almanac-signals', () => api.getAlmanacSignals());
+ipcMain.handle('get-inbox', () => api.getInbox());
+// Test mode skips the checks that fill the Inbox, so tests seed it directly.
+ipcMain.handle('test-seed-inbox', (_, list) => { if (isTestMode) store.set('inbox', list); });
+ipcMain.handle('mark-inbox-read', (_, kind) => api.markInboxRead(kind));
+ipcMain.handle('clear-inbox', (_, id) => api.clearInbox(id));
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-launches', async () => api.getLaunches());

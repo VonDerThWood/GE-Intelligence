@@ -67,8 +67,6 @@ addEventListener('syncState', (resolve, reject, args) => {
   try {
     const d = args || {};
     if (d.watchlist) setJSON('rb_watchlist', d.watchlist);
-    if (d.dxpWatchlist) setJSON('rb_dxpWatchlist', d.dxpWatchlist);
-    if (d.dxpTiming) setJSON('rb_dxpTiming', d.dxpTiming);
     if (d.dxpEvents) setJSON('rb_dxpEvents', d.dxpEvents);
     if (d.dxpSettings) setJSON('rb_dxpSettings', d.dxpSettings);
     if (d.watchlistSettings) setJSON('rb_watchlistSettings', d.watchlistSettings);
@@ -76,6 +74,9 @@ addEventListener('syncState', (resolve, reject, args) => {
     if (d.portfolioSettings) setJSON('rb_portfolioSettings', d.portfolioSettings);
     if (d.reminders) setJSON('rb_reminders', d.reminders);
     if (d.quietHours) setJSON('rb_quietHours', d.quietHours);
+    if (d.almanacRows) setJSON('rb_almanacRows', d.almanacRows);
+    // Merged, so a flag sent here but not yet collected by the app isn't sent again.
+    if (d.almanacSeen) setJSON('rb_almanacSeen', { ...getJSON('rb_almanacSeen', {}), ...d.almanacSeen });
     if (d.alerts) {
       setJSON('rb_alerts', d.alerts);
       // The app is the authority on which alerts are already hit (it may
@@ -108,6 +109,36 @@ addEventListener('collectFiredAlerts', (resolve, reject) => {
   }
 });
 
+// Everything notified here, handed to the app's Inbox the next time it asks.
+addEventListener('collectInbox', (resolve, reject) => {
+  try {
+    const entries = getJSON('rb_inboxPending', []);
+    setJSON('rb_inboxPending', []);
+    resolve({ entries });
+  } catch (err) {
+    reject(err);
+  }
+});
+
+// Mirrors representativeLivePrices in src/backend-js/run.js: last hour's average
+// if both sides traded enough, else the day's, else the latest trade.
+const LIVE_MIN_HOUR_UNITS = 20;
+const LIVE_MIN_HOUR_SHARE = 0.01;
+const LIVE_MIN_DAY_UNITS = 3;
+function livePrices(latest, hour, day) {
+  const h = hour || {}, d = day || {}, l = latest || {};
+  const whole = n => Math.max(1, Math.round(n));
+  const hourOk = (avg, units, dayUnits) => avg && units >= LIVE_MIN_HOUR_UNITS && units >= (dayUnits || 0) * LIVE_MIN_HOUR_SHARE;
+  if (hourOk(h.avgHighPrice, h.highPriceVolume, d.highPriceVolume) && hourOk(h.avgLowPrice, h.lowPriceVolume, d.lowPriceVolume)) {
+    return { buy: whole(h.avgHighPrice), sell: whole(h.avgLowPrice) };
+  }
+  const dayOk = (avg, units) => avg && units >= LIVE_MIN_DAY_UNITS;
+  return {
+    buy: dayOk(d.avgHighPrice, d.highPriceVolume) ? whole(d.avgHighPrice) : (l.high != null ? l.high : null),
+    sell: dayOk(d.avgLowPrice, d.lowPriceVolume) ? whole(d.avgLowPrice) : (l.low != null ? l.low : null),
+  };
+}
+
 addEventListener('checkNotifications', async (resolve, reject) => {
   try {
     const notifEnabled = kvGet('rb_notifEnabled') !== 'false';
@@ -125,8 +156,6 @@ addEventListener('checkNotifications', async (resolve, reject) => {
     CapacitorKV.set('rb_lastRunAt', String(Date.now()));
 
     const watchlist = getJSON('rb_watchlist', []);
-    const dxpWatchlist = getJSON('rb_dxpWatchlist', []);
-    const dxpTiming = getJSON('rb_dxpTiming', {});
     const dxpEvents = getJSON('rb_dxpEvents', []);
     const dxpSettings = getJSON('rb_dxpSettings', { enabled: false });
     const watchlistSettings = getJSON('rb_watchlistSettings', { enabled: false });
@@ -141,7 +170,6 @@ addEventListener('checkNotifications', async (resolve, reject) => {
 
     const needsPrices = alerts.some(a => !a.condition.startsWith('live_')) ||
       (watchlistSettings.enabled && watchlist.length) ||
-      (dxpSettings.enabled && dxpWatchlist.length) ||
       (portfolioSettings.enabled && portfolioPositions.length);
 
     let dump = null;
@@ -154,11 +182,16 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       }
     }
 
-    let live = null;
-    if (alerts.some(a => a.condition.startsWith('live_'))) {
+    let live = null, liveHour = null, liveDay = null;
+    if (alerts.some(a => a.condition.startsWith('live_')) || (portfolioSettings.enabled && portfolioPositions.length)) {
       try {
-        const res = await fetch('https://prices.runescape.wiki/api/v2/rs/latest', { method: 'GET', headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' } });
-        live = (await res.json()).data || null;
+        const wiki = async path => {
+          const res = await fetch('https://prices.runescape.wiki/api/v2/rs/' + path, { method: 'GET', headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' } });
+          return (await res.json()).data || null;
+        };
+        live = await wiki('latest');
+        liveHour = await wiki('1h');
+        liveDay = await wiki('24h');
       } catch (e) {
         console.error('[GEnius bg] live price fetch failed: ' + e.message);
       }
@@ -168,18 +201,22 @@ addEventListener('checkNotifications', async (resolve, reject) => {
     let nextId = Math.floor(Date.now() / 1000) % 2000000000;
     // Quiet hours: same notifications, sent to the silent channel.
     const quiet = inQuietHours(getJSON('rb_quietHours', null));
-    const queue = (title, body) => {
+    const inboxPending = [];
+    // kind and source match api.js's toInbox calls. Seen: Almanac flag keys.
+    const queue = (title, body, kind, source, seen) => {
       const n = { id: nextId++, title, body, schedule: { at: new Date(Date.now() + 100) } };
       if (quiet) n.channelId = 'genius_quiet';
       notifications.push(n);
+      inboxPending.push({ title, body, kind, source, at: Date.now(), seen });
     };
+    const liveOf = id => livePrices(live && live[String(id)], liveHour && liveHour[String(id)], liveDay && liveDay[String(id)]);
 
     // --- Reminders (pure date checks, no price data needed) ---
     let remindersChanged = false;
     for (const r of reminders) {
       const todayStr = new Date().toISOString().slice(0, 10);
       if (r.fired || !r.dueDate || r.dueDate > todayStr) continue;
-      queue(r.itemName ? `Reminder: ${r.itemName}` : 'GEnius Reminder', r.message || 'Reminder due.');
+      queue(r.itemName ? `Reminder: ${r.itemName}` : 'GEnius Reminder', r.message || 'Reminder due.', 'mine', 'reminder');
       r.fired = true;
       remindersChanged = true;
     }
@@ -193,7 +230,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       let logChanged = false;
       const fire = (key, title, body) => {
         if (notifiedLog[key]) return;
-        queue(title, body);
+        queue(title, body, 'almanac', 'dxp');
         notifiedLog[key] = todayStr;
         logChanged = true;
       };
@@ -216,48 +253,32 @@ addEventListener('checkNotifications', async (resolve, reject) => {
         }
       }
 
-      const daysBetween = (a, b) => Math.round((b - a) / 86400000);
-      // Where a day sits relative to the event, for alert text. Counts whole game
-      // days (UTC, the daily reset): rounding the exact time gap flipped at noon.
-      const dxpDayLabel = (n, lastDay) => {
-        const days = c => `${c} day${c === 1 ? '' : 's'}`;
-        if (n < 0) return `${days(-n)} before DXP starts`;
-        if (n === 0) return 'the day DXP starts';
-        if (n <= lastDay) return `day ${n + 1} of DXP`;
-        return `${days(n - lastDay)} after DXP ended`;
-      };
       for (const [announced, start, end] of dxpEvents) {
         if (dxpSettings.announceAlerts && todayStr === announced) {
           fire(`announce_${announced}`, '📅 DXP Announced',
-            `A new Double XP event has been announced (${start} to ${end}). Check your Almanac watchlist for buy timing.`);
-          continue;
+            `A new Double XP event has been announced (${start} to ${end}). Check Notifications > Almanac for what to buy.`);
         }
-        const startDt = new Date(start + 'T00:00:00Z');
-        const endDt = new Date(end + 'T00:00:00Z');
-        const baselineDt = new Date(startDt.getTime() - 21 * 86400000);
-        const afterDt = new Date(endDt.getTime() + 21 * 86400000);
-        if (today < baselineDt || today > afterDt) continue;
-        const dayOffset = daysBetween(startDt, new Date(todayStr + 'T00:00:00Z'));
-        const lastDay = daysBetween(startDt, endDt);
+      }
 
-        for (const w of dxpWatchlist) {
-          const timing = dxpTiming[w.id];
-          if (!timing) continue;
-          if (dxpSettings.buyAlerts && timing.best_buy_day_offset != null) {
-            const std = Math.max(timing.best_buy_day_std || 0, 0.5);
-            if (Math.abs(dayOffset - timing.best_buy_day_offset) <= std) {
-              fire(`${w.id}_buy_${start}_${todayStr}`, '📅 DXP Buy Window',
-                `${w.name} is in its usual best-buy window: ${dxpDayLabel(dayOffset, lastDay)}.`);
-            }
-          }
-          if (dxpSettings.sellAlerts && timing.best_sell_day_offset != null) {
-            const std = Math.max(timing.best_sell_day_std || 0, 0.5);
-            if (Math.abs(dayOffset - timing.best_sell_day_offset) <= std) {
-              fire(`${w.id}_sell_${start}_${todayStr}`, '📅 DXP Sell Window',
-                `${w.name} is in its usual best-sell window: ${dxpDayLabel(dayOffset, lastDay)}.`);
-            }
-          }
-        }
+      // Almanac digest: the app works out each flag and its day (almanac-signals.js)
+      // and syncs them here, so flags come due while the app stays closed. Same text
+      // as buildDigest in almanac-signals.js.
+      const seen = getJSON('rb_almanacSeen', {});
+      const dayNow = Date.parse(todayStr + 'T00:00:00Z');
+      const due = getJSON('rb_almanacRows', []).filter(r => {
+        if (seen[r.key] || !(r.action === 'sell' ? dxpSettings.sellAlerts : dxpSettings.buyAlerts)) return false;
+        const diff = Math.round((Date.parse(r.day + 'T00:00:00Z') - dayNow) / 86400000);
+        const reach = r.estimated ? 7 : 2;
+        return diff >= -reach && diff <= reach;
+      });
+      if (due.length) {
+        const sells = due.filter(r => r.action === 'sell'), buys = due.filter(r => r.action === 'buy');
+        const names = list => list.slice(0, 3).map(r => r.name).join(', ') + (list.length > 3 ? `, and ${list.length - 3} more` : '');
+        const title = 'Almanac: ' + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(', ');
+        const body = [sells.length && `Sell now: ${names(sells)}`, buys.length && `Buy now: ${names(buys)}`].filter(Boolean).join('\n');
+        queue(title, body, 'almanac', 'almanac_digest', due.map(r => r.key));
+        for (const r of due) seen[r.key] = Date.now();
+        setJSON('rb_almanacSeen', seen);
       }
       if (logChanged) {
         const cutoff = Date.now() - 60 * 86400000;
@@ -282,7 +303,9 @@ addEventListener('checkNotifications', async (resolve, reject) => {
         const price = entry && typeof entry === 'object' ? entry.price : null;
         const last = entry && typeof entry === 'object' ? entry.last : null;
         const lv = live && live[String(a.itemId)];
-        const liveRef = lv ? (lv.high != null ? lv.high : lv.low) : null;
+        // An hour or day average, not one trade that could be anything.
+        const lp = lv ? liveOf(a.itemId) : null;
+        const liveRef = lp ? (lp.buy != null ? lp.buy : lp.sell) : null;
         const chg = price && last ? ((price - last) / last) * 100 : null;
         const t = a.price || 0, pct = a.pct || 0;
         let hit = null, msg = '';
@@ -297,7 +320,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
         if (hit == null) continue; // no price this run: leave state alone
         const key = String(a.id);
         const was = key in active ? active[key] : !!a.active;
-        if (hit && !was) { queue('Alert: ' + a.name, msg); fired.push({ id: a.id, at: Date.now() }); }
+        if (hit && !was) { queue('Alert: ' + a.name, msg, 'mine', 'price_alert'); fired.push({ id: a.id, at: Date.now() }); }
         active[key] = hit;
       }
       setJSON('rb_alertActive', active);
@@ -356,16 +379,14 @@ addEventListener('checkNotifications', async (resolve, reject) => {
             return `${m.name}: ${parts.join(', ')}`;
           });
           if (movers.length > top.length) lines.push(`+${movers.length - top.length} more`);
-          queue(`Watchlist — ${movers.length} item${movers.length === 1 ? '' : 's'} moving`, lines.join('\n'));
+          queue(`Watchlist — ${movers.length} item${movers.length === 1 ? '' : 's'} moving`, lines.join('\n'), 'digest', 'watchlist_digest');
           CapacitorKV.set('rb_watchlistDigestLastSent', String(now));
         }
       }
     }
 
-    // --- Portfolio digest (GE price only — the runner has no access to
-    // the wiki's separate live buy/sell feed api.js's own version uses,
-    // just the raw gazbot dump it already fetched above for the watchlist
-    // digest) ---
+    // --- Portfolio digest: what selling really gets you, like api.js, unless
+    // that price is obviously broken or missing (then the guide price) ---
     if (portfolioSettings.enabled && portfolioPositions.length && dump) {
       const intervalMs = (portfolioSettings.intervalHours || 0.25) * 3600000;
       const lastSentMs = parseInt(kvGet('rb_portfolioDigestLastSent') || '0', 10);
@@ -374,8 +395,10 @@ addEventListener('checkNotifications', async (resolve, reject) => {
         const rows = [];
         for (const pos of portfolioPositions) {
           const entry = dump[String(pos.id)];
-          const price = entry && typeof entry === 'object' ? entry.price : (typeof entry === 'number' ? entry : null);
-          if (price == null) continue;
+          const guide = entry && typeof entry === 'object' ? entry.price : (typeof entry === 'number' ? entry : null);
+          if (guide == null) continue;
+          const sell = liveOf(pos.id).sell;
+          const price = sell && sell <= guide * 5 && sell >= guide / 5 ? sell : guide;
           const value = price * pos.quantity;
           const pl = value - pos.costBasis * pos.quantity;
           totalValue += value; totalPL += pl;
@@ -394,12 +417,13 @@ addEventListener('checkNotifications', async (resolve, reject) => {
           const sign = n => (n > 0 ? '+' : '') + shortGp(n);
           rows.sort((a, b) => Math.abs(b.pl) - Math.abs(a.pl));
           queue(`Portfolio ${sign(totalPL)} · ${rows.length} position${rows.length === 1 ? '' : 's'} · worth ${shortGp(totalValue)}`,
-            rows.map(r => `${r.pl >= 0 ? '▲' : '▼'} ${r.name}  ${sign(r.pl)} (${shortGp(r.price)} ea)`).join('\n'));
+            rows.map(r => `${r.pl >= 0 ? '▲' : '▼'} ${r.name}  ${sign(r.pl)} (${shortGp(r.price)} ea)`).join('\n'), 'digest', 'portfolio_digest');
           CapacitorKV.set('rb_portfolioDigestLastSent', String(Date.now()));
         }
       }
     }
 
+    if (inboxPending.length) setJSON('rb_inboxPending', [...getJSON('rb_inboxPending', []), ...inboxPending].slice(-100));
     if (notifications.length) CapacitorNotifications.schedule(notifications);
     resolve();
   } catch (err) {

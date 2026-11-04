@@ -23081,6 +23081,203 @@
     }
   });
 
+  // src/backend-js/almanac-signals.js
+  var require_almanac_signals = __commonJS({
+    "src/backend-js/almanac-signals.js"(exports, module) {
+      var DAY = 864e5;
+      var TAX = 0.02;
+      var MIN_EVENTS = 7;
+      var MIN_RATE = 0.6;
+      var MIN_RATE_MINE = 0.5;
+      var MIN_PEAK_PCT = 5;
+      var MIN_DAILY_GP = 5e6;
+      var NOW_WINDOW = 2;
+      var ESTIMATE_WINDOW = 7;
+      var SOON_DAYS = 30;
+      var OTHER_NOW_CAP = 15;
+      var OTHER_SOON_CAP = 15;
+      var toMs = (s) => Date.parse(s + "T00:00:00Z");
+      var toDate = (ms) => new Date(ms).toISOString().slice(0, 10);
+      var median = (arr) => {
+        const s = [...arr].sort((a, b) => a - b);
+        const m = Math.floor(s.length / 2);
+        return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+      };
+      function uniqueEvents(events) {
+        const byStart = /* @__PURE__ */ new Map();
+        for (const e of events) {
+          const had = byStart.get(e[1]);
+          if (!had || e[0] > had[0]) byStart.set(e[1], e);
+        }
+        return [...byStart.values()].sort((a, b) => a[1] < b[1] ? -1 : 1);
+      }
+      function estimateNextStart(events) {
+        const starts = events.map((e) => toMs(e[1])).slice(-9);
+        const gaps = starts.slice(1).map((s, i) => s - starts[i]);
+        if (!gaps.length) return null;
+        return starts[starts.length - 1] + median(gaps);
+      }
+      function rate(phases, names, side) {
+        let hit = 0, total = 0;
+        for (const n of names) {
+          const p = phases && phases[n];
+          if (!p) continue;
+          hit += p[side] || 0;
+          total += p.total || 0;
+        }
+        return { hit, total, rate: total ? hit / total : 0 };
+      }
+      var fmtPct = (n) => Math.round(n * 10) / 10;
+      var dxpDayText = (offset) => offset >= 0 ? `day ${Math.round(offset) + 1} of DXP` : `${Math.abs(Math.round(offset))} days before DXP`;
+      function patternsFor(entry) {
+        const t = entry.timing;
+        if (!t || (t.n_events || 0) < MIN_EVENTS) return [];
+        const out = [];
+        const rises = rate(entry.phases, ["anticipation"], "rise");
+        const falls = rate(entry.phases, ["early_event", "late_event"], "drop");
+        const after = rate(entry.phases, ["post_event"], "drop");
+        const peak = t.best_sell_pct_median;
+        const riser = rises.rate >= MIN_RATE && peak >= MIN_PEAK_PCT;
+        const riserMine = rises.rate >= MIN_RATE_MINE && peak >= MIN_PEAK_PCT;
+        if (t.best_sell_day_offset != null) out.push({
+          type: "sell",
+          action: "sell",
+          offset: t.best_sell_day_offset,
+          strong: riser,
+          mineOk: riserMine,
+          strength: rises.rate * peak,
+          evidence: `Usually peaks around ${dxpDayText(t.best_sell_day_offset)}, typically ${fmtPct(peak)}% up. Based on ${t.n_events} DXPs.`,
+          peak
+        });
+        if (t.pre_trough_offset_median != null && t.pre_trough_offset_median < 0) out.push({
+          type: "buy_pre",
+          action: "buy",
+          offset: t.pre_trough_offset_median,
+          strong: riser,
+          mineOk: riserMine,
+          strength: rises.rate * peak,
+          evidence: `Usually bottoms ${Math.abs(Math.round(t.pre_trough_offset_median))} days before DXP. Rose into DXP in ${rises.hit} of ${rises.total}, typically peaking ${fmtPct(peak)}% up.`,
+          peak
+        });
+        if (t.best_buy_day_offset != null) {
+          const deepDip = t.best_buy_pct_median <= -MIN_PEAK_PCT;
+          out.push({
+            type: "buy_dip",
+            action: "buy",
+            offset: t.best_buy_day_offset,
+            strong: deepDip && falls.rate >= MIN_RATE,
+            mineOk: deepDip && falls.rate >= MIN_RATE_MINE,
+            strength: falls.rate * Math.abs(t.best_buy_pct_median),
+            evidence: `Usually bottoms around ${dxpDayText(t.best_buy_day_offset)}, typically ${fmtPct(Math.abs(t.best_buy_pct_median))}% down. Fell during ${falls.hit} of ${falls.total} DXP stretches.`
+          });
+        }
+        if (t.post_trough_offset_median != null) out.push({
+          type: "buy_post",
+          action: "buy",
+          offset: t.post_trough_offset_median,
+          strong: riser && after.rate >= 0.5,
+          mineOk: riserMine && after.rate >= 0.5,
+          strength: after.rate * peak,
+          evidence: `Usually bottoms after DXP ends. Fell afterward in ${after.hit} of ${after.total}, and typically peaks ${fmtPct(peak)}% up next time.`,
+          peak
+        });
+        return out;
+      }
+      function computeSignals({ intel, events, items, holdings = [], watched = [], today = Date.now() }) {
+        const dayMs = Math.floor(today / DAY) * DAY;
+        const list = uniqueEvents(events);
+        const upcoming = list.filter((e) => toMs(e[1]) > dayMs);
+        const started = list.filter((e) => toMs(e[1]) <= dayMs);
+        const est = upcoming.length ? null : estimateNextStart(list);
+        const next = upcoming.length ? upcoming[0] : null;
+        const nextStart = next ? toMs(next[1]) : est;
+        const nextEstimated = !next;
+        const last = started[started.length - 1] || null;
+        const byId = new Map((items || []).map((i) => [String(i.id), i]));
+        const heldByName = new Map(holdings.map((h) => [h.name.toLowerCase(), h]));
+        const watchSet = new Set(watched.map(String));
+        const now = [], soon = [];
+        for (const [id, entry] of Object.entries(intel || {})) {
+          if (id === "_meta" || !entry || !entry.name) continue;
+          const item = byId.get(String(id));
+          if (!item || item.untradeable) continue;
+          const held = heldByName.get(String(entry.name).toLowerCase());
+          const star = watchSet.has(String(id));
+          const mine = !!held || star;
+          const dailyGp = (item.liveUnits || 0) * (item.liveBuy || item.high || 0);
+          for (const p of patternsFor(entry)) {
+            if (!p.strong && !(mine && p.mineOk)) continue;
+            if (!mine && dailyGp < MIN_DAILY_GP) continue;
+            const anchors = [];
+            if (p.type === "buy_pre") {
+              if (nextStart) anchors.push({ start: nextStart, estimated: nextEstimated });
+            } else {
+              if (last) anchors.push({ start: toMs(last[1]), end: toMs(last[2]), estimated: false });
+              if (next) anchors.push({ start: toMs(next[1]), end: toMs(next[2]), estimated: false });
+            }
+            for (const a of anchors) {
+              const day = a.start + p.offset * DAY;
+              if (p.type === "buy_post" && a.end && dayMs < a.end) continue;
+              const reach = a.estimated ? ESTIMATE_WINDOW : NOW_WINDOW;
+              const diff = Math.round((day - dayMs) / DAY);
+              if (diff < -reach || diff > SOON_DAYS) continue;
+              const row = {
+                key: `${id}_${p.type}_${toDate(a.start)}`,
+                id,
+                name: entry.name,
+                action: p.action,
+                type: p.type,
+                group: held ? "held" : star ? "watched" : "other",
+                star,
+                strength: p.strength,
+                evidence: p.evidence,
+                day: toDate(day),
+                inDays: diff,
+                estimated: a.estimated,
+                peak: p.peak || 0,
+                liveBuy: item.liveBuy || null,
+                liveSell: item.liveSell || null,
+                guide: item.high || null
+              };
+              if (held) {
+                row.quantity = held.quantity;
+                row.breakEven = held.cost ? Math.ceil(held.cost / (1 - TAX)) : null;
+                if (p.action === "sell" && row.breakEven && row.liveSell && row.liveSell < row.breakEven) row.belowBreakEven = true;
+              }
+              (diff <= reach ? now : soon).push(row);
+              break;
+            }
+          }
+        }
+        const rank = { held: 0, watched: 1, other: 2 };
+        const order = (a, b) => (a.action === b.action ? 0 : a.action === "sell" ? -1 : 1) || rank[a.group] - rank[b.group] || b.strength - a.strength;
+        const capOthers = (rows, cap) => {
+          let others = 0;
+          return rows.filter((r) => r.group !== "other" || ++others <= cap);
+        };
+        return {
+          now: capOthers(now.sort(order), OTHER_NOW_CAP),
+          soon: capOthers(soon.sort((a, b) => rank[a.group] - rank[b.group] || a.inDays - b.inDays || b.strength - a.strength), OTHER_SOON_CAP),
+          nextDxp: nextStart ? { start: toDate(nextStart), end: next ? next[2] : null, estimated: nextEstimated } : null,
+          lastDxp: last ? { start: last[1], end: last[2] } : null
+        };
+      }
+      function buildDigest(rows) {
+        if (!rows.length) return null;
+        const sells = rows.filter((r) => r.action === "sell");
+        const buys = rows.filter((r) => r.action === "buy");
+        const names = (list) => {
+          const shown = list.slice(0, 3).map((r) => r.name);
+          return shown.join(", ") + (list.length > 3 ? `, and ${list.length - 3} more` : "");
+        };
+        const title = "Almanac: " + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(", ");
+        const body = [sells.length && `Sell now: ${names(sells)}`, buys.length && `Buy now: ${names(buys)}`].filter(Boolean).join("\n");
+        return { title, body };
+      }
+      module.exports = { computeSignals, buildDigest, uniqueEvents, estimateNextStart };
+    }
+  });
+
   // src/backend-js/_pyround.js
   var require_pyround = __commonJS({
     "src/backend-js/_pyround.js"(exports, module) {
@@ -24657,6 +24854,7 @@
       var { createLiveHistory } = require_live_history();
       var { createSync } = require_sync();
       var { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require_update_risks();
+      var { computeSignals, buildDigest, uniqueEvents } = require_almanac_signals();
       var SIGNAL_TREND_DAYS = 7;
       var DISCORD_WEBHOOK_RE = /^https:\/\/(?:(?:ptb|canary)\.)?discord(?:app)?\.com\/api\/(?:v\d+\/)?webhooks\/\d+\/[\w-]+\/?(?:\?[\w=&-]*)?$/;
       function localDateStr(d = /* @__PURE__ */ new Date()) {
@@ -25215,7 +25413,8 @@
                   itemNames[String(it.id)] = it.name;
                 }
               }
-              const events = (await loadEvents(dataDir)).filter((e) => e[1] >= ALMANAC_STATS_SINCE);
+              const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
+              const events = uniqueEvents((await loadEvents(dataDir)).filter((e) => e[1] >= ALMANAC_STATS_SINCE && e[2] < todayStr));
               const out = await computeDxpData(
                 [...historyPopulatedIds],
                 async (id) => {
@@ -25828,6 +26027,60 @@
           }
         }
         const CAL_PRIORITY = ["dxp", "release", "seasonal", "marketplace", "livestream", "maintenance", "other"];
+        async function getAlmanacSignals() {
+          const { loadEvents } = require_dxp_intelligence();
+          const intel = await storage2.readJSON(path.join(dataDir, "dxp_intelligence.json"), null);
+          if (!intel) return { now: [], soon: [], nextDxp: null, lastDxp: null };
+          const latest = await storage2.readJSON(path.join(dataDir, "latest.json"), {});
+          const portfolio = await readPortfolio();
+          const held = /* @__PURE__ */ new Map();
+          for (const p of portfolio.positions) {
+            if (p.status !== "open" || !(p.quantity > 0)) continue;
+            const k = p.item_name.toLowerCase();
+            const h = held.get(k) || { name: p.item_name, quantity: 0, spent: 0 };
+            h.quantity += p.quantity;
+            h.spent += p.quantity * (p.cost_basis || 0);
+            held.set(k, h);
+          }
+          const holdings = [...held.values()].map((h) => ({ name: h.name, quantity: h.quantity, cost: h.spent / h.quantity }));
+          const events = (await loadEvents(dataDir)).filter((e) => e[1] >= ALMANAC_STATS_SINCE);
+          const out = computeSignals({
+            intel,
+            events,
+            items: latest.items || [],
+            holdings,
+            watched: [...store2.get("watchlist", []), ...store2.get("dxpWatchlist", [])]
+          });
+          const monthAgo = Date.now() - 30 * 864e5;
+          for (const r of [...out.now, ...out.soon]) {
+            if (r.action !== "buy" || !r.peak || !r.liveBuy) continue;
+            const points = await getHistoryPoints(r.id);
+            evictHistory(r.id);
+            const recent = (points || []).filter((p) => p.timestamp >= monthAgo && p.price).map((p) => p.price).sort((a, b) => a - b);
+            if (!recent.length) continue;
+            const usual = recent[Math.floor(recent.length / 2)];
+            const runUp = (r.liveBuy - usual) / usual * 100;
+            if (runUp >= r.peak / 2) {
+              r.priceHigh = true;
+              r.runUpPct = Math.round(runUp);
+            }
+          }
+          return out;
+        }
+        async function getAlmanacNotifications() {
+          const settings = store2.get("dxpNotificationSettings", { enabled: false, buyAlerts: true, sellAlerts: true });
+          if (!settings.enabled) return [];
+          const { now } = await getAlmanacSignals();
+          const log = store2.get("almanacDigestLog", {});
+          const fresh = now.filter((r) => !log[r.key] && (r.action === "sell" ? settings.sellAlerts : settings.buyAlerts));
+          if (!fresh.length) return [];
+          const stamp = Date.now();
+          for (const r of fresh) log[r.key] = stamp;
+          for (const k of Object.keys(log)) if (stamp - log[k] > 120 * 864e5) delete log[k];
+          store2.set("almanacDigestLog", log);
+          const digest = buildDigest(fresh);
+          return digest ? [digest] : [];
+        }
         const updateRiskPostsFile = path.join(dataDir, "update_risk_posts.json");
         async function loadUpdateRiskPosts() {
           const saved = await storage2.readJSON(updateRiskPostsFile, {});
@@ -28659,57 +28912,13 @@
               );
             }
           }
-          const watchlist = store2.get("dxpWatchlist", []);
-          const dxpData = watchlist.length ? await storage2.readJSON(path.join(dataDir, "dxp_intelligence.json"), null) : null;
-          const daysBetween = (a, b) => Math.round((b - a) / 864e5);
-          const dxpDayLabel = (n, lastDay) => {
-            const days = (c) => `${c} day${c === 1 ? "" : "s"}`;
-            if (n < 0) return `${days(-n)} before DXP starts`;
-            if (n === 0) return "the day DXP starts";
-            if (n <= lastDay) return `day ${n + 1} of DXP`;
-            return `${days(n - lastDay)} after DXP ended`;
-          };
           for (const [announced, start, end] of events) {
             if (settings.announceAlerts && todayStr === announced) {
               fire(
                 `announce_${announced}`,
                 "\u{1F4C5} DXP Announced",
-                `A new Double XP event has been announced (${start} to ${end}). Check your Almanac watchlist for buy timing.`
+                `A new Double XP event has been announced (${start} to ${end}). Check Notifications > Almanac for what to buy.`
               );
-              continue;
-            }
-            const startDt = /* @__PURE__ */ new Date(start + "T00:00:00Z");
-            const endDt = /* @__PURE__ */ new Date(end + "T00:00:00Z");
-            const baselineDt = new Date(startDt.getTime() - 21 * 864e5);
-            const afterDt = new Date(endDt.getTime() + 21 * 864e5);
-            if (today < baselineDt || today > afterDt) continue;
-            const dayOffset = daysBetween(startDt, /* @__PURE__ */ new Date(todayStr + "T00:00:00Z"));
-            const lastDay = daysBetween(startDt, endDt);
-            for (const itemId of dxpData ? watchlist : []) {
-              const entry = dxpData[itemId];
-              const timing = entry?.timing;
-              if (!timing) continue;
-              const name = entry.name || itemId;
-              if (settings.buyAlerts && timing.best_buy_day_offset != null) {
-                const std = Math.max(timing.best_buy_day_std || 0, 0.5);
-                if (Math.abs(dayOffset - timing.best_buy_day_offset) <= std) {
-                  fire(
-                    `${itemId}_buy_${start}_${todayStr}`,
-                    "\u{1F4C5} DXP Buy Window",
-                    `${name} is in its usual best-buy window: ${dxpDayLabel(dayOffset, lastDay)}.`
-                  );
-                }
-              }
-              if (settings.sellAlerts && timing.best_sell_day_offset != null) {
-                const std = Math.max(timing.best_sell_day_std || 0, 0.5);
-                if (Math.abs(dayOffset - timing.best_sell_day_offset) <= std) {
-                  fire(
-                    `${itemId}_sell_${start}_${todayStr}`,
-                    "\u{1F4C5} DXP Sell Window",
-                    `${name} is in its usual best-sell window: ${dxpDayLabel(dayOffset, lastDay)}.`
-                  );
-                }
-              }
             }
           }
           if (logChanged) {
@@ -28810,6 +29019,48 @@
           store2.set("portfolioDigestLastSentAt", Date.now());
           return digestMessage(rows, totalPL, totalValue);
         }
+        const INBOX_MAX = 300;
+        function addToInbox(kind, source, notes, replace) {
+          const list = notes.filter((n) => n && n.title);
+          if (!list.length) return;
+          let inbox = store2.get("inbox", []);
+          if (replace) inbox = inbox.filter((e) => e.source !== source);
+          const now = Date.now();
+          const added = list.map((n, i) => ({ id: `${now}_${source}_${i}`, kind, source, title: n.title, body: n.body || "", at: now, read: false }));
+          store2.set("inbox", [...added, ...inbox].slice(0, INBOX_MAX));
+        }
+        const toInbox = (kind, source, check, replace) => async (...args) => {
+          const result = await check(...args);
+          try {
+            addToInbox(kind, source, Array.isArray(result) ? result : [result], replace);
+          } catch (e) {
+            console.error("[Inbox] save failed:", e.message);
+          }
+          return result;
+        };
+        function getInbox() {
+          return store2.get("inbox", []);
+        }
+        function addBackgroundInbox(entries) {
+          const log = store2.get("almanacDigestLog", {});
+          let inbox = store2.get("inbox", []);
+          entries.forEach((e, i) => {
+            if (e.source === "watchlist_digest" || e.source === "portfolio_digest") inbox = inbox.filter((x) => x.source !== e.source);
+            inbox.unshift({ id: `${e.at}_${e.source}_bg${i}`, kind: e.kind, source: e.source, title: e.title, body: e.body || "", at: e.at, read: false });
+            for (const key of e.seen || []) log[key] = e.at;
+          });
+          inbox.sort((a, b) => b.at - a.at);
+          store2.set("inbox", inbox.slice(0, INBOX_MAX));
+          store2.set("almanacDigestLog", log);
+        }
+        function markInboxRead(kind) {
+          store2.set("inbox", store2.get("inbox", []).map((e) => !kind || e.kind === kind ? { ...e, read: true } : e));
+          return { success: true };
+        }
+        function clearInbox(id) {
+          store2.set("inbox", id ? store2.get("inbox", []).filter((e) => e.id !== id) : []);
+          return { success: true };
+        }
         async function getDueReminders() {
           const reminders = store2.get("reminders", []);
           if (!reminders.length) return [];
@@ -28863,7 +29114,7 @@
           sync: createSync({ dataDir, store: store2, writePortfolio, buildExportBundle }),
           getUpdateRisks,
           dismissUpdateRisk,
-          getUpdateRiskNotifications,
+          getUpdateRiskNotifications: toInbox("upcoming", "update_risk", getUpdateRiskNotifications),
           getUpdateRiskSettings,
           setUpdateRiskSettings,
           syncLiveHistory: () => liveHistory.sync(),
@@ -28886,13 +29137,13 @@
           saveBuyGoal,
           deleteBuyGoal,
           updateBuyGoalTotals,
-          getBuyGoalNotifications,
+          getBuyGoalNotifications: toInbox("mine", "buy_goal", getBuyGoalNotifications),
           recordOpportunities,
           getOpportunityHistory,
           refreshStaleHistory,
           getDxpNewsDetections,
           resolveDxpNews,
-          getDxpNewsNotifications,
+          getDxpNewsNotifications: toInbox("almanac", "dxp_news", getDxpNewsNotifications),
           parseDxpDates,
           parseDxpTease,
           getNewsCalendar,
@@ -28925,7 +29176,7 @@
           getAlerts,
           saveAlert,
           deleteAlert,
-          getTriggeredAlerts,
+          getTriggeredAlerts: toInbox("mine", "price_alert", getTriggeredAlerts),
           markAlertsFiredInBackground,
           // overrides
           getOverrides,
@@ -28937,10 +29188,17 @@
           runAutoBackup,
           // notification checks (see comment above — what to fire is shared,
           // how to actually show it natively is platform-specific glue)
-          getDxpNotifications,
-          getWatchlistDigest,
-          getPortfolioDigest,
-          getDueReminders
+          getDxpNotifications: toInbox("almanac", "dxp", getDxpNotifications),
+          getWatchlistDigest: toInbox("digest", "watchlist_digest", getWatchlistDigest, true),
+          getPortfolioDigest: toInbox("digest", "portfolio_digest", getPortfolioDigest, true),
+          getDueReminders: toInbox("mine", "reminder", getDueReminders),
+          // Notifications tab > Inbox
+          getInbox,
+          addBackgroundInbox,
+          markInboxRead,
+          clearInbox,
+          getAlmanacSignals,
+          getAlmanacNotifications: toInbox("almanac", "almanac_digest", getAlmanacNotifications)
         };
       }
       module.exports = { createGeniusApi: createGeniusApi2, isValidDiscordWebhook };
@@ -31317,19 +31575,14 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
   async function syncRunnerState() {
     try {
       const a = await ensureApi();
-      const [data, dxpData, portfolio] = await Promise.all([
+      const [data, portfolio] = await Promise.all([
         a.getData().catch(() => ({ items: [] })),
-        a.getDxpIntelligence().catch(() => ({})),
         a.getPortfolio().catch(() => ({ positions: [] }))
       ]);
       const namesById = Object.fromEntries((data.items || []).map((i) => [String(i.id), i.name]));
       const withNames = (ids) => ids.map((id) => ({ id, name: namesById[String(id)] || String(id) }));
-      const dxpWatchlist = store.get("dxpWatchlist", []);
-      const dxpTiming = {};
-      for (const id of dxpWatchlist) {
-        const t = dxpData[id]?.timing;
-        if (t) dxpTiming[id] = t;
-      }
+      const signals = await a.getAlmanacSignals().catch(() => ({ now: [], soon: [] }));
+      const almanacRows = [...signals.now, ...signals.soon].map((r) => ({ key: r.key, name: r.name, action: r.action, day: r.day, estimated: r.estimated }));
       const events = await storage.readJSON(DATA_DIR + "/dxp_events.json", []).catch(() => []);
       const idByName = Object.fromEntries((data.items || []).map((i) => [i.name.toLowerCase(), i.id]));
       const openPositions = (portfolio.positions || []).filter((p) => p.status === "open").map((p) => ({ id: idByName[(p.item_name || "").toLowerCase()], name: p.item_name, quantity: p.quantity, costBasis: p.cost_basis })).filter((p) => p.id != null);
@@ -31338,8 +31591,8 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         event: "syncState",
         details: {
           watchlist: withNames(store.get("watchlist", [])),
-          dxpWatchlist: withNames(dxpWatchlist),
-          dxpTiming,
+          almanacRows,
+          almanacSeen: store.get("almanacDigestLog", {}),
           dxpEvents: events,
           dxpSettings: store.get("dxpNotificationSettings", {
             enabled: false,
@@ -31375,8 +31628,17 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       console.error("[GEnius] Background runner sync failed:", e.message);
     }
   }
+  async function collectBackgroundInbox(a) {
+    try {
+      const r = await BackgroundRunner.dispatchEvent({ label: "com.vonderthwood.genius.background.task", event: "collectInbox", details: {} });
+      if (r && r.entries && r.entries.length) a.addBackgroundInbox(r.entries);
+    } catch (e) {
+      console.error("[GEnius] collectInbox failed:", e.message);
+    }
+  }
   async function runNotificationChecks() {
     const a = await ensureApi();
+    await collectBackgroundInbox(a);
     try {
       const r = await BackgroundRunner.dispatchEvent({ label: "com.vonderthwood.genius.background.task", event: "collectFiredAlerts", details: {} });
       await a.markAlertsFiredInBackground(r && r.fired || []);
@@ -31385,6 +31647,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     }
     for (const n of await a.getUpdateRiskNotifications()) await fireNotification(n.title, n.body);
     for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
+    for (const n of await a.getAlmanacNotifications()) await fireNotification(n.title, n.body);
     const digest = await a.getWatchlistDigest();
     if (digest) await fireNotification(digest.title, digest.body);
     const portfolioDigest = await a.getPortfolioDigest();
@@ -31476,6 +31739,14 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       setUpdateRiskSettings: async (s) => (await ensureApi()).setUpdateRiskSettings(s),
       getUpdateRisks: async () => (await ensureApi()).getUpdateRisks(),
       dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
+      getAlmanacSignals: async () => (await ensureApi()).getAlmanacSignals(),
+      getInbox: async () => {
+        const a2 = await ensureApi();
+        await collectBackgroundInbox(a2);
+        return a2.getInbox();
+      },
+      markInboxRead: async (kind) => (await ensureApi()).markInboxRead(kind),
+      clearInbox: async (id) => (await ensureApi()).clearInbox(id),
       syncRole: "phone",
       syncStatus: async () => (await ensureApi()).sync.clientStatus(),
       syncScan: scanSyncQr,

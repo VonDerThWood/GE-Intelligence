@@ -5368,6 +5368,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     ),
 
     h(UpdateRisksBar, {scope:'yours'}),
+    h(AlmanacFlagsBar),
     h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
     h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
@@ -5850,6 +5851,7 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
 
   return h('div', null,
     h(UpdateRisksBar, {scope:'watched'}),
+    h(AlmanacFlagsBar, {scope:'watched'}),
     description && h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
 
     // ── Mode pills ──────────────────────────────────────────────────────────
@@ -8488,6 +8490,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     h('div', {style:{fontSize:12, color:T.gold, fontStyle:'italic', marginBottom:10}},
       'The market has seasons too. This is their almanac.'
     ),
+    h('div', {style:{margin:'0 -12px 10px'}}, h(UpdateRisksBar), h(AlmanacFlagsBar)),
     h('div', {style:{display:'flex', gap:6, marginBottom:16}},
       [
         {id:'dxp',      label:'📅 DXP Weekend'},
@@ -10122,6 +10125,10 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     ),
 
     h('div',{className:'ge-section-head', style:{fontSize:13}},'Notifications'),
+    h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:14}},
+      h('input',{type:'checkbox',defaultChecked:notifEmojiOn(),onChange:e=>{ try { localStorage.setItem('genius_notif_emoji', e.target.checked ? '1' : '0'); } catch {} refreshInbox(); }}),
+      h('span',null,'Use emojis instead of colored dots for unread notifications')
+    ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Desktop Notifications'),
       h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
@@ -15137,7 +15144,7 @@ function UpdateRisksBar({scope = 'yours'}) {
   return h('div', {
     style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
     title:'See everything that may be affected',
-    onClick:()=>window.dispatchEvent(new CustomEvent('genius-goto', {detail:'update_risks'})),
+    onClick:()=>{ _alertsInitialPill = 'upcoming'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
     h('span', {style:{flex:1}}, '⚠️ ', h('b', {style:{color:T.gold}}, 'Upcoming updates'), ' may affect '+risks.length+' of your item'+(risks.length===1?'':'s'),
       exposed > 0 ? ' · '+fmt.gp(exposed)+'gp held' : '', updates > 1 ? ' · '+updates+' updates' : ''),
@@ -15188,6 +15195,185 @@ function UpdateRisksTab({items, onSelect, description}) {
       section('Named in update posts', shown.filter(r => r.group === 'other'))));
 }
 
+// The Alerts tab's pills (Ben, 2026-11-04). Set _alertsInitialPill before
+// navigating to open a specific one. Notifications and Almanac are built next.
+let _alertsInitialPill = null;
+
+// Each pill has a color, or an emoji for people who can't tell the colors apart
+// (Settings > Notifications). Pills map to the Inbox entry kinds they cover.
+const NOTIF_MARKS = {
+  notifications: {color:'#4a9eff', emoji:'📥', label:'Inbox'},
+  upcoming:      {color:'#f0a030', emoji:'⚠️', label:'Upcoming Changes'},
+  almanac:       {color:'#4caf50', emoji:'🌱', label:'Almanac'},
+  mine:          {color:'#e05050', emoji:'🔔', label:'My Alerts'},
+};
+const notifEmojiOn = () => { try { return localStorage.getItem('genius_notif_emoji') === '1'; } catch { return false; } };
+// Which marks the unread entries light up. Every unread entry lights the Inbox.
+const unreadMarks = inbox => {
+  const unread = inbox.filter(e => !e.read);
+  if (!unread.length) return [];
+  return ['notifications', ...['upcoming','almanac','mine'].filter(k => unread.some(e => e.kind === k))];
+};
+const refreshInbox = () => window.dispatchEvent(new CustomEvent('genius-inbox-changed'));
+function useInbox() {
+  const [inbox, setInbox] = useState([]);
+  useEffect(() => {
+    let live = true;
+    const load = () => window.genius?.getInbox?.().then(l => { if (live && l) setInbox(l); }).catch(() => {});
+    load();
+    const timer = setInterval(load, 30000);
+    window.addEventListener('genius-inbox-changed', load);
+    return () => { live = false; clearInterval(timer); window.removeEventListener('genius-inbox-changed', load); };
+  }, []);
+  return inbox;
+}
+// One dot or emoji. With several marks it steps through them.
+function NotifMark({marks, style}) {
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    if (marks.length < 2) return;
+    const timer = setInterval(() => setStep(s => s + 1), 1500);
+    return () => clearInterval(timer);
+  }, [marks.length]);
+  if (!marks.length) return null;
+  const mark = NOTIF_MARKS[marks[step % marks.length]];
+  const title = 'New: ' + marks.map(m => NOTIF_MARKS[m].label).join(', ');
+  return notifEmojiOn()
+    ? h('span', {title, style:{fontSize:12, lineHeight:1, transition:'opacity .3s', ...style}}, mark.emoji)
+    : h('span', {title, style:{width:8, height:8, borderRadius:'50%', background:mark.color, display:'inline-block', flexShrink:0, transition:'background .5s', ...style}});
+}
+
+function InboxView({onOpenPill}) {
+  const [list, setList] = useState(null);
+  const load = () => window.genius.getInbox().then(setList);
+  useEffect(() => {
+    // Show what's unread on arrival, then count it as seen.
+    load().then(() => window.genius.markInboxRead()).then(refreshInbox);
+  }, []);
+  const clear = async id => { await window.genius.clearInbox(id); await load(); refreshInbox(); };
+  return h('div', null,
+    h('div', {style:{padding:'8px 14px', borderBottom:'1px solid '+T.border, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}},
+      'Here lies all of the unread ', h('s', null, 'emails'), ' alerts we flood you with.'),
+    h('div', {style:{padding:14}},
+      list && list.length > 0 && h('div', {style:{display:'flex', justifyContent:'flex-end', marginBottom:8}},
+        h('button', {className:'ge-btn', style:{fontSize:11}, onClick:()=>clear()}, 'Clear all')),
+      list && list.length === 0 && h('div', {className:'empty'}, h('p', null, 'Nothing here. New notifications will land here until you clear them.')),
+      (list || []).map(e => {
+        const pill = NOTIF_MARKS[e.kind] ? e.kind : null;
+        return h('div', {key:e.id, style:{padding:'10px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:10, alignItems:'flex-start'}},
+          h('span', {style:{width:14, paddingTop:5, flexShrink:0}}, !e.read && h(NotifMark, {marks:[pill || 'notifications']})),
+          h('div', {style:{flex:1, minWidth:0}},
+            h('div', {style:{color:e.read ? T.text : T.textBright, fontWeight:e.read ? 'normal' : 'bold', cursor:pill ? 'pointer' : 'default'}, onClick:()=>pill && onOpenPill(pill)}, e.title),
+            h('div', {style:{color:T.textDim, whiteSpace:'pre-line'}}, e.body),
+            h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, new Date(e.at).toLocaleString())),
+          h('button', {className:'ge-btn', style:{padding:'2px 8px', fontSize:11}, onClick:()=>clear(e.id)}, 'Clear'));
+      })));
+}
+
+// Almanac flags, shared by the pill and the bars (Ben, 2026-11-04).
+let _almanacSignals = null, _almanacSignalsAt = 0;
+function loadAlmanacSignals(fresh) {
+  if (!window.genius?.getAlmanacSignals) return Promise.resolve({now:[], soon:[]});
+  if (!fresh && _almanacSignals && Date.now() - _almanacSignalsAt < 300000) return _almanacSignals;
+  _almanacSignalsAt = Date.now();
+  _almanacSignals = window.genius.getAlmanacSignals().catch(() => ({now:[], soon:[]}));
+  return _almanacSignals;
+}
+// The bar on Dashboard, Portfolio, Watchlist and the Almanac tab.
+function AlmanacFlagsBar({scope = 'yours'}) {
+  const [data, setData] = useState(null);
+  useEffect(() => { let live = true; loadAlmanacSignals().then(d => { if (live) setData(d); }); return () => { live = false; }; }, []);
+  const rows = (data?.now || []).filter(r => scope === 'watched' ? r.star : r.group !== 'other');
+  if (!rows.length) return null;
+  const sells = rows.filter(r => r.action === 'sell').length, buys = rows.length - sells;
+  return h('div', {
+    style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+NOTIF_MARKS.almanac.color, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
+    title:'See what the Almanac is flagging',
+    onClick:()=>{ _alertsInitialPill = 'almanac'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
+  },
+    h('span', {style:{flex:1}}, '🌱 ', h('b', {style:{color:NOTIF_MARKS.almanac.color}}, 'Almanac'), ' says of your items: ',
+      [sells && sells+' to sell now', buys && buys+' to buy now'].filter(Boolean).join(', ')),
+    h('span', {style:{color:NOTIF_MARKS.almanac.color}}, 'View all →'));
+}
+
+const fmtDayShort = s => new Date(s + 'T12:00:00Z').toLocaleDateString(undefined, {month:'short', day:'numeric'});
+function AlmanacFlagsView({items, onSelect}) {
+  const [data, setData] = useState(null);
+  useEffect(() => { let live = true; loadAlmanacSignals(true).then(d => { if (live) setData(d); }); return () => { live = false; }; }, []);
+  const quip = h('div', {style:{padding:'8px 14px', borderBottom:'1px solid '+T.border, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}},
+    'Planting a seed of potential. (waitaminute)');
+  if (!data) return h('div', null, quip, h('div', {className:'empty'}, h('p', null, 'Loading…')));
+  const byId = id => (items || []).find(it => String(it.id) === String(id));
+  const star = r => h('span', {style:{width:16, flexShrink:0, color:T.gold}, title:r.star ? 'On your watchlist' : undefined}, r.star ? '★' : '');
+  const nameEl = r => { const it = byId(r.id); return h('b', {style:{color:T.gold, cursor:it?'pointer':'default'}, onClick:()=>it&&onSelect(it)}, r.name); };
+  const details = r => {
+    const bits = [];
+    if (r.quantity) bits.push(r.quantity.toLocaleString()+' held');
+    if (r.action === 'sell' && r.liveSell) bits.push('live sell '+fmt.gp(r.liveSell));
+    if (r.action === 'buy' && r.liveBuy) bits.push('live buy '+fmt.gp(r.liveBuy));
+    if (r.breakEven) bits.push('your break-even '+fmt.gp(r.breakEven));
+    if (r.estimated) bits.push('DXP date is an estimate, not announced');
+    return bits.join(' · ');
+  };
+  const label = r => {
+    if (r.action === 'buy' && r.priceHigh) return ['Buy now, price high', '#f0a030', 'Already '+r.runUpPct+'% above its usual price this month, so much of the rise may be gone.'];
+    if (r.belowBreakEven) return ['Sell now, below break-even', '#f0a030', 'The usual exit time is here, but live sell is below your break-even.'];
+    return r.action === 'sell' ? ['Sell now', '#e05050'] : ['Buy now', '#4caf50'];
+  };
+  const nowRow = r => {
+    const [text, color, warn] = label(r);
+    return h('div', {key:r.key, style:{padding:'10px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:8, alignItems:'flex-start'}},
+      star(r),
+      h('div', {style:{flex:1, minWidth:0}},
+        nameEl(r),
+        h('div', {style:{color:T.text}}, r.evidence),
+        warn && h('div', {style:{color, fontSize:12}}, warn),
+        h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, details(r))),
+      h('span', {className:'cat-tag', style:{color, borderColor:color, whiteSpace:'nowrap'}}, text));
+  };
+  const soonRow = r => h('div', {key:r.key, style:{padding:'8px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:8, alignItems:'flex-start'}},
+    star(r),
+    h('div', {style:{flex:1, minWidth:0}}, nameEl(r), h('div', {style:{color:T.textDim, fontSize:12}},
+      (r.action === 'sell' ? 'Start selling' : 'Start buying')+' in about '+r.inDays+' day'+(r.inDays===1?'':'s')+(r.estimated?' (estimated)':''))),
+    h('span', {style:{color:T.textDim, fontSize:12, whiteSpace:'nowrap'}}, fmtDayShort(r.day)));
+  const section = (title, list, row, color) => list.length > 0 && h('div', {style:{marginBottom:18}},
+    h('div', {className:'ge-section-head', style:color ? {color} : undefined}, title+' ('+list.length+')'), list.map(row));
+  const sells = data.now.filter(r => r.action === 'sell'), buys = data.now.filter(r => r.action === 'buy');
+  const inGroup = g => data.soon.filter(r => r.group === g);
+  const next = data.nextDxp;
+  return h('div', null, quip,
+    h('div', {style:{padding:14}},
+      h('div', {style:{fontSize:12, color:T.textDim, marginBottom:12, lineHeight:1.6}},
+        next ? 'Next Double XP: '+fmtDayShort(next.start)+(next.end ? ' to '+fmtDayShort(next.end) : '')+(next.estimated ? ' (estimated from past gaps, not announced).' : '.') : '',
+        ' Timing comes from how each item moved around past DXPs, on guide prices. Past patterns can break, so check the live price first.'),
+      !data.now.length && !data.soon.length && h('div', {className:'empty'}, h('p', null, 'Nothing flagged right now.')),
+      section('Start selling now', sells, nowRow, '#e05050'),
+      section('Start buying now', buys, nowRow, '#4caf50'),
+      section('Coming up: your portfolio', inGroup('held'), soonRow),
+      section('Coming up: your watchlists', inGroup('watched'), soonRow),
+      section('Coming up: everything else', inGroup('other'), soonRow)));
+}
+
+function AlertsArea(props) {
+  const [pill, setPill] = useState(() => { const p = _alertsInitialPill || 'notifications'; _alertsInitialPill = null; return p; });
+  const inbox = useInbox();
+  const marks = unreadMarks(inbox);
+  // Opening a pill counts its entries as seen, in the Inbox too.
+  useEffect(() => {
+    if (pill === 'notifications') return; // InboxView does this after it loads
+    window.genius?.markInboxRead?.(pill)?.then(refreshInbox);
+  }, [pill]);
+  return h('div', null,
+    h('div', {style:{display:'flex', gap:6, padding:'8px 12px', borderBottom:`1px solid ${T.border}`, flexWrap:'wrap'}},
+      [['notifications','Inbox'],['upcoming','Upcoming Changes'],['almanac','Almanac'],['mine','My Alerts']].map(([id, label]) =>
+        h('button', {key:id, className: pill===id ? 'ge-btn gold' : 'ge-btn', onClick:()=>setPill(id), style:{display:'inline-flex', alignItems:'center', gap:6}},
+          label, pill !== id && marks.includes(id) && h(NotifMark, {marks:[id]})))),
+    pill === 'notifications' && h(InboxView, {onOpenPill:setPill}),
+    pill === 'upcoming' && h(UpdateRisksTab, {items:props.items, onSelect:props.onSelect, description:TAB_DESCRIPTIONS.update_risks}),
+    pill === 'almanac' && h(AlmanacFlagsView, {items:props.items, onSelect:props.onSelect}),
+    pill === 'mine' && h(AlertsTab, props));
+}
+
 function PortfolioArea(props) {
   const [view, setView] = useState('positions');
   return h('div', null,
@@ -15195,6 +15381,7 @@ function PortfolioArea(props) {
       h('button', {className: view==='positions' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('positions')}, 'Positions'),
       h('button', {className: view==='planner' ? 'ge-btn gold' : 'ge-btn', onClick:()=>setView('planner')}, '🛒 Buy Planner')),
     h(UpdateRisksBar),
+    h(AlmanacFlagsBar),
     view === 'positions'
       ? h(PortfolioTab, props)
       : h(BuyPlannerTab, {items: props.items, toast: props.toast, userShorthands: props.userShorthands,
@@ -15252,7 +15439,6 @@ const NAV = [
   {id:'dashboard',      label:'Dashboard',        icon:'◈'},
   {id:'dxp_intel',      label:'GEnius Almanac',   icon:'📅'},
   {id:'news',           label:'News',             icon:'📰'},
-  {id:'update_risks',   label:'Upcoming Changes', icon:'⚠'},
   {id:'watchlist',      label:'Watchlist',        icon:'★'},
   {id:'market',         label:'Market',           icon:'◐'},
   {id:'opportunities',  label:'Opportunities',    icon:'⚡'},
@@ -15261,7 +15447,7 @@ const NAV = [
   {id:'money_makers',   label:'Money Makers',     icon:'⚗'},
   {id:'compare',        label:'Compare',          icon:'⇌'},
   {id:'portfolio',      label:'Portfolio',        icon:'📊'},
-  {id:'alerts',         label:'Alerts',           icon:'◉'},
+  {id:'alerts',         label:'Notifications',    icon:'◉'},
   {id:'alch',           label:'Alch',             icon:'🔥'},
   {group:'Combat'},
   {id:'melee',          label:'Melee',            icon:'⚔'},
@@ -15305,6 +15491,7 @@ function App() {
     window.addEventListener('genius-goto', go);
     return () => window.removeEventListener('genius-goto', go);
   }, []);
+  const navMarks = unreadMarks(useInbox());
   const contentRef = useRef(null);
   const scrollContentTo = pos => contentRef.current?.scrollTo({top: pos, behavior:'smooth'});
   // Sidebar starts closed — only actually matters on a narrow/mobile
@@ -15879,6 +16066,8 @@ function App() {
             },
             h('span',{className:'nav-icon'},entry.icon),
             entry.label,
+            entry.id === 'alerts' && tab !== 'alerts' && h(NotifMark, {marks:navMarks, style:{marginLeft:'auto'}}),
+            entry.id === 'dxp_intel' && navMarks.includes('almanac') && h(NotifMark, {marks:['almanac'], style:{marginLeft:'auto'}}),
             entry.id === 'news' && newsBadge > 0 && h('span', {style:{marginLeft:'auto', background:T.gold, color:'#1a1209', borderRadius:9, fontSize:10, fontWeight:'bold', padding:'0 6px', fontFamily:'Arial, sans-serif'}, title:'Unread news that matches your News ⚙ settings'}, newsBadge)
           )
       )
@@ -15962,7 +16151,7 @@ function App() {
           tab==='money_makers' &&h(MoneyMakersTab, {items:visibleItems,onSelect:handleSelect,description:TAB_DESCRIPTIONS.money_makers}),
           tab==='news'    &&h(NewsTab,    {onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect,toast,onNavigate:setTab}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
-          tab==='alerts'  &&h(AlertsTab,  {
+          tab==='alerts'  &&h(AlertsArea, {
             items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
             onSave: upsertAlert,
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id)),
@@ -15971,7 +16160,6 @@ function App() {
             onDeleteReminder: id=>setReminders(rl=>rl.filter(r=>r.id!==id)),
           }),
           tab==='settings'&&h(SettingsTab,{settings,onChange:setSettings,toast,hiddenItems,items,onUnhide:toggleHide,userShorthands,onSaveShorthands:async sh=>{await window.genius?.saveShorthands(sh);setUserShorthands(sh);},monsterShorthands,onSaveMonsterShorthands:async sh=>{await window.genius?.saveMonsterShorthands(sh);setMonsterShorthands(sh);},onReplayTour:()=>setShowTour(true)}),
-          tab==='update_risks'&&h(UpdateRisksTab,{items,onSelect:handleSelect,description:TAB_DESCRIPTIONS.update_risks}),
           tab==='about'&&h(AboutTab),
           tab==='dxp_intel'&&h(DXPIntelTab,{items,selected,onSelect:handleSelect,userShorthands,toast})
         ),

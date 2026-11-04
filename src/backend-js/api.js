@@ -34,6 +34,7 @@ const catalogue = require('./catalogue.js');
 const { createLiveHistory } = require('./live-history.js');
 const { createSync } = require('./sync.js');
 const { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require('./update-risks.js');
+const { computeSignals, buildDigest, uniqueEvents } = require('./almanac-signals.js');
 
 const SIGNAL_TREND_DAYS = 7;
 
@@ -996,7 +997,10 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // next DXP lands; the 2017-2022 market behaved too differently to mix
         // into per-item price patterns (Ben, 2026-10-07). New DXPs are
         // included automatically as they happen.
-        const events = (await loadEvents(dataDir)).filter(e => e[1] >= ALMANAC_STATS_SINCE);
+        // Finished DXPs only, once each: the running one has no result yet, and
+        // re-announced dates were being counted twice (found 2026-11-04).
+        const todayStr = new Date().toISOString().slice(0, 10);
+        const events = uniqueEvents((await loadEvents(dataDir)).filter(e => e[1] >= ALMANAC_STATS_SINCE && e[2] < todayStr));
         // Confirmed for real on a Pixel 8 Pro (2026-06-29): this single call
         // took 146.7s on-device vs 7.8s on a desktop dev machine for the
         // identical computation/dataset — see computeDxpData's BATCH comment
@@ -1769,6 +1773,57 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   const CAL_PRIORITY = ['dxp', 'release', 'seasonal', 'marketplace', 'livestream', 'maintenance', 'other'];
   // pastDays (Ben, 2026-10-18): the calendar's month view also shows dates
   // earlier in the month; everything else wants upcoming only (default 0).
+  // ─── Almanac buy and sell flags (almanac-signals.js) ──────────────────────
+  async function getAlmanacSignals() {
+    const { loadEvents } = require('./dxp_intelligence.js');
+    const intel = await storage.readJSON(path.join(dataDir, 'dxp_intelligence.json'), null);
+    if (!intel) return { now: [], soon: [], nextDxp: null, lastDxp: null };
+    const latest = await storage.readJSON(path.join(dataDir, 'latest.json'), {});
+    const portfolio = await readPortfolio();
+    const held = new Map();
+    for (const p of portfolio.positions) {
+      if (p.status !== 'open' || !(p.quantity > 0)) continue;
+      const k = p.item_name.toLowerCase();
+      const h = held.get(k) || { name: p.item_name, quantity: 0, spent: 0 };
+      h.quantity += p.quantity;
+      h.spent += p.quantity * (p.cost_basis || 0);
+      held.set(k, h);
+    }
+    const holdings = [...held.values()].map(h => ({ name: h.name, quantity: h.quantity, cost: h.spent / h.quantity }));
+    const events = (await loadEvents(dataDir)).filter(e => e[1] >= ALMANAC_STATS_SINCE);
+    const out = computeSignals({ intel, events, items: latest.items || [], holdings,
+      watched: [...store.get('watchlist', []), ...store.get('dxpWatchlist', [])] });
+    // Live price check: has it already used up half its usual rise?
+    const monthAgo = Date.now() - 30 * 86400000;
+    for (const r of [...out.now, ...out.soon]) {
+      if (r.action !== 'buy' || !r.peak || !r.liveBuy) continue;
+      const points = await getHistoryPoints(r.id);
+      evictHistory(r.id);
+      const recent = (points || []).filter(p => p.timestamp >= monthAgo && p.price).map(p => p.price).sort((a, b) => a - b);
+      if (!recent.length) continue;
+      const usual = recent[Math.floor(recent.length / 2)];
+      const runUp = (r.liveBuy - usual) / usual * 100;
+      if (runUp >= r.peak / 2) { r.priceHigh = true; r.runUpPct = Math.round(runUp); }
+    }
+    return out;
+  }
+
+  // One digest for flags that are new since the last one.
+  async function getAlmanacNotifications() {
+    const settings = store.get('dxpNotificationSettings', { enabled: false, buyAlerts: true, sellAlerts: true });
+    if (!settings.enabled) return [];
+    const { now } = await getAlmanacSignals();
+    const log = store.get('almanacDigestLog', {});
+    const fresh = now.filter(r => !log[r.key] && (r.action === 'sell' ? settings.sellAlerts : settings.buyAlerts));
+    if (!fresh.length) return [];
+    const stamp = Date.now();
+    for (const r of fresh) log[r.key] = stamp;
+    for (const k of Object.keys(log)) if (stamp - log[k] > 120 * 86400000) delete log[k];
+    store.set('almanacDigestLog', log);
+    const digest = buildDigest(fresh);
+    return digest ? [digest] : [];
+  }
+
   // ─── Upcoming update risks (update-risks.js) ──────────────────────────────
   // Page text of forward-looking posts, kept so each is only downloaded once.
   const updateRiskPostsFile = path.join(dataDir, 'update_risk_posts.json');
@@ -4949,55 +5004,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       }
     }
 
-    const watchlist = store.get('dxpWatchlist', []);
-    const dxpData = watchlist.length ? await storage.readJSON(path.join(dataDir, 'dxp_intelligence.json'), null) : null;
-
-    const daysBetween = (a, b) => Math.round((b - a) / 86400000);
-    // Where a day sits relative to the event, for alert text. Counts whole game
-    // days (UTC, the daily reset): rounding the exact time gap flipped at noon.
-    const dxpDayLabel = (n, lastDay) => {
-      const days = c => `${c} day${c === 1 ? '' : 's'}`;
-      if (n < 0) return `${days(-n)} before DXP starts`;
-      if (n === 0) return 'the day DXP starts';
-      if (n <= lastDay) return `day ${n + 1} of DXP`;
-      return `${days(n - lastDay)} after DXP ended`;
-    };
-
+    // Item buy and sell timing moved to the Almanac digest (getAlmanacNotifications).
     for (const [announced, start, end] of events) {
       if (settings.announceAlerts && todayStr === announced) {
         fire(`announce_${announced}`, '📅 DXP Announced',
-          `A new Double XP event has been announced (${start} to ${end}). Check your Almanac watchlist for buy timing.`);
-        continue;
-      }
-
-      const startDt = new Date(start + 'T00:00:00Z');
-      const endDt = new Date(end + 'T00:00:00Z');
-      const baselineDt = new Date(startDt.getTime() - 21 * 86400000);
-      const afterDt = new Date(endDt.getTime() + 21 * 86400000);
-      if (today < baselineDt || today > afterDt) continue;
-      const dayOffset = daysBetween(startDt, new Date(todayStr + 'T00:00:00Z'));
-      const lastDay = daysBetween(startDt, endDt);
-
-      for (const itemId of (dxpData ? watchlist : [])) {
-        const entry = dxpData[itemId];
-        const timing = entry?.timing;
-        if (!timing) continue;
-        const name = entry.name || itemId;
-
-        if (settings.buyAlerts && timing.best_buy_day_offset != null) {
-          const std = Math.max(timing.best_buy_day_std || 0, 0.5);
-          if (Math.abs(dayOffset - timing.best_buy_day_offset) <= std) {
-            fire(`${itemId}_buy_${start}_${todayStr}`, '📅 DXP Buy Window',
-              `${name} is in its usual best-buy window: ${dxpDayLabel(dayOffset, lastDay)}.`);
-          }
-        }
-        if (settings.sellAlerts && timing.best_sell_day_offset != null) {
-          const std = Math.max(timing.best_sell_day_std || 0, 0.5);
-          if (Math.abs(dayOffset - timing.best_sell_day_offset) <= std) {
-            fire(`${itemId}_sell_${start}_${todayStr}`, '📅 DXP Sell Window',
-              `${name} is in its usual best-sell window: ${dxpDayLabel(dayOffset, lastDay)}.`);
-          }
-        }
+          `A new Double XP event has been announced (${start} to ${end}). Check Notifications > Almanac for what to buy.`);
       }
     }
 
@@ -5135,6 +5146,52 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Plain date-triggered reminders, no price involved. Fires once the day
   // arrives, then marked fired so it never repeats.
+  // Inbox (Ben, 2026-11-04): every notification GEnius pushes stays here until
+  // the user clears it. kind picks the dot: upcoming, almanac, mine, digest.
+  const INBOX_MAX = 300;
+  function addToInbox(kind, source, notes, replace) {
+    const list = notes.filter(n => n && n.title);
+    if (!list.length) return;
+    let inbox = store.get('inbox', []);
+    // A digest can fire every few minutes, so only its newest copy is kept.
+    if (replace) inbox = inbox.filter(e => e.source !== source);
+    const now = Date.now();
+    const added = list.map((n, i) => ({ id: `${now}_${source}_${i}`, kind, source, title: n.title, body: n.body || '', at: now, read: false }));
+    store.set('inbox', [...added, ...inbox].slice(0, INBOX_MAX));
+  }
+  // Wraps a notification check so whatever it returns is also saved to the Inbox.
+  const toInbox = (kind, source, check, replace) => async (...args) => {
+    const result = await check(...args);
+    try { addToInbox(kind, source, Array.isArray(result) ? result : [result], replace); }
+    catch (e) { console.error('[Inbox] save failed:', e.message); }
+    return result;
+  };
+  function getInbox() { return store.get('inbox', []); }
+  // Phone: notifications the background runner sent while the app was closed.
+  function addBackgroundInbox(entries) {
+    const log = store.get('almanacDigestLog', {});
+    let inbox = store.get('inbox', []);
+    entries.forEach((e, i) => {
+      if (e.source === 'watchlist_digest' || e.source === 'portfolio_digest') inbox = inbox.filter(x => x.source !== e.source);
+      inbox.unshift({ id: `${e.at}_${e.source}_bg${i}`, kind: e.kind, source: e.source, title: e.title, body: e.body || '', at: e.at, read: false });
+      // So the open app doesn't announce the same Almanac flags again.
+      for (const key of e.seen || []) log[key] = e.at;
+    });
+    inbox.sort((a, b) => b.at - a.at);
+    store.set('inbox', inbox.slice(0, INBOX_MAX));
+    store.set('almanacDigestLog', log);
+  }
+  // No kind marks everything read (opening the Inbox pill).
+  function markInboxRead(kind) {
+    store.set('inbox', store.get('inbox', []).map(e => (!kind || e.kind === kind) ? { ...e, read: true } : e));
+    return { success: true };
+  }
+  // No id clears everything.
+  function clearInbox(id) {
+    store.set('inbox', id ? store.get('inbox', []).filter(e => e.id !== id) : []);
+    return { success: true };
+  }
+
   async function getDueReminders() {
     const reminders = store.get('reminders', []);
     if (!reminders.length) return [];
@@ -5173,7 +5230,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getLiveItemPrice,
     getItemLiveTimeseries,
     sync: createSync({ dataDir, store, writePortfolio, buildExportBundle }),
-    getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications, getUpdateRiskSettings, setUpdateRiskSettings,
+    getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications: toInbox('upcoming', 'update_risk', getUpdateRiskNotifications), getUpdateRiskSettings, setUpdateRiskSettings,
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLaunches,
@@ -5183,21 +5240,28 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getItemProducts,
     // portfolio
     getPortfolio, savePosition, deletePosition, sellPosition, convertPosition, reopenPosition,
-    getBuyGoals, saveBuyGoal, deleteBuyGoal, updateBuyGoalTotals, getBuyGoalNotifications,
+    getBuyGoals, saveBuyGoal, deleteBuyGoal, updateBuyGoalTotals, getBuyGoalNotifications: toInbox('mine', 'buy_goal', getBuyGoalNotifications),
     recordOpportunities, getOpportunityHistory, refreshStaleHistory,
-    getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications, parseDxpDates, parseDxpTease,
+    getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications: toInbox('almanac', 'dxp_news', getDxpNewsNotifications), parseDxpDates, parseDxpTease,
     getNewsCalendar, extractNewsDates, fetchNewsPage,
     getNewsFeed, getNewsBadgeCount, markNewsRead, getNewsBadgePrefs, setNewsBadgePrefs,
     archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup, getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac,
     // alerts
-    getAlerts, saveAlert, deleteAlert, getTriggeredAlerts, markAlertsFiredInBackground,
+    getAlerts, saveAlert, deleteAlert, getTriggeredAlerts: toInbox('mine', 'price_alert', getTriggeredAlerts), markAlertsFiredInBackground,
     // overrides
     getOverrides, saveOverrides,
     // misc
     getData, buildExportBundle, applyImportBundle, runAutoBackup,
     // notification checks (see comment above — what to fire is shared,
     // how to actually show it natively is platform-specific glue)
-    getDxpNotifications, getWatchlistDigest, getPortfolioDigest, getDueReminders,
+    getDxpNotifications: toInbox('almanac', 'dxp', getDxpNotifications),
+    getWatchlistDigest: toInbox('digest', 'watchlist_digest', getWatchlistDigest, true),
+    getPortfolioDigest: toInbox('digest', 'portfolio_digest', getPortfolioDigest, true),
+    getDueReminders: toInbox('mine', 'reminder', getDueReminders),
+    // Notifications tab > Inbox
+    getInbox, addBackgroundInbox, markInboxRead, clearInbox,
+    getAlmanacSignals,
+    getAlmanacNotifications: toInbox('almanac', 'almanac_digest', getAlmanacNotifications),
   };
 }
 

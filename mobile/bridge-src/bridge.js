@@ -157,20 +157,15 @@ async function fireNotification(title, body) {
 async function syncRunnerState() {
   try {
     const a = await ensureApi();
-    const [data, dxpData, portfolio] = await Promise.all([
+    const [data, portfolio] = await Promise.all([
       a.getData().catch(() => ({ items: [] })),
-      a.getDxpIntelligence().catch(() => ({})),
       a.getPortfolio().catch(() => ({ positions: [] })),
     ]);
     const namesById = Object.fromEntries((data.items || []).map(i => [String(i.id), i.name]));
     const withNames = (ids) => ids.map(id => ({ id, name: namesById[String(id)] || String(id) }));
 
-    const dxpWatchlist = store.get('dxpWatchlist', []);
-    const dxpTiming = {};
-    for (const id of dxpWatchlist) {
-      const t = dxpData[id]?.timing;
-      if (t) dxpTiming[id] = t;
-    }
+    const signals = await a.getAlmanacSignals().catch(() => ({ now: [], soon: [] }));
+    const almanacRows = [...signals.now, ...signals.soon].map(r => ({ key: r.key, name: r.name, action: r.action, day: r.day, estimated: r.estimated }));
 
     const events = await storage.readJSON(DATA_DIR + '/dxp_events.json', []).catch(() => []);
 
@@ -193,8 +188,8 @@ async function syncRunnerState() {
       event: 'syncState',
       details: {
         watchlist: withNames(store.get('watchlist', [])),
-        dxpWatchlist: withNames(dxpWatchlist),
-        dxpTiming,
+        almanacRows,
+        almanacSeen: store.get('almanacDigestLog', {}),
         dxpEvents: events,
         dxpSettings: store.get('dxpNotificationSettings', {
           enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
@@ -220,11 +215,20 @@ async function syncRunnerState() {
   }
 }
 
+// Moves notifications the background sent into the app's Inbox.
+async function collectBackgroundInbox(a) {
+  try {
+    const r = await BackgroundRunner.dispatchEvent({ label: 'com.vonderthwood.genius.background.task', event: 'collectInbox', details: {} });
+    if (r && r.entries && r.entries.length) a.addBackgroundInbox(r.entries);
+  } catch (e) { console.error('[GEnius] collectInbox failed:', e.message); }
+}
+
 // Mirrors main.js's checkDxpNotifications/checkWatchlistDigest/
 // checkReminders — same shared api.js logic, just firing each returned
 // descriptor as a real native notification instead of Electron's.
 async function runNotificationChecks() {
   const a = await ensureApi();
+  await collectBackgroundInbox(a);
   // Alerts the background already notified about: mark them, don't repeat.
   try {
     const r = await BackgroundRunner.dispatchEvent({ label: 'com.vonderthwood.genius.background.task', event: 'collectFiredAlerts', details: {} });
@@ -232,6 +236,7 @@ async function runNotificationChecks() {
   } catch (e) { console.error('[GEnius] collectFiredAlerts failed:', e.message); }
   for (const n of await a.getUpdateRiskNotifications()) await fireNotification(n.title, n.body);
   for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
+  for (const n of await a.getAlmanacNotifications()) await fireNotification(n.title, n.body);
   const digest = await a.getWatchlistDigest();
   if (digest) await fireNotification(digest.title, digest.body);
   const portfolioDigest = await a.getPortfolioDigest();
@@ -333,6 +338,10 @@ async function buildGenius() {
     setUpdateRiskSettings: async (s) => (await ensureApi()).setUpdateRiskSettings(s),
     getUpdateRisks: async () => (await ensureApi()).getUpdateRisks(),
     dismissUpdateRisk: async (key) => (await ensureApi()).dismissUpdateRisk(key),
+    getAlmanacSignals: async () => (await ensureApi()).getAlmanacSignals(),
+    getInbox: async () => { const a = await ensureApi(); await collectBackgroundInbox(a); return a.getInbox(); },
+    markInboxRead: async (kind) => (await ensureApi()).markInboxRead(kind),
+    clearInbox: async (id) => (await ensureApi()).clearInbox(id),
     syncRole: 'phone',
     syncStatus: async () => (await ensureApi()).sync.clientStatus(),
     syncScan: scanSyncQr,
