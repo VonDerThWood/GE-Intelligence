@@ -86,8 +86,18 @@ function parseOffer(text, itemNames = []) {
       // Best: both numbers are on screen. Next: the quantity is, and the price follows.
       const pick = numbers.find(q => seen.has(fits(q))) || numbers.find(q => fits(q) != null);
       if (pick) { out.quantity = pick; out.price = fits(pick); }
+      // Neither on screen: offers usually fill at their price, so coins / filled
+      // gives the price, and the total then has to give a whole quantity.
+      else if (out.filled > 0 && out.coins > 0) {
+        const rate = out.side === 'sell' ? keep : 1;
+        const p = Math.round(out.coins / out.filled / rate);
+        const q = p > 0 ? Math.round(out.total / (p * rate)) : 0;
+        if (q >= out.filled && matches(q, p)) { out.quantity = q; out.price = p; }
+      }
     }
   }
+  // A quantity below what's already filled can't be right, so leave it blank.
+  if (out.quantity != null && out.filled != null && out.quantity < out.filled) { out.quantity = null; out.price = null; }
   return out;
 }
 
