@@ -29,7 +29,7 @@ GEnius now watches upcoming game update previews and looks for items that might 
 - **Related items count, too.** Materials associated with skills or content targeted by an update can also be flagged, even when the items themselves aren't explicitly mentioned.
 - **No financial advice from a nervous friend.** GEnius identifies potential exposure; it doesn't tell you to buy or sell. These warnings are informational, and related-item detection isn't guaranteed to catch everything.
 
-This feature exists because we nearly sold 93,000 Magic frames right before the 120 Construction release. We didn't. We were approximately 2.8b poorer for the experience.
+This feature exists because we nearly sold 93,000 Magic frames right before the 120 Construction release. We didn't. We're approximately 2.8b poorer for the experience, and still holding.
 
 *Might be nothing. Might be 2.8b.*
 
