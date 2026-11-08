@@ -6623,6 +6623,21 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v2.9.0',
+    items: [
+      "The Almanac gets a reality check, Notifications finally remembers things, and Jagex is about to touch your stuff. Ayo...",
+      "Almanac: every DXP plan gets tested. GEnius replays each item's strategy against past Double XPs it wasn't trained on, after GE tax, and against simply trading 45 days before. Only strategies that hold up across at least 8 tests make Recommendations. The rest say No reliable trade. We'd rather tell you we don't know than pretend we do.",
+      "Click the 📋 icon in the Plan column for a plain-English plan: when to buy and when to sell, with real dates once a Double XP is announced. Plans that begin by selling say Only if you own it.",
+      "This DXP, live: the forecast pop-up compares real trades during the current Double XP against the GE guide price, and GEnius tracks how the old approach holds up.",
+      "New Items: items from the last 18 months are too new to recommend, so they get their own tab, tested the same way and compared with their closest older items (Eternal frames vs. Elder and Magic frames). Items 18 to 30 months old get a Fairly new item label. DXPs are no longer counted twice, and one still underway no longer skews the stats.",
+      "Alerts is now Notifications: Inbox, Upcoming Changes, Almanac and My Alerts. The Inbox keeps every notification until you clear it. Almanac flags (Start selling now, Start buying now, Coming up) arrive in a single digest, holdings and watchlists first. Each pill gets an unread dot, or emojis (Settings → Notifications).",
+      "Upcoming Changes: Jagex has plans, your bank has concerns. Items you hold or watch that an upcoming update might affect are flagged on the Dashboard, Portfolio, Watchlist, item panel and the new Upcoming Changes page, including related materials. It identifies exposure; it doesn't tell you to buy or sell. Might be nothing. Might be 2.8b.",
+      "Portfolio: risk badges (Low, Medium, High) from volatility, largest drop, spread and your stack vs daily volume. Click one for the reasons. A description, not a prediction. Positions in the same item now group into one row, and Full Numbers shows 13,903,000 instead of 13.90M.",
+      "Live prices across the app: profit in Alch, Invention, Make it yourself, potions, DXP ideas and Portfolio uses live buy/sell, from recent averages rather than one odd trade. Alch profit no longer takes tax off the buy price, and machine profit includes tax. Live prices are now saved permanently, beyond the Wiki's ~100 days.",
+      "Smaller things: themes renamed Classic (was Dark) and Dark (was Black); DXP alerts count game days; Name Release posts aren't game releases; layout fixes; faster Almanac flags, fewer redraws, and code review fixes.",
+    ]
+  },
+  {
     version: 'v2.8.0',
     items: [
       'A pretty ridiculous amount of research, a much smarter Almanac, and your data is still there.',

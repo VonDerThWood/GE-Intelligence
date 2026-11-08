@@ -1,44 +1,56 @@
-## GEnius v2.8.0
+## GEnius v2.9.0
 
-A pretty ridiculous amount of research, a much smarter Almanac, and your data is still there.
+**The Almanac gets a reality check, Notifications finally remembers things, and Jagex is about to touch your stuff. Ayo...**
 
-### Chart analysis and item research
-- **Chart analysis** is now available under every item chart. See how an item compares to the market, where its price sits in its yearly range, tested support/resistance levels, and how its dips usually play out. Every reading comes with its own track record. If something doesn't hold up, it gets marked *Weak* instead of being dressed up as a sure thing.
-- **Alch floor line** shows high alch minus a nature rune, along with exactly how often the item's price fell below it over the last 3 years.
-- **Ask about this item** gives you 16 fill-in-the-blank questions about an item's own history: when it last hit a price, its biggest drops, how it behaved around DXP, flip odds, and more. Less guessing, more receipts.
-- **Moves with** finds items whose prices tend to move together, or in opposite directions. Your portfolio may have some interesting relationships.
+This one's a big one. Better-tested market recommendations, a proper notification history, early warnings about game updates, and live prices making themselves useful across the app. Let's get into it.
 
-### Almanac and News
-- **Game Updates** digs into how past updates moved prices and which items were affected. History has a habit of repeating itself, especially when Jagex changes something.
-- **Launches** tracks every new item by update, from launch through its lowest price to today, using live prices.
-- **News** got a redesign: upcoming dates, a monthly calendar, unread dots, and tags for DXP, items you hold or watch, and tracked updates. Finding the stuff that matters to you should take less digging.
-- **DXP alerts:** GEnius now spots Double XP announcements and teases in the news automatically and notifies you. No more relying entirely on your ability to notice Jagex hinting at something.
+### Almanac: Show your work.
+The Almanac has a new job: proving its recommendations aren't just making things up.
 
-### Portfolio
-- **Buy Planner** helps you buy up an item across multiple 4-hour limits, including goals spread across several accounts. Keeping track of your true average cost across accounts is a major pain; this does it for you.
-- Added **Break-even** and **Since bought** columns, a **High alch** sell option, and multi-input **Convert**.
-- **Closed Positions** are now grouped by item, so they're easier to follow when you've bought, sold, and bought the same item again. Your money has a history, and now it's easier to read.
+- **Every DXP plan gets tested.** GEnius now replays each item's strategy against historical Double XP events it wasn't trained on, accounting for GE tax. It also compares the results against simply trading 45 days before DXP. Only strategies that hold up across at least 8 tests earn a place in Recommendations. The rest get a *No reliable trade* label. We'd rather tell you we don't know than pretend we do.
+- **Forecasts, in plain English.** Click the 📋 icon in the Plan column to see a plain-English breakdown of the Forecast, including when to buy and when to sell. Once a Double XP is announced, relative timing is replaced with actual dates.
+- **Already own it?** Plans that begin by selling now get an *Only if you own it* label. No point recommending a strategy you can't actually follow.
+- **This DXP, live.** The forecast pop-up now compares actual market trades during the current Double XP against the GE guide price. Untested strategies are clearly identified, while GEnius tracks how the old approach performs against the market.
+- **New Items.** Items released within the last 18 months are too new for regular recommendations, so they get their own tab. They're tested using the same process and compared with their closest older counterparts (Eternal frames vs. Elder and Magic frames, for example). Active items appear by default, with a Show all option for everything else. Items between 18 and 30 months old get a *Fairly new item* label.
+- **No more double-counting.** Double XP events are no longer counted twice, and an event that's still underway won't skew the historical statistics.
 
-### November GE removals
-- Items Jagex removes from the GE, including springs, Silverhawk feathers, and portables, stay on your Watchlist and in your Portfolio. They're labelled *Removed from GE* instead of disappearing like they owe you money.
-- **Invention → Items** now includes a **Make it yourself** calculator for Tight springs and Enchanted notepaper, priced using the cheapest live disassembly source.
+### Notifications: We have things to tell you.
+The old Alerts tab has grown up. Or at least learned to keep receipts.
 
-### Signals and markets
-- **Opportunities → Track record** grades every high-scoring item based on what its price actually did 1, 7, and 30 days later. A high score is a lead, not a prophecy.
-- New **SPIKE / SLUMP** signals based on live prices.
-- Brand-new items no longer get volume badges on day one. Having a price and having meaningful trading volume are two different things.
-- **Food** now shows heal amounts and cost per life point.
-- The **Market** tab can now hide items below a price you set. Less scrolling past pocket change.
+- **Alerts is now Notifications.** Four pills organize everything: Inbox, Upcoming Changes, Almanac and My Alerts.
+- **Inbox remembers.** Every notification GEnius sends is saved until you clear it. Dismissed a popup? No problem. It isn't gone forever.
+- **Almanac flags.** New *Start selling now*, *Start buying now* and *Coming up* flags are tracked across the item catalogue. Your holdings and watchlists get priority, and new findings arrive together in a single digest notification.
+- **Unread indicators.** Each pill gets its own unread dot, with optional emoji indicators if you'd rather give things a little personality. Configure them under Settings → Notifications.
 
-### Fixes and safety
-- **Big fix: price history is updating again.** History for most items had stopped refreshing in late June, throwing off volume signals, Opportunity Score, and the Almanac. Background refresh is back, and the Almanac has been rebuilt. If some of those features seemed to have lost their minds, this is why.
-- Fixed a failed file read at startup that made all your data *look* wiped. Your data was safe on disk the entire time; the app just did a spectacularly bad job of showing it.
-- Fixed new items failing to download their price history.
-- Fixed the Buy Planner counting items you'd already sold as still held when you updated your totals.
-- **Restore a daily backup** from Settings. Your current data is saved first, so you can undo a restore if needed. Backups now include your portfolio and alerts, too.
-- Update checks now run every 6 hours while GEnius is open.
-- Security pass completed, Electron updated, and a whole pile of smaller fixes and improvements.
+### Upcoming Changes: Jagex has plans. Your bank has concerns.
+GEnius now watches upcoming game update previews and looks for items that might be caught in the crossfire.
 
----
+- **Early warnings.** Items you hold or watch that might be affected by an upcoming update are flagged across the Dashboard, Portfolio, Watchlist, item panel and the new Upcoming Changes page.
+- **Related items count, too.** Materials associated with skills or content targeted by an update can also be flagged, even when the items themselves aren't explicitly mentioned.
+- **No financial advice from a nervous friend.** GEnius identifies potential exposure; it doesn't tell you to buy or sell. These warnings are informational, and related-item detection isn't guaranteed to catch everything.
 
-That's v2.8.0. GEnius now has a much better memory for the market, a much better idea of what its own predictions are worth, and considerably fewer ways to give you a heart attack at startup.
+This feature exists because we nearly sold 93,000 Magic frames right before the 120 Construction release. We didn't. We were approximately 2.8b poorer for the experience.
+
+*Might be nothing. Might be 2.8b.*
+
+### Portfolio: Know what you're holding.
+- **Risk badges.** Every position and item now gets a Low, Medium or High risk rating based on price volatility, its largest historical drop, buy/sell spread and the size of your stack relative to daily trading volume. Click a badge to see what contributed to the rating. It's a description of risk, not a prediction of what happens next.
+- **Multiple positions, one row.** Positions in the same item are now grouped together, showing combined quantity, average cost, value and P&L. Expand the row to see the individual positions.
+- **Full Numbers.** A new display setting replaces abbreviated values with their full amounts. 13,903,000 instead of 13.90M. For those who like counting zeroes.
+
+### Live Prices: The numbers should actually be live.
+Live buy and sell prices now reach considerably more corners of GEnius.
+
+- **Live prices across the app.** Profit calculations now use live buy/sell prices throughout Alch, Invention machines, Make it yourself, potions, DXP ideas, Portfolio and more.
+- **Less weird price behavior.** Live prices now use recent trade averages instead of relying on a single latest trade. One unusually priced transaction shouldn't make Soul runes look like they're worth 200gp.
+- **Tax fixes.** Alch profit no longer takes GE tax off the purchase price (tax only applies when you sell), which made alchs look more profitable than they were. Invention machine profit calculations now include tax as well.
+- **Live price history is permanent.** GEnius now saves its collected live prices instead of relying entirely on the Wiki's roughly 100-day history window. That gives us a much longer history to work with as the app grows.
+
+### Smaller Things
+- **Theme names cleaned up.** Classic (formerly Dark) and Dark (formerly Black). Your saved theme preference carries over.
+- **DXP alerts use game days.** Notifications now say things like *3 days before DXP starts* or *day 5 of DXP*, rather than awkwardly changing at noon.
+- **News cleanup.** "Name Release" news posts no longer get mistaken for actual game releases.
+- **Layout fixes.** Fixed cut-off layouts and column-resize lines extending above table headers.
+- **Under the hood.** Faster Almanac flags, fewer unnecessary redraws, and a batch of additional fixes from a code review.
+
+**GEnius v2.9.0 — More history. Better signals. Fewer expensive surprises.**
