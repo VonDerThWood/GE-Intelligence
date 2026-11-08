@@ -10025,6 +10025,19 @@ function AboutTab() {
   );
 }
 
+// Settings > Hourly price history: what's saved so far (live-hourly.js).
+function HourlyArchiveStatus() {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => window.genius.getLiveHourlyStatus?.().then(setSt).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const saveNow = async () => { setBusy(true); try { await window.genius.syncLiveHourly(); } catch {} setBusy(false); load(); };
+  const mb = st ? (st.bytes / 1048576).toFixed(1) : '0';
+  return h('div',{className:'row',style:{gap:10,marginTop:6,fontSize:11,color:T.textDim}},
+    h('span',null, !st || !st.days ? 'Nothing saved yet. It starts on the next fetch.' : `Saved: ${st.days} days (${st.oldest} to ${st.newest}), ${mb} MB`),
+    h('button',{className:'ge-btn',style:{fontSize:11,padding:'3px 9px'},disabled:busy,onClick:saveNow}, busy ? 'Saving…' : 'Save now'));
+}
+
 function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands, monsterShorthands, onSaveMonsterShorthands, onReplayTour}) {
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
@@ -10252,6 +10265,14 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       h('select',{className:'ge-input',value:s.fetchInterval||15,onChange:set('fetchInterval')},
         [5,10,15,30,60].map(v=>h('option',{key:v,value:v},`Every ${v} minutes`))
       )
+    ),
+    !IS_PHONE && h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Hourly price history'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
+        h('input',{type:'checkbox',checked:s.saveHourlyPrices===true,onChange:setChk('saveHourlyPrices')}),
+        h('span',{style:{fontSize:12,color:T.text}},'Save hourly live prices for every item')),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:4}}, "Daily averages hide spikes: an item that sold high for one hour still looks average for the day. The wiki only keeps about 100 days of hours, so this saves them on your PC for the Almanac's research. Uses about 25MB of disk a month, and downloads about 190MB a month in the background. The first run fills in the last ~100 days over a few fetches."),
+      s.saveHourlyPrices===true && h(HourlyArchiveStatus, null)
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Expensive items threshold'),

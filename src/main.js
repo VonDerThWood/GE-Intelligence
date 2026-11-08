@@ -76,6 +76,7 @@ const resourcesPath = isDev
 
 // dataDir must be set after app is ready (app.getPath requires it)
 let dataDir;
+let liveHourly = null; // live-hourly.js, created once dataDir is known
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 function createWindow() {
@@ -219,6 +220,8 @@ function runPython(mode = 'prices') {
       // takes a few minutes and must never hold up the fetch itself.
       // Same idea for the daily live price archive (live-history.js).
       if (mode !== 'news') api.syncLiveHistory().catch(() => {});
+      // Hourly archive (live-hourly.js) is opt-in: Settings > Hourly price history.
+      if (mode !== 'news' && store.get('saveHourlyPrices', false) && !isTestMode) liveHourly?.sync().catch(() => {});
       if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(() => {});
     } catch (error) {
       console.error('[run.js] Error:', error.message);
@@ -488,6 +491,7 @@ ipcMain.handle('get-settings', () => ({
   columnWidths:       store.get('columnWidths', {}),
   showThumbnails:     store.get('showThumbnails', true),
   fullNumbers:        store.get('fullNumbers', false),
+  saveHourlyPrices:   store.get('saveHourlyPrices', false),
   devMode:            store.get('devMode', false),
   // These three were saved but never returned here, so a changed value
   // silently reset on every restart (found during the 2026-10-02 audit).
@@ -502,7 +506,7 @@ ipcMain.handle('get-settings', () => ({
 const SAVEABLE_SETTINGS = new Set([
   'discordWebhook', 'fetchInterval', 'theme', 'notifications', 'expensiveThreshold',
   'navOrder', 'uiScale', 'detailPanelWidth', 'columnWidths', 'showThumbnails', 'fullNumbers',
-  'devMode', 'dateFormat', 'overpricedThreshold', 'accentColor',
+  'saveHourlyPrices', 'devMode', 'dateFormat', 'overpricedThreshold', 'accentColor',
 ]);
 ipcMain.handle('save-settings', async (_, settings) => {
   Object.entries(settings || {}).forEach(([k, v]) => {
@@ -715,6 +719,10 @@ ipcMain.handle('get-inbox', () => api.getInbox());
 ipcMain.handle('test-seed-inbox', (_, list) => { if (isTestMode) store.set('inbox', list); });
 ipcMain.handle('mark-inbox-read', (_, kind, upTo) => api.markInboxRead(kind, upTo));
 ipcMain.handle('clear-inbox', (_, id) => api.clearInbox(id));
+ipcMain.handle('get-item-live-hourly', async (_, itemId, days) => liveHourly ? liveHourly.getItem(itemId, days) : []);
+ipcMain.handle('get-item-daily-range', async (_, itemId, days) => liveHourly ? liveHourly.getItemDailyRange(itemId, days) : []);
+ipcMain.handle('get-live-hourly-status', async () => liveHourly ? liveHourly.status() : null);
+ipcMain.handle('sync-live-hourly', async () => liveHourly && !isTestMode ? liveHourly.sync() : { saved: 0 });
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-launches', async () => api.getLaunches());
@@ -846,6 +854,7 @@ app.whenReady().then(async () => {
   api = await createGeniusApi({ dataDir, store, platform: 'desktop',
     ...(isTestMode ? { historyDirOverride: path.join(REAL_USER_DATA, 'data', 'history'), readOnlyHistory: true } : {}) });
 
+  liveHourly = require('./backend-js/live-hourly.js').createLiveHourly({ dataDir: isTestMode ? path.join(REAL_USER_DATA, 'data') : dataDir });
   createWindow();
   updateGeReaderShortcut();
   if (isTestMode) {

@@ -359,6 +359,11 @@ async function buildGenius() {
     syncNow: (opts) => runSync(opts),
     syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
     getItemLiveHistory:     (id, days) => a.getItemLiveHistory(id, days),
+    // Hourly archive is desktop-only (live-hourly.js uses fs/zlib).
+    getItemLiveHourly:      async () => [],
+    getItemDailyRange:      async () => [],
+    getLiveHourlyStatus:    async () => null,
+    syncLiveHourly:         async () => ({ saved: 0 }),
     getItemLiveTimeseries:  (id, lookback) => a.getItemLiveTimeseries(id, lookback),
     getLaunches:            async () => a.getLaunches(),
     getDropSources:         (name) => a.getDropSources(name),
