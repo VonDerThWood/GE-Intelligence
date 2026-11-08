@@ -363,6 +363,76 @@ function bestBuySellDays(points, parsed = null, events = null) {
   };
 }
 
+// Would this item's plan have made money? (Ben, 2026-11-05) Replays it through each
+// finished DXP, choosing the days from earlier DXPs only, after the 2% tax. The app's
+// old profit figure combined separate typical highs and lows, so it never came from a
+// real trade: Yak-hide showed +58gp but lost 5.7% in a typical replay. Control is the
+// same trade 45 days earlier, to catch what's only drift. GUIDE prices: old DXPs have
+// no live history, so real fills will be worse. research/dxp_plan_backtest has the study.
+const REPLAY_MIN_PRIOR = 5, REPLAY_MIN_TESTS = 8, REPLAY_DAY_WINDOW = 12;
+// early = the New Items tab (Ben, 2026-11-05): same tests for items without the 13 DXPs
+// a full replay needs (5 to learn the days, 8 to test), learning from as few as 2. It
+// reports what it finds but never passes, so these items stay out of Recommendations.
+// Bump whenever what's saved in dxp_intelligence.json changes shape, so an updated app
+// rebuilds it at once instead of showing the old file (Ben, 2026-11-05: replays and
+// New Items stayed empty after updating until a manual Refresh).
+const ALMANAC_DATA_VERSION = 3;
+const REPLAY_FULL_DXPS =REPLAY_MIN_PRIOR + REPLAY_MIN_TESTS;
+function planReplay(points, events, early = false) {
+  const pts = (points || []).filter(p => p.price > 0)
+    .map(p => [p.timestamp > 1e12 ? p.timestamp : p.timestamp * 1000, p.price, p.volume || 0]).sort((a, b) => a[0] - b[0]);
+  if (pts.length < (early ? 20 : 200)) return null;
+  const minPrior = early ? 2 : REPLAY_MIN_PRIOR;
+  const firstAtOrAfter = ts => { let lo = 0, hi = pts.length; while (lo < hi) { const m = (lo + hi) >> 1; if (pts[m][0] < ts) lo = m + 1; else hi = m; } return lo; };
+  const priceAt = ts => { const i = firstAtOrAfter(ts + 1) - 1; return i >= 0 && ts - pts[i][0] <= 3 * MS_PER_DAY ? pts[i][1] : null; };
+  const evs = [...events].sort((a, b) => (a[1] < b[1] ? -1 : 1)).map(e => ({ start: parseDate(e[1]), end: parseDate(e[2]) }));
+  const extremes = ev => {
+    const from = firstAtOrAfter(ev.start), to = firstAtOrAfter(ev.end + 1);
+    if (to - from < 3) return null;
+    let lo = pts[from], hi = pts[from];
+    for (let i = from; i < to; i++) { if (pts[i][1] < lo[1]) lo = pts[i]; if (pts[i][1] > hi[1]) hi = pts[i]; }
+    return { buy: Math.floor((lo[0] - ev.start) / MS_PER_DAY), sell: Math.floor((hi[0] - ev.start) / MS_PER_DAY) };
+  };
+  const daysFrom = seen => { const r = seen.slice(-REPLAY_DAY_WINDOW); return { buy: median(r.map(s => s.buy)), sell: median(r.map(s => s.sell)) }; };
+  const seen = [], rets = [], ctls = [];
+  evs.forEach((ev, i) => {
+    if (seen.length >= minPrior) {
+      const d = daysFrom(seen), buyFirst = d.buy <= d.sell, next = evs[i + 1];
+      const run = shift => {
+        const sellP = priceAt(ev.start + shift + Math.round(d.sell) * MS_PER_DAY);
+        const buyP = buyFirst ? priceAt(ev.start + shift + Math.round(d.buy) * MS_PER_DAY)
+          : next ? priceAt(next.start + shift + Math.round(d.buy) * MS_PER_DAY) : null;
+        return sellP && buyP ? (sellP * 0.98 / buyP - 1) * 100 : null;
+      };
+      const r = run(0), c = run(-45 * MS_PER_DAY);
+      if (r != null) rets.push(r);
+      if (c != null) ctls.push(c);
+    }
+    const x = extremes(ev);
+    if (x) seen.push(x);
+  });
+  if (early) {
+    // Old items with spotty history aren't new, and dead or cheap ones aren't worth listing.
+    const tail = pts.slice(-90);
+    // Quiet items are kept (the tab hides them) so their pop-ups can still say they're fairly new.
+    if (seen.length >= REPLAY_FULL_DXPS || tail[tail.length - 1][1] < 100) return null;
+    if (!rets.length) return { dxps: seen.length, needed: REPLAY_FULL_DXPS, tests: 0, firstSeen: pts[0][0], volume: median(tail.map(p => p[2])), passes: false };
+  } else if (rets.length < REPLAY_MIN_TESTS) return null;
+  const d = daysFrom(seen);
+  const med = median(rets), ctl = ctls.length ? median(ctls) : 0, wins = rets.filter(r => r > 0).length;
+  if (early) {
+    const rec = rets.slice(-8), recWins = rec.filter(r => r > 0).length;
+    return { dxps: seen.length, needed: REPLAY_FULL_DXPS, firstSeen: pts[0][0], volume: median(pts.slice(-90).map(p => p[2])), tests: rets.length, wins, median: round2(med), control: round2(ctl), recentTests: rec.length, recentWins: recWins, buyDay: d.buy, sellDay: d.sell, buyFirst: d.buy <= d.sell,
+      looksGood: med >= 3 && wins / rets.length >= 0.7 && med - ctl >= 2 && recWins / rec.length >= 0.6, passes: false };
+  }
+  const recent = rets.slice(-8), recentWins = recent.filter(r => r > 0).length;
+  const last = pts.slice(-90);
+  // Cheap or barely-traded items can't be measured well, and recent DXPs must agree.
+  const tradable = last[last.length - 1][1] >= 100 && median(last.map(p => p[2])) >= 100;
+  const passes = tradable && med >= 3 && wins / rets.length >= 0.7 && med - ctl >= 2 && recentWins / recent.length >= 0.6;
+  return { tests: rets.length, wins, median: round2(med), control: round2(ctl), recentTests: recent.length, recentWins, buyDay: d.buy, sellDay: d.sell, buyFirst: d.buy <= d.sell, passes };
+}
+
 function confidenceScore(tally, phase) {
   // Returns [direction, score, total] for the strongest signal in a phase,
   // or null if there isn't enough data / no clear direction.
@@ -399,6 +469,8 @@ function mergeEntry(live, seed) {
   } else {
     merged.timing = liveT || seedT;
   }
+  if (live.replay) merged.replay = live.replay;
+  if (live.early) merged.early = live.early;
   return merged;
 }
 
@@ -420,7 +492,7 @@ function mergeEntry(live, seed) {
 // getHistoryPoints, evicted again immediately after each item here) so
 // this function's own peak memory stays bounded to ~BATCH items in
 // flight, not the whole catalogue.
-async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null, itemNames = null, useSeed = true, events = null) {
+async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null, itemNames = null, useSeed = true, events = null, replayEvents = null) {
   if (events === null) events = EVENTS;
   itemLimits = itemLimits || {};
   itemNames = itemNames || {};
@@ -446,7 +518,9 @@ async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null,
       const tally = classifyItem(points, parsed, events);
       const timing = bestBuySellDays(points, parsed, events);
       const hasSignal = PHASES.some(p => confidenceScore(tally, p));
-      if (!hasSignal && !timing) continue;
+      const replay = planReplay(points, replayEvents || events);
+      const early = replay ? null : planReplay(points, replayEvents || events, true);
+      if (!hasSignal && !timing && !early) continue;
       const phases = {};
       for (const p of PHASES) {
         phases[p] = {
@@ -461,12 +535,14 @@ async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null,
         limit: itemLimits[itemId] ?? null,
         phases,
         timing,
+        replay,
+        ...(early ? { early } : {}),
       };
     }
     if (b + BATCH < allItemIds.length) await new Promise(res => setTimeout(res, 0));
   }
 
-  const meta = { event_count: events.length };
+  const meta = { event_count: events.length, version: ALMANAC_DATA_VERSION };
   if (!useSeed) {
     live._meta = meta;
     return live;
@@ -488,7 +564,7 @@ async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null,
 
 module.exports = {
   EVENTS, loadEvents, parsePoints, nearestPrice, avgVolume, windowedExtreme,
-  classifyItem, bestBuySellDays, confidenceScore, loadSeed, mergeEntry,
+  classifyItem, bestBuySellDays, planReplay, ALMANAC_DATA_VERSION, confidenceScore, loadSeed, mergeEntry,
   computeDxpData, median, pstdev, PHASES,
 };
 

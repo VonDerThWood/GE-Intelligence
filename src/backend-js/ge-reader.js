@@ -84,7 +84,14 @@ function parseOffer(text, itemNames = []) {
         .filter(n => n > 0 && n !== out.total && n !== out.coins).sort((a, b) => b - a);
       const seen = new Set(numbers);
       // Best: both numbers are on screen. Next: the quantity is, and the price follows.
-      const pick = numbers.find(q => seen.has(fits(q))) || numbers.find(q => fits(q) != null);
+      // A total fits both ways round (1,000 x 60,000 or 60,000 x 1,000). What's been
+      // paid per item picks the real price; failing that, quantity is on screen first.
+      const raw = (String(text).match(/\d[\d,]*/g) || []).map(toNum);
+      const paid = out.filled > 0 && out.coins > 0 ? out.coins / out.filled : null;
+      const paidFits = p => paid == null || (out.side === 'sell' ? paid >= p * keep - 0.01 : paid <= p + 0.01);
+      const both = numbers.filter(q => seen.has(fits(q)));
+      const pick = both.filter(q => paidFits(fits(q))).sort((a, b) => raw.indexOf(a) - raw.indexOf(b))[0]
+        || numbers.find(q => fits(q) != null && paidFits(fits(q)));
       if (pick) { out.quantity = pick; out.price = fits(pick); }
       // Neither on screen: offers usually fill at their price, so coins / filled
       // gives the price, and the total then has to give a whole quantity.
@@ -118,12 +125,14 @@ const sameOffer = (a, b) => ['side', 'name', 'quantity', 'price', 'filled', 'coi
 
 // Reads at several sizes. Confirmed means two reads agree and the numbers add up.
 // Otherwise it returns the most complete read, for the person to check closely.
+// The first two run side by side for speed; later ones only if those disagree.
 async function readOfferPasses(readPass, passes) {
-  const seen = [];
-  for (const p of passes) {
-    const offer = await readPass(p);
-    if (offerAddsUp(offer) && seen.some(s => offerAddsUp(s) && sameOffer(s, offer))) return { ...offer, confirmed: true };
-    seen.push(offer);
+  const seen = await Promise.all(passes.slice(0, 2).map(readPass));
+  const agreed = () => seen.find((o, i) => offerAddsUp(o) && seen.some((s, j) => j !== i && sameOffer(s, o)));
+  if (agreed()) return { ...agreed(), confirmed: true };
+  for (const p of passes.slice(2)) {
+    seen.push(await readPass(p));
+    if (agreed()) return { ...agreed(), confirmed: true };
   }
   const score = o => (offerAddsUp(o) ? 100 : 0) + ['side', 'name', 'quantity', 'price', 'filled', 'coins', 'total'].filter(k => o[k] != null).length;
   return { ...seen.sort((a, b) => score(b) - score(a))[0], confirmed: false };

@@ -292,15 +292,20 @@ async function checkBuyGoals() {
 // Shift+PrtSc reads the screen once, on this machine only. The image is never
 // saved or sent anywhere. Parsing lives in backend-js/ge-reader.js.
 const GE_READER_KEY = 'Shift+PrintScreen';
-let geOcrWorker = null;
+// One worker per side-by-side read. A worker reads one image at a time, so reads
+// that share a worker would just queue.
+const geOcrWorkers = [];
 let geReadBusy = false;
-async function geOcr(png) {
-  if (!geOcrWorker) {
+function geWorker(slot) {
+  if (!geOcrWorkers[slot]) {
     const { createWorker } = require('tesseract.js');
     const dataDir = path.join(__dirname, 'backend-js', 'data', 'ocr').replace('app.asar', 'app.asar.unpacked');
-    geOcrWorker = await createWorker('eng', 1, { langPath: dataDir, gzip: false, cacheMethod: 'none' });
+    geOcrWorkers[slot] = createWorker('eng', 1, { langPath: dataDir, gzip: false, cacheMethod: 'none' });
   }
-  return (await geOcrWorker.recognize(png)).data.text;
+  return geOcrWorkers[slot];
+}
+async function geOcr(png, slot) {
+  return (await (await geWorker(slot)).recognize(png)).data.text;
 }
 // Greyscale with stretched contrast. Tested on real GE screens (2026-11-04): this
 // read every number at 1.5x and 2x, where color often missed or misread them.
@@ -327,7 +332,7 @@ async function readGeImage(image) {
   const { width } = image.getSize();
   return readOfferPasses(async scale => {
     const scaled = image.resize({ width: Math.round(width * scale), quality: 'best' });
-    return parseOffer(await geOcr(greyContrast(scaled).toPNG()), names);
+    return parseOffer(await geOcr(greyContrast(scaled).toPNG(), scale === 2 ? 1 : 0), names);
   }, [1.5, 2, 1]);
 }
 async function captureGeOffer() {
@@ -339,9 +344,11 @@ async function captureGeOffer() {
     const sources = await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: size });
     const source = sources.find(s => String(s.display_id) === String(display.id)) || sources[0];
     if (!source) throw new Error('No screen to read');
+    // The screen is captured, so GEnius can come forward and show it's working.
+    notifyRenderer('ge-reader-result', { reading: true });
+    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
     const offer = await readGeImage(source.thumbnail);
     notifyRenderer('ge-reader-result', offer);
-    if (mainWindow && !mainWindow.isDestroyed()) { mainWindow.show(); mainWindow.focus(); }
   } catch (e) {
     console.error('[GE reader] failed:', e.message);
     notifyRenderer('ge-reader-result', { error: e.message });
@@ -361,6 +368,7 @@ function updateGeReaderShortcut() {
 // Test mode reads a saved image instead of the screen.
 ipcMain.handle('test-ge-reader', async (_, file) => {
   if (!isTestMode) return null;
+  notifyRenderer('ge-reader-result', { reading: true });
   const offer = await readGeImage(nativeImage.createFromPath(file));
   notifyRenderer('ge-reader-result', offer);
   return offer;
@@ -479,6 +487,7 @@ ipcMain.handle('get-settings', () => ({
   detailPanelWidth:   store.get('detailPanelWidth', 296),
   columnWidths:       store.get('columnWidths', {}),
   showThumbnails:     store.get('showThumbnails', true),
+  fullNumbers:        store.get('fullNumbers', false),
   devMode:            store.get('devMode', false),
   // These three were saved but never returned here, so a changed value
   // silently reset on every restart (found during the 2026-10-02 audit).
@@ -492,7 +501,7 @@ ipcMain.handle('get-settings', () => ({
 // actually saves is listed; anything else is ignored.
 const SAVEABLE_SETTINGS = new Set([
   'discordWebhook', 'fetchInterval', 'theme', 'notifications', 'expensiveThreshold',
-  'navOrder', 'uiScale', 'detailPanelWidth', 'columnWidths', 'showThumbnails',
+  'navOrder', 'uiScale', 'detailPanelWidth', 'columnWidths', 'showThumbnails', 'fullNumbers',
   'devMode', 'dateFormat', 'overpricedThreshold', 'accentColor',
 ]);
 ipcMain.handle('save-settings', async (_, settings) => {

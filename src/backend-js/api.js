@@ -961,7 +961,9 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       dxpIntelInFlight = storage.readJSON(path.join(dataDir, 'dxp_intelligence.json'), null);
       const onDisk = await dxpIntelInFlight;
       dxpIntelInFlight = null;
-      if (onDisk && Object.keys(onDisk).length) {
+      // A file from an older app version is missing newer results: rebuild now instead.
+      const current = onDisk?._meta?.version === require('./dxp_intelligence.js').ALMANAC_DATA_VERSION;
+      if (onDisk && current && Object.keys(onDisk).length) {
         // historyVersion:-1 never matches a real version, so the next call
         // (kicked off below, fire-and-forget, on its own separate in-flight
         // cycle) still runs the real computation and replaces this
@@ -1000,7 +1002,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // Finished DXPs only, once each: the running one has no result yet, and
         // re-announced dates were being counted twice (found 2026-11-04).
         const todayStr = new Date().toISOString().slice(0, 10);
-        const events = uniqueEvents((await loadEvents(dataDir)).filter(e => e[1] >= ALMANAC_STATS_SINCE && e[2] < todayStr));
+        const finished = uniqueEvents((await loadEvents(dataDir)).filter(e => e[2] < todayStr));
+        const events = finished.filter(e => e[1] >= ALMANAC_STATS_SINCE);
         // Confirmed for real on a Pixel 8 Pro (2026-06-29): this single call
         // took 146.7s on-device vs 7.8s on a desktop dev machine for the
         // identical computation/dataset — see computeDxpData's BATCH comment
@@ -1011,7 +1014,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         const out = await computeDxpData(
           [...historyPopulatedIds],
           async id => { const p = await getHistoryPoints(id); evictHistory(id); return p; },
-          itemLimits, itemNames, true, events
+          itemLimits, itemNames, true, events, finished
         );
         await storage.writeJSON(path.join(dataDir, 'dxp_intelligence.json'), out);
         dxpIntelCache = { historyVersion, data: out };

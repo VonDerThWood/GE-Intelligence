@@ -6,6 +6,7 @@ const { createElement: h, useState, useEffect, useCallback, useRef, useMemo } = 
 const { createRoot, createPortal } = ReactDOM;
 
 let SHOW_THUMBNAILS = true;
+let FULL_NUMBERS = false; // Settings: 13,903,000 instead of 13.90M
 
 function ItemThumb({name, size}) {
   const [hidden, setHidden] = useState(false);
@@ -238,6 +239,10 @@ select option:checked { background: ${T.border}; color: ${T.textBright}; }
 .signal-badge.MANIPULATED  { background: rgba(229,57,53,0.18);   border-color: #e53935;               color: #e53935; font-weight: bold; letter-spacing: 0.03em; }
 .signal-badge.OVERPRICED   { background: rgba(229,57,53,0.12);   border-color: rgba(229,57,53,0.4);   color: #ef9a9a; }
 .signal-badge.UNDERPRICED  { background: rgba(76,175,80,0.12);   border-color: rgba(76,175,80,0.4);   color: #81c784; }
+.signal-badge.RISK_LOW, .signal-badge.RISK_MEDIUM, .signal-badge.RISK_HIGH { display: inline-block; }
+.signal-badge.RISK_LOW     { background: rgba(76,175,80,0.08);   border-color: rgba(76,175,80,0.35);  color: #81c784; }
+.signal-badge.RISK_MEDIUM  { background: rgba(255,152,0,0.1);    border-color: rgba(255,152,0,0.4);   color: #ffb74d; }
+.signal-badge.RISK_HIGH    { background: rgba(229,57,53,0.12);   border-color: rgba(229,57,53,0.45);  color: #ef9a9a; }
 .signal-badge.WIDE_SPREAD  { background: rgba(158,158,158,0.12); border-color: rgba(158,158,158,0.4); color: #bdbdbd; }
 
 /* ── Star button ── */
@@ -474,7 +479,7 @@ const SIGNAL_INFO = {
   WIDE_SPREAD:  'Live instant-buy and instant-sell prices are 40%+ apart — a thin, two-sided market. What looks like a flip margin here is often just illiquidity, not a real opportunity.',
 };
 
-function SignalBadge({signal, style: extraStyle}) {
+function SignalBadge({signal, label, details, style: extraStyle}) {
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
 
@@ -485,7 +490,7 @@ function SignalBadge({signal, style: extraStyle}) {
     return () => document.removeEventListener('mousedown', handler);
   }, [pos]);
 
-  const info = SIGNAL_INFO[signal];
+  const info = details || SIGNAL_INFO[signal];
   return h('span', {ref, style:{position:'relative', display:'inline-block', ...extraStyle}},
     h('span', {
       className: `signal-badge ${signal}`,
@@ -495,7 +500,7 @@ function SignalBadge({signal, style: extraStyle}) {
         setPos(p => p ? null : {x: e.clientX, y: e.clientY});
       },
       style: {cursor: info ? 'pointer' : 'default'},
-    }, signal),
+    }, label || signal),
     pos && info && createPortal(h('div', {
       style: {
         position:'fixed', zIndex:9999,
@@ -510,7 +515,7 @@ function SignalBadge({signal, style: extraStyle}) {
         pointerEvents:'none',
       }
     },
-      h('div', {style:{fontWeight:'bold', color:T.gold, marginBottom:4, letterSpacing:'0.5px'}}, signal),
+      h('div', {style:{fontWeight:'bold', color:T.gold, marginBottom:4, letterSpacing:'0.5px'}}, label || signal),
       info
     ), document.body)
   );
@@ -518,7 +523,7 @@ function SignalBadge({signal, style: extraStyle}) {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 const fmt = {
-  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
+  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (FULL_NUMBERS) return (a >= 1000 ? Math.round(n) : n).toLocaleString(); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
   pct: n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
   num: n => n ? n.toLocaleString() : '—',
 };
@@ -3079,6 +3084,15 @@ function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast
 }
 
 function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem, onSaveAlert, onSaveReminder, toast}) {
+  // Item risk, worked out only for the item you open (one year of its saved prices).
+  const [riskDays, setRiskDays] = useState(null);
+  useEffect(() => {
+    let stale = false;
+    setRiskDays(null);
+    if (item?.id && !item.untradeable) loadDailyPrices(item.id).then(d => { if (!stale) setRiskDays(d); }).catch(() => {});
+    return () => { stale = true; };
+  }, [item?.id]);
+  const itemRisk = riskDays ? positionRisk(null, item, riskDays, Date.now() - 365 * 86400000) : null;
   const updateRisksForPanel = useUpdateRisks();
   const [chartOpen, setChartOpen]     = useState(false);
   const [chartDxpMode, setChartDxpMode] = useState(false);
@@ -3536,6 +3550,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       !item.untradeable && item.signals&&item.signals.length>0 && h('div',{className:'signal-list'},
         item.signals.map(s=>h(SignalBadge,{key:s,signal:s}))
       ),
+      !item.untradeable && itemRisk && h('div',{style:{marginTop:4, marginBottom:4}}, h(SignalBadge, itemRisk)),
 
       // Price trend badges from history
       item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true), untradeable: item.untradeable}),
@@ -7740,7 +7755,7 @@ const DXP_DEBUNKED_THEORIES = [
 // Profit is computed NET of GE tax (applyTax, defined above) — this was
 // missing entirely until Ben caught it 2026-06-24; the raw sell-buy
 // difference overstates every single trade idea in this tab by ~2%.
-function buildTradeIdea(timing, price, limit) {
+function buildTradeIdea(timing, price, limit, replay) {
   if (!timing || !price) return null;
   const buyDay = timing.best_buy_day_offset, sellDay = timing.best_sell_day_offset;
   const buyPct = timing.best_buy_pct_median, sellPct = timing.best_sell_pct_median;
@@ -7773,6 +7788,14 @@ function buildTradeIdea(timing, price, limit) {
     // tells you roughly how early to start buying, not just the in-event
     // buy/sell days above.
     preTroughOffset: timing.pre_trough_offset_median,
+    // Replayed through real past DXPs: its days and typical result replace the
+    // combined highs and lows above, which never came from one real trade.
+    replay: replay || null,
+    ...(replay ? {
+      buyDay: replay.buyDay, sellDay: replay.sellDay, sameySequence: replay.buyFirst, nEvents: replay.tests,
+      netProfitPct: replay.median, profitPerItem: Math.round(price * replay.median / 100),
+      profitForLimit: limit ? Math.round(price * replay.median / 100) * limit : null,
+    } : {}),
   };
 }
 
@@ -7791,7 +7814,7 @@ function computeRecommendationCandidates(data, priceById) {
     const price = liveBuyOf(liveItem) || 0;
     if (!price || !entry.timing) continue;
     const limit = entry.limit || liveItem?.limit || null;
-    const trade = buildTradeIdea(entry.timing, price, limit);
+    const trade = buildTradeIdea(entry.timing, price, limit, entry.replay);
     if (!trade || trade.profitPerItem == null) continue;
     let bestRatio = 0;
     for (const p of ALMANAC_PHASES) {
@@ -8044,6 +8067,124 @@ function DxpNewsBanner({toast}) {
 // tab's "Game Updates" link uses it).
 let _almanacInitialView = null;
 let _almanacInitialUpdate = null; // Game Update name to open on arrival
+// The Almanac's trading plan in plain English (Ben, 2026-11-05: the table's day
+// numbers were hard to follow). The table just shows an icon that opens this.
+function dxpDayInWords(day, next) {
+  const dxp = (next ? 'the next ' : '') + 'Double XP';
+  const d = Math.round(day), n = Math.abs(d), days = n + (n === 1 ? ' day' : ' days');
+  return d === 0 ? 'the day ' + dxp + ' starts' : d < 0 ? days + ' before ' + dxp + ' starts' : days + ' after ' + dxp + ' starts';
+}
+// The real date, once Jagex has announced this Double XP: day 5 of a Nov 6 start is Nov 11.
+function dxpDayDate(start, day) {
+  const d = new Date(Date.parse(start + 'T00:00:00Z') + Math.round(day) * 86400000);
+  return d.toLocaleDateString(undefined, {month:'short', day:'numeric', timeZone:'UTC'});
+}
+// New Items tab (Ben, 2026-11-05). The closest older items are picked by hand, because
+// automatic matching could easily pair the wrong ones. They're a guess, not a result.
+const NEW_ITEM_COMPARE = {
+  'Eternal frame': ['Elder frame', 'Magic frame'],
+  'Eternal plank': ['Elder plank', 'Magic plank'],
+  'Refined Eternal planks': ['Refined Magic planks'],
+};
+const NEW_ITEM_MIN_VOLUME = 1000;
+const NEW_ITEM_MONTHS = 18;
+const NEW_ITEM_COLS = [['Item','name'],['Double XPs seen','dxps'],['Made money','wins'],['Typical result','median'],['Normal time','control'],['So far','verdict'],['',null]];
+const NEW_ITEM_SORT = {
+  name: r => r.name.toLowerCase(), dxps: r => r.early.dxps * 1e9 - (r.early.volume || 0),
+  wins: r => r.early.tests ? r.early.wins / r.early.tests : -1, median: r => r.early.tests ? r.early.median : -Infinity,
+  control: r => r.early.tests ? r.early.control : -Infinity, verdict: r => !r.early.tests || r.early.tests < 3 ? 0 : r.early.looksGood ? 2 : 1,
+};
+function newItemVerdict(e) {
+  if (!e.tests || e.tests < 3) return {text:'Too early to say', color:T.textDim};
+  return e.looksGood ? {text:'Looks good so far', color:T.green} : {text:'Not so far', color:T.textDim};
+}
+function NewItemModal({id, name, early, data, dxpStart, onClose}) {
+  const v = newItemVerdict(early);
+  const pct = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+  const byName = n => Object.values(data || {}).find(x => x && x.name === n);
+  const compare = (NEW_ITEM_COMPARE[name] || []).map(n => ({n, r: byName(n)?.replay || byName(n)?.early})).filter(c => c.r && c.r.tests);
+  return h('div', {className:'modal-overlay', onClick:e => { if (e.target === e.currentTarget) onClose(); }},
+    h('div', {className:'modal', style:{maxWidth:460}},
+      h('div', {className:'ge-section-head'}, 'New item: ' + name),
+      h('div', {style:{fontSize:14, color:T.gold, marginBottom:10}}, 'Too new to recommend.'),
+      h('div', {style:{fontSize:14, color:T.text, lineHeight:1.5, marginBottom:10}},
+        early.dxps === 0 ? 'This item hasn\'t been through a finished Double XP yet.' : 'It has been through ' + early.dxps + ' of the ' + early.needed + ' Double XPs we need to trust a plan.'),
+      early.tests > 0 && h('div', {style:{fontSize:14, color: early.median >= 0 ? T.green : T.red, marginBottom:6}},
+        'So far: tried on ' + early.tests + ' Double XP' + (early.tests === 1 ? '' : 's') + ', it made money ' + early.wins + ' time' + (early.wins === 1 ? '' : 's') + ', and typically ' + (early.median >= 0 ? 'made ' : 'lost ') + Math.abs(early.median).toFixed(1) + '% after tax.'),
+      early.tests > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:6}}, 'The same trade at a normal time of year: ' + pct(early.control) + '.'),
+      h('div', {style:{fontSize:12, color:v.color, marginBottom:12}}, early.tests ? 'Same tests as every other item: ' + v.text.toLowerCase() + '. This few results could easily be luck.' : 'Not enough history to test yet. It\'ll go through the same tests as every other item once it has.'),
+      compare.length > 0 && h('div', {style:{fontSize:12, color:T.text, lineHeight:1.5, marginBottom:12}},
+        h('div', {style:{color:T.gold, marginBottom:4}}, 'Closest older items (a guess, not a result)'),
+        compare.map(c => h('div', {key:c.n}, c.n + ': made money ' + c.r.wins + ' of ' + c.r.tests + ', typically ' + pct(c.r.median)))),
+      id != null && dxpStart && h(DxpLiveWatch, {id, dxpStart}),
+      h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.5, marginBottom:14}},
+        'Uses GE guide prices, so real trades may do worse. The past may not repeat.'),
+      h('button', {className:'ge-btn gold', onClick:onClose}, 'Got it')));
+}
+function DxpPlanModal({id, name, t, early, dxpStart, onClose}) {
+  // Between New Items' 18 months and 30 (Ben, 2026-11-07): new for a 25-year-old game, old for
+  // an MMO. These stay in the normal lists with a note about their short history.
+  const ageMonths = early ? (Date.now() - early.firstSeen) / (30.44 * 86400000) : 0;
+  const fairlyNew = early && ageMonths > NEW_ITEM_MONTHS && ageMonths <= 30;
+  const rp = t.replay;
+  const reliable = !rp || rp.passes;
+  // A sell-first plan's buy belongs to the next Double XP, whose dates aren't known.
+  const dateFor = (verb, day) => dxpStart && (t.sameySequence || verb === 'Sell') ? ' (' + dxpDayDate(dxpStart, day) + ')' : '';
+  const step = (num, verb, color, day, lead) => h('div', {key:num, style:{display:'flex', gap:10, marginBottom:12}},
+    h('div', {style:{width:24, height:24, flex:'none', borderRadius:12, background:color, color:'#111', fontWeight:'bold', display:'flex', alignItems:'center', justifyContent:'center'}}, num),
+    h('div', {style:{fontSize:14, color:T.text, lineHeight:1.5}},
+      lead, h('b', {style:{color}}, lead ? verb.toLowerCase() : verb), ' about ', h('b', null, dxpDayInWords(day, !t.sameySequence && verb === 'Buy') + dateFor(verb, day)), '.'));
+  const buy = n => step(n, 'Buy', T.green, t.buyDay, t.sameySequence ? '' : 'Then ');
+  const sell = n => step(n, 'Sell', T.gold, t.sellDay, t.sameySequence ? 'Then ' : 'If you own some, ');
+  const pct = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  return h('div', {className:'modal-overlay', onClick:e => { if (e.target === e.currentTarget) onClose(); }},
+    h('div', {className:'modal', style:{maxWidth:460}},
+      h('div', {className:'ge-section-head'}, 'The forecast: ' + name),
+      fairlyNew && h('div', {style:{fontSize:12, color:T.gold, lineHeight:1.5, marginBottom:10}},
+        'Fairly new item: on the GE since ' + new Date(early.firstSeen).toLocaleDateString(undefined, {month:'short', year:'numeric'}) + ', so it has only seen ' + early.dxps + ' Double XP' + (early.dxps === 1 ? '' : 's') + '. That\'s less history than most items, so take these days with extra care.'),
+      !reliable && h('div', {style:{fontSize:15, color:T.gold, marginBottom:10}}, 'No reliable trade here.'),
+      reliable && rp && !t.sameySequence && h('div', {style:{fontSize:14, color:T.gold, marginBottom:10}}, 'Only if you own it: this plan starts by selling.'),
+      !rp && h('div', {style:{fontSize:14, color:T.gold, marginBottom:10}}, 'The old strategy: past GE guide prices' + (t.nEvents ? ' over ' + t.nEvents + ' Double XPs' : '') + ' pointed to these days.'),
+      reliable && (t.sameySequence ? [buy(1), sell(2)] : [sell(1), buy(2)]),
+      rp && h('div', {style:{fontSize:14, color: rp.median >= 0 ? T.green : T.red, marginBottom:6}},
+        (reliable ? 'We tried this on ' : 'We tried this item\'s usual plan on ') + rp.tests + ' past Double XPs. It made money ' + rp.wins + ' times, and typically ' + (rp.median >= 0 ? 'made ' : 'lost ') + Math.abs(rp.median).toFixed(1) + '% after tax.'),
+      rp && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}},
+        'The same trade at a normal time of year: ' + pct(rp.control) + '. In the last ' + rp.recentTests + ' Double XPs it made money ' + rp.recentWins + ' times.'),
+      rp && reliable && t.profitPerItem != null && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'At today\'s price, that\'s about ' + fmt.gp(Math.abs(t.profitPerItem)) + 'gp per item.'),
+      !rp && h('div', {style:{fontSize:12, color:T.text, lineHeight:1.5, marginBottom:12}},
+        'It hasn\'t been through the newer replay test, which needs 13 Double XPs of steady trading. The GE guide price also lags behind real trades. GEnius is tracking real trade prices during this Double XP, and will show here how well the old strategy holds up.'),
+      id != null && dxpStart && h(DxpLiveWatch, {id, dxpStart}),
+      rp && h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.5, marginBottom:14}},
+        'Uses GE guide prices, since old Double XPs have no live prices, so real trades may do worse. The past may not repeat.'),
+      h('button', {className:'ge-btn gold', onClick:onClose}, 'Got it')));
+}
+// Watches this Double XP as it happens (Ben, 2026-11-05): the GE guide price lags real
+// trades, so this compares where each one peaked. Complete days only, from the live
+// archive, which keeps them for good so later DXPs can learn from this one.
+function DxpLiveWatch({id, dxpStart}) {
+  const [watch, setWatch] = useState(null);
+  useEffect(() => {
+    let stale = false;
+    Promise.all([window.genius?.getItemLiveHistory?.(id, 45), loadDailyPrices(id)]).then(([live, guide]) => {
+      if (stale) return;
+      const start = Date.parse(dxpStart + 'T00:00:00Z');
+      const dayOf = ts => Math.floor((ts - start) / 86400000);
+      const rows = (live || []).filter(r => r.date >= dxpStart && r.buy > 0 && r.sell > 0).map(r => ({day: dayOf(Date.parse(r.date + 'T00:00:00Z')), price: (r.buy + r.sell) / 2}));
+      if (!rows.length) return;
+      const top = list => list.reduce((a, b) => b.price > a.price ? b : a);
+      const guideRows = (guide || []).filter(g => g.ts >= start).map(g => ({day: dayOf(g.ts), price: g.price}));
+      setWatch({days: rows.length, live: top(rows), guide: guideRows.length ? top(guideRows) : null, latest: rows[rows.length - 1]});
+    }).catch(() => {});
+    return () => { stale = true; };
+  }, [id, dxpStart]);
+  if (!watch) return null;
+  const {live, guide, latest, days} = watch;
+  return h('div', {style:{fontSize:12, color:T.text, lineHeight:1.5, border:'1px solid '+T.borderDim, borderRadius:4, padding:'8px 10px', marginBottom:12}},
+    h('div', {style:{color:T.gold, marginBottom:3}}, 'This Double XP so far (' + days + (days === 1 ? ' full day' : ' full days') + ')'),
+    h('div', null, 'Real trades were highest on day ' + live.day + ', at about ' + fmt.gp(Math.round(live.price)) + 'gp. Latest: about ' + fmt.gp(Math.round(latest.price)) + 'gp.'),
+    guide && h('div', null, guide.day === live.day ? 'The GE guide price was highest that same day.' : 'The GE guide price was highest on day ' + guide.day + (guide.day > live.day ? ', so it was ' + (guide.day - live.day) + ' behind.' : '.')));
+}
+
 function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   const [activeView, setActiveView] = useState(() => { const v = _almanacInitialView || 'dxp'; _almanacInitialView = null; return v; }); // 'dxp' | 'seasonal' | 'updates'
   const [data, setData] = useState(() => _dxpDataCache);
@@ -8054,6 +8195,18 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   const [activePhase, setActivePhase] = useState('anticipation');
   const [sort, setSort] = useState({key:'confidence', dir:-1});
   const [tier, setTier] = useState('confirmed'); // 'confirmed' | 'negligible' | 'speculative' | 'debunked' | 'watchlist' | 'recommendations'
+  const [planFor, setPlanFor] = useState(null); // {name, t}: the plain-English pop-up
+  const [newItemFor, setNewItemFor] = useState(null);
+  const [showAllNew, setShowAllNew] = useState(false);
+  const [newSort, setNewSort] = useState({key:'dxps', dir:1});
+  const [dxpStart, setDxpStart] = useState(null); // announced start date, from the news calendar
+  useEffect(() => {
+    window.genius?.getNewsCalendar?.().then(list => {
+      const today = new Date().toISOString().slice(0, 10);
+      const next = (list || []).filter(e => e.category === 'dxp' && e.start && (e.end || e.start) >= today).sort((a, b) => a.start < b.start ? -1 : 1)[0];
+      setDxpStart(next ? next.start : null);
+    }).catch(() => {});
+  }, []);
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
   const [dxpWatchlist, setDxpWatchlistState] = useState([]);
@@ -8072,12 +8225,12 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   // independent widths since their columns don't correspond 1:1; Honorable
   // Mentions reuses the Recommendations widths rather than getting its own
   // handles, since it's the same columns directly below the same table.
-  const mainCols = useTableColumns('genius_almanac_main_col_widths_v2',
-    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:150, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26},
-    null, ['name', 'direction', 'confidence', 'expand']);
-  const recCols = useTableColumns('genius_almanac_rec_col_widths_v2',
-    {star:26, name:185, strategy:160, netRoi:88, profitPerItem:128, profitForLimit:148},
-    null, ['name', 'netRoi', 'profitForLimit']);
+  const mainCols = useTableColumns('genius_almanac_main_col_widths_v3',
+    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:50, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26},
+    null, ['name', 'direction', 'strategy', 'confidence', 'expand']);
+  const recCols = useTableColumns('genius_almanac_rec_col_widths_v3',
+    {star:26, name:185, strategy:50, netRoi:88, profitPerItem:128, profitForLimit:148},
+    null, ['name', 'strategy', 'netRoi', 'profitForLimit']);
 
   useEffect(() => {
     // Already have data cached from an earlier visit this session — skip
@@ -8147,7 +8300,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     const price = liveBuyOf(liveItem) || 0;
     const medianPct = ph?.median_pct ?? ph?.avg_pct ?? 0;
     const limit = entry.limit || liveItem?.limit || null;
-    const trade = buildTradeIdea(entry.timing, price, limit);
+    const trade = buildTradeIdea(entry.timing, price, limit, entry.replay);
     const negligible = trade
       ? trade.netProfitPct < NEGLIGIBLE_NET_PROFIT_PCT
         || (trade.profitForLimit != null && trade.profitForLimit < NEGLIGIBLE_PROFIT_FOR_LIMIT_GP)
@@ -8233,6 +8386,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     const numSlots = Math.max(1, slots || GE_SLOTS);
     let pool = recommendationCandidates.filter(r => !r.negligible);
     if (riskTolerance === 'safe') pool = pool.filter(r => r.bestRatio >= ALMANAC_CONFIDENCE_THRESHOLD);
+    if (pool.some(r => r.trade.replay)) pool = pool.filter(r => r.trade.replay?.passes); // only plans that worked in the replay
     if (budget > 0) pool = pool.filter(r => r.trade.buyPrice <= budget); // can afford at least one unit
     // Ranked by total gp payout (Profit (buy limit)), not ROI — most
     // players care more about "how much total gp can this make me" than
@@ -8290,7 +8444,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       case 'direction':      return mainCols.th(k, sortable('direction'), 'Direction'+sortArrow('direction'));
       case 'confidence':     return mainCols.th(k, sortable('confidence'), 'Confidence'+sortArrow('confidence'));
       case 'medianPct':      return mainCols.th(k, sortable('medianPct'), 'Median %'+sortArrow('medianPct'));
-      case 'strategy':       return mainCols.th(k, null, 'Trading Strategy');
+      case 'strategy':       return mainCols.th(k, null, 'Plan');
       case 'profitPerItem':  return mainCols.th(k, {...sortable('profitPerItem'), title:PROFIT_ITEM_TIP}, 'Probable profit/item'+sortArrow('profitPerItem'));
       case 'profitForLimit': return mainCols.th(k, {...sortable('profitForLimit'), title:PROFIT_LIMIT_TIP}, 'Probable profit (buy limit)'+sortArrow('profitForLimit'));
       case 'volRatio':       return mainCols.th(k, sortable('volRatio'), 'Vol'+sortArrow('volRatio'));
@@ -8298,7 +8452,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       default:               return mainCols.th(k, null, null);
     }
   };
-  const mainTdFor = (k, r, t, tradeLabel) => {
+  const mainTdFor = (k, r, t) => {
     switch (k) {
       case 'star': return h('td', {
         key:k,
@@ -8326,12 +8480,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         : h('td', {key:k, style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop');
       case 'confidence': return h('td', {key:k}, `${r.score}/${r.total}`);
       case 'medianPct': return h('td', {key:k, style:{color: r.medianPct>=0 ? T.green : T.red}}, `${r.medianPct>=0?'+':''}${r.medianPct}%`);
-      case 'strategy': return h('td', {
-        key:k,
-        style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-        onClick:()=>setExpanded(expanded===r.id?null:r.id),
-        title:'Show trading strategy details',
-      }, tradeLabel);
+      case 'strategy': return h('td', {key:k, style:{textAlign:'center'}}, t ? h('button', {
+        className:'ge-btn', style:{padding:'1px 6px'}, title:'See the plan in plain English',
+        onClick: e => { e.stopPropagation(); setPlanFor({id:r.id, name:r.name, t:t}); },
+      }, '📋') : '—');
       case 'profitPerItem': return h('td', {key:k, style:{color: t?.profitPerItem==null ? T.textDim : t.profitPerItem>=0 ? T.gold : T.red}}, t?.profitPerItem!=null ? (t.profitPerItem>=0?'+':'')+fmt.gp(t.profitPerItem)+'gp' : '—');
       case 'profitForLimit': return h('td', {key:k, style:{color: t?.profitForLimit==null ? T.textDim : t.profitForLimit>=0 ? T.gold : T.red}}, t?.profitForLimit!=null ? (t.profitForLimit>=0?'+':'')+fmt.gp(t.profitForLimit)+'gp' : '—');
       case 'volRatio': return h('td', {key:k, style:{color:T.textDim}}, r.volRatio!=null ? r.volRatio+'x' : '—');
@@ -8352,7 +8504,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     switch (k) {
       case 'star':           return recCols.th(k, null, null);
       case 'name':           return recCols.th(k, sortable('name'), 'Item'+arrow('name'));
-      case 'strategy':       return recCols.th(k, null, 'Trading Strategy');
+      case 'strategy':       return recCols.th(k, null, 'Plan');
       case 'netRoi':         return recCols.th(k, {...(sortable('netRoi')||{}), title:'Net of the 2% GE sell tax'}, 'Net ROI'+arrow('netRoi'));
       case 'profitPerItem':  return recCols.th(k, {...(sortable('profitPerItem')||{}), title:PROFIT_ITEM_TIP}, 'Probable profit/item'+arrow('profitPerItem'));
       case 'profitForLimit': return recCols.th(k, {...(sortable('profitForLimit')||{}), title:PROFIT_LIMIT_TIP}, 'Probable profit (buy limit)'+arrow('profitForLimit'));
@@ -8366,17 +8518,11 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
         onClick: e => { e.stopPropagation(); toggleDxpWatch(r.id); },
       }, dxpWatchlist.includes(r.id) ? '★' : '☆');
-      case 'name': return h('td', {key:k}, r.name);
-      case 'strategy': return h('td', {
-        key:k,
-        style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-        onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
-        title:'Show trading strategy details',
-      },
-        r.trade.sameySequence
-          ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
-          : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
-      );
+      case 'name': return h('td', {key:k}, r.name, r.trade?.replay && !r.trade.sameySequence && h('div', {style:{fontSize:11, color:T.gold}}, 'Only if you own it'));
+      case 'strategy': return h('td', {key:k, style:{textAlign:'center'}}, r.trade ? h('button', {
+        className:'ge-btn', style:{padding:'1px 6px'}, title:'See the plan in plain English',
+        onClick: e => { e.stopPropagation(); setPlanFor({id:r.id, name:r.name, t:r.trade}); },
+      }, '📋') : '—');
       case 'netRoi': return h('td', {key:k, style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%');
       case 'profitPerItem': return h('td', {key:k, style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp');
       case 'profitForLimit': return h('td', {key:k, style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—');
@@ -8433,40 +8579,18 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
 
   const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
   const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
-  // Shared "Trade idea" writeup shown when expanding a row — used by the
-  // main Confirmed/Negligible/Speculative table AND Recommendations/
-  // Honorable mentions, so the trade-idea expand behaves identically
-  // everywhere instead of being a main-table-only feature.
-  const tradeDetailBlock = t => !t ? null : h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`}},
-    h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
-      `Trading strategy — based on ${t.nEvents} past DXP cycles`
-    ),
-    h('div', {style:{fontSize:13, color:T.gold, fontWeight:600, marginBottom:8}},
-      t.sameySequence
-        ? `Buy day ${t.buyDay}, sell day ${t.sellDay}`
-        : `Sell day ${t.sellDay}, buy day ${t.buyDay} (next cycle)`
-    ),
-    h('div', {style:{fontSize:12, color:T.text, lineHeight:1.6}},
-      t.sameySequence
-        ? h('span', null, `Buy first, sell later. `)
-        : h('span', null, `Sell first (if you already own some), buy back later at the lower price for next time. `),
-      t.preTroughOffset != null && t.preTroughOffset < -1 && h('span', null,
-        `This one starts getting cheaper before the event is even announced — around ${Math.abs(t.preTroughOffset)} days before it starts. If you want the absolute best price, that's actually a better time to buy than the dip described below.`, h('br',null), h('br',null),
-      ),
-      `Cheapest point: around day ${t.buyDay} of the event (give or take ${t.buyDayStd} days) — typically about ${Math.abs(t.buyPct).toFixed(1)}% ${t.buyPct>=0?'above':'below'} its normal price, roughly ${fmt.gp(t.buyPrice)}gp.`, h('br',null),
-      `Priciest point: around day ${t.sellDay} (give or take ${t.sellDayStd} days) — typically about ${Math.abs(t.sellPct).toFixed(1)}% ${t.sellPct>=0?'above':'below'} its normal price, roughly ${fmt.gp(t.sellPrice)}gp before tax (${fmt.gp(t.netSellPrice)}gp after the 2% GE sell tax).`, h('br',null),
-      `Buying at the cheap point and selling at the expensive point has historically netted about ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item, after tax.`, h('br',null),
-      h('span', {style:{color:T.textDim, fontStyle:'italic'}},
-        '"Day 0" is the moment the event starts — negative days are before it starts, and fractional days are partial days (day 2.5 ≈ 2.5 days in).'
-      ),
-    )
-  );
   const confidentRows = allRows.filter(r => r.ratio >= ALMANAC_CONFIDENCE_THRESHOLD);
   const confirmedCount = confidentRows.filter(r => !r.negligible).length;
   const negligibleRows = confidentRows.filter(r => r.negligible);
   const negligibleCount = negligibleRows.length;
   const negligibleNetNegativeCount = negligibleRows.filter(r => (r.trade?.profitPerItem ?? 0) < 0).length;
   const speculativeCount = allRows.length - confidentRows.length;
+  const allNewItems = Object.entries(data || {})
+    .filter(([id, e]) => id !== '_meta' && e?.early && Date.now() - e.early.firstSeen <= NEW_ITEM_MONTHS * 30.44 * 86400000 && (e.early.volume || 0) >= 100 && !isDebunkedDxpItem(e.name || priceById[id]?.name))
+    .map(([id, e]) => ({id, name: e.name || priceById[id]?.name || id, early: e.early}))
+    .sort((a, b) => a.early.dxps - b.early.dxps || (b.early.volume || 0) - (a.early.volume || 0));
+  const busyNewItems = allNewItems.filter(r => (r.early.volume || 0) >= NEW_ITEM_MIN_VOLUME);
+  const shownNewItems = showAllNew ? allNewItems : busyNewItems;
   const recBudget = parseGP(budgetInput) || 0;
   const recSlots = Math.max(1, parseInt(slotsInput, 10) || GE_SLOTS);
   const recs = buildRecommendations(riskTolerance, recBudget, recSlots, diversify);
@@ -8483,6 +8607,8 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   });
 
   return h('div', {style:{padding:'16px 20px', maxWidth:900}},
+    planFor && h(DxpPlanModal, {...planFor, early: data?.[planFor.id]?.early, dxpStart, onClose:()=>setPlanFor(null)}),
+    newItemFor && h(NewItemModal, {...newItemFor, data, dxpStart, onClose:()=>setNewItemFor(null)}),
     h('div', {style:{display:'flex', alignItems:'center', gap:8, marginBottom:4}},
       h('span', {style:{fontSize:16}}, '📅'),
       h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac'),
@@ -8581,7 +8707,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           // panels that otherwise stay open forever — clicking a phase
           // pill should always return you to the normal phase-filtered
           // table, not silently no-op while the old panel keeps showing.
-          if (tier === 'debunked' || tier === 'recommendations') setTier('confirmed');
+          if (tier === 'debunked' || tier === 'recommendations' || tier === 'newitems') setTier('confirmed');
         },
         style:{
           padding:'6px 12px', fontSize:11, borderRadius:4, cursor:'pointer',
@@ -8599,9 +8725,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         {key:'speculative', label:`Highly Speculative (${speculativeCount})`},
         {key:'watchlist', label:`⭐ My Watchlist (${dxpWatchlist.length})`},
         {key:'recommendations', label:`🎯 Recommendations`},
+        {key:'newitems', label:`🌱 New Items (${busyNewItems.length})`},
         {key:'debunked', label:`📖 Debunked Theories (${DXP_DEBUNKED_THEORIES.length})`},
       ].map(t => {
-        const golden = t.key==='debunked' || t.key==='watchlist' || t.key==='recommendations';
+        const golden = t.key==='debunked' || t.key==='watchlist' || t.key==='recommendations' || t.key==='newitems';
         return h('button', {
         key:t.key,
         onClick:()=>{setTier(t.key); setExpanded(null);},
@@ -8614,7 +8741,30 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       }, t.label);
       })
     ),
-    tier !== 'debunked' && tier !== 'recommendations' && h('input', {
+    tier === 'newitems' && !loading && !error && h('div', null,
+      h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.5, marginBottom:10}},
+        'These items are too new to the game to judge. We trust a plan after 13 Double XPs: 5 to learn its usual days, then 8 to test them. Until then an item runs through the same tests as everything else, but with so few results a good score could be luck, so it isn\'t recommended. Each one moves to the normal lists once it has enough history.'),
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap'}},
+        h('span', {style:{fontSize:11, color:T.textDim}}, showAllNew ? `All ${allNewItems.length} new items tested` : `${busyNewItems.length} busy items (${NEW_ITEM_MIN_VOLUME.toLocaleString()}+ traded a day), of ${allNewItems.length} tested`),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:()=>setShowAllNew(s => !s)}, showAllNew ? 'Show busy only' : 'Show all')),
+      shownNewItems.length === 0
+        ? h('div', {className:'empty-state'}, h('div', null, 'No new items yet. The list fills in after the Almanac next rebuilds.'))
+        : h('div', {className:'ge-table-wrap'},
+          h('table', {className:'ge-table'},
+            h('thead', null, h('tr', null, NEW_ITEM_COLS.map(([c, key]) => h('th', key ? {key:c, style:{cursor:'pointer'}, onClick:()=>setNewSort(s => ({key, dir: s.key === key ? -s.dir : (key === 'name' ? 1 : -1)}))} : {key:c},
+              c + (key && newSort.key === key ? (newSort.dir > 0 ? ' ↑' : ' ↓') : ''))))),
+            h('tbody', null, [...shownNewItems].sort((a, b) => { const f = NEW_ITEM_SORT[newSort.key], x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * newSort.dir; }).map(r => {
+              const e = r.early, v = newItemVerdict(e);
+              return h('tr', {key:r.id},
+                h('td', {style:{cursor: onSelect ? 'pointer' : 'default'}, title: onSelect ? 'Open item details' : undefined, onClick: onSelect && priceById[r.id] ? ()=>onSelect(priceById[r.id]) : undefined}, r.name),
+                h('td', null, e.dxps + ' of ' + e.needed),
+                h('td', null, e.tests ? e.wins + ' of ' + e.tests : '—'),
+                h('td', {style:{color: !e.tests ? T.textDim : e.median >= 0 ? T.green : T.red}}, e.tests ? (e.median >= 0 ? '+' : '') + e.median.toFixed(1) + '%' : '—'),
+                h('td', null, e.tests ? (e.control >= 0 ? '+' : '') + e.control.toFixed(1) + '%' : '—'),
+                h('td', {style:{color:v.color}}, v.text),
+                h('td', {style:{textAlign:'center'}}, h('button', {className:'ge-btn', style:{padding:'1px 6px'}, title:'See what we know so far', onClick:()=>setNewItemFor({id:r.id, name:r.name, early:e})}, '📋')));
+            }))))),
+    tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('input', {
       type:'text', value:search, placeholder:'Search any item, across all tiers…',
       onChange:e=>setSearch(e.target.value),
       style:{
@@ -8705,15 +8855,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
           recCols.colgroup(),
           h('thead', null, h('tr', null, recCols.colOrder.map(k => recThFor(k, true)))),
-          h('tbody', null, sortedPicks.flatMap(r => [
-            h('tr', {
+          h('tbody', null, sortedPicks.map(r => h('tr', {
               key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
               onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-            }, recCols.colOrder.map(k => recTdFor(k, r))),
-            expanded===r.id && h('tr', {key:r.id+'-detail'},
-              h('td', {colSpan:recCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
-            ),
-          ]))
+            }, recCols.colOrder.map(k => recTdFor(k, r)))))
         ),
         recCols.handles(),
         ),
@@ -8725,15 +8870,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
             recCols.colgroup(),
             h('thead', null, h('tr', null, recCols.colOrder.map(k => recThFor(k, false)))),
-            h('tbody', null, recs.honorableMentions.flatMap(r => [
-              h('tr', {
+            h('tbody', null, recs.honorableMentions.map(r => h('tr', {
                 key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
                 onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-              }, recCols.colOrder.map(k => recTdFor(k, r))),
-              expanded===r.id && h('tr', {key:r.id+'-detail'},
-                h('td', {colSpan:recCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
-              ),
-            ]))
+              }, recCols.colOrder.map(k => recTdFor(k, r)))))
           ),
         ),
       ),
@@ -8762,10 +8902,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       ))
     ),
 
-    loading && tier !== 'debunked' && tier !== 'recommendations' && h('div', {style:{color:T.textDim, fontSize:12, padding:'20px 0'}}, 'Computing DXP patterns from local + research history…'),
-    error && tier !== 'debunked' && tier !== 'recommendations' && h('div', {style:{color:T.red, fontSize:12, padding:'20px 0'}}, 'Failed to load Almanac data.'),
+    loading && tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('div', {style:{color:T.textDim, fontSize:12, padding:'20px 0'}}, 'Computing DXP patterns from local + research history…'),
+    error && tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('div', {style:{color:T.red, fontSize:12, padding:'20px 0'}}, 'Failed to load Almanac data.'),
 
-    !loading && !error && tier !== 'debunked' && tier !== 'recommendations' && h('div', null,
+    !loading && !error && tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('div', null,
       h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}},
         isSearching ? `${rows.length} match${rows.length===1?'':'es'} across all tiers` : `${rows.length} items in this view`
       ),
@@ -8777,18 +8917,13 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
             h('thead', null, h('tr', null, mainCols.colOrder.map(k => mainThFor(k)))),
             h('tbody', null, rows.map(r => {
               const t = r.trade;
-              const tradeLabel = !t ? '—'
-                : t.sameySequence
-                  ? `Buy ~day ${t.buyDay} → Sell ~day ${t.sellDay}`
-                  : `Sell ~day ${t.sellDay} → Buy ~day ${t.buyDay} (next cycle)`;
               return [
-              h('tr', {key:r.id}, mainCols.colOrder.map(k => mainTdFor(k, r, t, tradeLabel))),
+              h('tr', {key:r.id}, mainCols.colOrder.map(k => mainTdFor(k, r, t))),
               expanded===r.id && h('tr', {key:r.id+'-detail'},
                 h('td', {colSpan:mainCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}},
                   r.negligible && r.negligibleReason && h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`, fontSize:12, color:T.gold}},
                     r.negligibleReason
                   ),
-                  tradeDetailBlock(t),
                   h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
                     `Tracked DXP events — ${r.events.length} with data for this phase`
                   ),
@@ -10011,8 +10146,8 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Theme'),
       h('select',{className:'ge-input',value:s.theme||'dark',onChange:set('theme')},
-        h('option',{value:'dark'},'Dark (default)'),
-        h('option',{value:'black'},'Black'),
+        h('option',{value:'dark'},'Classic (default)'),
+        h('option',{value:'black'},'Dark'),
       )
     ),
     h('div',{style:{marginBottom:20}},
@@ -10027,6 +10162,12 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         h('button',{className:'ge-btn', style:{fontSize:11, padding:'4px 10px'}, onClick:()=>update({accentColor: DEFAULT_ACCENT})}, 'Reset to default'),
       ),
       h('div',{style:{fontSize:11,color:T.textDim, marginTop:4}}, 'Recolors highlights, headers, active states, and buttons. Applies and saves immediately.'),
+    ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Full Numbers'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
+        h('input',{type:'checkbox',checked:s.fullNumbers===true,onChange:setChk('fullNumbers')}),
+        h('span',{style:{fontSize:12,color:T.text}},'Show full numbers with commas (13,903,000 instead of 13.90M)'))
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Item Thumbnails'),
@@ -11428,6 +11569,55 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
+// Position risk (Ben's friend's idea, 2026-11-04): how this item has behaved and how
+// hard your stack would be to sell, never a forecast. The worst factor sets the level.
+// Cut-offs measured once across ~3,000 items over a year (2026-11-04), aiming for the
+// calmest third Low and the wildest 15% High. Spread's High is capped by hand at 40%
+// (stale prices made the measured figure useless). Re-measure if the market shifts.
+function positionRisk(quantity, item, days, heldSince) {
+  const reasons = [];
+  let level = 0;
+  const add = (lvl, text) => { level = Math.max(level, lvl); reasons.push(text); };
+  // No quantity means the item panel: how the item behaves, with no stack to judge.
+  // Under 100gp a 1gp tick looks like a big % move, so swings don't raise the level.
+  const cheap = (item.high || item.low || 0) < 100;
+  if (quantity == null) {
+    if (item.avgVolume > 0) add(0, `Trading: about ${Math.round(item.avgVolume).toLocaleString()} a day.`);
+    else add(1, 'Trading: no volume data, so it could be hard to sell.');
+  } else if (item.avgVolume > 0) {
+    const d = quantity / item.avgVolume;
+    add(d >= 5 ? 2 : d >= 1 ? 1 : 0, `Selling: your ${quantity.toLocaleString()} is ${d < 0.1 ? 'under 10% of' : d < 1 ? 'about ' + Math.round(d * 100) + '% of' : 'about ' + d.toFixed(1) + ' x'} a normal day's volume.`);
+  } else add(1, 'Selling: no volume data, so it could be hard to sell.');
+  if (item.liveBuy > 0 && item.liveSell > 0) {
+    const s = (item.liveBuy - item.liveSell) / item.liveSell * 100;
+    if (s < 0) reasons.push('Spread: live buy and sell prices don\'t line up right now, so this isn\'t counted.');
+    else add(cheap ? 0 : s >= 40 ? 2 : s >= 25 ? 1 : 0, `Spread: live buy and sell are ${s.toFixed(1)}% apart.`);
+  }
+  // The whole time you've held it, and at least 90 days so a new buy still has context.
+  const from = Math.min(Date.now() - 90 * 86400000, heldSince || Infinity);
+  const spanDays = Math.round((Date.now() - from) / 86400000);
+  const recent = (days || []).filter(x => x.ts >= from);
+  if (recent.length >= 10) {
+    let moves = 0, peak = 0, drop = 0;
+    recent.forEach((x, i) => {
+      if (i) moves += Math.abs(x.price - recent[i - 1].price) / recent[i - 1].price * 100;
+      peak = Math.max(peak, x.price);
+      drop = Math.max(drop, (peak - x.price) / peak * 100);
+    });
+    const swing = moves / (recent.length - 1);
+    if (cheap) reasons.push('Under 100gp, so percent moves are mostly small ticks and do not count here.');
+    add(cheap ? 0 : swing >= 1.8 ? 2 : swing >= 0.7 ? 1 : 0, `Swings: moves about ${swing.toFixed(1)}% on a typical day (${spanDays} days of GE prices).`);
+    add(cheap ? 0 : drop >= 75 ? 2 : drop >= 45 ? 1 : 0, `Biggest drop: ${drop.toFixed(0)}% from a high in the last ${spanDays} days.`);
+  } else if (quantity == null) return null; // Too little to say anything about the item alone.
+  else reasons.push('Not enough price history to judge swings.');
+  // Barely trading: a flat price means little, and you may not be able to sell.
+  if (item.avgVolume > 0 && item.avgVolume < 20) add(1, 'Thin market: trades under 20 a day, so a steady price says little.');
+  const name = ['Low', 'Medium', 'High'][level];
+  return { signal: 'RISK_' + name.toUpperCase(), label: (quantity == null ? 'ITEM RISK: ' : 'POSITION RISK: ') + name.toUpperCase(),
+    details: h('div', null, reasons.map((r, i) => h('div', {key:i, style:{marginBottom:3}}, r)),
+      h('div', {style:{color:T.textDim, marginTop:4}}, 'About behaviour and selling, not where the price goes next.')) };
+}
+
 function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
   // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
   // chart already respects (Ben, 2026-09-09: "can we add dates to the
@@ -11592,22 +11782,26 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   // snapshots), so a brief intraday spike won't show.
   const openKey = openPos.map(p => p.id + ':' + (p.date_opened || p.created_at)).join('|');
   const [sinceBought, setSinceBought] = useState({});
+  const [expandedItems, setExpandedItems] = useState(() => new Set());
+  const [dailyById, setDailyById] = useState({});
   useEffect(() => {
     let stale = false;
     (async () => {
-      const out = {};
+      const out = {}, daily = {};
       for (const p of openPos) {
         const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
         if (!it || it.untradeable) continue;
+        const allDays = await loadDailyPrices(it.id);
+        daily[p.id] = allDays;
         const opened = new Date(p.date_opened || p.created_at).getTime();
         if (!opened) continue;
-        const days = (await loadDailyPrices(it.id)).filter(d => d.ts >= opened - 86400000);
+        const days = allDays.filter(d => d.ts >= opened - 86400000);
         if (!days.length) continue;
         let hi = days[0], lo = days[0];
         for (const d of days) { if (d.price > hi.price) hi = d; if (d.price < lo.price) lo = d; }
         out[p.id] = { hi, lo };
       }
-      if (!stale) setSinceBought(out);
+      if (!stale) { setSinceBought(out); setDailyById(daily); }
     })();
     return () => { stale = true; };
   }, [openKey]);
@@ -11651,6 +11845,61 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
       h('div', {style:{whiteSpace:'nowrap'}}, fmt.gp(be) + 'gp'),
       h('div', {style:{fontSize:10, whiteSpace:'nowrap'}}, h('span', {style:{color:T.red}}, '+' + needs.toFixed(1) + '%'), h('span', {style:{color:T.textDim}}, ' · ' + seenText.replace('last seen ', ''))));
   };
+
+  // Same-item positions group under one row with a chevron (Ben, 2026-11-04). The
+  // risk badge sits on the combined stack, since they'd all sell into one market.
+  const posGroups = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
+  const heldSinceOf = p => new Date(p.date_opened || p.created_at).getTime() || null;
+  const heldText = ts => {
+    if (!ts || !isFinite(ts)) return '—';
+    const days = Math.floor((Date.now() - ts) / 86400000);
+    return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? days + 'd' : days < 365 ? Math.floor(days / 30) + 'mo' : (days / 365).toFixed(1) + 'y';
+  };
+  const breakEvenOf = breakEvenPrice;
+  const riskBadgeFor = list => {
+    const first = list[0];
+    const it = !first.removedItem && items.find(i => i.name.toLowerCase() === (first.item_name || '').toLowerCase());
+    const days = dailyById[first.id];
+    if (!it || !days) return null;
+    const qty = list.reduce((sum, p) => sum + p.quantity, 0);
+    const since = Math.min(...list.map(heldSinceOf).filter(Boolean));
+    return h('div', {style:{marginTop:3}}, h(SignalBadge, positionRisk(qty, it, days, isFinite(since) ? since : null)));
+  };
+  const positionRow = (pos, child) =>
+            h('tr',{key:pos.id},
+              h('td',{
+                style: {...(onSelect ? {cursor:'pointer', color:T.gold} : null), ...(child ? {paddingLeft:28, fontSize:'0.92em'} : null)},
+                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
+              }, pos.item_name,
+                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER'),
+                pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem}),
+                !child && riskBadgeFor([pos])),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
+              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
+              breakEvenCell(pos),
+              sinceBoughtCell(pos),
+              h('td',null,
+                h('div',{style:{color:T.textDim, whiteSpace:'nowrap'}},(() => {
+                  const d = pos.date_opened || pos.created_at;
+                  if (!d) return '—';
+                  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+                  return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
+                })()),
+                pos.target_price ? h('div',{style:{fontSize:10, whiteSpace:'nowrap', color:pos.currentPrice>=pos.target_price?T.green:T.textDim}},'→ '+fmt.gp(pos.target_price)+'gp') : null),
+              h('td',null,
+                h('div',{style:{display:'flex',gap:3}},
+                  h('button',{className:'ge-btn',title:'Edit',style:{padding:'2px 5px',fontSize:11},
+                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'✎'),
+                  h('button',{className:'ge-btn',title:'Sell',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
+                    onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
+                  h('button',{className:'ge-btn',title:'Convert into another item',style:{padding:'2px 5px',fontSize:11,borderColor:T.blue},
+                    onClick:()=>setConvertModal(pos)},'⇄'),
+                  h('button',{className:'ge-btn danger',title:'Delete position',style:{padding:'2px 5px',fontSize:11},
+                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'✕')
+                )
+              )
+            );
 
   const totalInvested = openPos.reduce((s,p) => s+p.costValue, 0);
   const totalCurrent  = openPos.reduce((s,p) => s+p.currentValue, 0);
@@ -12015,41 +12264,33 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
             h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
             h('th',{title:'How long you\'ve held it, and your target price'},'Held / target'), h('th',null,'')
           )),
-          h('tbody',null, openPos.map(pos =>
-            h('tr',{key:pos.id},
-              h('td',{
-                style: onSelect ? {cursor:'pointer', color:T.gold} : null,
-                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
-              }, pos.item_name,
-                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER'),
-                pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem})),
-              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
-              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
-              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
-              breakEvenCell(pos),
-              sinceBoughtCell(pos),
-              h('td',null,
-                h('div',{style:{color:T.textDim, whiteSpace:'nowrap'}},(() => {
-                  const d = pos.date_opened || pos.created_at;
-                  if (!d) return '—';
-                  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-                  return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
-                })()),
-                pos.target_price ? h('div',{style:{fontSize:10, whiteSpace:'nowrap', color:pos.currentPrice>=pos.target_price?T.green:T.textDim}},'→ '+fmt.gp(pos.target_price)+'gp') : null),
-              h('td',null,
-                h('div',{style:{display:'flex',gap:3}},
-                  h('button',{className:'ge-btn',title:'Edit',style:{padding:'2px 5px',fontSize:11},
-                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'✎'),
-                  h('button',{className:'ge-btn',title:'Sell',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
-                    onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
-                  h('button',{className:'ge-btn',title:'Convert into another item',style:{padding:'2px 5px',fontSize:11,borderColor:T.blue},
-                    onClick:()=>setConvertModal(pos)},'⇄'),
-                  h('button',{className:'ge-btn danger',title:'Delete position',style:{padding:'2px 5px',fontSize:11},
-                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'✕')
-                )
-              )
-            )
-          ))
+          h('tbody',null, posGroups.flatMap(list => {
+            if (list.length === 1) return [positionRow(list[0], false)];
+            const name = list[0].item_name, key = name.toLowerCase(), open = expandedItems.has(key);
+            const qty = list.reduce((s, p) => s + p.quantity, 0);
+            const cost = list.reduce((s, p) => s + p.costValue, 0);
+            const value = list.reduce((s, p) => s + p.currentValue, 0);
+            const net = list.reduce((s, p) => s + p.netPL, 0);
+            const price = list[0].currentPrice, avg = cost / qty;
+            const be = breakEvenOf(avg);
+            const ranges = list.map(p => sinceBought[p.id]).filter(Boolean);
+            const toggle = () => setExpandedItems(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+            return [h('tr',{key:'group:'+key, onClick:toggle, style:{cursor:'pointer'}},
+              h('td',{style:{color:T.gold}}, h('span',{style:{display:'inline-block', width:14}}, open ? '▾' : '▸'), name,
+                h('span',{style:{marginLeft:6, fontSize:10, color:T.textDim, whiteSpace:'nowrap'}}, list.length+' positions'), riskBadgeFor(list)),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},qty.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'avg @ '+fmt.gp(Math.round(avg))+'gp')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(value)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(price)+'gp ea')),
+              h('td',{className:net>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(net>=0?'+':'')+fmt.gp(net)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(cost > 0 ? (value - cost) / cost * 100 : 0))),
+              net >= 0 || !(price > 0)
+                ? h('td',{style:{color:T.textDim}}, net >= 0 ? '✓' : '—')
+                : h('td',{title:`Across all ${list.length} positions, sell at ${be.toLocaleString()}gp or more to break even after the 2% GE tax.`}, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(be)+'gp'), h('div',{style:{fontSize:10, color:T.red, whiteSpace:'nowrap'}},'+'+((be - price) / price * 100).toFixed(1)+'%')),
+              ranges.length
+                ? h('td',null, h('div',{style:{fontSize:11, whiteSpace:'nowrap'}}, h('span',{style:{color:T.green}},'▲ '+fmt.gp(Math.max(...ranges.map(r => r.hi.price)))),' ',h('span',{style:{color:T.red}},'▼ '+fmt.gp(Math.min(...ranges.map(r => r.lo.price))))))
+                : h('td',{style:{color:T.textDim}},'—'),
+              h('td',{style:{color:T.textDim, whiteSpace:'nowrap'}}, heldText(Math.min(...list.map(heldSinceOf).filter(Boolean)))),
+              h('td',null)),
+              ...(open ? list.map(p => positionRow(p, true)) : [])];
+          }))
         ),
 
     // Diversification warning — flags real concentration risk in tracked
@@ -15143,7 +15384,7 @@ function UpdateRisksBar({scope = 'yours'}) {
   const exposed = risks.reduce((sum, r) => sum + (r.value || 0), 0);
   const updates = new Set(risks.map(r => r.updateId)).size;
   return h('div', {
-    style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
+    style:{margin:'8px 12px 12px', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
     title:'See everything that may be affected',
     onClick:()=>{ _alertsInitialPill = 'upcoming'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
@@ -15307,7 +15548,7 @@ function AlmanacFlagsBar({scope = 'yours'}) {
   if (!rows.length) return null;
   const sells = rows.filter(r => r.action === 'sell').length, buys = rows.length - sells;
   return h('div', {
-    style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+NOTIF_MARKS.almanac.color, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
+    style:{margin:'8px 12px 12px', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+NOTIF_MARKS.almanac.color, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
     title:'See what the Almanac is flagging',
     onClick:()=>{ _alertsInitialPill = 'almanac'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
@@ -15399,7 +15640,10 @@ function AlertsArea(props) {
 // numbers and sells only log what's new since the last read of that offer.
 const geSoldLog = () => { try { return JSON.parse(localStorage.getItem('genius_ge_sold_log') || '{}'); } catch { return {}; } };
 function GeReaderModal({offer, items, toast, onClose, onSaved}) {
-  const [f, setF] = useState(() => ({side:offer.side || 'buy', name:offer.name || '', quantity:offer.quantity ?? '', price:offer.price ?? '', filled:offer.filled ?? 0, coins:offer.coins ?? 0}));
+  const commas = v => v == null || v === '' ? '' : Number(v).toLocaleString();
+  const [f, setF] = useState(() => ({side:offer.side || 'buy', name:offer.name || '', quantity:commas(offer.quantity), price:commas(offer.price), filled:commas(offer.filled ?? 0), coins:commas(offer.coins ?? 0)}));
+  // Number boxes take commas and K/M/B ("60k", "1.5m"), and tidy up when you leave them.
+  const num = k => Math.round(parseGpString(f[k])) || 0;
   const [goals, setGoals] = useState([]);
   const [portfolio, setPortfolio] = useState({positions:[]});
   const [offerId, setOfferId] = useState(null);
@@ -15410,7 +15654,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   }, []);
   const set = k => e => setF(x => ({...x, [k]:e.target.value}));
   const nameLow = String(f.name).trim().toLowerCase();
-  const filled = Number(f.filled) || 0, coins = Number(f.coins) || 0;
+  const filled = num('filled'), coins = num('coins');
   const goal = goals.find(g => g.item_name.toLowerCase() === nameLow);
   const known = (items || []).find(i => i.name.toLowerCase() === nameLow);
   // The offer these totals most likely belong to: the fullest that isn't past them.
@@ -15421,7 +15665,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
   // Identifies the offer, so re-reading it only logs what's new. Price stays out of
   // it since an offer's price can be edited in-game.
-  const logKey = [nameLow, f.quantity].join('|');
+  const logKey = [nameLow, num('quantity')].join('|');
   const alreadySold = geSoldLog()[logKey] || 0;
   const newSold = Math.max(0, filled - alreadySold);
   const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
@@ -15439,7 +15683,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const newGoal = async () => {
     if (!requireItem()) return;
     const id = Date.now().toString();
-    await window.genius.saveBuyGoal({id, item_name:known.name, item_id:known.id, target:Number(f.quantity) || filled, max_price:Number(f.price) || 0});
+    await window.genius.saveBuyGoal({id, item_name:known.name, item_id:known.id, target:num('quantity') || filled, max_price:num('price')});
     await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
     finish(known.name + ' added to the Buy Planner');
   };
@@ -15451,7 +15695,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   };
   const saveSale = async () => {
     if (!requireItem() || !chosenPos) return;
-    if (!(Number(f.quantity) > 0)) { toast('Enter the offer quantity first', 'error'); return; }
+    if (!(num('quantity') > 0)) { toast('Enter the offer quantity first', 'error'); return; }
     if (!(newSold > 0)) { toast('Those sales are already logged', 'error'); return; }
     const qty = Math.min(newSold, chosenPos.quantity);
     // The GE shows coins after its 2% tax, and sellPosition takes the tax off itself,
@@ -15464,8 +15708,10 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
     finish('Logged '+qty.toLocaleString()+' '+known.name+' sold');
   };
 
-  const field = (label, key, type='text') => h('label', {style:{display:'block', fontSize:11, color:T.textDim}}, label,
-    h('input', {className:'ge-input', type, value:f[key], onChange:set(key), style:{display:'block', width:'100%', marginTop:2}}));
+  const field = (label, key, isNumber) => h('label', {style:{display:'block', fontSize:11, color:T.textDim}}, label,
+    h('input', {className:'ge-input', type:'text', value:f[key], onChange:set(key),
+      onBlur: isNumber ? () => setF(x => ({...x, [key]:commas(Math.round(parseGpString(x[key])) || 0)})) : undefined,
+      style:{display:'block', width:'100%', marginTop:2}}));
   const avg = filled > 0 ? coins / filled : 0;
   return h('div', {style:{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16}, onClick:e=>{ if (e.target === e.currentTarget) onClose(); }},
     h('div', {style:{background:T.bg || '#14100a', border:'1px solid '+T.gold, borderRadius:6, padding:18, width:460, maxWidth:'100%', maxHeight:'90vh', overflow:'auto'}},
@@ -15477,8 +15723,8 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
         ['buy','sell'].map(s => h('button', {key:s, className:f.side===s ? 'ge-btn gold' : 'ge-btn', onClick:()=>setF(x=>({...x, side:s}))}, s === 'buy' ? 'Buy offer' : 'Sell offer'))),
       h('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}},
         h('div', {style:{gridColumn:'1 / -1'}}, field('Item', 'name')),
-        field('Offer quantity', 'quantity', 'number'), field('Offer price', 'price', 'number'),
-        field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', 'number'), field(f.side === 'buy' ? 'Coins spent so far' : 'Coins received so far', 'coins', 'number')),
+        field('Offer quantity', 'quantity', true), field('Offer price', 'price', true),
+        field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', true), field(f.side === 'buy' ? 'Coins spent so far' : 'Coins received so far', 'coins', true)),
       !known && f.name && h('div', {style:{color:'#f0a030', fontSize:12, marginBottom:8}}, 'GEnius doesn\'t know that item name.'),
       filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
 
@@ -15737,6 +15983,7 @@ function App() {
   const {toasts, add:toast} = useToast();
   const theme = settings.theme || 'dark';
   SHOW_THUMBNAILS = settings.showThumbnails !== false;
+  FULL_NUMBERS = settings.fullNumbers === true;
   const [detailPanelWidth, setDetailPanelWidth] = useState(settings.detailPanelWidth || 296);
   useEffect(() => { if (settings.detailPanelWidth) setDetailPanelWidth(settings.detailPanelWidth); }, [settings.detailPanelWidth]);
   const panelWidthRef = useRef(detailPanelWidth);
@@ -16207,7 +16454,9 @@ function App() {
       )
     ),
 
-    geOffer && h(GeReaderModal, {key:geOffer.readAt, offer:geOffer, items, toast, onClose:()=>setGeOffer(null),
+    geOffer && geOffer.reading && h('div', {style:{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16}},
+      h('div', {style:{background:T.panel, border:'1px solid '+T.gold, borderRadius:6, padding:'18px 24px', color:T.text, fontSize:14}}, '📷 Screen captured. Reading your GE offer...')),
+    geOffer && !geOffer.reading && h(GeReaderModal, {key:geOffer.readAt, offer:geOffer, items, toast, onClose:()=>setGeOffer(null),
       onSaved:async()=>{ const p = await window.genius?.getPortfolio(); if (p) setPortfolio(p); }}),
     h('div',{className:'main'},
       h('div',{className:'ge-header'},

@@ -22,7 +22,7 @@
     --red:       #e53935;
     --blue:      #64b5f6;
   }
-  /* Mirrors the app's own "Black" theme (Settings -> Theme -> Black):
+  /* Mirrors the app's own "Dark" theme (Settings -> Theme -> Dark, id "black"):
      same gold/text/signal colors, backgrounds swapped to near-black. The
      screenshots swap with it (see applyTheme). */
   :root[data-theme="black"] {
@@ -287,7 +287,7 @@
     </div>
     <div class="meta-line" id="version-line">Free &middot; No account, no server, everything stays on your devices</div>
     <div class="theme-toggle-wrap">
-      <button class="btn btn-secondary theme-toggle-btn" id="theme-toggle-btn" onclick="toggleSiteTheme()">🌑 Try Black Theme</button>
+      <button class="btn btn-secondary theme-toggle-btn" id="theme-toggle-btn" onclick="toggleSiteTheme()">🌑 Try Dark Theme</button>
       <div class="meta-line theme-note">GEnius has two themes. This switches the page and all its screenshots between them.</div>
     </div>
   </div>
@@ -663,7 +663,7 @@
         img.src = 'assets/shots/' + img.dataset.shot + '-' + suffix + '.png';
       });
       const btn = document.getElementById('theme-toggle-btn');
-      if (btn) btn.textContent = theme === 'black' ? '☀ Back to Default Theme' : '🌑 Try Black Theme';
+      if (btn) btn.textContent = theme === 'black' ? '☀ Back to Classic Theme' : '🌑 Try Dark Theme';
     }
     function toggleSiteTheme() {
       const next = document.documentElement.getAttribute('data-theme') === 'black' ? 'default' : 'black';

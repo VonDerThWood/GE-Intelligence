@@ -393,6 +393,7 @@ async function buildGenius() {
       detailPanelWidth:   store.get('detailPanelWidth', 296),
       columnWidths:       store.get('columnWidths', {}),
       showThumbnails:     store.get('showThumbnails', true),
+      fullNumbers:        store.get('fullNumbers', false),
       devMode:            store.get('devMode', false),
       dateFormat:         store.get('dateFormat', 'MM/DD/YYYY'),
       overpricedThreshold: store.get('overpricedThreshold', 30),
