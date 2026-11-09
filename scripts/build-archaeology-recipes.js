@@ -35,7 +35,7 @@ async function pages(titles) {
   const readArtefact = (title, w) => {
     const chrono = field(w, 'chronotes');
     const i = w.indexOf('Infobox Recipe');
-    if (!chrono || i < 0) return;
+    if (!chrono || i < 0 || !Number.isFinite(num(chrono))) return; // quest items have no chronote value
     const rec = w.slice(i, w.indexOf('}}', i));
     const level = num(field(rec, 'skill1lvl'));
     const mats = [];
@@ -67,7 +67,7 @@ async function pages(titles) {
     for (const t of pieces) if (!artefacts[t]) missingArtefacts.add(t);
     const expected = num(field(w, 'artefacts') || 0);
     if (expected !== pieces.length) console.log(`MISMATCH ${name}: page says ${expected}, found ${pieces.length}`);
-    const rewards = ['recurring', 'recurring1', 'recurring2'].map(k => unlink(field(w, k))).filter(Boolean).filter(r => !/chronotes/i.test(r));
+    const rewards = ['recurring', 'recurring1', 'recurring2'].map(k => unlink(field(w, k))).filter(Boolean).filter(r => !/chronotes/i.test(r) && !/^(no|n\/a)$/i.test(r));
     collections.push({ n: name, e: expected, by: unlink(field(w, 'collector')), l: num(field(w, 'archlevel') || 0), b: num(field(w, 'chronotes') || 0), r: rewards.join(', '), a: pieces });
   }
   for (const [title, w] of Object.entries(await pages([...missingArtefacts]))) readArtefact(title, w);
