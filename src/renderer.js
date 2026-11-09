@@ -14638,7 +14638,10 @@ function flattenSmithingMats(name, mult = 1, depth = 0) {
   return out;
 }
 // One row per product of `bar`, at live prices (buy materials, sell the product, 2% tax).
-function smithingProductRows(bar, items) {
+function smithingProductRows(bar, items, priceMode = 'live') {
+  const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+  const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
+  const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
   const byName = {};
   for (const it of items) byName[it.name.toLowerCase()] = it;
   return (SMITHING_PRODUCTS[bar] || []).map(([qty, name]) => {
@@ -14647,17 +14650,17 @@ function smithingProductRows(bar, items) {
     let cost = 0;
     const missing = [];
     for (const [mat, q] of Object.entries(flat)) {
-      const p = findItemBuyPrice(items, mat);
+      const p = buyOf(mat);
       if (p == null) missing.push(mat); else cost += p * q;
     }
-    const sell = findItemSellPrice(items, name);
+    const sell = sellOf(name);
     if (sell == null) missing.push(name);
     const it = byName[name.toLowerCase()];
     const revenue = sell != null ? applyTax(sell) * qty : null;
     const profit = !missing.length && bars ? revenue - cost : null;
     const guide = it ? (it.high ?? it.low ?? null) : null;
     // Live sell price far from the GE guide on a thin item is usually a few odd trades.
-    const liveOdd = it && it.liveSell != null && guide ? Math.abs(it.liveSell / guide - 1) > 0.4 : false;
+    const liveOdd = priceMode === 'live' && it && it.liveSell != null && guide ? Math.abs(it.liveSell / guide - 1) > 0.4 : false;
     return { name, qty, bars, cost, revenue, profit, perBar: profit != null ? profit / bars : null,
       volume: it ? (it.volume ?? null) : null, others: Object.keys(flat).filter(k => k !== bar), missing, liveOdd };
   }).filter(r => r.bars > 0);
@@ -14668,14 +14671,15 @@ function SmithingFromScratch({items, onSelect}) {
   const [bar, setBar] = useState('Rune bar');
   const [busyOnly, setBusyOnly] = useState(true);
   const [sort, setSort] = useState({key:'perBar', dir:-1});
-  const all = useMemo(() => smithingProductRows(bar, items), [bar, items]);
+  const [priceMode, setPriceMode] = useState('live');
+  const all = useMemo(() => smithingProductRows(bar, items, priceMode), [bar, items, priceMode]);
   const rows = useMemo(() => {
     const r = all.filter(x => x.profit != null && (!busyOnly || (x.volume || 0) >= 100));
     return r.sort((a, b) => ((a[sort.key] ?? -Infinity) > (b[sort.key] ?? -Infinity) ? 1 : (a[sort.key] ?? -Infinity) < (b[sort.key] ?? -Infinity) ? -1 : 0) * sort.dir);
   }, [all, busyOnly, sort]);
   const unpriced = all.filter(x => x.profit == null).length;
   const hidden = all.filter(x => x.profit != null).length - rows.length;
-  const barPrice = findItemBuyPrice(items, bar);
+  const barPrice = priceMode === 'ge' ? (items.find(i => i.name === bar)?.high ?? items.find(i => i.name === bar)?.low ?? null) : findItemBuyPrice(items, bar);
   const th = (key, label, title) => h('th', {onClick:()=>setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='name' ? 1 : -1)})), style:{cursor:'pointer'}, title}, label + (sort.key===key ? (sort.dir>0?' ▲':' ▼') : ''));
   const gp = v => (v>=0?'+':'') + fmt.gp(Math.round(v)) + 'gp';
   return h('div', null,
@@ -14686,7 +14690,13 @@ function SmithingFromScratch({items, onSelect}) {
         border:`1px solid ${bar===b ? T.gold : T.border}`, color: bar===b ? T.goldBright : T.textDim,
       }}, b.replace(/ bar$/, '')))),
     h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
-      `What every ${bar.toLowerCase()} product is worth at live prices: materials at the live buy price${barPrice ? ` (${bar} ${fmt.gp(Math.round(barPrice))}gp)` : ''}, the product at the live sell price, after 2% tax. Upgrades (+1 and up) count every bar from the base item, as if you made the whole thing from scratch. Profit per bar is what to compare. Varrock armour only speeds up smithing progress; it doesn't save bars, so it doesn't change these numbers.`),
+      `What every ${bar.toLowerCase()} product is worth at ${priceMode === 'ge' ? 'GE guide prices, which lag behind real trades' : 'live prices: materials at the live buy price, the product at the live sell price'}${barPrice ? ` (${bar} ${fmt.gp(Math.round(barPrice))}gp)` : ''}, after 2% tax. Upgrades (+1 and up) count every bar from the base item, as if you made the whole thing from scratch. Profit per bar is what to compare. Varrock armour only speeds up smithing progress; it doesn't save bars, so it doesn't change these numbers.`),
+    h('div', {style:{display:'flex', gap:4, marginBottom:10}},
+      [{key:'live',label:'Live prices'},{key:'ge',label:'GE guide prices'}].map(m => h('button', {key:m.key, onClick:()=>setPriceMode(m.key), style:{
+        padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+        background: priceMode===m.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+        border:`1px solid ${priceMode===m.key ? T.gold : T.border}`, color: priceMode===m.key ? T.goldBright : T.textDim,
+      }}, m.label))),
     h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:10}},
       h('input', {type:'checkbox', checked:busyOnly, onChange:()=>setBusyOnly(v=>!v)}),
       h('span', {style:{color:T.textDim}}, `Only items trading 100+ a day${hidden ? ` (${hidden} hidden)` : ''}`)),
