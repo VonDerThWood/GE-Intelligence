@@ -14676,6 +14676,7 @@ const ARCHAEOLOGY_DATA = {"artefacts":{"'Da Boss Man' sculpture":{"l":119,"c":12
 // The donation bin always pays 40% of the artefact's listed chronotes (Ben, 2026-11-09).
 function ArchaeologyCalc({items}) {
   const [view, setView] = useState('collections');
+  const [open, setOpen] = useState({});
   const [priceMode, setPriceMode] = useState('live');
   const [level, setLevel] = useState('');
   const [sort, setSort] = useState({key:'profit', dir:-1});
@@ -14699,8 +14700,14 @@ function ArchaeologyCalc({items}) {
       if (c.a.some(n => !ARCHAEOLOGY_DATA.artefacts[n])) { skipped++; continue; }
       let cost = 0, chrono = c.b, level = c.l;
       const missingMats = new Set();
+      // Each piece carries its share of the set bonus, by its chronote value.
+      const listed = c.a.reduce((t, n) => t + ARCHAEOLOGY_DATA.artefacts[n].c, 0);
+      const parts = c.a.map(n => {
+        const a = ARCHAEOLOGY_DATA.artefacts[n], pc = costOf(a), got = a.c + (listed ? c.b * a.c / listed : c.b / c.a.length);
+        return { name:n, level:a.l, cost:pc, chronotes:Math.round(got), profit:value(got) - pc, unpriced:noPrice(a) };
+      });
       for (const n of c.a) { const a = ARCHAEOLOGY_DATA.artefacts[n]; cost += costOf(a); noPrice(a).forEach(m => missingMats.add(m)); chrono += a.c; level = Math.max(level, a.l); }
-      collections.push({ name:c.n, by:c.by, level, unpriced:[...missingMats], pieces:c.a.length, list:c.a.join(', '), reward:c.r, cost, chronotes:chrono, profit: value(chrono) - cost });
+      collections.push({ name:c.n, by:c.by, level, unpriced:[...missingMats], parts, bonus:c.b, listed, pieces:c.a.length, list:c.a.join(', '), reward:c.r, cost, chronotes:chrono, profit: value(chrono) - cost });
     }
     return { artefacts, collections, skipped, chronote };
   }, [items, priceMode]);
@@ -14734,8 +14741,19 @@ function ArchaeologyCalc({items}) {
         h('thead', null, h('tr', null, th('name','Collection'), th('level','Level'), th('pieces','Pieces'), th('cost','Materials'), th('chronotes','Chronotes'), th('profit','Profit'))) :
         h('thead', null, h('tr', null, th('name','Artefact'), th('level','Level'), th('cost','Materials'), th('chronotes','Listed chronotes'), th('bin','Bin chronotes'), th('profit','Bin profit'), th('collProfit','In a collection'))),
       h('tbody', null, rows.map(r => view === 'collections' ?
-        h('tr', {key:r.name}, h('td', {title:r.list}, r.name, h('div', {style:{fontSize:10, color:T.textDim}}, r.by + (r.reward ? ' · + ' + r.reward : '')), r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null),
-          h('td', null, r.level), h('td', null, r.pieces), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit))) :
+        h(React.Fragment, {key:r.name},
+          h('tr', {onClick:()=>setOpen(o => ({...o, [r.name]:!o[r.name]})), style:{cursor:'pointer'}},
+            h('td', null, (open[r.name] ? '▾ ' : '▸ ') + r.name,
+              h('div', {style:{fontSize:10, color:T.textDim}}, `${r.by} · Gives ${r.chronotes.toLocaleString()} chronotes${r.reward ? ' + ' + r.reward : ''} every time`),
+              r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null),
+            h('td', null, r.level), h('td', null, r.pieces), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit))),
+          open[r.name] && h('tr', null, h('td', {colSpan:6, style:{padding:'6px 10px 10px 22px'}},
+            h('div', {style:{fontSize:11, color:T.textDim, marginBottom:4}}, `Pieces ${r.listed.toLocaleString()} chronotes + set bonus ${r.bonus.toLocaleString()}. Each piece below includes its share of the bonus. First-time-only rewards aren't counted.`),
+            h('table', {className:'ge-table'},
+              h('thead', null, h('tr', null, ['Artefact','Level','Materials','Chronotes','Profit / loss'].map(t => h('th', {key:t}, t)))),
+              h('tbody', null, r.parts.map(p => h('tr', {key:p.name},
+                h('td', null, p.name, p.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + p.unpriced.join(', ')) : null),
+                h('td', null, p.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(p.cost))+'gp'), h('td', null, p.chronotes.toLocaleString()), h('td', {style:col(p.profit)}, gp(p.profit))))))))) :
         h('tr', {key:r.name}, h('td', null, r.name, r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null), h('td', null, r.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', null, r.bin.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit)), h('td', {style:col(r.collProfit)}, gp(r.collProfit))))))),
     view === 'collections' && data.skipped ? h('div', {style:{fontSize:10, color:T.textDim, marginTop:8}}, `${data.skipped} collections have a piece GEnius couldn't price yet.`) : null,
   );
