@@ -42,7 +42,7 @@ async function pages(titles) {
     for (let n = 1; n < 12; n++) {
       const name = field(rec, `mat${n}`);
       if (!name) break;
-      if (/\(damaged\)/.test(name)) continue;
+      if (/\(damaged\)|^Damaged /.test(name)) continue;
       mats.push([name, num(field(rec, `mat${n}qty`) || 1)]);
     }
     if (!level || !mats.length) { console.log('skipped', title); return; }
