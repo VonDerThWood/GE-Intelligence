@@ -42,6 +42,26 @@
         {
           "name": "Dinosaur hide",
           "effect": "Big Game Hunter drop rate 1/10 to 1/6."
+        },
+        {
+          "name": "Trimmed masterwork melee helm",
+          "effect": "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+        },
+        {
+          "name": "Trimmed masterwork melee platebody",
+          "effect": "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+        },
+        {
+          "name": "Trimmed masterwork melee platelegs",
+          "effect": "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+        },
+        {
+          "name": "Trimmed masterwork melee gloves",
+          "effect": "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+        },
+        {
+          "name": "Trimmed masterwork melee boots",
+          "effect": "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
         }
       ]
     }
