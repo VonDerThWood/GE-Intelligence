@@ -6,6 +6,7 @@ const { createElement: h, useState, useEffect, useCallback, useRef, useMemo } = 
 const { createRoot, createPortal } = ReactDOM;
 
 let SHOW_THUMBNAILS = true;
+let FULL_NUMBERS = false; // Settings: 13,903,000 instead of 13.90M
 
 function ItemThumb({name, size}) {
   const [hidden, setHidden] = useState(false);
@@ -238,6 +239,10 @@ select option:checked { background: ${T.border}; color: ${T.textBright}; }
 .signal-badge.MANIPULATED  { background: rgba(229,57,53,0.18);   border-color: #e53935;               color: #e53935; font-weight: bold; letter-spacing: 0.03em; }
 .signal-badge.OVERPRICED   { background: rgba(229,57,53,0.12);   border-color: rgba(229,57,53,0.4);   color: #ef9a9a; }
 .signal-badge.UNDERPRICED  { background: rgba(76,175,80,0.12);   border-color: rgba(76,175,80,0.4);   color: #81c784; }
+.signal-badge.RISK_LOW, .signal-badge.RISK_MEDIUM, .signal-badge.RISK_HIGH { display: inline-block; }
+.signal-badge.RISK_LOW     { background: rgba(76,175,80,0.08);   border-color: rgba(76,175,80,0.35);  color: #81c784; }
+.signal-badge.RISK_MEDIUM  { background: rgba(255,152,0,0.1);    border-color: rgba(255,152,0,0.4);   color: #ffb74d; }
+.signal-badge.RISK_HIGH    { background: rgba(229,57,53,0.12);   border-color: rgba(229,57,53,0.45);  color: #ef9a9a; }
 .signal-badge.WIDE_SPREAD  { background: rgba(158,158,158,0.12); border-color: rgba(158,158,158,0.4); color: #bdbdbd; }
 
 /* ── Star button ── */
@@ -474,7 +479,7 @@ const SIGNAL_INFO = {
   WIDE_SPREAD:  'Live instant-buy and instant-sell prices are 40%+ apart — a thin, two-sided market. What looks like a flip margin here is often just illiquidity, not a real opportunity.',
 };
 
-function SignalBadge({signal, style: extraStyle}) {
+function SignalBadge({signal, label, details, style: extraStyle}) {
   const [pos, setPos] = useState(null);
   const ref = useRef(null);
 
@@ -485,7 +490,7 @@ function SignalBadge({signal, style: extraStyle}) {
     return () => document.removeEventListener('mousedown', handler);
   }, [pos]);
 
-  const info = SIGNAL_INFO[signal];
+  const info = details || SIGNAL_INFO[signal];
   return h('span', {ref, style:{position:'relative', display:'inline-block', ...extraStyle}},
     h('span', {
       className: `signal-badge ${signal}`,
@@ -495,7 +500,7 @@ function SignalBadge({signal, style: extraStyle}) {
         setPos(p => p ? null : {x: e.clientX, y: e.clientY});
       },
       style: {cursor: info ? 'pointer' : 'default'},
-    }, signal),
+    }, label || signal),
     pos && info && createPortal(h('div', {
       style: {
         position:'fixed', zIndex:9999,
@@ -510,7 +515,7 @@ function SignalBadge({signal, style: extraStyle}) {
         pointerEvents:'none',
       }
     },
-      h('div', {style:{fontWeight:'bold', color:T.gold, marginBottom:4, letterSpacing:'0.5px'}}, signal),
+      h('div', {style:{fontWeight:'bold', color:T.gold, marginBottom:4, letterSpacing:'0.5px'}}, label || signal),
       info
     ), document.body)
   );
@@ -518,7 +523,7 @@ function SignalBadge({signal, style: extraStyle}) {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 const fmt = {
-  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
+  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (FULL_NUMBERS) return (a >= 1000 ? Math.round(n) : n).toLocaleString(); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
   pct: n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
   num: n => n ? n.toLocaleString() : '—',
 };
@@ -3079,6 +3084,15 @@ function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast
 }
 
 function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems, onClose, onCategoryChange, notes, onSaveNote, allItems, dateFormat, onAddToPortfolio, panelWidth, populatedHistoryIds, devMode, onSelectItem, onSaveAlert, onSaveReminder, toast}) {
+  // Item risk, worked out only for the item you open (one year of its saved prices).
+  const [riskDays, setRiskDays] = useState(null);
+  useEffect(() => {
+    let stale = false;
+    setRiskDays(null);
+    if (item?.id && !item.untradeable) loadDailyPrices(item.id).then(d => { if (!stale) setRiskDays(d); }).catch(() => {});
+    return () => { stale = true; };
+  }, [item?.id]);
+  const itemRisk = riskDays ? positionRisk(null, item, riskDays, Date.now() - 365 * 86400000) : null;
   const updateRisksForPanel = useUpdateRisks();
   const [chartOpen, setChartOpen]     = useState(false);
   const [chartDxpMode, setChartDxpMode] = useState(false);
@@ -3536,6 +3550,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       !item.untradeable && item.signals&&item.signals.length>0 && h('div',{className:'signal-list'},
         item.signals.map(s=>h(SignalBadge,{key:s,signal:s}))
       ),
+      !item.untradeable && itemRisk && h('div',{style:{marginTop:4, marginBottom:4}}, h(SignalBadge, itemRisk)),
 
       // Price trend badges from history
       item.id && h(PriceTrendBadges, {itemId: item.id, currentPrice: item.high||item.low, onOpenChart:()=>setChartOpen(true), untradeable: item.untradeable}),
@@ -6608,6 +6623,21 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v2.9.0',
+    items: [
+      "The Almanac gets a reality check, Notifications finally remembers things, and Jagex is about to touch your stuff. Ayo...",
+      "Almanac: every DXP plan gets tested. GEnius replays each item's strategy against past Double XPs it wasn't trained on, after GE tax, and against simply trading 45 days before. Only strategies that hold up across at least 8 tests make Recommendations. The rest say No reliable trade. We'd rather tell you we don't know than pretend we do.",
+      "Click the 📋 icon in the Plan column for a plain-English plan: when to buy and when to sell, with real dates once a Double XP is announced. Plans that begin by selling say Only if you own it.",
+      "This DXP, live: the forecast pop-up compares real trades during the current Double XP against the GE guide price, and GEnius tracks how the old approach holds up.",
+      "New Items: items from the last 18 months are too new to recommend, so they get their own tab, tested the same way and compared with their closest older items (Eternal frames vs. Elder and Magic frames). Items 18 to 30 months old get a Fairly new item label. DXPs are no longer counted twice, and one still underway no longer skews the stats.",
+      "Alerts is now Notifications: Inbox, Upcoming Changes, Almanac and My Alerts. The Inbox keeps every notification until you clear it. Almanac flags (Start selling now, Start buying now, Coming up) arrive in a single digest, holdings and watchlists first. Each pill gets an unread dot, or emojis (Settings → Notifications).",
+      "Upcoming Changes: Jagex has plans, your bank has concerns. Items you hold or watch that an upcoming update might affect are flagged on the Dashboard, Portfolio, Watchlist, item panel and the new Upcoming Changes page, including related materials. It identifies exposure; it doesn't tell you to buy or sell. Might be nothing. Might be 2.8b.",
+      "Portfolio: risk badges (Low, Medium, High) from volatility, largest drop, spread and your stack vs daily volume. Click one for the reasons. A description, not a prediction. Positions in the same item now group into one row, and Full Numbers shows 13,903,000 instead of 13.90M.",
+      "Live prices across the app: profit in Alch, Invention, Make it yourself, potions, DXP ideas and Portfolio uses live buy/sell, from recent averages rather than one odd trade. Alch profit no longer takes tax off the buy price, and machine profit includes tax. Live prices are now saved permanently, beyond the Wiki's ~100 days.",
+      "Smaller things: themes renamed Classic (was Dark) and Dark (was Black); DXP alerts count game days; Name Release posts aren't game releases; layout fixes; faster Almanac flags, fewer redraws, and code review fixes.",
+    ]
+  },
+  {
     version: 'v2.8.0',
     items: [
       'A pretty ridiculous amount of research, a much smarter Almanac, and your data is still there.',
@@ -7740,7 +7770,7 @@ const DXP_DEBUNKED_THEORIES = [
 // Profit is computed NET of GE tax (applyTax, defined above) — this was
 // missing entirely until Ben caught it 2026-06-24; the raw sell-buy
 // difference overstates every single trade idea in this tab by ~2%.
-function buildTradeIdea(timing, price, limit) {
+function buildTradeIdea(timing, price, limit, replay) {
   if (!timing || !price) return null;
   const buyDay = timing.best_buy_day_offset, sellDay = timing.best_sell_day_offset;
   const buyPct = timing.best_buy_pct_median, sellPct = timing.best_sell_pct_median;
@@ -7773,6 +7803,14 @@ function buildTradeIdea(timing, price, limit) {
     // tells you roughly how early to start buying, not just the in-event
     // buy/sell days above.
     preTroughOffset: timing.pre_trough_offset_median,
+    // Replayed through real past DXPs: its days and typical result replace the
+    // combined highs and lows above, which never came from one real trade.
+    replay: replay || null,
+    ...(replay ? {
+      buyDay: replay.buyDay, sellDay: replay.sellDay, sameySequence: replay.buyFirst, nEvents: replay.tests,
+      netProfitPct: replay.median, profitPerItem: Math.round(price * replay.median / 100),
+      profitForLimit: limit ? Math.round(price * replay.median / 100) * limit : null,
+    } : {}),
   };
 }
 
@@ -7791,7 +7829,7 @@ function computeRecommendationCandidates(data, priceById) {
     const price = liveBuyOf(liveItem) || 0;
     if (!price || !entry.timing) continue;
     const limit = entry.limit || liveItem?.limit || null;
-    const trade = buildTradeIdea(entry.timing, price, limit);
+    const trade = buildTradeIdea(entry.timing, price, limit, entry.replay);
     if (!trade || trade.profitPerItem == null) continue;
     let bestRatio = 0;
     for (const p of ALMANAC_PHASES) {
@@ -8044,6 +8082,124 @@ function DxpNewsBanner({toast}) {
 // tab's "Game Updates" link uses it).
 let _almanacInitialView = null;
 let _almanacInitialUpdate = null; // Game Update name to open on arrival
+// The Almanac's trading plan in plain English (Ben, 2026-11-05: the table's day
+// numbers were hard to follow). The table just shows an icon that opens this.
+function dxpDayInWords(day, next) {
+  const dxp = (next ? 'the next ' : '') + 'Double XP';
+  const d = Math.round(day), n = Math.abs(d), days = n + (n === 1 ? ' day' : ' days');
+  return d === 0 ? 'the day ' + dxp + ' starts' : d < 0 ? days + ' before ' + dxp + ' starts' : days + ' after ' + dxp + ' starts';
+}
+// The real date, once Jagex has announced this Double XP: day 5 of a Nov 6 start is Nov 11.
+function dxpDayDate(start, day) {
+  const d = new Date(Date.parse(start + 'T00:00:00Z') + Math.round(day) * 86400000);
+  return d.toLocaleDateString(undefined, {month:'short', day:'numeric', timeZone:'UTC'});
+}
+// New Items tab (Ben, 2026-11-05). The closest older items are picked by hand, because
+// automatic matching could easily pair the wrong ones. They're a guess, not a result.
+const NEW_ITEM_COMPARE = {
+  'Eternal frame': ['Elder frame', 'Magic frame'],
+  'Eternal plank': ['Elder plank', 'Magic plank'],
+  'Refined Eternal planks': ['Refined Magic planks'],
+};
+const NEW_ITEM_MIN_VOLUME = 1000;
+const NEW_ITEM_MONTHS = 18;
+const NEW_ITEM_COLS = [['Item','name'],['Double XPs seen','dxps'],['Made money','wins'],['Typical result','median'],['Normal time','control'],['So far','verdict'],['',null]];
+const NEW_ITEM_SORT = {
+  name: r => r.name.toLowerCase(), dxps: r => r.early.dxps * 1e9 - (r.early.volume || 0),
+  wins: r => r.early.tests ? r.early.wins / r.early.tests : -1, median: r => r.early.tests ? r.early.median : -Infinity,
+  control: r => r.early.tests ? r.early.control : -Infinity, verdict: r => !r.early.tests || r.early.tests < 3 ? 0 : r.early.looksGood ? 2 : 1,
+};
+function newItemVerdict(e) {
+  if (!e.tests || e.tests < 3) return {text:'Too early to say', color:T.textDim};
+  return e.looksGood ? {text:'Looks good so far', color:T.green} : {text:'Not so far', color:T.textDim};
+}
+function NewItemModal({id, name, early, data, dxpStart, onClose}) {
+  const v = newItemVerdict(early);
+  const pct = n => (n >= 0 ? '+' : '') + n.toFixed(1) + '%';
+  const byName = n => Object.values(data || {}).find(x => x && x.name === n);
+  const compare = (NEW_ITEM_COMPARE[name] || []).map(n => ({n, r: byName(n)?.replay || byName(n)?.early})).filter(c => c.r && c.r.tests);
+  return h('div', {className:'modal-overlay', onClick:e => { if (e.target === e.currentTarget) onClose(); }},
+    h('div', {className:'modal', style:{maxWidth:460}},
+      h('div', {className:'ge-section-head'}, 'New item: ' + name),
+      h('div', {style:{fontSize:14, color:T.gold, marginBottom:10}}, 'Too new to recommend.'),
+      h('div', {style:{fontSize:14, color:T.text, lineHeight:1.5, marginBottom:10}},
+        early.dxps === 0 ? 'This item hasn\'t been through a finished Double XP yet.' : 'It has been through ' + early.dxps + ' of the ' + early.needed + ' Double XPs we need to trust a plan.'),
+      early.tests > 0 && h('div', {style:{fontSize:14, color: early.median >= 0 ? T.green : T.red, marginBottom:6}},
+        'So far: tried on ' + early.tests + ' Double XP' + (early.tests === 1 ? '' : 's') + ', it made money ' + early.wins + ' time' + (early.wins === 1 ? '' : 's') + ', and typically ' + (early.median >= 0 ? 'made ' : 'lost ') + Math.abs(early.median).toFixed(1) + '% after tax.'),
+      early.tests > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:6}}, 'The same trade at a normal time of year: ' + pct(early.control) + '.'),
+      h('div', {style:{fontSize:12, color:v.color, marginBottom:12}}, early.tests ? 'Same tests as every other item: ' + v.text.toLowerCase() + '. This few results could easily be luck.' : 'Not enough history to test yet. It\'ll go through the same tests as every other item once it has.'),
+      compare.length > 0 && h('div', {style:{fontSize:12, color:T.text, lineHeight:1.5, marginBottom:12}},
+        h('div', {style:{color:T.gold, marginBottom:4}}, 'Closest older items (a guess, not a result)'),
+        compare.map(c => h('div', {key:c.n}, c.n + ': made money ' + c.r.wins + ' of ' + c.r.tests + ', typically ' + pct(c.r.median)))),
+      id != null && dxpStart && h(DxpLiveWatch, {id, dxpStart}),
+      h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.5, marginBottom:14}},
+        'Uses GE guide prices, so real trades may do worse. The past may not repeat.'),
+      h('button', {className:'ge-btn gold', onClick:onClose}, 'Got it')));
+}
+function DxpPlanModal({id, name, t, early, dxpStart, onClose}) {
+  // Between New Items' 18 months and 30 (Ben, 2026-11-07): new for a 25-year-old game, old for
+  // an MMO. These stay in the normal lists with a note about their short history.
+  const ageMonths = early ? (Date.now() - early.firstSeen) / (30.44 * 86400000) : 0;
+  const fairlyNew = early && ageMonths > NEW_ITEM_MONTHS && ageMonths <= 30;
+  const rp = t.replay;
+  const reliable = !rp || rp.passes;
+  // A sell-first plan's buy belongs to the next Double XP, whose dates aren't known.
+  const dateFor = (verb, day) => dxpStart && (t.sameySequence || verb === 'Sell') ? ' (' + dxpDayDate(dxpStart, day) + ')' : '';
+  const step = (num, verb, color, day, lead) => h('div', {key:num, style:{display:'flex', gap:10, marginBottom:12}},
+    h('div', {style:{width:24, height:24, flex:'none', borderRadius:12, background:color, color:'#111', fontWeight:'bold', display:'flex', alignItems:'center', justifyContent:'center'}}, num),
+    h('div', {style:{fontSize:14, color:T.text, lineHeight:1.5}},
+      lead, h('b', {style:{color}}, lead ? verb.toLowerCase() : verb), ' about ', h('b', null, dxpDayInWords(day, !t.sameySequence && verb === 'Buy') + dateFor(verb, day)), '.'));
+  const buy = n => step(n, 'Buy', T.green, t.buyDay, t.sameySequence ? '' : 'Then ');
+  const sell = n => step(n, 'Sell', T.gold, t.sellDay, t.sameySequence ? 'Then ' : 'If you own some, ');
+  const pct = v => (v >= 0 ? '+' : '') + v.toFixed(1) + '%';
+  return h('div', {className:'modal-overlay', onClick:e => { if (e.target === e.currentTarget) onClose(); }},
+    h('div', {className:'modal', style:{maxWidth:460}},
+      h('div', {className:'ge-section-head'}, 'The forecast: ' + name),
+      fairlyNew && h('div', {style:{fontSize:12, color:T.gold, lineHeight:1.5, marginBottom:10}},
+        'Fairly new item: on the GE since ' + new Date(early.firstSeen).toLocaleDateString(undefined, {month:'short', year:'numeric'}) + ', so it has only seen ' + early.dxps + ' Double XP' + (early.dxps === 1 ? '' : 's') + '. That\'s less history than most items, so take these days with extra care.'),
+      !reliable && h('div', {style:{fontSize:15, color:T.gold, marginBottom:10}}, 'No reliable trade here.'),
+      reliable && rp && !t.sameySequence && h('div', {style:{fontSize:14, color:T.gold, marginBottom:10}}, 'Only if you own it: this plan starts by selling.'),
+      !rp && h('div', {style:{fontSize:14, color:T.gold, marginBottom:10}}, 'The old strategy: past GE guide prices' + (t.nEvents ? ' over ' + t.nEvents + ' Double XPs' : '') + ' pointed to these days.'),
+      reliable && (t.sameySequence ? [buy(1), sell(2)] : [sell(1), buy(2)]),
+      rp && h('div', {style:{fontSize:14, color: rp.median >= 0 ? T.green : T.red, marginBottom:6}},
+        (reliable ? 'We tried this on ' : 'We tried this item\'s usual plan on ') + rp.tests + ' past Double XPs. It made money ' + rp.wins + ' times, and typically ' + (rp.median >= 0 ? 'made ' : 'lost ') + Math.abs(rp.median).toFixed(1) + '% after tax.'),
+      rp && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}},
+        'The same trade at a normal time of year: ' + pct(rp.control) + '. In the last ' + rp.recentTests + ' Double XPs it made money ' + rp.recentWins + ' times.'),
+      rp && reliable && t.profitPerItem != null && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'At today\'s price, that\'s about ' + fmt.gp(Math.abs(t.profitPerItem)) + 'gp per item.'),
+      !rp && h('div', {style:{fontSize:12, color:T.text, lineHeight:1.5, marginBottom:12}},
+        'It hasn\'t been through the newer replay test, which needs 13 Double XPs of steady trading. The GE guide price also lags behind real trades. GEnius is tracking real trade prices during this Double XP, and will show here how well the old strategy holds up.'),
+      id != null && dxpStart && h(DxpLiveWatch, {id, dxpStart}),
+      rp && h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.5, marginBottom:14}},
+        'Uses GE guide prices, since old Double XPs have no live prices, so real trades may do worse. The past may not repeat.'),
+      h('button', {className:'ge-btn gold', onClick:onClose}, 'Got it')));
+}
+// Watches this Double XP as it happens (Ben, 2026-11-05): the GE guide price lags real
+// trades, so this compares where each one peaked. Complete days only, from the live
+// archive, which keeps them for good so later DXPs can learn from this one.
+function DxpLiveWatch({id, dxpStart}) {
+  const [watch, setWatch] = useState(null);
+  useEffect(() => {
+    let stale = false;
+    Promise.all([window.genius?.getItemLiveHistory?.(id, 45), loadDailyPrices(id)]).then(([live, guide]) => {
+      if (stale) return;
+      const start = Date.parse(dxpStart + 'T00:00:00Z');
+      const dayOf = ts => Math.floor((ts - start) / 86400000);
+      const rows = (live || []).filter(r => r.date >= dxpStart && r.buy > 0 && r.sell > 0).map(r => ({day: dayOf(Date.parse(r.date + 'T00:00:00Z')), price: (r.buy + r.sell) / 2}));
+      if (!rows.length) return;
+      const top = list => list.reduce((a, b) => b.price > a.price ? b : a);
+      const guideRows = (guide || []).filter(g => g.ts >= start).map(g => ({day: dayOf(g.ts), price: g.price}));
+      setWatch({days: rows.length, live: top(rows), guide: guideRows.length ? top(guideRows) : null, latest: rows[rows.length - 1]});
+    }).catch(() => {});
+    return () => { stale = true; };
+  }, [id, dxpStart]);
+  if (!watch) return null;
+  const {live, guide, latest, days} = watch;
+  return h('div', {style:{fontSize:12, color:T.text, lineHeight:1.5, border:'1px solid '+T.borderDim, borderRadius:4, padding:'8px 10px', marginBottom:12}},
+    h('div', {style:{color:T.gold, marginBottom:3}}, 'This Double XP so far (' + days + (days === 1 ? ' full day' : ' full days') + ')'),
+    h('div', null, 'Real trades were highest on day ' + live.day + ', at about ' + fmt.gp(Math.round(live.price)) + 'gp. Latest: about ' + fmt.gp(Math.round(latest.price)) + 'gp.'),
+    guide && h('div', null, guide.day === live.day ? 'The GE guide price was highest that same day.' : 'The GE guide price was highest on day ' + guide.day + (guide.day > live.day ? ', so it was ' + (guide.day - live.day) + ' behind.' : '.')));
+}
+
 function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   const [activeView, setActiveView] = useState(() => { const v = _almanacInitialView || 'dxp'; _almanacInitialView = null; return v; }); // 'dxp' | 'seasonal' | 'updates'
   const [data, setData] = useState(() => _dxpDataCache);
@@ -8054,6 +8210,18 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   const [activePhase, setActivePhase] = useState('anticipation');
   const [sort, setSort] = useState({key:'confidence', dir:-1});
   const [tier, setTier] = useState('confirmed'); // 'confirmed' | 'negligible' | 'speculative' | 'debunked' | 'watchlist' | 'recommendations'
+  const [planFor, setPlanFor] = useState(null); // {name, t}: the plain-English pop-up
+  const [newItemFor, setNewItemFor] = useState(null);
+  const [showAllNew, setShowAllNew] = useState(false);
+  const [newSort, setNewSort] = useState({key:'dxps', dir:1});
+  const [dxpStart, setDxpStart] = useState(null); // announced start date, from the news calendar
+  useEffect(() => {
+    window.genius?.getNewsCalendar?.().then(list => {
+      const today = new Date().toISOString().slice(0, 10);
+      const next = (list || []).filter(e => e.category === 'dxp' && e.start && (e.end || e.start) >= today).sort((a, b) => a.start < b.start ? -1 : 1)[0];
+      setDxpStart(next ? next.start : null);
+    }).catch(() => {});
+  }, []);
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
   const [dxpWatchlist, setDxpWatchlistState] = useState([]);
@@ -8072,12 +8240,12 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   // independent widths since their columns don't correspond 1:1; Honorable
   // Mentions reuses the Recommendations widths rather than getting its own
   // handles, since it's the same columns directly below the same table.
-  const mainCols = useTableColumns('genius_almanac_main_col_widths_v2',
-    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:150, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26},
-    null, ['name', 'direction', 'confidence', 'expand']);
-  const recCols = useTableColumns('genius_almanac_rec_col_widths_v2',
-    {star:26, name:185, strategy:160, netRoi:88, profitPerItem:128, profitForLimit:148},
-    null, ['name', 'netRoi', 'profitForLimit']);
+  const mainCols = useTableColumns('genius_almanac_main_col_widths_v3',
+    {star:26, name:190, direction:82, confidence:80, medianPct:72, strategy:50, profitPerItem:112, profitForLimit:138, volRatio:58, expand:26},
+    null, ['name', 'direction', 'strategy', 'confidence', 'expand']);
+  const recCols = useTableColumns('genius_almanac_rec_col_widths_v3',
+    {star:26, name:185, strategy:50, netRoi:88, profitPerItem:128, profitForLimit:148},
+    null, ['name', 'strategy', 'netRoi', 'profitForLimit']);
 
   useEffect(() => {
     // Already have data cached from an earlier visit this session — skip
@@ -8147,7 +8315,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     const price = liveBuyOf(liveItem) || 0;
     const medianPct = ph?.median_pct ?? ph?.avg_pct ?? 0;
     const limit = entry.limit || liveItem?.limit || null;
-    const trade = buildTradeIdea(entry.timing, price, limit);
+    const trade = buildTradeIdea(entry.timing, price, limit, entry.replay);
     const negligible = trade
       ? trade.netProfitPct < NEGLIGIBLE_NET_PROFIT_PCT
         || (trade.profitForLimit != null && trade.profitForLimit < NEGLIGIBLE_PROFIT_FOR_LIMIT_GP)
@@ -8233,6 +8401,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     const numSlots = Math.max(1, slots || GE_SLOTS);
     let pool = recommendationCandidates.filter(r => !r.negligible);
     if (riskTolerance === 'safe') pool = pool.filter(r => r.bestRatio >= ALMANAC_CONFIDENCE_THRESHOLD);
+    if (pool.some(r => r.trade.replay)) pool = pool.filter(r => r.trade.replay?.passes); // only plans that worked in the replay
     if (budget > 0) pool = pool.filter(r => r.trade.buyPrice <= budget); // can afford at least one unit
     // Ranked by total gp payout (Profit (buy limit)), not ROI — most
     // players care more about "how much total gp can this make me" than
@@ -8290,7 +8459,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       case 'direction':      return mainCols.th(k, sortable('direction'), 'Direction'+sortArrow('direction'));
       case 'confidence':     return mainCols.th(k, sortable('confidence'), 'Confidence'+sortArrow('confidence'));
       case 'medianPct':      return mainCols.th(k, sortable('medianPct'), 'Median %'+sortArrow('medianPct'));
-      case 'strategy':       return mainCols.th(k, null, 'Trading Strategy');
+      case 'strategy':       return mainCols.th(k, null, 'Plan');
       case 'profitPerItem':  return mainCols.th(k, {...sortable('profitPerItem'), title:PROFIT_ITEM_TIP}, 'Probable profit/item'+sortArrow('profitPerItem'));
       case 'profitForLimit': return mainCols.th(k, {...sortable('profitForLimit'), title:PROFIT_LIMIT_TIP}, 'Probable profit (buy limit)'+sortArrow('profitForLimit'));
       case 'volRatio':       return mainCols.th(k, sortable('volRatio'), 'Vol'+sortArrow('volRatio'));
@@ -8298,7 +8467,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       default:               return mainCols.th(k, null, null);
     }
   };
-  const mainTdFor = (k, r, t, tradeLabel) => {
+  const mainTdFor = (k, r, t) => {
     switch (k) {
       case 'star': return h('td', {
         key:k,
@@ -8326,12 +8495,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         : h('td', {key:k, style:{color: r.dominant==='rise' ? T.green : T.red}}, r.dominant==='rise' ? '▲ Rise' : '▼ Drop');
       case 'confidence': return h('td', {key:k}, `${r.score}/${r.total}`);
       case 'medianPct': return h('td', {key:k, style:{color: r.medianPct>=0 ? T.green : T.red}}, `${r.medianPct>=0?'+':''}${r.medianPct}%`);
-      case 'strategy': return h('td', {
-        key:k,
-        style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-        onClick:()=>setExpanded(expanded===r.id?null:r.id),
-        title:'Show trading strategy details',
-      }, tradeLabel);
+      case 'strategy': return h('td', {key:k, style:{textAlign:'center'}}, t ? h('button', {
+        className:'ge-btn', style:{padding:'1px 6px'}, title:'See the plan in plain English',
+        onClick: e => { e.stopPropagation(); setPlanFor({id:r.id, name:r.name, t:t}); },
+      }, '📋') : '—');
       case 'profitPerItem': return h('td', {key:k, style:{color: t?.profitPerItem==null ? T.textDim : t.profitPerItem>=0 ? T.gold : T.red}}, t?.profitPerItem!=null ? (t.profitPerItem>=0?'+':'')+fmt.gp(t.profitPerItem)+'gp' : '—');
       case 'profitForLimit': return h('td', {key:k, style:{color: t?.profitForLimit==null ? T.textDim : t.profitForLimit>=0 ? T.gold : T.red}}, t?.profitForLimit!=null ? (t.profitForLimit>=0?'+':'')+fmt.gp(t.profitForLimit)+'gp' : '—');
       case 'volRatio': return h('td', {key:k, style:{color:T.textDim}}, r.volRatio!=null ? r.volRatio+'x' : '—');
@@ -8352,7 +8519,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     switch (k) {
       case 'star':           return recCols.th(k, null, null);
       case 'name':           return recCols.th(k, sortable('name'), 'Item'+arrow('name'));
-      case 'strategy':       return recCols.th(k, null, 'Trading Strategy');
+      case 'strategy':       return recCols.th(k, null, 'Plan');
       case 'netRoi':         return recCols.th(k, {...(sortable('netRoi')||{}), title:'Net of the 2% GE sell tax'}, 'Net ROI'+arrow('netRoi'));
       case 'profitPerItem':  return recCols.th(k, {...(sortable('profitPerItem')||{}), title:PROFIT_ITEM_TIP}, 'Probable profit/item'+arrow('profitPerItem'));
       case 'profitForLimit': return recCols.th(k, {...(sortable('profitForLimit')||{}), title:PROFIT_LIMIT_TIP}, 'Probable profit (buy limit)'+arrow('profitForLimit'));
@@ -8366,17 +8533,11 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         style:{cursor:'pointer', color: dxpWatchlist.includes(r.id) ? T.gold : T.textDim, textAlign:'center'},
         onClick: e => { e.stopPropagation(); toggleDxpWatch(r.id); },
       }, dxpWatchlist.includes(r.id) ? '★' : '☆');
-      case 'name': return h('td', {key:k}, r.name);
-      case 'strategy': return h('td', {
-        key:k,
-        style:{fontSize:11, color:T.textDim, cursor:'pointer'},
-        onClick: e => { e.stopPropagation(); setExpanded(expanded===r.id?null:r.id); },
-        title:'Show trading strategy details',
-      },
-        r.trade.sameySequence
-          ? `Buy ~day ${r.trade.buyDay} → Sell ~day ${r.trade.sellDay}`
-          : `Sell ~day ${r.trade.sellDay} → Buy ~day ${r.trade.buyDay} (next cycle)`
-      );
+      case 'name': return h('td', {key:k}, r.name, r.trade?.replay && !r.trade.sameySequence && h('div', {style:{fontSize:11, color:T.gold}}, 'Only if you own it'));
+      case 'strategy': return h('td', {key:k, style:{textAlign:'center'}}, r.trade ? h('button', {
+        className:'ge-btn', style:{padding:'1px 6px'}, title:'See the plan in plain English',
+        onClick: e => { e.stopPropagation(); setPlanFor({id:r.id, name:r.name, t:r.trade}); },
+      }, '📋') : '—');
       case 'netRoi': return h('td', {key:k, style:{color: r.trade.netProfitPct>=0?T.green:T.red}}, (r.trade.netProfitPct>=0?'+':'')+r.trade.netProfitPct.toFixed(2)+'%');
       case 'profitPerItem': return h('td', {key:k, style:{color: r.trade.profitPerItem>=0?T.gold:T.red}}, (r.trade.profitPerItem>=0?'+':'')+fmt.gp(r.trade.profitPerItem)+'gp');
       case 'profitForLimit': return h('td', {key:k, style:{color: r.trade.profitForLimit==null ? T.textDim : r.trade.profitForLimit>=0 ? T.gold : T.red}}, r.trade.profitForLimit!=null ? (r.trade.profitForLimit>=0?'+':'')+fmt.gp(r.trade.profitForLimit)+'gp' : '—');
@@ -8433,40 +8594,18 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
 
   const toggleSort = key => setSort(s => ({key, dir: s.key===key ? -s.dir : -1}));
   const sortArrow = key => sort.key===key ? (sort.dir>0?' ↑':' ↓') : '';
-  // Shared "Trade idea" writeup shown when expanding a row — used by the
-  // main Confirmed/Negligible/Speculative table AND Recommendations/
-  // Honorable mentions, so the trade-idea expand behaves identically
-  // everywhere instead of being a main-table-only feature.
-  const tradeDetailBlock = t => !t ? null : h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`}},
-    h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
-      `Trading strategy — based on ${t.nEvents} past DXP cycles`
-    ),
-    h('div', {style:{fontSize:13, color:T.gold, fontWeight:600, marginBottom:8}},
-      t.sameySequence
-        ? `Buy day ${t.buyDay}, sell day ${t.sellDay}`
-        : `Sell day ${t.sellDay}, buy day ${t.buyDay} (next cycle)`
-    ),
-    h('div', {style:{fontSize:12, color:T.text, lineHeight:1.6}},
-      t.sameySequence
-        ? h('span', null, `Buy first, sell later. `)
-        : h('span', null, `Sell first (if you already own some), buy back later at the lower price for next time. `),
-      t.preTroughOffset != null && t.preTroughOffset < -1 && h('span', null,
-        `This one starts getting cheaper before the event is even announced — around ${Math.abs(t.preTroughOffset)} days before it starts. If you want the absolute best price, that's actually a better time to buy than the dip described below.`, h('br',null), h('br',null),
-      ),
-      `Cheapest point: around day ${t.buyDay} of the event (give or take ${t.buyDayStd} days) — typically about ${Math.abs(t.buyPct).toFixed(1)}% ${t.buyPct>=0?'above':'below'} its normal price, roughly ${fmt.gp(t.buyPrice)}gp.`, h('br',null),
-      `Priciest point: around day ${t.sellDay} (give or take ${t.sellDayStd} days) — typically about ${Math.abs(t.sellPct).toFixed(1)}% ${t.sellPct>=0?'above':'below'} its normal price, roughly ${fmt.gp(t.sellPrice)}gp before tax (${fmt.gp(t.netSellPrice)}gp after the 2% GE sell tax).`, h('br',null),
-      `Buying at the cheap point and selling at the expensive point has historically netted about ${t.netProfitPct>=0?'+':''}${t.netProfitPct.toFixed(2)}% per item, after tax.`, h('br',null),
-      h('span', {style:{color:T.textDim, fontStyle:'italic'}},
-        '"Day 0" is the moment the event starts — negative days are before it starts, and fractional days are partial days (day 2.5 ≈ 2.5 days in).'
-      ),
-    )
-  );
   const confidentRows = allRows.filter(r => r.ratio >= ALMANAC_CONFIDENCE_THRESHOLD);
   const confirmedCount = confidentRows.filter(r => !r.negligible).length;
   const negligibleRows = confidentRows.filter(r => r.negligible);
   const negligibleCount = negligibleRows.length;
   const negligibleNetNegativeCount = negligibleRows.filter(r => (r.trade?.profitPerItem ?? 0) < 0).length;
   const speculativeCount = allRows.length - confidentRows.length;
+  const allNewItems = Object.entries(data || {})
+    .filter(([id, e]) => id !== '_meta' && e?.early && Date.now() - e.early.firstSeen <= NEW_ITEM_MONTHS * 30.44 * 86400000 && (e.early.volume || 0) >= 100 && !isDebunkedDxpItem(e.name || priceById[id]?.name))
+    .map(([id, e]) => ({id, name: e.name || priceById[id]?.name || id, early: e.early}))
+    .sort((a, b) => a.early.dxps - b.early.dxps || (b.early.volume || 0) - (a.early.volume || 0));
+  const busyNewItems = allNewItems.filter(r => (r.early.volume || 0) >= NEW_ITEM_MIN_VOLUME);
+  const shownNewItems = showAllNew ? allNewItems : busyNewItems;
   const recBudget = parseGP(budgetInput) || 0;
   const recSlots = Math.max(1, parseInt(slotsInput, 10) || GE_SLOTS);
   const recs = buildRecommendations(riskTolerance, recBudget, recSlots, diversify);
@@ -8483,6 +8622,8 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   });
 
   return h('div', {style:{padding:'16px 20px', maxWidth:900}},
+    planFor && h(DxpPlanModal, {...planFor, early: data?.[planFor.id]?.early, dxpStart, onClose:()=>setPlanFor(null)}),
+    newItemFor && h(NewItemModal, {...newItemFor, data, dxpStart, onClose:()=>setNewItemFor(null)}),
     h('div', {style:{display:'flex', alignItems:'center', gap:8, marginBottom:4}},
       h('span', {style:{fontSize:16}}, '📅'),
       h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'GEnius Almanac'),
@@ -8581,7 +8722,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           // panels that otherwise stay open forever — clicking a phase
           // pill should always return you to the normal phase-filtered
           // table, not silently no-op while the old panel keeps showing.
-          if (tier === 'debunked' || tier === 'recommendations') setTier('confirmed');
+          if (tier === 'debunked' || tier === 'recommendations' || tier === 'newitems') setTier('confirmed');
         },
         style:{
           padding:'6px 12px', fontSize:11, borderRadius:4, cursor:'pointer',
@@ -8599,9 +8740,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         {key:'speculative', label:`Highly Speculative (${speculativeCount})`},
         {key:'watchlist', label:`⭐ My Watchlist (${dxpWatchlist.length})`},
         {key:'recommendations', label:`🎯 Recommendations`},
+        {key:'newitems', label:`🌱 New Items (${busyNewItems.length})`},
         {key:'debunked', label:`📖 Debunked Theories (${DXP_DEBUNKED_THEORIES.length})`},
       ].map(t => {
-        const golden = t.key==='debunked' || t.key==='watchlist' || t.key==='recommendations';
+        const golden = t.key==='debunked' || t.key==='watchlist' || t.key==='recommendations' || t.key==='newitems';
         return h('button', {
         key:t.key,
         onClick:()=>{setTier(t.key); setExpanded(null);},
@@ -8614,7 +8756,30 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       }, t.label);
       })
     ),
-    tier !== 'debunked' && tier !== 'recommendations' && h('input', {
+    tier === 'newitems' && !loading && !error && h('div', null,
+      h('div', {style:{fontSize:12, color:T.textDim, lineHeight:1.5, marginBottom:10}},
+        'These items are too new to the game to judge. We trust a plan after 13 Double XPs: 5 to learn its usual days, then 8 to test them. Until then an item runs through the same tests as everything else, but with so few results a good score could be luck, so it isn\'t recommended. Each one moves to the normal lists once it has enough history.'),
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap'}},
+        h('span', {style:{fontSize:11, color:T.textDim}}, showAllNew ? `All ${allNewItems.length} new items tested` : `${busyNewItems.length} busy items (${NEW_ITEM_MIN_VOLUME.toLocaleString()}+ traded a day), of ${allNewItems.length} tested`),
+        h('button', {className:'ge-btn', style:{padding:'2px 8px'}, onClick:()=>setShowAllNew(s => !s)}, showAllNew ? 'Show busy only' : 'Show all')),
+      shownNewItems.length === 0
+        ? h('div', {className:'empty-state'}, h('div', null, 'No new items yet. The list fills in after the Almanac next rebuilds.'))
+        : h('div', {className:'ge-table-wrap'},
+          h('table', {className:'ge-table'},
+            h('thead', null, h('tr', null, NEW_ITEM_COLS.map(([c, key]) => h('th', key ? {key:c, style:{cursor:'pointer'}, onClick:()=>setNewSort(s => ({key, dir: s.key === key ? -s.dir : (key === 'name' ? 1 : -1)}))} : {key:c},
+              c + (key && newSort.key === key ? (newSort.dir > 0 ? ' ↑' : ' ↓') : ''))))),
+            h('tbody', null, [...shownNewItems].sort((a, b) => { const f = NEW_ITEM_SORT[newSort.key], x = f(a), y = f(b); return (x < y ? -1 : x > y ? 1 : 0) * newSort.dir; }).map(r => {
+              const e = r.early, v = newItemVerdict(e);
+              return h('tr', {key:r.id},
+                h('td', {style:{cursor: onSelect ? 'pointer' : 'default'}, title: onSelect ? 'Open item details' : undefined, onClick: onSelect && priceById[r.id] ? ()=>onSelect(priceById[r.id]) : undefined}, r.name),
+                h('td', null, e.dxps + ' of ' + e.needed),
+                h('td', null, e.tests ? e.wins + ' of ' + e.tests : '—'),
+                h('td', {style:{color: !e.tests ? T.textDim : e.median >= 0 ? T.green : T.red}}, e.tests ? (e.median >= 0 ? '+' : '') + e.median.toFixed(1) + '%' : '—'),
+                h('td', null, e.tests ? (e.control >= 0 ? '+' : '') + e.control.toFixed(1) + '%' : '—'),
+                h('td', {style:{color:v.color}}, v.text),
+                h('td', {style:{textAlign:'center'}}, h('button', {className:'ge-btn', style:{padding:'1px 6px'}, title:'See what we know so far', onClick:()=>setNewItemFor({id:r.id, name:r.name, early:e})}, '📋')));
+            }))))),
+    tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('input', {
       type:'text', value:search, placeholder:'Search any item, across all tiers…',
       onChange:e=>setSearch(e.target.value),
       style:{
@@ -8705,15 +8870,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
         h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
           recCols.colgroup(),
           h('thead', null, h('tr', null, recCols.colOrder.map(k => recThFor(k, true)))),
-          h('tbody', null, sortedPicks.flatMap(r => [
-            h('tr', {
+          h('tbody', null, sortedPicks.map(r => h('tr', {
               key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
               onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-            }, recCols.colOrder.map(k => recTdFor(k, r))),
-            expanded===r.id && h('tr', {key:r.id+'-detail'},
-              h('td', {colSpan:recCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
-            ),
-          ]))
+            }, recCols.colOrder.map(k => recTdFor(k, r)))))
         ),
         recCols.handles(),
         ),
@@ -8725,15 +8885,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           h('table', {className:'ge-table', style:{tableLayout:'fixed', width:'max-content'}},
             recCols.colgroup(),
             h('thead', null, h('tr', null, recCols.colOrder.map(k => recThFor(k, false)))),
-            h('tbody', null, recs.honorableMentions.flatMap(r => [
-              h('tr', {
+            h('tbody', null, recs.honorableMentions.map(r => h('tr', {
                 key:r.id, style:{cursor: onSelect ? 'pointer' : 'default'},
                 onClick: onSelect ? ()=>onSelect(priceById[r.id]) : undefined,
-              }, recCols.colOrder.map(k => recTdFor(k, r))),
-              expanded===r.id && h('tr', {key:r.id+'-detail'},
-                h('td', {colSpan:recCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}}, tradeDetailBlock(r.trade)),
-              ),
-            ]))
+              }, recCols.colOrder.map(k => recTdFor(k, r)))))
           ),
         ),
       ),
@@ -8762,10 +8917,10 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       ))
     ),
 
-    loading && tier !== 'debunked' && tier !== 'recommendations' && h('div', {style:{color:T.textDim, fontSize:12, padding:'20px 0'}}, 'Computing DXP patterns from local + research history…'),
-    error && tier !== 'debunked' && tier !== 'recommendations' && h('div', {style:{color:T.red, fontSize:12, padding:'20px 0'}}, 'Failed to load Almanac data.'),
+    loading && tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('div', {style:{color:T.textDim, fontSize:12, padding:'20px 0'}}, 'Computing DXP patterns from local + research history…'),
+    error && tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('div', {style:{color:T.red, fontSize:12, padding:'20px 0'}}, 'Failed to load Almanac data.'),
 
-    !loading && !error && tier !== 'debunked' && tier !== 'recommendations' && h('div', null,
+    !loading && !error && tier !== 'debunked' && tier !== 'recommendations' && tier !== 'newitems' && h('div', null,
       h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}},
         isSearching ? `${rows.length} match${rows.length===1?'':'es'} across all tiers` : `${rows.length} items in this view`
       ),
@@ -8777,18 +8932,13 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
             h('thead', null, h('tr', null, mainCols.colOrder.map(k => mainThFor(k)))),
             h('tbody', null, rows.map(r => {
               const t = r.trade;
-              const tradeLabel = !t ? '—'
-                : t.sameySequence
-                  ? `Buy ~day ${t.buyDay} → Sell ~day ${t.sellDay}`
-                  : `Sell ~day ${t.sellDay} → Buy ~day ${t.buyDay} (next cycle)`;
               return [
-              h('tr', {key:r.id}, mainCols.colOrder.map(k => mainTdFor(k, r, t, tradeLabel))),
+              h('tr', {key:r.id}, mainCols.colOrder.map(k => mainTdFor(k, r, t))),
               expanded===r.id && h('tr', {key:r.id+'-detail'},
                 h('td', {colSpan:mainCols.colOrder.length, style:{background:'rgba(0,0,0,0.2)', padding:'10px 14px'}},
                   r.negligible && r.negligibleReason && h('div', {style:{marginBottom:12, paddingBottom:10, borderBottom:`1px solid ${T.borderDim}`, fontSize:12, color:T.gold}},
                     r.negligibleReason
                   ),
-                  tradeDetailBlock(t),
                   h('div', {style:{fontSize:10, color:T.textDim, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:6}},
                     `Tracked DXP events — ${r.events.length} with data for this phase`
                   ),
@@ -9875,6 +10025,19 @@ function AboutTab() {
   );
 }
 
+// Settings > Hourly price history: what's saved so far (live-hourly.js).
+function HourlyArchiveStatus() {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => window.genius.getLiveHourlyStatus?.().then(setSt).catch(() => {});
+  useEffect(() => { load(); }, []);
+  const saveNow = async () => { setBusy(true); try { await window.genius.syncLiveHourly(); } catch {} setBusy(false); load(); };
+  const mb = st ? (st.bytes / 1048576).toFixed(1) : '0';
+  return h('div',{className:'row',style:{gap:10,marginTop:6,fontSize:11,color:T.textDim}},
+    h('span',null, !st || !st.days ? 'Nothing saved yet. It starts on the next fetch.' : `Saved: ${st.days} days (${st.oldest} to ${st.newest}), ${mb} MB`),
+    h('button',{className:'ge-btn',style:{fontSize:11,padding:'3px 9px'},disabled:busy,onClick:saveNow}, busy ? 'Saving…' : 'Save now'));
+}
+
 function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, userShorthands, onSaveShorthands, monsterShorthands, onSaveMonsterShorthands, onReplayTour}) {
   const [s, setS] = useState(settings);
   const [appVersion, setAppVersion] = useState('');
@@ -9992,6 +10155,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         onClick:handleVersionTap,
       }, `Version ${appVersion}`),
       s.devMode && h('div',{style:{fontSize:10, color:T.gold, marginTop:4, letterSpacing:'0.05em'}}, '⚙ DEVELOPER MODE'),
+      s.devMode && !IS_PHONE && h('div',{style:{fontSize:11, color:T.textDim, marginTop:4}}, 'Shift+PrtSc reads your screen once to log an open GE offer. It only runs when you press it, stays on this PC, and the image isn\'t saved.'),
       h('div',{style:{display:'flex', gap:10, marginTop:12}},
         h('button',{
           className:'ge-btn', style:{fontSize:11, padding:'5px 12px'},
@@ -10010,8 +10174,8 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Theme'),
       h('select',{className:'ge-input',value:s.theme||'dark',onChange:set('theme')},
-        h('option',{value:'dark'},'Dark (default)'),
-        h('option',{value:'black'},'Black'),
+        h('option',{value:'dark'},'Classic (default)'),
+        h('option',{value:'black'},'Dark'),
       )
     ),
     h('div',{style:{marginBottom:20}},
@@ -10026,6 +10190,12 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         h('button',{className:'ge-btn', style:{fontSize:11, padding:'4px 10px'}, onClick:()=>update({accentColor: DEFAULT_ACCENT})}, 'Reset to default'),
       ),
       h('div',{style:{fontSize:11,color:T.textDim, marginTop:4}}, 'Recolors highlights, headers, active states, and buttons. Applies and saves immediately.'),
+    ),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Full Numbers'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
+        h('input',{type:'checkbox',checked:s.fullNumbers===true,onChange:setChk('fullNumbers')}),
+        h('span',{style:{fontSize:12,color:T.text}},'Show full numbers with commas (13,903,000 instead of 13.90M)'))
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Item Thumbnails'),
@@ -10095,6 +10265,14 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       h('select',{className:'ge-input',value:s.fetchInterval||15,onChange:set('fetchInterval')},
         [5,10,15,30,60].map(v=>h('option',{key:v,value:v},`Every ${v} minutes`))
       )
+    ),
+    !IS_PHONE && h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Hourly price history'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
+        h('input',{type:'checkbox',checked:s.saveHourlyPrices===true,onChange:setChk('saveHourlyPrices')}),
+        h('span',{style:{fontSize:12,color:T.text}},'Save hourly live prices for every item')),
+      h('div',{style:{fontSize:11,color:T.textDim,marginTop:4}}, "Daily averages hide spikes: an item that sold high for one hour still looks average for the day. The wiki only keeps about 100 days of hours, so this saves them on your PC for the Almanac's research. Uses about 25MB of disk a month, and downloads about 190MB a month in the background. The first run fills in the last ~100 days over a few fetches."),
+      s.saveHourlyPrices===true && h(HourlyArchiveStatus, null)
     ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Expensive items threshold'),
@@ -11427,6 +11605,55 @@ function TierLadderModal({title, tiers, achievedIndex, onClose}) {
 }
 
 /* ─── Portfolio tab ───────────────────────────────────────────── */
+// Position risk (Ben's friend's idea, 2026-11-04): how this item has behaved and how
+// hard your stack would be to sell, never a forecast. The worst factor sets the level.
+// Cut-offs measured once across ~3,000 items over a year (2026-11-04), aiming for the
+// calmest third Low and the wildest 15% High. Spread's High is capped by hand at 40%
+// (stale prices made the measured figure useless). Re-measure if the market shifts.
+function positionRisk(quantity, item, days, heldSince) {
+  const reasons = [];
+  let level = 0;
+  const add = (lvl, text) => { level = Math.max(level, lvl); reasons.push(text); };
+  // No quantity means the item panel: how the item behaves, with no stack to judge.
+  // Under 100gp a 1gp tick looks like a big % move, so swings don't raise the level.
+  const cheap = (item.high || item.low || 0) < 100;
+  if (quantity == null) {
+    if (item.avgVolume > 0) add(0, `Trading: about ${Math.round(item.avgVolume).toLocaleString()} a day.`);
+    else add(1, 'Trading: no volume data, so it could be hard to sell.');
+  } else if (item.avgVolume > 0) {
+    const d = quantity / item.avgVolume;
+    add(d >= 5 ? 2 : d >= 1 ? 1 : 0, `Selling: your ${quantity.toLocaleString()} is ${d < 0.1 ? 'under 10% of' : d < 1 ? 'about ' + Math.round(d * 100) + '% of' : 'about ' + d.toFixed(1) + ' x'} a normal day's volume.`);
+  } else add(1, 'Selling: no volume data, so it could be hard to sell.');
+  if (item.liveBuy > 0 && item.liveSell > 0) {
+    const s = (item.liveBuy - item.liveSell) / item.liveSell * 100;
+    if (s < 0) reasons.push('Spread: live buy and sell prices don\'t line up right now, so this isn\'t counted.');
+    else add(cheap ? 0 : s >= 40 ? 2 : s >= 25 ? 1 : 0, `Spread: live buy and sell are ${s.toFixed(1)}% apart.`);
+  }
+  // The whole time you've held it, and at least 90 days so a new buy still has context.
+  const from = Math.min(Date.now() - 90 * 86400000, heldSince || Infinity);
+  const spanDays = Math.round((Date.now() - from) / 86400000);
+  const recent = (days || []).filter(x => x.ts >= from);
+  if (recent.length >= 10) {
+    let moves = 0, peak = 0, drop = 0;
+    recent.forEach((x, i) => {
+      if (i) moves += Math.abs(x.price - recent[i - 1].price) / recent[i - 1].price * 100;
+      peak = Math.max(peak, x.price);
+      drop = Math.max(drop, (peak - x.price) / peak * 100);
+    });
+    const swing = moves / (recent.length - 1);
+    if (cheap) reasons.push('Under 100gp, so percent moves are mostly small ticks and do not count here.');
+    add(cheap ? 0 : swing >= 1.8 ? 2 : swing >= 0.7 ? 1 : 0, `Swings: moves about ${swing.toFixed(1)}% on a typical day (${spanDays} days of GE prices).`);
+    add(cheap ? 0 : drop >= 75 ? 2 : drop >= 45 ? 1 : 0, `Biggest drop: ${drop.toFixed(0)}% from a high in the last ${spanDays} days.`);
+  } else if (quantity == null) return null; // Too little to say anything about the item alone.
+  else reasons.push('Not enough price history to judge swings.');
+  // Barely trading: a flat price means little, and you may not be able to sell.
+  if (item.avgVolume > 0 && item.avgVolume < 20) add(1, 'Thin market: trades under 20 a day, so a steady price says little.');
+  const name = ['Low', 'Medium', 'High'][level];
+  return { signal: 'RISK_' + name.toUpperCase(), label: (quantity == null ? 'ITEM RISK: ' : 'POSITION RISK: ') + name.toUpperCase(),
+    details: h('div', null, reasons.map((r, i) => h('div', {key:i, style:{marginBottom:3}}, r)),
+      h('div', {style:{color:T.textDim, marginTop:4}}, 'About behaviour and selling, not where the price goes next.')) };
+}
+
 function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
   // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
   // chart already respects (Ben, 2026-09-09: "can we add dates to the
@@ -11591,22 +11818,26 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   // snapshots), so a brief intraday spike won't show.
   const openKey = openPos.map(p => p.id + ':' + (p.date_opened || p.created_at)).join('|');
   const [sinceBought, setSinceBought] = useState({});
+  const [expandedItems, setExpandedItems] = useState(() => new Set());
+  const [dailyById, setDailyById] = useState({});
   useEffect(() => {
     let stale = false;
     (async () => {
-      const out = {};
+      const out = {}, daily = {};
       for (const p of openPos) {
         const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
         if (!it || it.untradeable) continue;
+        const allDays = await loadDailyPrices(it.id);
+        daily[p.id] = allDays;
         const opened = new Date(p.date_opened || p.created_at).getTime();
         if (!opened) continue;
-        const days = (await loadDailyPrices(it.id)).filter(d => d.ts >= opened - 86400000);
+        const days = allDays.filter(d => d.ts >= opened - 86400000);
         if (!days.length) continue;
         let hi = days[0], lo = days[0];
         for (const d of days) { if (d.price > hi.price) hi = d; if (d.price < lo.price) lo = d; }
         out[p.id] = { hi, lo };
       }
-      if (!stale) setSinceBought(out);
+      if (!stale) { setSinceBought(out); setDailyById(daily); }
     })();
     return () => { stale = true; };
   }, [openKey]);
@@ -11650,6 +11881,61 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
       h('div', {style:{whiteSpace:'nowrap'}}, fmt.gp(be) + 'gp'),
       h('div', {style:{fontSize:10, whiteSpace:'nowrap'}}, h('span', {style:{color:T.red}}, '+' + needs.toFixed(1) + '%'), h('span', {style:{color:T.textDim}}, ' · ' + seenText.replace('last seen ', ''))));
   };
+
+  // Same-item positions group under one row with a chevron (Ben, 2026-11-04). The
+  // risk badge sits on the combined stack, since they'd all sell into one market.
+  const posGroups = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
+  const heldSinceOf = p => new Date(p.date_opened || p.created_at).getTime() || null;
+  const heldText = ts => {
+    if (!ts || !isFinite(ts)) return '—';
+    const days = Math.floor((Date.now() - ts) / 86400000);
+    return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? days + 'd' : days < 365 ? Math.floor(days / 30) + 'mo' : (days / 365).toFixed(1) + 'y';
+  };
+  const breakEvenOf = breakEvenPrice;
+  const riskBadgeFor = list => {
+    const first = list[0];
+    const it = !first.removedItem && items.find(i => i.name.toLowerCase() === (first.item_name || '').toLowerCase());
+    const days = dailyById[first.id];
+    if (!it || !days) return null;
+    const qty = list.reduce((sum, p) => sum + p.quantity, 0);
+    const since = Math.min(...list.map(heldSinceOf).filter(Boolean));
+    return h('div', {style:{marginTop:3}}, h(SignalBadge, positionRisk(qty, it, days, isFinite(since) ? since : null)));
+  };
+  const positionRow = (pos, child) =>
+            h('tr',{key:pos.id},
+              h('td',{
+                style: {...(onSelect ? {cursor:'pointer', color:T.gold} : null), ...(child ? {paddingLeft:28, fontSize:'0.92em'} : null)},
+                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
+              }, pos.item_name,
+                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER'),
+                pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem}),
+                !child && riskBadgeFor([pos])),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
+              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
+              breakEvenCell(pos),
+              sinceBoughtCell(pos),
+              h('td',null,
+                h('div',{style:{color:T.textDim, whiteSpace:'nowrap'}},(() => {
+                  const d = pos.date_opened || pos.created_at;
+                  if (!d) return '—';
+                  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
+                  return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
+                })()),
+                pos.target_price ? h('div',{style:{fontSize:10, whiteSpace:'nowrap', color:pos.currentPrice>=pos.target_price?T.green:T.textDim}},'→ '+fmt.gp(pos.target_price)+'gp') : null),
+              h('td',null,
+                h('div',{style:{display:'flex',gap:3}},
+                  h('button',{className:'ge-btn',title:'Edit',style:{padding:'2px 5px',fontSize:11},
+                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'✎'),
+                  h('button',{className:'ge-btn',title:'Sell',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
+                    onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
+                  h('button',{className:'ge-btn',title:'Convert into another item',style:{padding:'2px 5px',fontSize:11,borderColor:T.blue},
+                    onClick:()=>setConvertModal(pos)},'⇄'),
+                  h('button',{className:'ge-btn danger',title:'Delete position',style:{padding:'2px 5px',fontSize:11},
+                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'✕')
+                )
+              )
+            );
 
   const totalInvested = openPos.reduce((s,p) => s+p.costValue, 0);
   const totalCurrent  = openPos.reduce((s,p) => s+p.currentValue, 0);
@@ -12014,41 +12300,33 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
             h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
             h('th',{title:'How long you\'ve held it, and your target price'},'Held / target'), h('th',null,'')
           )),
-          h('tbody',null, openPos.map(pos =>
-            h('tr',{key:pos.id},
-              h('td',{
-                style: onSelect ? {cursor:'pointer', color:T.gold} : null,
-                onClick: onSelect ? () => { const it = items.find(i => i.name.toLowerCase()===(pos.item_name||'').toLowerCase()); if(it) onSelect(it); } : null,
-              }, pos.item_name,
-                pos.planner_goal_id && h('span',{title:'Managed by the Buy Planner: quantity and cost are set from your planner totals, so manual edits here get overwritten on the next update.', style:{marginLeft:6, fontSize:9, letterSpacing:1, color:T.textDim, border:`1px solid ${T.borderDim}`, borderRadius:3, padding:'0 4px'}},'PLANNER'),
-                pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem})),
-              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
-              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
-              h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
-              breakEvenCell(pos),
-              sinceBoughtCell(pos),
-              h('td',null,
-                h('div',{style:{color:T.textDim, whiteSpace:'nowrap'}},(() => {
-                  const d = pos.date_opened || pos.created_at;
-                  if (!d) return '—';
-                  const days = Math.floor((Date.now() - new Date(d).getTime()) / 86400000);
-                  return days === 0 ? 'Today' : days === 1 ? '1d' : days < 30 ? `${days}d` : days < 365 ? `${Math.floor(days/30)}mo` : `${(days/365).toFixed(1)}y`;
-                })()),
-                pos.target_price ? h('div',{style:{fontSize:10, whiteSpace:'nowrap', color:pos.currentPrice>=pos.target_price?T.green:T.textDim}},'→ '+fmt.gp(pos.target_price)+'gp') : null),
-              h('td',null,
-                h('div',{style:{display:'flex',gap:3}},
-                  h('button',{className:'ge-btn',title:'Edit',style:{padding:'2px 5px',fontSize:11},
-                    onClick:()=>{setEditPos(pos);setShowModal(true);}},'✎'),
-                  h('button',{className:'ge-btn',title:'Sell',style:{padding:'2px 6px',fontSize:10,borderColor:T.green},
-                    onClick:()=>setSellModal({...pos, currentPrice:pos.currentPrice})},'Sell'),
-                  h('button',{className:'ge-btn',title:'Convert into another item',style:{padding:'2px 5px',fontSize:11,borderColor:T.blue},
-                    onClick:()=>setConvertModal(pos)},'⇄'),
-                  h('button',{className:'ge-btn danger',title:'Delete position',style:{padding:'2px 5px',fontSize:11},
-                    onClick:async()=>{if(confirm(`Delete position: ${pos.item_name}?`)){await onDeletePosition(pos.id);toast('Deleted','info');}}},'✕')
-                )
-              )
-            )
-          ))
+          h('tbody',null, posGroups.flatMap(list => {
+            if (list.length === 1) return [positionRow(list[0], false)];
+            const name = list[0].item_name, key = name.toLowerCase(), open = expandedItems.has(key);
+            const qty = list.reduce((s, p) => s + p.quantity, 0);
+            const cost = list.reduce((s, p) => s + p.costValue, 0);
+            const value = list.reduce((s, p) => s + p.currentValue, 0);
+            const net = list.reduce((s, p) => s + p.netPL, 0);
+            const price = list[0].currentPrice, avg = cost / qty;
+            const be = breakEvenOf(avg);
+            const ranges = list.map(p => sinceBought[p.id]).filter(Boolean);
+            const toggle = () => setExpandedItems(s => { const n = new Set(s); n.has(key) ? n.delete(key) : n.add(key); return n; });
+            return [h('tr',{key:'group:'+key, onClick:toggle, style:{cursor:'pointer'}},
+              h('td',{style:{color:T.gold}}, h('span',{style:{display:'inline-block', width:14}}, open ? '▾' : '▸'), name,
+                h('span',{style:{marginLeft:6, fontSize:10, color:T.textDim, whiteSpace:'nowrap'}}, list.length+' positions'), riskBadgeFor(list)),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},qty.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'avg @ '+fmt.gp(Math.round(avg))+'gp')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(value)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(price)+'gp ea')),
+              h('td',{className:net>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(net>=0?'+':'')+fmt.gp(net)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(cost > 0 ? (value - cost) / cost * 100 : 0))),
+              net >= 0 || !(price > 0)
+                ? h('td',{style:{color:T.textDim}}, net >= 0 ? '✓' : '—')
+                : h('td',{title:`Across all ${list.length} positions, sell at ${be.toLocaleString()}gp or more to break even after the 2% GE tax.`}, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(be)+'gp'), h('div',{style:{fontSize:10, color:T.red, whiteSpace:'nowrap'}},'+'+((be - price) / price * 100).toFixed(1)+'%')),
+              ranges.length
+                ? h('td',null, h('div',{style:{fontSize:11, whiteSpace:'nowrap'}}, h('span',{style:{color:T.green}},'▲ '+fmt.gp(Math.max(...ranges.map(r => r.hi.price)))),' ',h('span',{style:{color:T.red}},'▼ '+fmt.gp(Math.min(...ranges.map(r => r.lo.price))))))
+                : h('td',{style:{color:T.textDim}},'—'),
+              h('td',{style:{color:T.textDim, whiteSpace:'nowrap'}}, heldText(Math.min(...list.map(heldSinceOf).filter(Boolean)))),
+              h('td',null)),
+              ...(open ? list.map(p => positionRow(p, true)) : [])];
+          }))
         ),
 
     // Diversification warning — flags real concentration risk in tracked
@@ -12376,7 +12654,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
             const res = await onReopenPosition(ctxMenu.pos.id);
             setCtxMenu(null);
             if (res?.success) toast('Position reopened', 'success');
-            else toast('Could not reopen position', 'error');
+            else toast(res?.error || 'Could not reopen position', 'error');
           },
           style:{padding:'8px 12px', fontSize:12, color:T.text, cursor:'pointer', display:'flex', alignItems:'center', gap:6},
           onMouseEnter: e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)',
@@ -12403,6 +12681,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         const res = await onSellPosition(opts);
         setSellModal(null);
         if (res?.success) toast(`${opts.alch ? 'Alched' : 'Sold'}! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
+        else toast(res?.error || 'Could not sell', 'error');
       }
     }),
     convertModal && h(ConvertModal, {position:convertModal, allItems:items, userShorthands, onClose:()=>setConvertModal(null),
@@ -13566,13 +13845,15 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
    processing step itself being free or cheap, not by market timing.
    ──────────────────────────────────────────────────────────────── */
 const MONEY_MAKER_SKILLS = [
-  {key:'herblore',     label:'Herblore'},
-  {key:'divination',   label:'Divination'},
+  // Alphabetical (Ben, 2026-11-09).
+  {key:'archaeology',  label:'Archaeology'},
   {key:'construction', label:'Construction'},
+  {key:'crafting',     label:'Crafting'},
+  {key:'divination',   label:'Divination'},
+  {key:'fletching',    label:'Fletching'},
+  {key:'herblore',     label:'Herblore'},
   {key:'magic',        label:'Magic'},
   {key:'smithing',     label:'Smithing'},
-  {key:'crafting',     label:'Crafting'},
-  {key:'fletching',    label:'Fletching'},
   {key:'summoning',    label:'Summoning'},
 ];
 
@@ -14336,6 +14617,236 @@ const SMITHING_BAR_RECIPES = [
     ], outputQty:5, doubleBarPct:10 },
 ];
 
+// Anvil products per bar (Ben, 2026-11-08), from each bar's wiki Products table.
+// BEGIN SMITHING_PRODUCTS (generated by scripts/build-smithing-recipes.js)
+const SMITHING_PRODUCTS = {"Bronze bar":[[1,"Bronze 2h sword",[["Bronze bar",4]]],[1,"Bronze armoured boots",[["Bronze bar",1]]],[75,"Bronze arrowheads",[["Bronze bar",1]]],[1,"Bronze battleaxe",[["Bronze bar",2]]],[50,"Bronze bolts (unf)",[["Bronze bar",1]]],[1,"Bronze chainbody",[["Bronze bar",5]]],[1,"Bronze claws",[["Bronze bar",2]]],[1,"Bronze dagger",[["Bronze bar",2]]],[50,"Bronze dart tip",[["Bronze bar",1]]],[1,"Bronze full helm",[["Bronze bar",2]]],[1,"Bronze gauntlets",[["Bronze bar",1]]],[1,"Bronze hasta",[["Bronze bar",1],["Logs",1]]],[1,"Bronze hatchet",[["Bronze bar",1]]],[1,"Bronze kiteshield",[["Bronze bar",2]]],[25,"Bronze knife",[["Bronze bar",1]]],[1,"Bronze limbs",[["Bronze bar",1]]],[1,"Bronze longsword",[["Bronze bar",2]]],[1,"Bronze mace",[["Bronze bar",2]]],[1,"Bronze mattock",[["Bronze bar",2]]],[1,"Bronze med helm",[["Bronze bar",2]]],[75,"Bronze nails",[["Bronze bar",1]]],[1,"Bronze off hand battleaxe",[["Bronze bar",2]]],[1,"Bronze off hand claws",[["Bronze bar",2]]],[1,"Bronze off hand dagger",[["Bronze bar",2]]],[1,"Bronze off hand longsword",[["Bronze bar",2]]],[1,"Bronze off hand mace",[["Bronze bar",2]]],[1,"Bronze off hand scimitar",[["Bronze bar",2]]],[1,"Bronze off hand sword",[["Bronze bar",2]]],[1,"Bronze off hand warhammer",[["Bronze bar",2]]],[1,"Bronze ore box",[["Bronze bar",2]]],[1,"Bronze pickaxe",[["Bronze bar",2]]],[1,"Bronze platebody",[["Bronze bar",5]]],[1,"Bronze platelegs",[["Bronze bar",3]]],[1,"Bronze plateskirt",[["Bronze bar",3]]],[1,"Bronze scimitar",[["Bronze bar",2]]],[1,"Bronze spear",[["Bronze bar",1],["Logs",1]]],[1,"Bronze square shield",[["Bronze bar",2]]],[1,"Bronze sword",[["Bronze bar",2]]],[25,"Bronze throwing axe",[["Bronze bar",1]]],[1,"Bronze warhammer",[["Bronze bar",2]]],[1,"Bronze wire",[["Bronze bar",1]]],[25,"Off-hand bronze knife",[["Bronze bar",1]]],[25,"Off-hand bronze throwing axe",[["Bronze bar",1]]],[1,"Ornament",[["Broken vane part (bronze)",1],["Bronze bar",1]]]],"Iron bar":[[1,"Iron 2h sword",[["Iron bar",4]]],[1,"Iron 2h sword + 1",[["Iron bar",4],["Iron 2h sword",1]]],[1,"Iron armoured boots",[["Iron bar",1]]],[1,"Iron armoured boots + 1",[["Iron bar",1],["Iron armoured boots",1]]],[75,"Iron arrowheads",[["Iron bar",1]]],[1,"Iron battleaxe",[["Iron bar",2]]],[1,"Iron battleaxe + 1",[["Iron bar",2],["Iron battleaxe",1]]],[50,"Iron bolts (unf)",[["Iron bar",1]]],[1,"Iron chainbody",[["Iron bar",5]]],[1,"Iron chainbody + 1",[["Iron bar",5],["Iron chainbody",1]]],[1,"Iron claws",[["Iron bar",2]]],[1,"Iron claws + 1",[["Iron bar",2],["Iron claws",1]]],[1,"Iron dagger",[["Iron bar",2]]],[1,"Iron dagger + 1",[["Iron bar",2],["Iron dagger",1]]],[50,"Iron dart tip",[["Iron bar",1]]],[1,"Iron full helm",[["Iron bar",2]]],[1,"Iron full helm + 1",[["Iron bar",2],["Iron full helm",1]]],[1,"Iron gauntlets",[["Iron bar",1]]],[1,"Iron gauntlets + 1",[["Iron bar",1],["Iron gauntlets",1]]],[1,"Iron hasta",[["Iron bar",1],["Oak logs",1]]],[1,"Iron hatchet",[["Iron bar",1]]],[1,"Iron kiteshield",[["Iron bar",2]]],[1,"Iron kiteshield + 1",[["Iron bar",2],["Iron kiteshield",1]]],[25,"Iron knife",[["Iron bar",1]]],[1,"Iron limbs",[["Iron bar",1]]],[1,"Iron longsword",[["Iron bar",2]]],[1,"Iron longsword + 1",[["Iron bar",2],["Iron longsword",1]]],[1,"Iron mace",[["Iron bar",2]]],[1,"Iron mace + 1",[["Iron bar",2],["Iron mace",1]]],[1,"Iron mattock",[["Iron bar",2]]],[1,"Iron med helm",[["Iron bar",2]]],[1,"Iron med helm + 1",[["Iron bar",2],["Iron med helm",1]]],[75,"Iron nails",[["Iron bar",1]]],[1,"Iron off hand battleaxe",[["Iron bar",2]]],[1,"Iron off hand battleaxe + 1",[["Iron bar",2],["Iron off hand battleaxe",1]]],[1,"Iron off hand claws",[["Iron bar",2]]],[1,"Iron off hand claws + 1",[["Iron bar",2],["Iron off hand claws",1]]],[1,"Iron off hand dagger",[["Iron bar",2]]],[1,"Iron off hand dagger + 1",[["Iron bar",2],["Iron off hand dagger",1]]],[1,"Iron off hand longsword",[["Iron bar",2]]],[1,"Iron off hand longsword + 1",[["Iron bar",2],["Iron off hand longsword",1]]],[1,"Iron off hand mace",[["Iron bar",2]]],[1,"Iron off hand mace + 1",[["Iron bar",2],["Iron off hand mace",1]]],[1,"Iron off hand scimitar",[["Iron bar",2]]],[1,"Iron off hand scimitar + 1",[["Iron bar",2],["Iron off hand scimitar",1]]],[1,"Iron off hand sword",[["Iron bar",2]]],[1,"Iron off hand sword + 1",[["Iron bar",2],["Iron off hand sword",1]]],[1,"Iron off hand warhammer",[["Iron bar",2]]],[1,"Iron off hand warhammer + 1",[["Iron bar",2],["Iron off hand warhammer",1]]],[1,"Iron ore box",[["Bronze ore box",1],["Iron bar",2]]],[1,"Iron pickaxe",[["Iron bar",2]]],[1,"Iron pickaxe + 1",[["Iron bar",2],["Iron pickaxe",1]]],[1,"Iron platebody",[["Iron bar",5]]],[1,"Iron platebody + 1",[["Iron bar",5],["Iron platebody",1]]],[1,"Iron platelegs",[["Iron bar",3]]],[1,"Iron platelegs + 1",[["Iron bar",3],["Iron platelegs",1]]],[1,"Iron plateskirt",[["Iron bar",3]]],[1,"Iron plateskirt + 1",[["Iron bar",3],["Iron plateskirt",1]]],[1,"Iron scimitar",[["Iron bar",2]]],[1,"Iron scimitar + 1",[["Iron bar",2],["Iron scimitar",1]]],[1,"Iron spear",[["Iron bar",1],["Oak logs",1]]],[1,"Iron spit",[["Iron bar",1]]],[1,"Iron square shield",[["Iron bar",2]]],[1,"Iron square shield + 1",[["Iron bar",2],["Iron square shield",1]]],[1,"Iron sword",[["Iron bar",2]]],[1,"Iron sword + 1",[["Iron bar",2],["Iron sword",1]]],[25,"Iron throwing axe",[["Iron bar",1]]],[1,"Iron warhammer",[["Iron bar",2]]],[1,"Iron warhammer + 1",[["Iron bar",2],["Iron warhammer",1]]],[25,"Off-hand iron knife",[["Iron bar",1]]],[25,"Off-hand iron throwing axe",[["Iron bar",1]]],[1,"Oil lantern frame",[["Iron bar",1]]]],"Steel bar":[[1,"Bullseye lantern (frame)",[["Steel bar",1]]],[1,"Directionals",[["Broken vane part (steel)",1],["Steel bar",1]]],[10,"Masterwork rivets",[["Steel bar",1]]],[25,"Off-hand steel knife",[["Steel bar",1]]],[25,"Off-hand steel throwing axe",[["Steel bar",1]]],[1,"Steel 2h sword",[["Steel bar",4]]],[1,"Steel 2h sword + 1",[["Steel bar",4],["Steel 2h sword",1]]],[1,"Steel armoured boots",[["Steel bar",1]]],[1,"Steel armoured boots + 1",[["Steel bar",1],["Steel armoured boots",1]]],[75,"Steel arrowheads",[["Steel bar",1]]],[1,"Steel battleaxe",[["Steel bar",2]]],[1,"Steel battleaxe + 1",[["Steel bar",2],["Steel battleaxe",1]]],[50,"Steel bolts (unf)",[["Steel bar",1]]],[1,"Steel chainbody",[["Steel bar",5]]],[1,"Steel chainbody + 1",[["Steel bar",5],["Steel chainbody",1]]],[1,"Steel claws",[["Steel bar",2]]],[1,"Steel claws + 1",[["Steel bar",2],["Steel claws",1]]],[1,"Steel dagger",[["Steel bar",2]]],[1,"Steel dagger + 1",[["Steel bar",2],["Steel dagger",1]]],[50,"Steel dart tip",[["Steel bar",1]]],[1,"Steel full helm",[["Steel bar",2]]],[1,"Steel full helm + 1",[["Steel bar",2],["Steel full helm",1]]],[1,"Steel gauntlets",[["Steel bar",1]]],[1,"Steel gauntlets + 1",[["Steel bar",1],["Steel gauntlets",1]]],[1,"Steel hasta",[["Steel bar",1],["Willow logs",1]]],[1,"Steel kiteshield",[["Steel bar",2]]],[1,"Steel kiteshield + 1",[["Steel bar",2],["Steel kiteshield",1]]],[25,"Steel knife",[["Steel bar",1]]],[1,"Steel limbs",[["Steel bar",1]]],[1,"Steel longsword",[["Steel bar",2]]],[1,"Steel longsword + 1",[["Steel bar",2],["Steel longsword",1]]],[1,"Steel mace",[["Steel bar",2]]],[1,"Steel mace + 1",[["Steel bar",2],["Steel mace",1]]],[1,"Steel mattock",[["Steel bar",2]]],[1,"Steel med helm",[["Steel bar",2]]],[1,"Steel med helm + 1",[["Steel bar",2],["Steel med helm",1]]],[75,"Steel nails",[["Steel bar",1]]],[1,"Steel off hand battleaxe",[["Steel bar",2]]],[1,"Steel off hand battleaxe + 1",[["Steel bar",2],["Steel off hand battleaxe",1]]],[1,"Steel off hand claws",[["Steel bar",2]]],[1,"Steel off hand claws + 1",[["Steel bar",2],["Steel off hand claws",1]]],[1,"Steel off hand dagger",[["Steel bar",2]]],[1,"Steel off hand dagger + 1",[["Steel bar",2],["Steel off hand dagger",1]]],[1,"Steel off hand longsword",[["Steel bar",2]]],[1,"Steel off hand longsword + 1",[["Steel bar",2],["Steel off hand longsword",1]]],[1,"Steel off hand mace",[["Steel bar",2]]],[1,"Steel off hand mace + 1",[["Steel bar",2],["Steel off hand mace",1]]],[1,"Steel off hand scimitar",[["Steel bar",2]]],[1,"Steel off hand scimitar + 1",[["Steel bar",2],["Steel off hand scimitar",1]]],[1,"Steel off hand sword",[["Steel bar",2]]],[1,"Steel off hand sword + 1",[["Steel bar",2],["Steel off hand sword",1]]],[1,"Steel off hand warhammer",[["Steel bar",2]]],[1,"Steel off hand warhammer + 1",[["Steel bar",2],["Steel off hand warhammer",1]]],[1,"Steel ore box",[["Iron ore box",1],["Steel bar",2]]],[1,"Steel pickaxe",[["Steel bar",2]]],[1,"Steel pickaxe + 1",[["Steel bar",2],["Steel pickaxe",1]]],[1,"Steel platebody",[["Steel bar",5]]],[1,"Steel platebody + 1",[["Steel bar",5],["Steel platebody",1]]],[1,"Steel platelegs",[["Steel bar",3]]],[1,"Steel platelegs + 1",[["Steel bar",3],["Steel platelegs",1]]],[1,"Steel plateskirt",[["Steel bar",3]]],[1,"Steel plateskirt + 1",[["Steel bar",3],["Steel plateskirt",1]]],[1,"Steel scimitar",[["Steel bar",2]]],[1,"Steel scimitar + 1",[["Steel bar",2],["Steel scimitar",1]]],[1,"Steel spear",[["Steel bar",1],["Willow logs",1]]]],"Mithril bar":[[1,"Mithril 2h sword",[["Mithril bar",4]]],[1,"Mithril 2h sword + 1",[["Mithril bar",4],["Mithril 2h sword",1]]],[1,"Mithril 2h sword + 2",[["Mithril bar",8],["Mithril 2h sword + 1",1]]],[1,"Mithril armoured boots",[["Mithril bar",1]]],[1,"Mithril armoured boots + 1",[["Mithril bar",1],["Mithril armoured boots",1]]],[1,"Mithril armoured boots + 2",[["Mithril bar",2],["Mithril armoured boots + 1",1]]],[75,"Mithril arrowheads",[["Mithril bar",1]]],[1,"Mithril battleaxe",[["Mithril bar",2]]],[1,"Mithril battleaxe + 1",[["Mithril bar",2],["Mithril battleaxe",1]]],[1,"Mithril battleaxe + 2",[["Mithril bar",4],["Mithril battleaxe + 1",1]]],[50,"Mithril bolts (unf)",[["Mithril bar",1]]],[1,"Mithril chainbody",[["Mithril bar",5]]],[1,"Mithril chainbody + 1",[["Mithril bar",5],["Mithril chainbody",1]]],[1,"Mithril chainbody + 2",[["Mithril bar",10],["Mithril chainbody + 1",1]]],[1,"Mithril claws",[["Mithril bar",2]]],[1,"Mithril claws + 1",[["Mithril bar",2],["Mithril claws",1]]],[1,"Mithril claws + 2",[["Mithril bar",4],["Mithril claws + 1",1]]],[1,"Mithril dagger",[["Mithril bar",2]]],[1,"Mithril dagger + 1",[["Mithril bar",2],["Mithril dagger",1]]],[1,"Mithril dagger + 2",[["Mithril bar",4],["Mithril dagger + 1",1]]],[50,"Mithril dart tip",[["Mithril bar",1]]],[1,"Mithril full helm",[["Mithril bar",2]]],[1,"Mithril full helm + 1",[["Mithril bar",2],["Mithril full helm",1]]],[1,"Mithril full helm + 2",[["Mithril bar",4],["Mithril full helm + 1",1]]],[1,"Mithril gauntlets",[["Mithril bar",1]]],[1,"Mithril gauntlets + 1",[["Mithril bar",1],["Mithril gauntlets",1]]],[1,"Mithril gauntlets + 2",[["Mithril bar",2],["Mithril gauntlets + 1",1]]],[1,"Mithril grapple tip",[["Mithril bar",1]]],[1,"Mithril hasta",[["Mithril bar",1],["Maple logs",1]]],[1,"Mithril kiteshield",[["Mithril bar",2]]],[1,"Mithril kiteshield + 1",[["Mithril bar",2],["Mithril kiteshield",1]]],[1,"Mithril kiteshield + 2",[["Mithril bar",4],["Mithril kiteshield + 1",1]]],[25,"Mithril knife",[["Mithril bar",1]]],[1,"Mithril limbs",[["Mithril bar",1]]],[1,"Mithril longsword",[["Mithril bar",2]]],[1,"Mithril longsword + 1",[["Mithril bar",2],["Mithril longsword",1]]],[1,"Mithril longsword + 2",[["Mithril bar",4],["Mithril longsword + 1",1]]],[1,"Mithril mace",[["Mithril bar",2]]],[1,"Mithril mace + 1",[["Mithril bar",2],["Mithril mace",1]]],[1,"Mithril mace + 2",[["Mithril bar",4],["Mithril mace + 1",1]]],[1,"Mithril mattock",[["Mithril bar",2]]],[1,"Mithril med helm",[["Mithril bar",2]]],[1,"Mithril med helm + 1",[["Mithril bar",2],["Mithril med helm",1]]],[1,"Mithril med helm + 2",[["Mithril bar",4],["Mithril med helm + 1",1]]],[75,"Mithril nails",[["Mithril bar",1]]],[1,"Mithril off hand battleaxe",[["Mithril bar",2]]],[1,"Mithril off hand battleaxe + 1",[["Mithril bar",2],["Mithril off hand battleaxe",1]]],[1,"Mithril off hand battleaxe + 2",[["Mithril bar",4],["Mithril off hand battleaxe + 1",1]]],[1,"Mithril off hand claws",[["Mithril bar",2]]],[1,"Mithril off hand claws + 1",[["Mithril bar",2],["Mithril off hand claws",1]]],[1,"Mithril off hand claws + 2",[["Mithril bar",4],["Mithril off hand claws + 1",1]]],[1,"Mithril off hand dagger",[["Mithril bar",2]]],[1,"Mithril off hand dagger + 1",[["Mithril bar",2],["Mithril off hand dagger",1]]],[1,"Mithril off hand dagger + 2",[["Mithril bar",4],["Mithril off hand dagger + 1",1]]],[1,"Mithril off hand longsword",[["Mithril bar",2]]],[1,"Mithril off hand longsword + 1",[["Mithril bar",2],["Mithril off hand longsword",1]]],[1,"Mithril off hand longsword + 2",[["Mithril bar",4],["Mithril off hand longsword + 1",1]]],[1,"Mithril off hand mace",[["Mithril bar",2]]],[1,"Mithril off hand mace + 1",[["Mithril bar",2],["Mithril off hand mace",1]]],[1,"Mithril off hand mace + 2",[["Mithril bar",4],["Mithril off hand mace + 1",1]]],[1,"Mithril off hand scimitar",[["Mithril bar",2]]],[1,"Mithril off hand scimitar + 1",[["Mithril bar",2],["Mithril off hand scimitar",1]]],[1,"Mithril off hand scimitar + 2",[["Mithril bar",4],["Mithril off hand scimitar + 1",1]]],[1,"Mithril off hand sword",[["Mithril bar",2]]],[1,"Mithril off hand sword + 1",[["Mithril bar",2],["Mithril off hand sword",1]]],[1,"Mithril off hand sword + 2",[["Mithril bar",4],["Mithril off hand sword + 1",1]]],[1,"Mithril off hand warhammer",[["Mithril bar",2]]],[1,"Mithril off hand warhammer + 1",[["Mithril bar",2],["Mithril off hand warhammer",1]]],[1,"Mithril off hand warhammer + 2",[["Mithril bar",4],["Mithril off hand warhammer + 1",1]]],[1,"Mithril ore box",[["Steel ore box",1],["Mithril bar",2]]],[1,"Mithril pickaxe",[["Mithril bar",2]]],[1,"Mithril pickaxe + 1",[["Mithril bar",2],["Mithril pickaxe",1]]],[1,"Mithril pickaxe + 2",[["Mithril bar",4],["Mithril pickaxe + 1",1]]],[1,"Mithril platebody",[["Mithril bar",5]]],[1,"Mithril platebody + 1",[["Mithril bar",5],["Mithril platebody",1]]],[1,"Mithril platebody + 2",[["Mithril bar",10],["Mithril platebody + 1",1]]],[1,"Mithril platelegs",[["Mithril bar",3]]],[1,"Mithril platelegs + 1",[["Mithril bar",3],["Mithril platelegs",1]]],[1,"Mithril platelegs + 2",[["Mithril bar",6],["Mithril platelegs + 1",1]]],[1,"Mithril plateskirt",[["Mithril bar",3]]],[1,"Mithril plateskirt + 1",[["Mithril bar",3],["Mithril plateskirt",1]]],[1,"Mithril plateskirt + 2",[["Mithril bar",6],["Mithril plateskirt + 1",1]]],[1,"Mithril scimitar",[["Mithril bar",2]]],[1,"Mithril scimitar + 1",[["Mithril bar",2],["Mithril scimitar",1]]],[1,"Mithril scimitar + 2",[["Mithril bar",4],["Mithril scimitar + 1",1]]],[1,"Mithril spear",[["Mithril bar",1],["Maple logs",1]]]],"Adamant bar":[[1,"Adamant 2h sword",[["Adamant bar",4]]],[1,"Adamant 2h sword + 1",[["Adamant bar",4],["Adamant 2h sword",1]]],[1,"Adamant 2h sword + 2",[["Adamant bar",8],["Adamant 2h sword + 1",1]]],[1,"Adamant armoured boots",[["Adamant bar",1]]],[1,"Adamant armoured boots + 1",[["Adamant bar",1],["Adamant armoured boots",1]]],[1,"Adamant armoured boots + 2",[["Adamant bar",2],["Adamant armoured boots + 1",1]]],[75,"Adamant arrowheads",[["Adamant bar",1]]],[1,"Adamant battleaxe",[["Adamant bar",2]]],[1,"Adamant battleaxe + 1",[["Adamant bar",2],["Adamant battleaxe",1]]],[1,"Adamant battleaxe + 2",[["Adamant bar",4],["Adamant battleaxe + 1",1]]],[50,"Adamant bolts (unf)",[["Adamant bar",1]]],[1,"Adamant chainbody",[["Adamant bar",5]]],[1,"Adamant chainbody + 1",[["Adamant bar",5],["Adamant chainbody",1]]],[1,"Adamant chainbody + 2",[["Adamant bar",10],["Adamant chainbody + 1",1]]],[1,"Adamant claws",[["Adamant bar",2]]],[1,"Adamant claws + 1",[["Adamant bar",2],["Adamant claws",1]]],[1,"Adamant claws + 2",[["Adamant bar",4],["Adamant claws + 1",1]]],[1,"Adamant dagger",[["Adamant bar",2]]],[1,"Adamant dagger + 1",[["Adamant bar",2],["Adamant dagger",1]]],[1,"Adamant dagger + 2",[["Adamant bar",4],["Adamant dagger + 1",1]]],[50,"Adamant dart tip",[["Adamant bar",1]]],[1,"Adamant full helm",[["Adamant bar",2]]],[1,"Adamant full helm + 1",[["Adamant bar",2],["Adamant full helm",1]]],[1,"Adamant full helm + 2",[["Adamant bar",4],["Adamant full helm + 1",1]]],[1,"Adamant gauntlets",[["Adamant bar",1]]],[1,"Adamant gauntlets + 1",[["Adamant bar",1],["Adamant gauntlets",1]]],[1,"Adamant gauntlets + 2",[["Adamant bar",2],["Adamant gauntlets + 1",1]]],[1,"Adamant hasta",[["Adamant bar",1],["Yew logs",1]]],[1,"Adamant kiteshield",[["Adamant bar",2]]],[1,"Adamant kiteshield + 1",[["Adamant bar",2],["Adamant kiteshield",1]]],[1,"Adamant kiteshield + 2",[["Adamant bar",4],["Adamant kiteshield + 1",1]]],[25,"Adamant knife",[["Adamant bar",1]]],[1,"Adamant limbs",[["Adamant bar",1]]],[1,"Adamant longsword",[["Adamant bar",2]]],[1,"Adamant longsword + 1",[["Adamant bar",2],["Adamant longsword",1]]],[1,"Adamant longsword + 2",[["Adamant bar",4],["Adamant longsword + 1",1]]],[1,"Adamant mace",[["Adamant bar",2]]],[1,"Adamant mace + 1",[["Adamant bar",2],["Adamant mace",1]]],[1,"Adamant mace + 2",[["Adamant bar",4],["Adamant mace + 1",1]]],[1,"Adamant mattock",[["Adamant bar",2]]],[1,"Adamant med helm",[["Adamant bar",2]]],[1,"Adamant med helm + 1",[["Adamant bar",2],["Adamant med helm",1]]],[1,"Adamant med helm + 2",[["Adamant bar",4],["Adamant med helm + 1",1]]],[75,"Adamant nails",[["Adamant bar",1]]],[1,"Adamant off hand battleaxe",[["Adamant bar",2]]],[1,"Adamant off hand battleaxe + 1",[["Adamant bar",2],["Adamant off hand battleaxe",1]]],[1,"Adamant off hand battleaxe + 2",[["Adamant bar",4],["Adamant off hand battleaxe + 1",1]]],[1,"Adamant off hand claws",[["Adamant bar",2]]],[1,"Adamant off hand claws + 1",[["Adamant bar",2],["Adamant off hand claws",1]]],[1,"Adamant off hand claws + 2",[["Adamant bar",4],["Adamant off hand claws + 1",1]]],[1,"Adamant off hand dagger",[["Adamant bar",2]]],[1,"Adamant off hand dagger + 1",[["Adamant bar",2],["Adamant off hand dagger",1]]],[1,"Adamant off hand dagger + 2",[["Adamant bar",4],["Adamant off hand dagger + 1",1]]],[1,"Adamant off hand longsword",[["Adamant bar",2]]],[1,"Adamant off hand longsword + 1",[["Adamant bar",2],["Adamant off hand longsword",1]]],[1,"Adamant off hand longsword + 2",[["Adamant bar",4],["Adamant off hand longsword + 1",1]]],[1,"Adamant off hand mace",[["Adamant bar",2]]],[1,"Adamant off hand mace + 1",[["Adamant bar",2],["Adamant off hand mace",1]]],[1,"Adamant off hand mace + 2",[["Adamant bar",4],["Adamant off hand mace + 1",1]]],[1,"Adamant off hand scimitar",[["Adamant bar",2]]],[1,"Adamant off hand scimitar + 1",[["Adamant bar",2],["Adamant off hand scimitar",1]]],[1,"Adamant off hand scimitar + 2",[["Adamant bar",4],["Adamant off hand scimitar + 1",1]]],[1,"Adamant off hand sword",[["Adamant bar",2]]],[1,"Adamant off hand sword + 1",[["Adamant bar",2],["Adamant off hand sword",1]]],[1,"Adamant off hand sword + 2",[["Adamant bar",4],["Adamant off hand sword + 1",1]]],[1,"Adamant off hand warhammer + 1",[["Adamant bar",2],["Adamant off hand warhammer",1]]],[1,"Adamant off hand warhammer + 2",[["Adamant bar",4],["Adamant off hand warhammer + 1",1]]],[1,"Adamant ore box",[["Mithril ore box",1],["Adamant bar",2]]],[1,"Adamant pickaxe",[["Adamant bar",2]]],[1,"Adamant pickaxe + 1",[["Adamant bar",2],["Adamant pickaxe",1]]],[1,"Adamant pickaxe + 2",[["Adamant bar",4],["Adamant pickaxe + 1",1]]],[1,"Adamant platebody",[["Adamant bar",5]]],[1,"Adamant platebody + 1",[["Adamant bar",5],["Adamant platebody",1]]],[1,"Adamant platebody + 2",[["Adamant bar",10],["Adamant platebody + 1",1]]],[1,"Adamant platelegs",[["Adamant bar",3]]],[1,"Adamant platelegs + 1",[["Adamant bar",3],["Adamant platelegs",1]]],[1,"Adamant platelegs + 2",[["Adamant bar",6],["Adamant platelegs + 1",1]]],[1,"Adamant plateskirt",[["Adamant bar",3]]],[1,"Adamant plateskirt + 1",[["Adamant bar",3],["Adamant plateskirt",1]]],[1,"Adamant plateskirt + 2",[["Adamant bar",6],["Adamant plateskirt + 1",1]]],[1,"Adamant scimitar",[["Adamant bar",2]]],[1,"Adamant scimitar + 1",[["Adamant bar",2],["Adamant scimitar",1]]],[1,"Adamant scimitar + 2",[["Adamant bar",4],["Adamant scimitar + 1",1]]],[1,"Adamant spear",[["Adamant bar",1],["Yew logs",1]]],[1,"Adamant square shield",[["Adamant bar",2]]],[1,"Adamant square shield + 1",[["Adamant bar",2],["Adamant square shield",1]]],[1,"Adamant square shield + 2",[["Adamant bar",4],["Adamant square shield + 1",1]]],[1,"Adamant sword",[["Adamant bar",2]]],[1,"Adamant sword + 1",[["Adamant bar",2],["Adamant sword",1]]],[1,"Adamant sword + 2",[["Adamant bar",4],["Adamant sword + 1",1]]],[25,"Adamant throwing axe",[["Adamant bar",1]]],[1,"Adamant warhammer",[["Adamant bar",2]]],[1,"Adamant warhammer + 1",[["Adamant bar",2],["Adamant warhammer",1]]],[1,"Adamant warhammer + 2",[["Adamant bar",4],["Adamant warhammer + 1",1]]]],"Rune bar":[[25,"Off-hand rune knife",[["Rune bar",1]]],[25,"Off-hand rune throwing axe",[["Rune bar",1]]],[1,"Rune 2h sword",[["Rune bar",4]]],[1,"Rune 2h sword + 1",[["Rune bar",4],["Rune 2h sword",1]]],[1,"Rune 2h sword + 2",[["Rune bar",8],["Rune 2h sword + 1",1]]],[1,"Rune 2h sword + 3",[["Rune bar",16],["Rune 2h sword + 2",1]]],[1,"Rune armoured boots",[["Rune bar",1]]],[1,"Rune armoured boots + 1",[["Rune bar",1],["Rune armoured boots",1]]],[1,"Rune armoured boots + 2",[["Rune bar",2],["Rune armoured boots + 1",1]]],[1,"Rune armoured boots + 3",[["Rune bar",4],["Rune armoured boots + 2",1]]],[75,"Rune arrowheads",[["Rune bar",1]]],[1,"Rune battleaxe",[["Rune bar",2]]],[1,"Rune battleaxe + 1",[["Rune bar",2],["Rune battleaxe",1]]],[1,"Rune battleaxe + 2",[["Rune bar",4],["Rune battleaxe + 1",1]]],[1,"Rune battleaxe + 3",[["Rune bar",8],["Rune battleaxe + 2",1]]],[50,"Rune bolts (unf)",[["Rune bar",1]]],[1,"Rune chainbody",[["Rune bar",5]]],[1,"Rune chainbody + 1",[["Rune bar",5],["Rune chainbody",1]]],[1,"Rune chainbody + 2",[["Rune bar",10],["Rune chainbody + 1",1]]],[1,"Rune chainbody + 3",[["Rune bar",20],["Rune chainbody + 2",1]]],[1,"Rune claws",[["Rune bar",2]]],[1,"Rune claws + 1",[["Rune bar",2],["Rune claws",1]]],[1,"Rune claws + 2",[["Rune bar",4],["Rune claws + 1",1]]],[1,"Rune claws + 3",[["Rune bar",8],["Rune claws + 2",1]]],[1,"Rune dagger",[["Rune bar",2]]],[1,"Rune dagger + 1",[["Rune bar",2],["Rune dagger",1]]],[1,"Rune dagger + 2",[["Rune bar",4],["Rune dagger + 1",1]]],[1,"Rune dagger + 3",[["Rune bar",8],["Rune dagger + 2",1]]],[50,"Rune dart tip",[["Rune bar",1]]],[1,"Rune full helm",[["Rune bar",2]]],[1,"Rune full helm + 1",[["Rune bar",2],["Rune full helm",1]]],[1,"Rune full helm + 2",[["Rune bar",4],["Rune full helm + 1",1]]],[1,"Rune full helm + 3",[["Rune bar",8],["Rune full helm + 2",1]]],[1,"Rune gauntlets",[["Rune bar",1]]],[1,"Rune gauntlets + 1",[["Rune bar",1],["Rune gauntlets",1]]],[1,"Rune gauntlets + 2",[["Rune bar",2],["Rune gauntlets + 1",1]]],[1,"Rune gauntlets + 3",[["Rune bar",4],["Rune gauntlets + 2",1]]],[1,"Rune hasta",[["Rune bar",1],["Magic logs",1]]],[1,"Rune hatchet",[["Rune bar",1]]],[1,"Rune kiteshield",[["Rune bar",2]]],[1,"Rune kiteshield + 1",[["Rune bar",2],["Rune kiteshield",1]]],[1,"Rune kiteshield + 2",[["Rune bar",4],["Rune kiteshield + 1",1]]],[1,"Rune kiteshield + 3",[["Rune bar",8],["Rune kiteshield + 2",1]]],[25,"Rune knife",[["Rune bar",1]]]],"Orikalkum bar":[[1,"Orikalkum 2h warhammer",[["Orikalkum bar",4]]],[1,"Orikalkum 2h warhammer + 1",[["Orikalkum bar",4],["Orikalkum 2h warhammer",1]]],[1,"Orikalkum 2h warhammer + 2",[["Orikalkum bar",8],["Orikalkum 2h warhammer + 1",1]]],[1,"Orikalkum 2h warhammer + 3",[["Orikalkum bar",16],["Orikalkum 2h warhammer + 2",1]]],[1,"Orikalkum armoured boots",[["Orikalkum bar",1]]],[1,"Orikalkum armoured boots + 1",[["Orikalkum bar",1],["Orikalkum armoured boots",1]]],[1,"Orikalkum armoured boots + 2",[["Orikalkum bar",2],["Orikalkum armoured boots + 1",1]]],[1,"Orikalkum armoured boots + 3",[["Orikalkum bar",4],["Orikalkum armoured boots + 2",1]]],[75,"Orikalkum arrowheads",[["Orikalkum bar",1]]],[1,"Orikalkum full helm",[["Orikalkum bar",2]]],[1,"Orikalkum full helm + 1",[["Orikalkum bar",2],["Orikalkum full helm",1]]],[1,"Orikalkum full helm + 2",[["Orikalkum bar",4],["Orikalkum full helm + 1",1]]],[1,"Orikalkum full helm + 3",[["Orikalkum bar",8],["Orikalkum full helm + 2",1]]],[1,"Orikalkum gauntlets",[["Orikalkum bar",1]]],[1,"Orikalkum gauntlets + 1",[["Orikalkum bar",1],["Orikalkum gauntlets",1]]],[1,"Orikalkum gauntlets + 2",[["Orikalkum bar",2],["Orikalkum gauntlets + 1",1]]],[1,"Orikalkum gauntlets + 3",[["Orikalkum bar",4],["Orikalkum gauntlets + 2",1]]],[1,"Orikalkum hatchet",[["Orikalkum bar",1]]],[1,"Orikalkum kiteshield",[["Orikalkum bar",2]]],[1,"Orikalkum kiteshield + 1",[["Orikalkum bar",2],["Orikalkum kiteshield",1]]],[1,"Orikalkum kiteshield + 2",[["Orikalkum bar",4],["Orikalkum kiteshield + 1",1]]],[1,"Orikalkum kiteshield + 3",[["Orikalkum bar",8],["Orikalkum kiteshield + 2",1]]],[1,"Orikalkum limbs",[["Orikalkum bar",1]]],[1,"Orikalkum mattock",[["Orikalkum bar",2]]],[1,"Orikalkum off hand warhammer",[["Orikalkum bar",2]]],[1,"Orikalkum off hand warhammer + 1",[["Orikalkum bar",2],["Orikalkum off hand warhammer",1]]],[1,"Orikalkum off hand warhammer + 2",[["Orikalkum bar",4],["Orikalkum off hand warhammer + 1",1]]],[1,"Orikalkum off hand warhammer + 3",[["Orikalkum bar",8],["Orikalkum off hand warhammer + 2",1]]],[1,"Orikalkum ore box",[["Rune ore box",1],["Orikalkum bar",2]]],[1,"Orikalkum pickaxe",[["Orikalkum bar",2]]],[1,"Orikalkum pickaxe + 1",[["Orikalkum bar",2],["Orikalkum pickaxe",1]]],[1,"Orikalkum pickaxe + 2",[["Orikalkum bar",4],["Orikalkum pickaxe + 1",1]]],[1,"Orikalkum pickaxe + 3",[["Orikalkum bar",8],["Orikalkum pickaxe + 2",1]]],[1,"Orikalkum platebody",[["Orikalkum bar",5]]],[1,"Orikalkum platebody + 1",[["Orikalkum bar",5],["Orikalkum platebody",1]]],[1,"Orikalkum platebody + 2",[["Orikalkum bar",10],["Orikalkum platebody + 1",1]]],[1,"Orikalkum platebody + 3",[["Orikalkum bar",20],["Orikalkum platebody + 2",1]]],[1,"Orikalkum platelegs",[["Orikalkum bar",3]]],[1,"Orikalkum platelegs + 1",[["Orikalkum bar",3],["Orikalkum platelegs",1]]],[1,"Orikalkum platelegs + 2",[["Orikalkum bar",6],["Orikalkum platelegs + 1",1]]],[1,"Orikalkum platelegs + 3",[["Orikalkum bar",12],["Orikalkum platelegs + 2",1]]],[1,"Orikalkum warhammer",[["Orikalkum bar",2]]],[1,"Orikalkum warhammer + 1",[["Orikalkum bar",2],["Orikalkum warhammer",1]]],[1,"Orikalkum warhammer + 2",[["Orikalkum bar",4],["Orikalkum warhammer + 1",1]]],[1,"Orikalkum warhammer + 3",[["Orikalkum bar",8],["Orikalkum warhammer + 2",1]]]],"Necronium bar":[[1,"Necronium 2h greataxe",[["Necronium bar",4]]],[1,"Necronium 2h greataxe + 1",[["Necronium bar",4],["Necronium 2h greataxe",1]]],[1,"Necronium 2h greataxe + 2",[["Necronium bar",8],["Necronium 2h greataxe + 1",1]]],[1,"Necronium 2h greataxe + 3",[["Necronium bar",16],["Necronium 2h greataxe + 2",1]]],[1,"Necronium 2h greataxe + 4",[["Necronium bar",32],["Necronium 2h greataxe + 3",1]]],[1,"Necronium armoured boots",[["Necronium bar",1]]],[1,"Necronium armoured boots + 1",[["Necronium bar",1],["Necronium armoured boots",1]]],[1,"Necronium armoured boots + 2",[["Necronium bar",2],["Necronium armoured boots + 1",1]]],[1,"Necronium armoured boots + 3",[["Necronium bar",4],["Necronium armoured boots + 2",1]]],[1,"Necronium armoured boots + 4",[["Necronium bar",8],["Necronium armoured boots + 3",1]]],[75,"Necronium arrowheads",[["Necronium bar",1]]],[1,"Necronium battleaxe",[["Necronium bar",2]]],[1,"Necronium battleaxe + 1",[["Necronium bar",2],["Necronium battleaxe",1]]],[1,"Necronium battleaxe + 2",[["Necronium bar",4],["Necronium battleaxe + 1",1]]],[1,"Necronium battleaxe + 3",[["Necronium bar",8],["Necronium battleaxe + 2",1]]],[1,"Necronium battleaxe + 4",[["Necronium bar",16],["Necronium battleaxe + 3",1]]],[1,"Necronium full helm",[["Necronium bar",2]]],[1,"Necronium full helm + 1",[["Necronium bar",2],["Necronium full helm",1]]],[1,"Necronium full helm + 2",[["Necronium bar",4],["Necronium full helm + 1",1]]],[1,"Necronium full helm + 3",[["Necronium bar",8],["Necronium full helm + 2",1]]],[1,"Necronium full helm + 4",[["Necronium bar",16],["Necronium full helm + 3",1]]],[1,"Necronium gauntlets",[["Necronium bar",1]]],[1,"Necronium gauntlets + 1",[["Necronium bar",1],["Necronium gauntlets",1]]],[1,"Necronium gauntlets + 2",[["Necronium bar",2],["Necronium gauntlets + 1",1]]],[1,"Necronium gauntlets + 3",[["Necronium bar",4],["Necronium gauntlets + 2",1]]],[1,"Necronium gauntlets + 4",[["Necronium bar",8],["Necronium gauntlets + 3",1]]],[1,"Necronium hatchet",[["Necronium bar",1]]],[1,"Necronium kiteshield",[["Necronium bar",2]]],[1,"Necronium kiteshield + 1",[["Necronium bar",2],["Necronium kiteshield",1]]],[1,"Necronium kiteshield + 2",[["Necronium bar",4],["Necronium kiteshield + 1",1]]],[1,"Necronium kiteshield + 3",[["Necronium bar",8],["Necronium kiteshield + 2",1]]],[1,"Necronium kiteshield + 4",[["Necronium bar",16],["Necronium kiteshield + 3",1]]],[1,"Necronium limbs",[["Necronium bar",1]]],[1,"Necronium mattock",[["Necronium bar",2]]],[1,"Necronium off hand battleaxe",[["Necronium bar",2]]],[1,"Necronium off hand battleaxe + 1",[["Necronium bar",2],["Necronium off hand battleaxe",1]]],[1,"Necronium off hand battleaxe + 2",[["Necronium bar",4],["Necronium off hand battleaxe + 1",1]]],[1,"Necronium off hand battleaxe + 3",[["Necronium bar",8],["Necronium off hand battleaxe + 2",1]]],[1,"Necronium off hand battleaxe + 4",[["Necronium bar",16],["Necronium off hand battleaxe + 3",1]]],[1,"Necronium ore box",[["Orikalkum ore box",1],["Necronium bar",2]]],[1,"Necronium pickaxe",[["Necronium bar",2]]],[1,"Necronium pickaxe + 1",[["Necronium bar",2],["Necronium pickaxe",1]]],[1,"Necronium pickaxe + 2",[["Necronium bar",4],["Necronium pickaxe + 1",1]]],[1,"Necronium pickaxe + 3",[["Necronium bar",8],["Necronium pickaxe + 2",1]]],[1,"Necronium pickaxe + 4",[["Necronium bar",16],["Necronium pickaxe + 3",1]]],[1,"Necronium platebody",[["Necronium bar",5]]],[1,"Necronium platebody + 1",[["Necronium bar",5],["Necronium platebody",1]]],[1,"Necronium platebody + 2",[["Necronium bar",10],["Necronium platebody + 1",1]]],[1,"Necronium platebody + 3",[["Necronium bar",20],["Necronium platebody + 2",1]]],[1,"Necronium platebody + 4",[["Necronium bar",40],["Necronium platebody + 3",1]]],[1,"Necronium platelegs",[["Necronium bar",3]]],[1,"Necronium platelegs + 1",[["Necronium bar",3],["Necronium platelegs",1]]],[1,"Necronium platelegs + 2",[["Necronium bar",6],["Necronium platelegs + 1",1]]],[1,"Necronium platelegs + 3",[["Necronium bar",12],["Necronium platelegs + 2",1]]],[1,"Necronium platelegs + 4",[["Necronium bar",24],["Necronium platelegs + 3",1]]]],"Bane bar":[[1,"Bane 2h sword",[["Bane bar",4]]],[1,"Bane 2h sword + 1",[["Bane bar",4],["Bane 2h sword",1]]],[1,"Bane 2h sword + 2",[["Bane bar",8],["Bane 2h sword + 1",1]]],[1,"Bane 2h sword + 3",[["Bane bar",16],["Bane 2h sword + 2",1]]],[1,"Bane 2h sword + 4",[["Bane bar",32],["Bane 2h sword + 3",1]]],[1,"Bane armoured boots",[["Bane bar",1]]],[1,"Bane armoured boots + 1",[["Bane bar",1],["Bane armoured boots",1]]],[1,"Bane armoured boots + 2",[["Bane bar",2],["Bane armoured boots + 1",1]]],[1,"Bane armoured boots + 3",[["Bane bar",4],["Bane armoured boots + 2",1]]],[1,"Bane armoured boots + 4",[["Bane bar",8],["Bane armoured boots + 3",1]]],[75,"Bane arrowheads",[["Bane bar",1]]],[1,"Bane full helm",[["Bane bar",2]]],[1,"Bane full helm + 1",[["Bane bar",2],["Bane full helm",1]]],[1,"Bane full helm + 2",[["Bane bar",4],["Bane full helm + 1",1]]],[1,"Bane full helm + 3",[["Bane bar",8],["Bane full helm + 2",1]]],[1,"Bane full helm + 4",[["Bane bar",16],["Bane full helm + 3",1]]],[1,"Bane gauntlets",[["Bane bar",1]]],[1,"Bane gauntlets + 1",[["Bane bar",1],["Bane gauntlets",1]]],[1,"Bane gauntlets + 2",[["Bane bar",2],["Bane gauntlets + 1",1]]],[1,"Bane gauntlets + 3",[["Bane bar",4],["Bane gauntlets + 2",1]]],[1,"Bane gauntlets + 4",[["Bane bar",8],["Bane gauntlets + 3",1]]],[1,"Bane hatchet",[["Bane bar",1]]],[1,"Bane limbs",[["Bane bar",1]]],[1,"Bane longsword",[["Bane bar",2]]],[1,"Bane longsword + 1",[["Bane bar",2],["Bane longsword",1]]],[1,"Bane longsword + 2",[["Bane bar",4],["Bane longsword + 1",1]]],[1,"Bane longsword + 3",[["Bane bar",8],["Bane longsword + 2",1]]],[1,"Bane longsword + 4",[["Bane bar",16],["Bane longsword + 3",1]]],[1,"Bane mattock",[["Bane bar",2]]],[1,"Bane off hand longsword",[["Bane bar",2]]],[1,"Bane off hand longsword + 1",[["Bane bar",2],["Bane off hand longsword",1]]],[1,"Bane off hand longsword + 2",[["Bane bar",4],["Bane off hand longsword + 1",1]]],[1,"Bane off hand longsword + 3",[["Bane bar",8],["Bane off hand longsword + 2",1]]],[1,"Bane off hand longsword + 4",[["Bane bar",16],["Bane off hand longsword + 3",1]]],[1,"Bane ore box",[["Necronium ore box",1],["Bane bar",2]]],[1,"Bane pickaxe",[["Bane bar",2]]],[1,"Bane pickaxe + 1",[["Bane bar",2],["Bane pickaxe",1]]],[1,"Bane pickaxe + 2",[["Bane bar",4],["Bane pickaxe + 1",1]]],[1,"Bane pickaxe + 3",[["Bane bar",8],["Bane pickaxe + 2",1]]],[1,"Bane pickaxe + 4",[["Bane bar",16],["Bane pickaxe + 3",1]]],[1,"Bane platebody",[["Bane bar",5]]],[1,"Bane platebody + 1",[["Bane bar",5],["Bane platebody",1]]],[1,"Bane platebody + 2",[["Bane bar",10],["Bane platebody + 1",1]]],[1,"Bane platebody + 3",[["Bane bar",20],["Bane platebody + 2",1]]],[1,"Bane platebody + 4",[["Bane bar",40],["Bane platebody + 3",1]]],[1,"Bane platelegs",[["Bane bar",3]]],[1,"Bane platelegs + 1",[["Bane bar",3],["Bane platelegs",1]]],[1,"Bane platelegs + 2",[["Bane bar",6],["Bane platelegs + 1",1]]],[1,"Bane platelegs + 3",[["Bane bar",12],["Bane platelegs + 2",1]]],[1,"Bane platelegs + 4",[["Bane bar",24],["Bane platelegs + 3",1]]],[1,"Bane square shield",[["Bane bar",2]]],[1,"Bane square shield + 1",[["Bane bar",2],["Bane square shield",1]]],[1,"Bane square shield + 2",[["Bane bar",4],["Bane square shield + 1",1]]],[1,"Bane square shield + 3",[["Bane bar",8],["Bane square shield + 2",1]]],[1,"Bane square shield + 4",[["Bane bar",16],["Bane square shield + 3",1]]],[1,"Tagga&#39;s corehammer",[["Croesus sporehammer",1],["Bane bar",4],["Croesus flakes",2500],["Calcified fungus",5],["Fungal algae",5]]]],"Elder rune bar":[[1000,"Armour spikes",[["Elder rune bar",1]]],[1,"Elder rune 2h sword",[["Elder rune bar",4]]],[1,"Elder rune 2h sword + 1",[["Elder rune bar",4],["Elder rune 2h sword",1]]],[1,"Elder rune 2h sword + 2",[["Elder rune bar",8],["Elder rune 2h sword + 1",1]]],[1,"Elder rune 2h sword + 3",[["Elder rune bar",16],["Elder rune 2h sword + 2",1]]],[1,"Elder rune 2h sword + 4",[["Elder rune bar",32],["Elder rune 2h sword + 3",1]]],[1,"Elder rune 2h sword + 5",[["Elder rune bar",64],["Elder rune 2h sword + 4",1]]],[1,"Elder rune armoured boots",[["Elder rune bar",1]]],[1,"Elder rune armoured boots + 1",[["Elder rune bar",1],["Elder rune armoured boots",1]]],[1,"Elder rune armoured boots + 2",[["Elder rune bar",2],["Elder rune armoured boots + 1",1]]],[1,"Elder rune armoured boots + 3",[["Elder rune bar",4],["Elder rune armoured boots + 2",1]]],[1,"Elder rune armoured boots + 4",[["Elder rune bar",8],["Elder rune armoured boots + 3",1]]],[1,"Elder rune armoured boots + 5",[["Elder rune bar",16],["Elder rune armoured boots + 4",1]]],[75,"Elder rune arrowheads",[["Elder rune bar",1]]],[1,"Elder rune full helm",[["Elder rune bar",2]]],[1,"Elder rune full helm + 1",[["Elder rune bar",2],["Elder rune full helm",1]]],[1,"Elder rune full helm + 2",[["Elder rune bar",4],["Elder rune full helm + 1",1]]],[1,"Elder rune full helm + 3",[["Elder rune bar",8],["Elder rune full helm + 2",1]]],[1,"Elder rune full helm + 4",[["Elder rune bar",16],["Elder rune full helm + 3",1]]],[1,"Elder rune full helm + 5",[["Elder rune bar",32],["Elder rune full helm + 4",1]]],[1,"Elder rune gauntlets",[["Elder rune bar",1]]],[1,"Elder rune gauntlets + 1",[["Elder rune bar",1],["Elder rune gauntlets",1]]],[1,"Elder rune gauntlets + 2",[["Elder rune bar",2],["Elder rune gauntlets + 1",1]]],[1,"Elder rune gauntlets + 3",[["Elder rune bar",4],["Elder rune gauntlets + 2",1]]],[1,"Elder rune gauntlets + 4",[["Elder rune bar",8],["Elder rune gauntlets + 3",1]]],[1,"Elder rune gauntlets + 5",[["Elder rune bar",16],["Elder rune gauntlets + 4",1]]],[1,"Elder rune hatchet",[["Elder rune bar",1]]],[1,"Elder rune limbs",[["Elder rune bar",1]]],[1,"Elder rune longsword",[["Elder rune bar",2]]],[1,"Elder rune longsword + 1",[["Elder rune bar",2],["Elder rune longsword",1]]],[1,"Elder rune longsword + 2",[["Elder rune bar",4],["Elder rune longsword + 1",1]]],[1,"Elder rune longsword + 3",[["Elder rune bar",8],["Elder rune longsword + 2",1]]],[1,"Elder rune longsword + 4",[["Elder rune bar",16],["Elder rune longsword + 3",1]]],[1,"Elder rune longsword + 5",[["Elder rune bar",32],["Elder rune longsword + 4",1]]],[1,"Elder rune mattock",[["Elder rune bar",2]]],[1,"Elder rune off hand longsword",[["Elder rune bar",2]]],[1,"Elder rune off hand longsword + 1",[["Elder rune bar",2],["Elder rune off hand longsword",1]]],[1,"Elder rune off hand longsword + 2",[["Elder rune bar",4],["Elder rune off hand longsword + 1",1]]],[1,"Elder rune off hand longsword + 3",[["Elder rune bar",8],["Elder rune off hand longsword + 2",1]]],[1,"Elder rune off hand longsword + 4",[["Elder rune bar",16],["Elder rune off hand longsword + 3",1]]],[1,"Elder rune off hand longsword + 5",[["Elder rune bar",32],["Elder rune off hand longsword + 4",1]]],[1,"Elder rune ore box",[["Bane ore box",1],["Elder rune bar",2]]],[1,"Elder rune pickaxe",[["Elder rune bar",2]]],[1,"Elder rune pickaxe + 1",[["Elder rune bar",2],["Elder rune pickaxe",1]]],[1,"Elder rune pickaxe + 2",[["Elder rune bar",4],["Elder rune pickaxe + 1",1]]],[1,"Elder rune pickaxe + 3",[["Elder rune bar",8],["Elder rune pickaxe + 2",1]]],[1,"Elder rune pickaxe + 4",[["Elder rune bar",16],["Elder rune pickaxe + 3",1]]],[1,"Elder rune pickaxe + 5",[["Elder rune bar",32],["Elder rune pickaxe + 4",1]]],[1,"Elder rune platebody",[["Elder rune bar",5]]],[1,"Elder rune platebody + 1",[["Elder rune bar",5],["Elder rune platebody",1]]],[1,"Elder rune platebody + 2",[["Elder rune bar",10],["Elder rune platebody + 1",1]]],[1,"Elder rune platebody + 3",[["Elder rune bar",20],["Elder rune platebody + 2",1]]],[1,"Elder rune platebody + 4",[["Elder rune bar",40],["Elder rune platebody + 3",1]]],[1,"Elder rune platebody + 5",[["Elder rune bar",80],["Elder rune platebody + 4",1]]],[1,"Elder rune platelegs",[["Elder rune bar",3]]],[1,"Elder rune platelegs + 1",[["Elder rune bar",3],["Elder rune platelegs",1]]],[1,"Elder rune platelegs + 2",[["Elder rune bar",6],["Elder rune platelegs + 1",1]]],[1,"Elder rune platelegs + 3",[["Elder rune bar",12],["Elder rune platelegs + 2",1]]],[1,"Elder rune platelegs + 4",[["Elder rune bar",24],["Elder rune platelegs + 3",1]]],[1,"Elder rune platelegs + 5",[["Elder rune bar",48],["Elder rune platelegs + 4",1]]],[1,"Elder rune round shield",[["Elder rune bar",2]]],[1,"Elder rune round shield + 1",[["Elder rune bar",2],["Elder rune round shield",1]]],[1,"Elder rune round shield + 2",[["Elder rune bar",4],["Elder rune round shield + 1",1]]],[1,"Elder rune round shield + 3",[["Elder rune bar",8],["Elder rune round shield + 2",1]]],[1,"Elder rune round shield + 4",[["Elder rune bar",16],["Elder rune round shield + 3",1]]],[1,"Elder rune round shield + 5",[["Elder rune bar",32],["Elder rune round shield + 4",1]]],[1,"Masterwork melee armour trim",[["Elder rune bar",1],["Malevolent essence",1],["Praesulic essence (melee)",1]]]],"Primal bar":[[1,"Masterwork sword trim",[["Primal bar",1],["Kalphite essence",4],["Demonic essence",4]]],[1,"Primal 2h sword",[["Primal bar",4]]],[1,"Primal 2h sword + 1",[["Primal bar",4],["Primal 2h sword",1]]],[1,"Primal 2h sword + 2",[["Primal bar",8],["Primal 2h sword + 1",1]]],[1,"Primal 2h sword + 3",[["Primal bar",16],["Primal 2h sword + 2",1]]],[1,"Primal 2h sword + 4",[["Primal bar",32],["Primal 2h sword + 3",1]]],[1,"Primal 2h sword + 5",[["Primal bar",64],["Primal 2h sword + 4",1]]],[1000,"Primal armour spikes",[["Primal bar",1]]],[1,"Primal armoured boots",[["Primal bar",1]]],[1,"Primal armoured boots + 1",[["Primal bar",1],["Primal armoured boots",1]]],[1,"Primal armoured boots + 2",[["Primal bar",2],["Primal armoured boots + 1",1]]],[1,"Primal armoured boots + 3",[["Primal bar",4],["Primal armoured boots + 2",1]]],[1,"Primal armoured boots + 4",[["Primal bar",8],["Primal armoured boots + 3",1]]],[1,"Primal armoured boots + 5",[["Primal bar",16],["Primal armoured boots + 4",1]]],[1,"Primal full helm",[["Primal bar",2]]],[1,"Primal full helm + 1",[["Primal bar",2],["Primal full helm",1]]],[1,"Primal full helm + 2",[["Primal bar",4],["Primal full helm + 1",1]]],[1,"Primal full helm + 3",[["Primal bar",8],["Primal full helm + 2",1]]],[1,"Primal full helm + 4",[["Primal bar",16],["Primal full helm + 3",1]]],[1,"Primal full helm + 5",[["Primal bar",32],["Primal full helm + 4",1]]],[1,"Primal gauntlets",[["Primal bar",1]]],[1,"Primal gauntlets + 1",[["Primal bar",1],["Primal gauntlets",1]]],[1,"Primal gauntlets + 2",[["Primal bar",2],["Primal gauntlets + 1",1]]],[1,"Primal gauntlets + 3",[["Primal bar",4],["Primal gauntlets + 2",1]]],[1,"Primal gauntlets + 4",[["Primal bar",8],["Primal gauntlets + 3",1]]],[1,"Primal gauntlets + 5",[["Primal bar",16],["Primal gauntlets + 4",1]]],[1,"Primal hatchet",[["Primal bar",1]]],[1,"Primal kiteshield",[["Primal bar",2]]],[1,"Primal kiteshield + 1",[["Primal bar",2],["Primal kiteshield",1]]],[1,"Primal kiteshield + 2",[["Primal bar",4],["Primal kiteshield + 1",1]]],[1,"Primal kiteshield + 3",[["Primal bar",8],["Primal kiteshield + 2",1]]],[1,"Primal kiteshield + 4",[["Primal bar",16],["Primal kiteshield + 3",1]]],[1,"Primal kiteshield + 5",[["Primal bar",32],["Primal kiteshield + 4",1]]],[1,"Primal limbs",[["Primal bar",1]]],[1,"Primal off hand warhammer",[["Primal bar",2]]],[1,"Primal off hand warhammer + 1",[["Primal bar",2],["Primal off hand warhammer",1]]],[1,"Primal off hand warhammer + 2",[["Primal bar",4],["Primal off hand warhammer + 1",1]]],[1,"Primal off hand warhammer + 3",[["Primal bar",8],["Primal off hand warhammer + 2",1]]],[1,"Primal off hand warhammer + 4",[["Primal bar",16],["Primal off hand warhammer + 3",1]]],[1,"Primal off hand warhammer + 5",[["Primal bar",32],["Primal off hand warhammer + 4",1]]],[1,"Primal ore box",[["Elder rune ore box",1],["Primal bar",2]]],[1,"Primal pickaxe",[["Primal bar",2]]],[1,"Primal pickaxe + 1",[["Primal bar",2],["Primal pickaxe",1]]],[1,"Primal pickaxe + 2",[["Primal bar",4],["Primal pickaxe + 1",1]]],[1,"Primal pickaxe + 3",[["Primal bar",8],["Primal pickaxe + 2",1]]],[1,"Primal pickaxe + 4",[["Primal bar",16],["Primal pickaxe + 3",1]]],[1,"Primal pickaxe + 5",[["Primal bar",32],["Primal pickaxe + 4",1]]],[1,"Primal platebody",[["Primal bar",5]]],[1,"Primal platebody + 1",[["Primal bar",5],["Primal platebody",1]]],[1,"Primal platebody + 2",[["Primal bar",10],["Primal platebody + 1",1]]],[1,"Primal platebody + 3",[["Primal bar",20],["Primal platebody + 2",1]]],[1,"Primal platebody + 4",[["Primal bar",40],["Primal platebody + 3",1]]],[1,"Primal platebody + 5",[["Primal bar",80],["Primal platebody + 4",1]]],[1,"Primal platelegs",[["Primal bar",3]]],[1,"Primal platelegs + 1",[["Primal bar",3],["Primal platelegs",1]]],[1,"Primal platelegs + 2",[["Primal bar",6],["Primal platelegs + 1",1]]],[1,"Primal platelegs + 3",[["Primal bar",12],["Primal platelegs + 2",1]]],[1,"Primal platelegs + 4",[["Primal bar",24],["Primal platelegs + 3",1]]],[1,"Primal platelegs + 5",[["Primal bar",48],["Primal platelegs + 4",1]]],[1,"Primal warhammer",[["Primal bar",2]]],[1,"Primal warhammer + 1",[["Primal bar",2],["Primal warhammer",1]]],[1,"Primal warhammer + 2",[["Primal bar",4],["Primal warhammer + 1",1]]],[1,"Primal warhammer + 3",[["Primal bar",8],["Primal warhammer + 2",1]]],[1,"Primal warhammer + 4",[["Primal bar",16],["Primal warhammer + 3",1]]],[1,"Primal warhammer + 5",[["Primal bar",32],["Primal warhammer + 4",1]]]]};
+// END SMITHING_PRODUCTS
+
+// Every anvil product, by name, across all bars (for flattening upgrade chains).
+const SMITHING_BY_NAME = (() => {
+  const m = {};
+  for (const list of Object.values(SMITHING_PRODUCTS)) for (const [qty, name, mats] of list) if (!m[name]) m[name] = { qty, name, mats };
+  return m;
+})();
+// Upgrades (+1..+5) are priced from scratch (Ben, 2026-11-08): an item made from
+// another anvil product is replaced by that product's own inputs, all the way down.
+function flattenSmithingMats(name, mult = 1, depth = 0) {
+  const out = {};
+  for (const [mat, q] of SMITHING_BY_NAME[name].mats) {
+    const sub = SMITHING_BY_NAME[mat];
+    if (sub && depth < 8) {
+      for (const [k, v] of Object.entries(flattenSmithingMats(mat, (q / sub.qty) * mult, depth + 1))) out[k] = (out[k] || 0) + v;
+    } else out[mat] = (out[mat] || 0) + q * mult;
+  }
+  return out;
+}
+// One row per product of `bar`, at live prices (buy materials, sell the product, 2% tax).
+function smithingProductRows(bar, items, priceMode = 'live') {
+  const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+  const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
+  const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
+  const byName = {};
+  for (const it of items) byName[it.name.toLowerCase()] = it;
+  return (SMITHING_PRODUCTS[bar] || []).map(([qty, name]) => {
+    const flat = flattenSmithingMats(name);
+    const bars = flat[bar] || 0;
+    let cost = 0;
+    const missing = [];
+    for (const [mat, q] of Object.entries(flat)) {
+      const p = buyOf(mat);
+      if (p == null) missing.push(mat); else cost += p * q;
+    }
+    const sell = sellOf(name);
+    if (sell == null) missing.push(name);
+    const it = byName[name.toLowerCase()];
+    const revenue = sell != null ? applyTax(sell) * qty : null;
+    const profit = !missing.length && bars ? revenue - cost : null;
+    const guide = it ? (it.high ?? it.low ?? null) : null;
+    // Live sell price far from the GE guide on a thin item is usually a few odd trades.
+    const liveOdd = priceMode === 'live' && it && it.liveSell != null && guide ? Math.abs(it.liveSell / guide - 1) > 0.4 : false;
+    return { name, qty, bars, cost, revenue, profit, perBar: profit != null ? profit / bars : null,
+      volume: it ? (it.volume ?? null) : null, others: Object.keys(flat).filter(k => k !== bar), missing, liveOdd };
+  }).filter(r => r.bars > 0);
+}
+
+// Artefacts and collections (Ben, 2026-11-09), from the wiki.
+// BEGIN ARCHAEOLOGY_DATA (generated by scripts/build-archaeology-recipes.js)
+const ARCHAEOLOGY_DATA = {"artefacts":{"'Da Boss Man' sculpture":{"l":119,"c":1204,"m":[["Yu'biusk clay",50],["Malachite green",44],["Soapstone",44]],"h":"Makeshift pie oven"},"'Forged in War' sculpture":{"l":100,"c":844,"m":[["Warforged bronze",50],["Yu'biusk clay",42],["Emerald",1]],"h":"Kyzaj champion's boudoir"},"'Disorder' painting":{"l":24,"c":272,"m":[["Samite silk",6],["White oak",6],["Vellum",6],["Cadmium red",14]],"h":"Lodge art storage"},"'Nosorog!' sculpture":{"l":94,"c":776,"m":[["Yu'biusk clay",30],["Malachite green",24],["Warforged bronze",30]],"h":"Yu'biusk animal pen"},"'Pandemonium' tapestry":{"l":89,"c":724,"m":[["White oak",12],["Samite silk",12],["Vellum",12],["Cadmium red",42]],"h":"Dis overspill"},"'Solem in Umbra' painting":{"l":25,"c":274,"m":[["Samite silk",8],["White oak",10],["Tyrian purple",14]],"h":"Administratum debris"},"'Prima Legio' painting":{"l":118,"c":1174,"m":[["White oak",20],["Samite silk",20],["Tyrian purple",74],["Zarosian insignia",20]],"h":"War table debris"},"'Consensus ad Idem' painting":{"l":74,"c":638,"m":[["White oak",10],["Samite silk",10],["Tyrian purple",50]],"h":"Kharid-et chapel debris"},"'Lust' metal sculpture":{"l":65,"c":578,"m":[["Third Age iron",16],["Eye of Dagon",24],["Goldrune",24],["Ruby",1]],"h":"Infernal art"},"'Possession' metal sculpture":{"l":104,"c":894,"m":[["Eye of Dagon",24],["Chaotic brimstone",30],["Third Age iron",44]],"h":"Hellfire forge"},"'Animate Dead' spell scroll":{"l":107,"c":942,"m":[["Vellum",40],["Ancient vis",24],["Blood of Orcus",40]],"h":"Ancient magick munitions"},"'Exsanguinate' spell scroll":{"l":86,"c":704,"m":[["Vellum",40],["Blood of Orcus",36]],"h":"Orcus altar"},"'Incite Fear' spell scroll":{"l":58,"c":508,"m":[["Vellum",20],["Ancient vis",18],["Blood of Orcus",18]],"h":"Carcerem debris"},"'Smoke Cloud' spell scroll":{"l":100,"c":844,"m":[["Vellum",40],["Ancient vis",20],["Blood of Orcus",32]],"h":"Culinarum debris"},"'Frying pan'":{"l":42,"c":392,"m":[["Third Age iron",20],["White marble",24]],"h":"Prodromoi remains"},"'Hallowed Be the Everlight' painting":{"l":105,"c":910,"m":[["Cobalt blue",52],["White oak",16],["Samite silk",16],["Vellum",16]],"h":"Stockpiled art"},"'The Enlightened Soul' scroll":{"l":109,"c":988,"m":[["Star of Saradomin",50],["Vellum",60]],"h":"Bibliotheke debris"},"'The Eudoxian Elements' tablet":{"l":109,"c":988,"m":[["White marble",60],["Goldrune",50]],"h":"Bibliotheke debris"},"'Raksha' idol":{"l":120,"c":1220,"m":[["Orgone",56],["Dragon metal",44],["Goldrune",40]],"h":"Saurthen debris"},"'Friendship bracelet'":{"l":87,"c":706,"m":[["Soapstone",30],["Felt",46]],"h":"Communal space"},"Amphora":{"l":92,"c":744,"m":[["Everlight silvthril",34],["Keramos",46]],"h":"Acropolis debris"},"Beastkeeper helm":{"l":94,"c":776,"m":[["Warforged bronze",16],["Vulcanised rubber",24],["Animal furs",20],["Fossilised bone",24]],"h":"Yu'biusk animal pen"},"'The Pride of Padosan' painting":{"l":105,"c":910,"m":[["Cobalt blue",52],["White oak",16],["Samite silk",16],["Vellum",16]],"h":"Stockpiled art"},"Avian song-egg player":{"l":76,"c":628,"m":[["Stormguard steel",36],["Armadylean yellow",32],["Diamond",1]],"h":"Keshik ger"},"'The Lake of Fire' painting":{"l":65,"c":578,"m":[["Samite silk",10],["White oak",10],["Vellum",10],["Cadmium red",34]],"h":"Infernal art"},"'Torment' metal sculpture":{"l":89,"c":724,"m":[["Eye of Dagon",20],["Third Age iron",20],["Hellfire metal",38]],"h":"Dis overspill"},"Ancient globe":{"l":118,"c":1174,"m":[["White oak",20],["Tyrian purple",54],["Ancient vis",60]],"h":"War table debris"},"Ancient magic tablet":{"l":107,"c":942,"m":[["Ancient vis",40],["Blood of Orcus",64]],"h":"Ancient magick munitions"},"Ancient timepiece":{"l":47,"c":416,"m":[["Goldrune",12],["Imperial steel",16],["Ancient vis",18]],"h":"Praesidio remains"},"Battle plans":{"l":118,"c":1174,"m":[["Vellum",40],["Tyrian purple",60],["Ancient vis",34]],"h":"War table debris"},"'The Lord of Light' painting":{"l":105,"c":910,"m":[["Cobalt blue",52],["White oak",16],["Samite silk",16],["Vellum",16]],"h":"Stockpiled art"},"Aviansie dreamcoat":{"l":81,"c":666,"m":[["Armadylean yellow",20],["Samite silk",30],["Animal furs",22]],"h":"Tailory debris"},"Blackfire lance":{"l":103,"c":878,"m":[["Aetherium alloy",50],["Quintessence",46]],"h":"Keshik weapon rack"},"'The Serpent's Fall' carving":{"l":67,"c":582,"m":[["Vellum",16],["Tyrian purple",24],["Blood of Orcus",12],["White oak",12]],"h":"Citizen remains"},"Apex cap":{"l":60,"c":540,"m":[["Samite silk",28],["Leather scraps",12],["Ancient vis",20]],"h":"Ministry remains"},"Backstrap loom":{"l":66,"c":580,"m":[["White oak",30],["Burnt umber",18],["Cashmere",16]],"h":"Weaver's hut debris"},"Animal doll":{"l":66,"c":580,"m":[["Cashmere",24],["White oak",24],["Ivory",16]],"h":"Weaver's hut debris"},"Bloodwine":{"l":82,"c":668,"m":[["Leather scraps",32],["Triskelion",20],["Cashmere",20],["Grapes",1]],"h":"Cauldron debris"},"Bloodletting dagger":{"l":88,"c":722,"m":[["Ivory",28],["Cashmere",24],["Soapstone",26]],"h":"Blood altar (excavation hotspot)"},"Ceremonial plume":{"l":81,"c":666,"m":[["Armadylean yellow",38],["Goldrune",34],["Phoenix feather",1]],"h":"Tailory debris"},"Crest of Dagon":{"l":24,"c":272,"m":[["Goldrune",14],["Orthenglass",18]],"h":"Lodge art storage"},"Centurion's dress sword":{"l":1,"c":0,"m":[["Imperial iron",5],["Purpleheart wood",5]],"h":"Centurion remains"},"Branding iron":{"l":45,"c":412,"m":[["Third Age iron",14],["Eye of Dagon",12],["Hellfire metal",20]],"h":"Dis dungeon debris"},"Chaos Elemental trophy":{"l":110,"c":1004,"m":[["Chaotic brimstone",52],["White oak",30],["Hellfire metal",30]],"h":"Chthonian trophies"},"Chaos star":{"l":68,"c":584,"m":[["Chaotic brimstone",28],["Hellfire metal",36]],"h":"Shakroth remains"},"Ceremonial mace":{"l":74,"c":624,"m":[["Imperial steel",20],["Third Age iron",20],["Goldrune",28]],"h":"Kharid-et chapel debris"},"Ceremonial unicorn ornament":{"l":48,"c":418,"m":[["Keramos",26],["Cobalt blue",20]],"h":"Monoceros remains"},"Ceremonial unicorn saddle":{"l":48,"c":418,"m":[["Leather scraps",24],["Cobalt blue",22]],"h":"Monoceros remains"},"Bronze Dominion medal":{"l":69,"c":572,"m":[["Everlight silvthril",36],["Star of Saradomin",26],["Bronze bar",1]],"h":"Dominion Games podium"},"Chuluu stone":{"l":118,"c":1174,"m":[["Aetherium alloy",40],["Quintessence",30],["Soapstone",40],["Goldrune",24]],"h":"Howl's workshop debris"},"Dayguard shield":{"l":95,"c":778,"m":[["Stormguard steel",36],["Wings of War",28],["White oak",20]],"h":"Keshik tower debris"},"Centurion's seal":{"l":12,"c":0,"m":[["Third Age iron",6],["Zarosian insignia",2]],"h":"None"},"Ceremonial dragonkin device":{"l":70,"c":602,"m":[["Orthenglass",66]],"h":"Dragonkin remains"},"Ceremonial dragonkin tablet":{"l":90,"c":733,"m":[["Orthenglass",79]],"h":"Orthen rubble"},"Curse tablet":{"l":60,"c":540,"m":[["Imperial steel",16],["Zarosian insignia",12],["Soapstone",20],["Blood of Orcus",12]],"h":"Ministry remains"},"Castle gatestone":{"l":73,"c":622,"m":[["Orgone",36],["Orthenglass",32]],"h":"Castle hall rubble"},"Comfort gatestone":{"l":107,"c":942,"m":[["Orthenglass",40],["Orgone",34],["Compass rose",30]],"h":"Security booth"},"Drogokishuun hook sword":{"l":110,"c":1004,"m":[["Warforged bronze",44],["Malachite green",36],["Fossilised bone",32]],"h":"Warforge weapon rack"},"Dorgeshuun spear":{"l":100,"c":844,"m":[["Warforged bronze",50],["White oak",42]],"h":"Kyzaj champion's boudoir"},"Decorative vase":{"l":72,"c":606,"m":[["White marble",36],["Cobalt blue",30]],"h":"Oikos studio debris"},"Dominarian device":{"l":84,"c":686,"m":[["Everlight silvthril",30],["Keramos",22],["Third Age iron",22],["Clockwork",1]],"h":"Oikos fishing hut remnants"},"Dominion discus":{"l":61,"c":556,"m":[["Keramos",34],["Star of Saradomin",28]],"h":"Stadio debris"},"Dominion javelin":{"l":61,"c":556,"m":[["Keramos",32],["Third Age iron",30]],"h":"Stadio debris"},"Dominion pelte shield":{"l":61,"c":556,"m":[["Star of Saradomin",34],["Samite silk",28]],"h":"Stadio debris"},"Dominion torch":{"l":69,"c":572,"m":[["Goldrune",12],["Orthenglass",12],["Everlight silvthril",20],["Star of Saradomin",18]],"h":"Dominion Games podium"},"Doru spear":{"l":117,"c":1158,"m":[["Everlight silvthril",70],["White oak",62]],"h":"Optimatoi remains"},"Ekeleshuun blinder mask":{"l":76,"c":628,"m":[["Vulcanised rubber",24],["Malachite green",20],["Vellum",24]],"h":"Gladiatorial goblin remains"},"Dragonkin device":{"l":50,"c":450,"m":[["Orthenglass",50]],"h":"Dragonkin remains (Desperate Measures)"},"Dragonkin tablet":{"l":50,"c":450,"m":[["Orthenglass",50]],"h":"Orthen rubble (Desperate Measures)"},"Death mask":{"l":99,"c":828,"m":[["Orgone",56],["Soapstone",34]],"h":"Dragonkin coffin"},"Dragon burner":{"l":102,"c":862,"m":[["Dragon metal",52],["Orgone",42]],"h":"Experiment workbench"},"Dragon scalpel":{"l":101,"c":860,"m":[["Dragon metal",52],["Felt",42]],"h":"Autopsy table"},"Dragonkin calendar":{"l":99,"c":828,"m":[["Orgone",34],["Carbon black",28],["Compass rose",28]],"h":"Dragonkin coffin"},"Dragonkin staff":{"l":99,"c":828,"m":[["Orgone",56],["Compass rose",34]],"h":"Dragonkin coffin"},"Decorative amphora":{"l":63,"c":560,"m":[["Tyrian purple",16],["Ancient vis",18],["Soapstone",28]],"h":"Marketplace debris"},"Garagorshuun anchor":{"l":97,"c":810,"m":[["Warforged bronze",32],["Mark of the Kyzaj",26],["Third Age iron",30]],"h":"Goblin trainee remains"},"Everlight harp":{"l":51,"c":466,"m":[["Everlight silvthril",30],["White oak",22]],"h":"Amphitheatre debris"},"Everlight trumpet":{"l":51,"c":466,"m":[["Everlight silvthril",28],["Goldrune",24]],"h":"Amphitheatre debris"},"Everlight violin":{"l":51,"c":466,"m":[["Star of Saradomin",16],["White oak",20],["Samite silk",16]],"h":"Amphitheatre debris"},"Fishing trident":{"l":84,"c":686,"m":[["Star of Saradomin",22],["Third Age iron",30],["Goldrune",22]],"h":"Oikos fishing hut remnants"},"Folded-arm figurine (female)":{"l":56,"c":490,"m":[["White marble",30],["Goldrune",24]],"h":"Ceramics studio debris"},"Folded-arm figurine (male)":{"l":56,"c":490,"m":[["White marble",30],["Goldrune",24]],"h":"Ceramics studio debris"},"Flat cap":{"l":111,"c":1020,"m":[["Armadylean yellow",60],["Samite silk",54]],"h":"Flight research debris"},"Gladiator helmet":{"l":66,"c":580,"m":[["Imperial steel",30],["Blood of Orcus",16],["Leather scraps",18]],"h":"Gladiator remains"},"Funerary urn of miasma":{"l":67,"c":582,"m":[["Soapstone",30],["Tyrian purple",14],["Ancient vis",20]],"h":"Citizen remains"},"Funerary urn of smoke":{"l":62,"c":558,"m":[["Soapstone",28],["Tyrian purple",14],["Ancient vis",20]],"h":"Cathedral debris"},"Funerary urn of blood":{"l":66,"c":580,"m":[["Soapstone",30],["Tyrian purple",14],["Blood of Orcus",20]],"h":"Gladiator remains"},"Funerary urn of ice":{"l":63,"c":560,"m":[["Soapstone",28],["Tyrian purple",14],["Ancient vis",20]],"h":"Marketplace debris"},"Funerary urn of shadow":{"l":60,"c":540,"m":[["Soapstone",26],["Tyrian purple",14],["Ancient vis",20]],"h":"Ministry remains"},"Gladiator sword":{"l":66,"c":580,"m":[["Imperial steel",30],["Goldrune",18],["Zarosian insignia",16]],"h":"Gladiator remains"},"Engraved ring of kinship":{"l":73,"c":622,"m":[["Goldrune",28],["Dragon metal",40]],"h":"Castle hall rubble"},"Exploratory totem":{"l":77,"c":644,"m":[["Dragon metal",34],["Compass rose",36]],"h":"Tunnelling equipment repository"},"Excavator portal mine":{"l":77,"c":644,"m":[["Orgone",36],["Orthenglass",34]],"h":"Tunnelling equipment repository"},"Fang of Kayazu":{"l":88,"c":722,"m":[["Ivory",38],["Burnt umber",20],["Soapstone",20]],"h":"Blood altar (excavation hotspot)"},"High priest mitre":{"l":89,"c":724,"m":[["Mark of the Kyzaj",26],["Malachite green",24],["Samite silk",28]],"h":"Big High War God shrine"},"Horogothgar cooking pot":{"l":119,"c":1204,"m":[["Yu'biusk clay",60],["Malachite green",38],["Soapstone",40]],"h":"Makeshift pie oven"},"High priest orb":{"l":89,"c":724,"m":[["Mark of the Kyzaj",26],["Malachite green",24],["Goldrune",28]],"h":"Big High War God shrine"},"Hobgoblin mansticker":{"l":110,"c":1004,"m":[["Warforged bronze",66],["Fossilised bone",46]],"h":"Warforge weapon rack"},"Hookah pipe":{"l":20,"c":250,"m":[["Third Age iron",10],["Goldrune",12],["Orthenglass",8]],"h":"Lodge bar storage"},"High priest crozier":{"l":89,"c":724,"m":[["Mark of the Kyzaj",26],["Malachite green",24],["Goldrune",28]],"h":"Big High War God shrine"},"Greater demon mask":{"l":29,"c":282,"m":[["Third Age iron",6],["Leather scraps",6],["Chaotic brimstone",8],["Demonhide",12]],"h":"Cultist footlocker"},"Hellfire haladie":{"l":98,"c":826,"m":[["Hellfire metal",44],["Third Age iron",26],["Leather scraps",20]],"h":"Byzroth remains"},"Hellfire katar":{"l":98,"c":826,"m":[["Hellfire metal",50],["Leather scraps",40]],"h":"Byzroth remains"},"Hellfire zaghnal":{"l":98,"c":826,"m":[["Hellfire metal",38],["White oak",26],["Orthenglass",26]],"h":"Byzroth remains"},"Hallowed lantern":{"l":42,"c":392,"m":[["Third Age iron",20],["Keramos",24],["White candle",1]],"h":"Prodromoi remains"},"Golem heart":{"l":98,"c":826,"m":[["Aetherium alloy",34],["Quintessence",24],["Orthenglass",16],["Soapstone",16]],"h":"Destroyed golem"},"Golem instruction":{"l":98,"c":826,"m":[["Quintessence",46],["Vellum",44],["Black mushroom ink",1]],"h":"Destroyed golem"},"Hawkeye lens multi-vision scope":{"l":85,"c":688,"m":[["Stormguard steel",40],["Orthenglass",34]],"h":"Weapons research debris"},"Gold dish":{"l":120,"c":1220,"m":[["Goldrune",86],["Dragon metal",54]],"h":"Saurthen debris"},"Hand of the Ancients":{"l":62,"c":558,"m":[["Blood of Orcus",12],["White oak",18],["Ancient vis",14],["Goldrune",18]],"h":"Cathedral debris"},"Homely totem":{"l":87,"c":706,"m":[["Soapstone",36],["Felt",40]],"h":"Communal space"},"Golden projection 'needle'":{"l":103,"c":878,"m":[["Goldrune",36],["Dragon metal",60]],"h":"Projection space"},"Halak's cube":{"l":107,"c":942,"m":[["Compass rose",36],["Carbon black",40],["Orgone",28]],"h":"Security booth"},"Kal-i-kra warhorn":{"l":115,"c":1112,"m":[["Vulcanised rubber",44],["Fossilised bone",42],["Animal furs",40]],"h":"Bandos's sanctum debris"},"Kal-i-kra chieftain crown":{"l":115,"c":1112,"m":[["Yu'biusk clay",66],["Animal furs",60]],"h":"Bandos's sanctum debris"},"Kal-i-kra mace":{"l":115,"c":1112,"m":[["Vulcanised rubber",42],["Third Age iron",44],["Fossilised bone",40]],"h":"Bandos's sanctum debris"},"Huzamogaarb chaos crown":{"l":104,"c":894,"m":[["Warforged bronze",44],["Third Age iron",34],["Eye of Dagon",20]],"h":"Warforge scrap pile"},"Idithuun horn ring":{"l":94,"c":776,"m":[["Yu'biusk clay",40],["Vulcanised rubber",44]],"h":"Yu'biusk animal pen"},"Ikovian gerege":{"l":70,"c":602,"m":[["Third Age iron",36],["Wings of War",30]],"h":"Ikovian memorial"},"Imp mask":{"l":29,"c":282,"m":[["Leather scraps",10],["Chaotic brimstone",10],["Demonhide",12]],"h":"Cultist footlocker"},"Kantharos cup":{"l":72,"c":606,"m":[["Everlight silvthril",30],["Orthenglass",36],["Sapphire",1]],"h":"Oikos studio debris"},"Kontos lance":{"l":117,"c":1158,"m":[["Everlight silvthril",70],["Samite silk",62]],"h":"Optimatoi remains"},"Keshik drum":{"l":76,"c":628,"m":[["Wings of War",16],["Animal furs",16],["White oak",20],["Leather scraps",16]],"h":"Keshik ger"},"Kilaya":{"l":96,"c":794,"m":[["Dragon metal",46],["Compass rose",40]],"h":"Dragonkin reliquary"},"Inquisitor's ceremonial mask":{"l":64,"c":562,"m":[["Ancient vis",14],["Leather scraps",12],["Blood of Orcus",14],["Samite silk",22]],"h":"Inquisitor remains"},"Inquisitor's ceremonial armour":{"l":64,"c":562,"m":[["Leather scraps",14],["Samite silk",30],["Tyrian purple",18]],"h":"Inquisitor remains"},"Infula robes":{"l":62,"c":558,"m":[["Samite silk",26],["Leather scraps",12],["Goldrune",12],["Tyrian purple",12]],"h":"Cathedral debris"},"Inquisitor's seal":{"l":64,"c":562,"m":[["Tyrian purple",14],["Zarosian insignia",20],["Ancient vis",14],["Goldrune",14]],"h":"Inquisitor remains"},"Ivory sickle":{"l":52,"c":468,"m":[["Ivory",28],["Triskelion",24]],"h":"Lunar wheel debris"},"Incense burner":{"l":75,"c":584,"m":[["Banded limestone",24],["White oak",18],["Cashmere",20]],"h":"Shrine debris"},"Initiate's kaunake":{"l":66,"c":580,"m":[["Cashmere",30],["Burnt umber",20],["Leather scraps",14]],"h":"Weaver's hut debris"},"Narogoshuun 'Hob-da-Gob' ball":{"l":76,"c":628,"m":[["Vulcanised rubber",36],["Mark of the Kyzaj",32]],"h":"Gladiatorial goblin remains"},"Larupia trophy":{"l":81,"c":666,"m":[["Cadmium red",18],["Animal furs",28],["Orthenglass",26]],"h":"Animal trophies"},"Lesser demon mask":{"l":29,"c":282,"m":[["Leather scraps",6],["Chaotic brimstone",8],["Demonhide",12],["Cadmium red",6]],"h":"Cultist footlocker"},"Lion trophy":{"l":81,"c":666,"m":[["Cadmium red",18],["Animal furs",28],["White oak",26]],"h":"Animal trophies"},"Manacles":{"l":45,"c":412,"m":[["Third Age iron",14],["Chaotic brimstone",18],["Eye of Dagon",14]],"h":"Dis dungeon debris"},"Legatus Maximus figurine":{"l":25,"c":274,"m":[["Goldrune",8],["Zarosian insignia",14],["Ancient vis",10]],"h":"Administratum debris"},"Legatus pendant":{"l":47,"c":416,"m":[["Third Age iron",16],["Goldrune",18],["Ancient vis",12],["Dragonstone",1]],"h":"Praesidio remains"},"Legionary gladius":{"l":12,"c":220,"m":[["Third Age iron",10],["Zarosian insignia",6],["Imperial steel",12]],"h":"Legionary remains"},"Legionary square shield":{"l":12,"c":220,"m":[["Third Age iron",8],["Zarosian insignia",8],["Imperial steel",12]],"h":"Legionary remains"},"Necromantic focus":{"l":86,"c":704,"m":[["Imperial steel",20],["Blood of Orcus",26],["Ancient vis",30]],"h":"Orcus altar"},"Kopis dagger":{"l":100,"c":844,"m":[["Everlight silvthril",50],["Leather scraps",42]],"h":"Icyene weapon rack"},"Morin khuur":{"l":76,"c":628,"m":[["Armadylean yellow",36],["White oak",32]],"h":"Keshik ger"},"Lingam stone":{"l":108,"c":958,"m":[["Orgone",44],["Carbon black",30],["Compass rose",32]],"h":"Moksha device"},"Master control":{"l":108,"c":958,"m":[["Orgone",30],["Carbon black",32],["Compass rose",44]],"h":"Moksha device"},"Meditation pipe":{"l":106,"c":912,"m":[["Orgone",60],["Dragon metal",40]],"h":"Aughra remains"},"Model chariot":{"l":67,"c":582,"m":[["Vellum",12],["Imperial steel",18],["Goldrune",20],["Zarosian insignia",14]],"h":"Citizen remains"},"Loarnab rod":{"l":63,"c":560,"m":[["White oak",28],["Blood of Orcus",16],["Imperial steel",18]],"h":"Marketplace debris"},"Lunar calendar":{"l":52,"c":468,"m":[["Banded limestone",28],["Triskelion",24]],"h":"Lunar wheel debris"},"Nakkirian seal":{"l":59,"c":552,"m":[["Ivory",34],["White oak",28],["Soft clay",1]],"h":"Arbour rubble"},"Ogre Kyzaj axe":{"l":81,"c":666,"m":[["Warforged bronze",28],["Mark of the Kyzaj",20],["Fossilised bone",24]],"h":"Crucible stands debris"},"Ork cleaver sword":{"l":81,"c":666,"m":[["Warforged bronze",36],["Fossilised bone",36]],"h":"Crucible stands debris"},"Opulent wine goblet":{"l":20,"c":250,"m":[["Third Age iron",14],["Goldrune",16]],"h":"Lodge bar storage"},"Nightguard shield":{"l":103,"c":878,"m":[["Stormguard steel",30],["Wings of War",36],["White oak",30]],"h":"Keshik weapon rack"},"Peacocking parasol":{"l":81,"c":666,"m":[["Armadylean yellow",22],["Samite silk",30],["White oak",20]],"h":"Tailory debris"},"Ourg megahitter":{"l":97,"c":810,"m":[["White oak",20],["Leather scraps",20],["Orthenglass",26],["Malachite green",22]],"h":"Goblin trainee remains"},"Ourg tower/goblin cower shield":{"l":97,"c":810,"m":[["Mark of the Kyzaj",20],["Third Age iron",26],["Leather scraps",22],["White oak",20]],"h":"Goblin trainee remains"},"Order of Dis robes":{"l":36,"c":352,"m":[["Samite silk",16],["Cadmium red",10],["Eye of Dagon",14]],"h":"Sacrificial altar"},"Pontifex censer":{"l":81,"c":666,"m":[["Third Age iron",20],["Ancient vis",20],["Goldrune",32],["Dragonstone",1]],"h":"Pontifex remains"},"Pontifex crozier":{"l":81,"c":666,"m":[["Imperial steel",20],["Zarosian insignia",20],["Goldrune",32]],"h":"Pontifex remains"},"Pontifex Maximus figurine":{"l":74,"c":624,"m":[["Zarosian insignia",24],["Ancient vis",16],["Goldrune",28],["Dragonstone",1]],"h":"Kharid-et chapel debris"},"Patera bowl":{"l":72,"c":606,"m":[["Keramos",36],["Goldrune",30],["Sapphire",1]],"h":"Oikos studio debris"},"Night owl flight goggles":{"l":111,"c":1020,"m":[["Armadylean yellow",44],["Leather scraps",40],["Orthenglass",30]],"h":"Flight research debris"},"Orthenglass flask":{"l":102,"c":862,"m":[["Dragon metal",34],["Orthenglass",60]],"h":"Experiment workbench"},"Pasaha":{"l":90,"c":726,"m":[["Felt",40],["Goldrune",38]],"h":"Varanusaur remains"},"Personal totem":{"l":106,"c":912,"m":[["Orgone",48],["Carbon black",26],["Compass rose",26]],"h":"Aughra remains"},"Plant seed satchel":{"l":78,"c":646,"m":[["Felt",28],["Carbon black",28],["Compass rose",14]],"h":"Botanical reserve"},"Offering bowl":{"l":75,"c":584,"m":[["Banded limestone",22],["Triskelion",20],["Burnt umber",20]],"h":"Shrine debris"},"Ninbaradari mural":{"l":82,"c":668,"m":[["Burnt umber",30],["Banded limestone",22],["Triskelion",20]],"h":"Cauldron debris"},"Rekeshuun war tether":{"l":76,"c":628,"m":[["Warforged bronze",20],["Vulcanised rubber",22],["Leather scraps",26]],"h":"Gladiatorial goblin remains"},"Quintessence counter":{"l":118,"c":1174,"m":[["Quintessence",54],["Stormguard steel",40],["White oak",40]],"h":"Howl's workshop debris"},"Ritual dagger":{"l":36,"c":352,"m":[["Goldrune",16],["Hellfire metal",24],["Ruby",1]],"h":"Sacrificial altar"},"Pontifex mitre":{"l":81,"c":666,"m":[["Samite silk",32],["Ancient vis",20],["Zarosian insignia",20]],"h":"Pontifex remains"},"Pontifex signet ring":{"l":58,"c":508,"m":[["Third Age iron",16],["Goldrune",18],["Ancient vis",22],["Dragonstone",1]],"h":"Carcerem debris"},"Portable phylactery":{"l":107,"c":942,"m":[["Imperial steel",48],["Blood of Orcus",36],["Ancient vis",20]],"h":"Ancient magick munitions"},"Praetorian hood":{"l":114,"c":1096,"m":[["Ancient vis",36],["Samite silk",48],["Zarosian insignia",40],["Death rune",30]],"h":"Praetorian remains"},"Praetorian robes":{"l":114,"c":1096,"m":[["Ancient vis",30],["Samite silk",54],["Zarosian insignia",40],["Death rune",50]],"h":"Praetorian remains"},"Praetorian staff":{"l":114,"c":1096,"m":[["Imperial steel",36],["Ancient vis",58],["Zarosian insignia",30],["Death rune",100]],"h":"Praetorian remains"},"Primis Elementis standard":{"l":12,"c":220,"m":[["Samite silk",16],["Third Age iron",12]],"h":"Legionary remains"},"Rod of Asclepius":{"l":92,"c":744,"m":[["White marble",30],["Star of Saradomin",24],["Goldrune",26]],"h":"Acropolis debris"},"Prototype godbow":{"l":112,"c":1050,"m":[["Aetherium alloy",50],["Quintessence",34],["Wings of War",34]],"h":"Aetherium forge"},"Prototype godstaff":{"l":112,"c":1050,"m":[["Aetherium alloy",50],["Quintessence",34],["Wings of War",34]],"h":"Aetherium forge"},"Prototype godsword":{"l":112,"c":1050,"m":[["Aetherium alloy",50],["Wings of War",34],["Goldrune",34]],"h":"Aetherium forge"},"Prototype gravimeter":{"l":91,"c":742,"m":[["Quintessence",34],["Leather scraps",20],["Third Age iron",26]],"h":"Gravitron research debris"},"Protective goggles":{"l":101,"c":860,"m":[["Felt",42],["Orthenglass",52]],"h":"Autopsy table"},"Ritual bell":{"l":90,"c":726,"m":[["Goldrune",40],["Compass rose",38]],"h":"Varanusaur remains"},"Projection attuner":{"l":103,"c":878,"m":[["Goldrune",28],["Orthenglass",28],["Dragon metal",40]],"h":"Projection space"},"Portable portal generator":{"l":113,"c":1066,"m":[["Dragon metal",50],["Orthenglass",36],["Goldrune",34]],"h":"Traveller's station"},"Reagent jar":{"l":82,"c":668,"m":[["Leather scraps",20],["Banded limestone",22],["Burnt umber",30]],"h":"Cauldron debris"},"Teleportation crystal":{"l":30,"c":200,"m":[["Orthenglass",20]],"h":"Crystallised rubble"},"Spear of Annihilation":{"l":115,"c":10730,"m":[["Spear of Annihilation with shaft + spokes",1],["Vulcanised rubber",500],["Malachite green",500],["Goldrune",500]],"h":"Bandos's sanctum debris"},"Saragorgak star crown":{"l":104,"c":894,"m":[["Warforged bronze",44],["Third Age iron",34],["Star of Saradomin",20]],"h":"Warforge scrap pile"},"She-wolf trophy":{"l":81,"c":666,"m":[["Chaotic brimstone",26],["Cadmium red",18],["Animal furs",28]],"h":"Animal trophies"},"Spiked dog collar":{"l":68,"c":584,"m":[["Third Age iron",24],["Leather scraps",24],["Chaotic brimstone",16]],"h":"Shakroth remains"},"Silver Dominion medal":{"l":69,"c":572,"m":[["Everlight silvthril",36],["Star of Saradomin",26],["Silver bar",1]],"h":"Dominion Games podium"},"Stormguard gerege":{"l":95,"c":778,"m":[["Stormguard steel",36],["Wings of War",28],["Goldrune",20]],"h":"Keshik tower debris"},"Talon-3 razor wing":{"l":85,"c":688,"m":[["Aetherium alloy",40],["Wings of War",34],["Rope",1]],"h":"Weapons research debris"},"Songbird recorder":{"l":91,"c":742,"m":[["Stormguard steel",44],["Orthenglass",36],["Diamond",1]],"h":"Gravitron research debris"},"Spherical astrolabe":{"l":118,"c":1174,"m":[["Aetherium alloy",46],["Armadylean yellow",40],["Orthenglass",48]],"h":"Howl's workshop debris"},"Singing bowl":{"l":106,"c":912,"m":[["Orgone",60],["Dragon metal",40]],"h":"Aughra remains"},"The Book of Blood":{"l":86,"c":704,"m":[["Imperial steel",20],["Blood of Orcus",26],["Ancient vis",30]],"h":"None"},"Soul beacon":{"l":86,"c":592,"m":[["White marble",30],["White oak",30],["Greater ensouled bar",5]],"h":"None"},"Storage totem":{"l":78,"c":646,"m":[["Dragon metal",36],["Compass rose",34]],"h":"Botanical reserve"},"Snuff box":{"l":78,"c":646,"m":[["Soapstone",20],["Carbon black",30],["Felt",20]],"h":"Botanical reserve"},"Spent summoning charm":{"l":87,"c":706,"m":[["Orgone",46],["Felt",30]],"h":"Communal space"},"Royal Game of Ba":{"l":59,"c":552,"m":[["White oak",32],["Triskelion",30]],"h":"Arbour rubble"},"Venator light crossbow":{"l":5,"c":206,"m":[["Third Age iron",12],["Zarosian insignia",16]],"h":"Venator remains"},"Thorobshuun battle standard":{"l":83,"c":684,"m":[["Mark of the Kyzaj",16],["Malachite green",22],["White oak",16],["Samite silk",20]],"h":"Goblin dorm debris"},"Toy glider":{"l":70,"c":602,"m":[["Stormguard steel",36],["White oak",30]],"h":"Ikovian memorial"},"Venator dagger":{"l":5,"c":206,"m":[["Third Age iron",16],["Zarosian insignia",12]],"h":"Venator remains"},"Trishula":{"l":104,"c":894,"m":[["Hellfire metal",48],["Eye of Dagon",30],["Third Age iron",20]],"h":"Hellfire forge"},"Tsutsaroth helm":{"l":116,"c":1142,"m":[["Hellfire metal",50],["Eye of Dagon",40],["Goldrune",40]],"h":"Tsutsaroth remains"},"Tsutsaroth pauldron":{"l":116,"c":1142,"m":[["Hellfire metal",40],["Goldrune",50],["Eye of Dagon",40]],"h":"Tsutsaroth remains"},"Tsutsaroth piercing":{"l":104,"c":894,"m":[["Hellfire metal",44],["Chaotic brimstone",30],["Cadmium red",24]],"h":"Hellfire forge"},"Tsutsaroth urumi":{"l":116,"c":1142,"m":[["Hellfire metal",50],["Eye of Dagon",40],["Third Age iron",40]],"h":"Tsutsaroth remains"},"Virius trophy":{"l":110,"c":1004,"m":[["Demonhide",44],["White oak",34],["Orthenglass",34]],"h":"Chthonian trophies"},"Vigorem vial":{"l":100,"c":844,"m":[["Imperial steel",54],["Ancient vis",38],["Molten glass",1]],"h":"Culinarum debris"},"Toy war golem":{"l":70,"c":602,"m":[["Third Age iron",36],["White oak",30],["Clockwork",1]],"h":"Ikovian memorial"},"Vazara":{"l":96,"c":794,"m":[["Dragon metal",30],["Compass rose",28],["Goldrune",28]],"h":"Dragonkin reliquary"},"The Book of Shadow":{"l":86,"c":704,"m":[["Imperial steel",20],["Blood of Orcus",26],["Ancient vis",30]],"h":"None"},"The Book of Smoke":{"l":86,"c":704,"m":[["Imperial steel",20],["Blood of Orcus",26],["Ancient vis",30]],"h":"None"},"The Book of Ice":{"l":86,"c":704,"m":[["Imperial steel",20],["Blood of Orcus",26],["Ancient vis",30]],"h":"None"},"Warped trinket":{"l":113,"c":1066,"m":[["Dragon metal",30],["Orthenglass",30],["Soapstone",30],["Goldrune",30]],"h":"Traveller's station"},"Zaros effigy":{"l":17,"c":244,"m":[["Samite silk",8],["White oak",10],["Zarosian insignia",12]],"h":"Castra debris"},"Yurkolgokh stink grenade":{"l":83,"c":684,"m":[["Yu'biusk clay",38],["Vulcanised rubber",36],["Weapon poison (3)",1]],"h":"Goblin dorm debris"},"Zarosian ewer":{"l":93,"c":760,"m":[["Third Age iron",52],["Zarosian insignia",30]],"h":"Armarium debris"},"Zarosian stein":{"l":93,"c":760,"m":[["Third Age iron",16],["Imperial steel",36],["Zarosian insignia",30]],"h":"Armarium debris"},"Zarosian training dummy":{"l":17,"c":244,"m":[["Third Age iron",16],["White oak",14]],"h":"Castra debris"},"Xiphos short sword":{"l":100,"c":844,"m":[["Everlight silvthril",46],["Leather scraps",46]],"h":"Icyene weapon rack"},"Xolo hard hat":{"l":113,"c":1066,"m":[["Goldrune",54],["Dragon metal",66]],"h":"Xolo mine"},"Xolo pickaxe":{"l":113,"c":1066,"m":[["Goldrune",36],["Dragon metal",50],["Orgone",34]],"h":"Xolo mine"},"Xolo shield":{"l":119,"c":1204,"m":[["Goldrune",52],["Orgone",44],["Felt",42]],"h":"Xolo remains"},"Xolo spear":{"l":119,"c":1204,"m":[["Dragon metal",74],["Orgone",64]],"h":"Xolo remains"},"Wolf statuette":{"l":52,"c":468,"m":[["Banded limestone",26],["Ivory",26]],"h":"Lunar wheel debris"}},"collections":[{"n":"Anarchic Abstraction","e":3,"by":"Art Critic Jacques","l":89,"b":1574,"r":"","a":["'Disorder' painting","'The Lake of Fire' painting","'Pandemonium' tapestry"]},{"n":"Radiant Renaissance","e":3,"by":"Art Critic Jacques","l":105,"b":2730,"r":"","a":["'Hallowed Be the Everlight' painting","'The Lord of Light' painting","'The Pride of Padosan' painting"]},{"n":"Imperial Impressionism","e":3,"by":"Art Critic Jacques","l":118,"b":2086,"r":"","a":["'Solem in Umbra' painting","'Consensus ad Idem' painting","'Prima Legio' painting"]},{"n":"Guthixian I","e":8,"by":"Artiefax","l":66,"b":4248,"r":"Tetracompass piece","a":["Lunar calendar","Wolf statuette","Ivory sickle","Nakkirian seal","Royal Game of Ba","Backstrap loom","Animal doll","Initiate's kaunake"]},{"n":"Guthixian II","e":7,"by":"Artiefax","l":88,"b":4628,"r":"Tetracompass piece","a":["Incense burner","Offering bowl","Bloodwine","Reagent jar","Ninbaradari mural","Bloodletting dagger","Fang of Kayazu"]},{"n":"Blingy Fings","e":5,"by":"Chief Tess","l":69,"b":2484,"r":"20 robust glass","a":["Ancient timepiece","Legatus pendant","Pontifex signet ring","Bronze Dominion medal","Silver Dominion medal"]},{"n":"Smoky Fings","e":5,"by":"Chief Tess","l":81,"b":2204,"r":"40 robust glass","a":["Hookah pipe","Opulent wine goblet","Everlight trumpet","Dominion torch","Pontifex censer"]},{"n":"Hitty Fings","e":5,"by":"Chief Tess","l":89,"b":5136,"r":"40 robust glass","a":["Ceremonial mace","Pontifex crozier","Fishing trident","High priest crozier","High priest orb"]},{"n":"Showy Fings","e":6,"by":"Chief Tess","l":92,"b":3158,"r":"40 robust glass","a":["Crest of Dagon","Legatus Maximus figurine","'Lust' metal sculpture","Pontifex Maximus figurine","Ceremonial plume","Rod of Asclepius"]},{"n":"Finery of the Inquisition","e":3,"by":"Eblis","l":64,"b":1686,"r":"","a":["Inquisitor's ceremonial armour","Inquisitor's ceremonial mask","Inquisitor's seal"]},{"n":"Religious Iconography","e":4,"by":"Eblis","l":67,"b":2240,"r":"","a":["Apex cap","Infula robes","Loarnab rod","'The Serpent's Fall' carving"]},{"n":"Urns of the Empire","e":5,"by":"Eblis","l":67,"b":2820,"r":"Tetracompass piece","a":["Funerary urn of shadow","Funerary urn of smoke","Funerary urn of ice","Funerary urn of blood","Funerary urn of miasma"]},{"n":"Entertaining the Masses","e":4,"by":"Eblis","l":67,"b":2302,"r":"","a":["Decorative amphora","Gladiator helmet","Gladiator sword","Model chariot"]},{"n":"Imperial Sorcery","e":8,"by":"Eblis","l":107,"b":5742,"r":"","a":["'Incite Fear' spell scroll","Curse tablet","Hand of the Ancients","'Exsanguinate' spell scroll","Necromantic focus","'Smoke Cloud' spell scroll","Ancient magic tablet","'Animate Dead' spell scroll"]},{"n":"Red Rum Relics I","e":4,"by":"General Bentnoze","l":94,"b":2884,"r":"Tetracompass piece","a":["Ork cleaver sword","Ogre Kyzaj axe","Beastkeeper helm","'Nosorog!' sculpture"]},{"n":"Red Rum Relics II","e":4,"by":"General Bentnoze","l":110,"b":3468,"r":"Tetracompass piece","a":["Ourg megahitter","Ourg tower/goblin cower shield","'Forged in War' sculpture","Hobgoblin mansticker"]},{"n":"Red Rum Relics III","e":4,"by":"General Bentnoze","l":119,"b":4540,"r":"Tetracompass piece","a":["Kal-i-kra chieftain crown","Kal-i-kra mace","Kal-i-kra warhorn","'Da Boss Man' sculpture"]},{"n":"Green Gobbo Goodies I","e":5,"by":"General Wartface","l":83,"b":3252,"r":"Tetracompass piece","a":["Ekeleshuun blinder mask","Narogoshuun 'Hob-da-Gob' ball","Rekeshuun war tether","Thorobshuun battle standard","Yurkolgokh stink grenade"]},{"n":"Green Gobbo Goodies II","e":5,"by":"General Wartface","l":97,"b":3758,"r":"Tetracompass piece","a":["High priest crozier","High priest mitre","High priest orb","Idithuun horn ring","Garagorshuun anchor"]},{"n":"Green Gobbo Goodies III","e":6,"by":"General Wartface","l":119,"b":6044,"r":"Tetracompass piece","a":["Dorgeshuun spear","Huzamogaarb chaos crown","Saragorgak star crown","Drogokishuun hook sword","Horogothgar cooking pot","'Da Boss Man' sculpture"]},{"n":"Desperate for Artefacts","e":2,"by":"Giles","l":90,"b":1335,"r":"","a":["Ceremonial dragonkin device","Ceremonial dragonkin tablet"]},{"n":"Zamorakian I","e":9,"by":"Isaura","l":36,"b":2594,"r":"","a":["Hookah pipe","Opulent wine goblet","Crest of Dagon","'Disorder' painting","Imp mask","Lesser demon mask","Greater demon mask","Order of Dis robes","Ritual dagger"]},{"n":"Zamorakian II","e":9,"by":"Isaura","l":81,"b":5146,"r":"Tetracompass piece","a":["Branding iron","Manacles","'The Lake of Fire' painting","'Lust' metal sculpture","Chaos star","Spiked dog collar","Larupia trophy","Lion trophy","She-wolf trophy"]},{"n":"Zamorakian III","e":8,"by":"Isaura","l":104,"b":6608,"r":"Tetracompass piece","a":["'Torment' metal sculpture","'Pandemonium' tapestry","Hellfire haladie","Hellfire katar","Hellfire zaghnal","'Possession' metal sculpture","Trishula","Tsutsaroth piercing"]},{"n":"Zamorakian IV","e":5,"by":"Isaura","l":116,"b":5434,"r":"Tetracompass piece","a":["Chaos Elemental trophy","Virius trophy","Tsutsaroth helm","Tsutsaroth pauldron","Tsutsaroth urumi"]},{"n":"Armadylean I","e":9,"by":"Lowse","l":81,"b":5688,"r":"50 torn blueprint fragments (Howl's workshop)","a":["Ikovian gerege","Toy glider","Toy war golem","Avian song-egg player","Keshik drum","Morin khuur","Aviansie dreamcoat","Ceremonial plume","Peacocking parasol"]},{"n":"Armadylean II","e":8,"by":"Lowse","l":98,"b":6068,"r":"75 torn blueprint fragments (Howl's workshop)","a":["Hawkeye lens multi-vision scope","Talon-3 razor wing","Prototype gravimeter","Songbird recorder","Dayguard shield","Stormguard gerege","Golem heart","Golem instruction"]},{"n":"Armadylean III","e":10,"by":"Lowse","l":118,"b":10468,"r":"150 torn blueprint fragments (Howl's workshop)","a":["Blackfire lance","Nightguard shield","Flat cap","Night owl flight goggles","Prototype godbow","Prototype godstaff","Prototype godsword","Chuluu stone","Quintessence counter","Spherical astrolabe"]},{"n":"Dragonkin I","e":7,"by":"Sharrigan","l":99,"b":5524,"r":"6 Anachronia resource packs","a":["Pasaha","Ritual bell","Kilaya","Vazara","Death mask","Dragonkin calendar","Dragonkin staff"]},{"n":"Dragonkin II","e":4,"by":"Sharrigan","l":102,"b":3444,"r":"75 rex skeleton fragments","a":["Dragon scalpel","Protective goggles","Dragon burner","Orthenglass flask"]},{"n":"Dragonkin III","e":5,"by":"Sharrigan","l":108,"b":4652,"r":"","a":["Meditation pipe","Personal totem","Singing bowl","Lingam stone","Master control"]},{"n":"Dragonkin IV","e":6,"by":"Sharrigan","l":120,"b":6980,"r":"150 rex skeleton fragments","a":["Xolo hard hat","Xolo pickaxe","Xolo shield","Xolo spear","Gold dish","'Raksha' idol"]},{"n":"Dragonkin V","e":4,"by":"Sharrigan","l":77,"b":2532,"r":"2 large dungeoneering token boxes","a":["Castle gatestone","Engraved ring of kinship","Exploratory totem","Excavator portal mine"]},{"n":"Dragonkin VI","e":6,"by":"Sharrigan","l":87,"b":4056,"r":"2 large dungeoneering token boxes","a":["Storage totem","Plant seed satchel","Snuff box","Spent summoning charm","'Friendship bracelet'","Homely totem"]},{"n":"Dragonkin VII","e":6,"by":"Sharrigan","l":113,"b":5772,"r":"Tetracompass piece","a":["Projection attuner","Golden projection 'needle'","Comfort gatestone","Halak's cube","Portable portal generator","Warped trinket"]},{"n":"Saradominist I","e":9,"by":"Sir Atcha","l":56,"b":3998,"r":"","a":["'Frying pan'","Hallowed lantern","Ceremonial unicorn ornament","Ceremonial unicorn saddle","Everlight harp","Everlight trumpet","Everlight violin","Folded-arm figurine (female)","Folded-arm figurine (male)"]},{"n":"Saradominist II","e":9,"by":"Sir Atcha","l":72,"b":5202,"r":"Tetracompass piece","a":["Dominion discus","Dominion javelin","Dominion pelte shield","Bronze Dominion medal","Silver Dominion medal","Dominion torch","Decorative vase","Kantharos cup","Patera bowl"]},{"n":"Saradominist III","e":6,"by":"Sir Atcha","l":100,"b":4548,"r":"Tetracompass piece","a":["Dominarian device","Fishing trident","Amphora","Rod of Asclepius","Kopis dagger","Xiphos short sword"]},{"n":"Saradominist IV","e":7,"by":"Sir Atcha","l":117,"b":7022,"r":"Tetracompass piece","a":["'Hallowed Be the Everlight' painting","'The Lord of Light' painting","'The Pride of Padosan' painting","'The Enlightened Soul' scroll","'The Eudoxian Elements' tablet","Doru spear","Kontos lance"]},{"n":"Zarosian I","e":9,"by":"Soran, Emissary of Zaros","l":25,"b":2108,"r":"20 [[Pylon battery","a":["Venator dagger","Venator light crossbow","Primis Elementis standard","Legionary gladius","Legionary square shield","Zaros effigy","Zarosian training dummy","Legatus Maximus figurine","'Solem in Umbra' painting"]},{"n":"Zarosian II","e":10,"by":"Soran, Emissary of Zaros","l":81,"b":5732,"r":"50 [[Pylon battery","a":["Ancient timepiece","Legatus pendant","'Incite Fear' spell scroll","Pontifex signet ring","Ceremonial mace","Pontifex Maximus figurine","'Consensus ad Idem' painting","Pontifex censer","Pontifex crozier","Pontifex mitre"]},{"n":"Zarosian III","e":9,"by":"Soran, Emissary of Zaros","l":107,"b":7442,"r":"100 [[Pylon battery","a":["'Exsanguinate' spell scroll","Necromantic focus","Zarosian ewer","Zarosian stein","'Smoke Cloud' spell scroll","Vigorem vial","Ancient magic tablet","'Animate Dead' spell scroll","Portable phylactery"]},{"n":"Zarosian IV","e":6,"by":"Soran, Emissary of Zaros","l":118,"b":6810,"r":"100 [[Pylon battery","a":["Praetorian hood","Praetorian robes","Praetorian staff","Ancient globe","Battle plans","'Prima Legio' painting"]},{"n":"Museum - Armadylean I","e":9,"by":"Velucia","l":81,"b":7110,"r":"","a":["Ikovian gerege","Toy glider","Toy war golem","Avian song-egg player","Keshik drum","Morin khuur","Aviansie dreamcoat","Ceremonial plume","Peacocking parasol"]},{"n":"Museum - Armadylean II","e":8,"by":"Velucia","l":98,"b":7585,"r":"","a":["Hawkeye lens multi-vision scope","Talon-3 razor wing","Prototype gravimeter","Songbird recorder","Dayguard shield","Stormguard gerege","Golem heart","Golem instruction"]},{"n":"Museum - Armadylean III","e":10,"by":"Velucia","l":118,"b":13085,"r":"","a":["Blackfire lance","Nightguard shield","Flat cap","Night owl flight goggles","Prototype godbow","Prototype godstaff","Prototype godsword","Chuluu stone","Quintessence counter","Spherical astrolabe"]},{"n":"Museum - Bandosian I","e":10,"by":"Velucia","l":89,"b":8445,"r":"","a":["Ekeleshuun blinder mask","Narogoshuun 'Hob-da-Gob' ball","Rekeshuun war tether","Ogre Kyzaj axe","Ork cleaver sword","Thorobshuun battle standard","Yurkolgokh stink grenade","High priest crozier","High priest mitre","High priest orb"]},{"n":"Museum - Bandosian II","e":8,"by":"Velucia","l":100,"b":8057,"r":"","a":["Beastkeeper helm","Idithuun horn ring","'Nosorog!' sculpture","Ourg megahitter","Ourg tower/goblin cower shield","Garagorshuun anchor","Dorgeshuun spear","'Forged in War' sculpture"]},{"n":"Museum - Bandosian III","e":9,"by":"Velucia","l":119,"b":11925,"r":"","a":["Huzamogaarb chaos crown","Saragorgak star crown","Drogokishuun hook sword","Hobgoblin mansticker","Kal-i-kra chieftain crown","Kal-i-kra mace","Kal-i-kra warhorn","'Da Boss Man' sculpture","Horogothgar cooking pot"]},{"n":"Museum - Dragonkin I","e":7,"by":"Velucia","l":99,"b":6905,"r":"","a":["Pasaha","Ritual bell","Kilaya","Vazara","Death mask","Dragonkin calendar","Dragonkin staff"]},{"n":"Museum - Dragonkin II","e":4,"by":"Velucia","l":102,"b":4305,"r":"","a":["Dragon scalpel","Protective goggles","Dragon burner","Orthenglass flask"]},{"n":"Museum - Dragonkin III","e":5,"by":"Velucia","l":108,"b":5815,"r":"","a":["Meditation pipe","Personal totem","Singing bowl","Lingam stone","Master control"]},{"n":"Museum - Dragonkin IV","e":6,"by":"Velucia","l":120,"b":8725,"r":"","a":["Xolo hard hat","Xolo pickaxe","Xolo shield","Xolo spear","Gold dish","'Raksha' idol"]},{"n":"Museum - Dragonkin V","e":4,"by":"Velucia","l":77,"b":3165,"r":"","a":["Castle gatestone","Engraved ring of kinship","Exploratory totem","Excavator portal mine"]},{"n":"Museum - Dragonkin VI","e":6,"by":"Velucia","l":87,"b":5070,"r":"","a":["Storage totem","Plant seed satchel","Snuff box","Spent summoning charm","'Friendship bracelet'","Homely totem"]},{"n":"Museum - Dragonkin VII","e":6,"by":"Velucia","l":113,"b":7215,"r":"","a":["Projection attuner","Golden projection 'needle'","Comfort gatestone","Halak's cube","Portable portal generator","Warped trinket"]},{"n":"Museum - Guthixian I","e":8,"by":"Velucia","l":66,"b":5310,"r":"","a":["Lunar calendar","Wolf statuette","Ivory sickle","Nakkirian seal","Royal Game of Ba","Backstrap loom","Animal doll","Initiate's kaunake"]},{"n":"Museum - Guthixian II","e":7,"by":"Velucia","l":88,"b":5785,"r":"","a":["Incense burner","Offering bowl","Bloodwine","Reagent jar","Ninbaradari mural","Bloodletting dagger","Fang of Kayazu"]},{"n":"Museum - Saradominist I","e":9,"by":"Velucia","l":56,"b":4997,"r":"","a":["'Frying pan'","Hallowed lantern","Ceremonial unicorn ornament","Ceremonial unicorn saddle","Everlight harp","Everlight trumpet","Everlight violin","Folded-arm figurine (female)","Folded-arm figurine (male)"]},{"n":"Museum - Saradominist II","e":9,"by":"Velucia","l":72,"b":6502,"r":"","a":["Dominion discus","Dominion javelin","Dominion pelte shield","Bronze Dominion medal","Silver Dominion medal","Dominion torch","Decorative vase","Kantharos cup","Patera bowl"]},{"n":"Museum - Saradominist III","e":6,"by":"Velucia","l":100,"b":5685,"r":"","a":["Dominarian device","Fishing trident","Amphora","Rod of Asclepius","Kopis dagger","Xiphos short sword"]},{"n":"Museum - Saradominist IV","e":7,"by":"Velucia","l":117,"b":8777,"r":"","a":["'Hallowed Be the Everlight' painting","'The Lord of Light' painting","'The Pride of Padosan' painting","'The Enlightened Soul' scroll","'The Eudoxian Elements' tablet","Doru spear","Kontos lance"]},{"n":"Museum - Zamorakian I","e":9,"by":"Velucia","l":36,"b":3242,"r":"","a":["Hookah pipe","Opulent wine goblet","Crest of Dagon","'Disorder' painting","Imp mask","Lesser demon mask","Greater demon mask","Order of Dis robes","Ritual dagger"]},{"n":"Museum - Zamorakian II","e":9,"by":"Velucia","l":81,"b":6432,"r":"","a":["Branding iron","Manacles","'The Lake of Fire' painting","'Lust' metal sculpture","Chaos star","Spiked dog collar","Larupia trophy","Lion trophy","She-wolf trophy"]},{"n":"Museum - Zamorakian III","e":8,"by":"Velucia","l":104,"b":8260,"r":"","a":["'Torment' metal sculpture","'Pandemonium' tapestry","Hellfire haladie","Hellfire katar","Hellfire zaghnal","'Possession' metal sculpture","Trishula","Tsutsaroth piercing"]},{"n":"Museum - Zamorakian IV","e":5,"by":"Velucia","l":116,"b":6792,"r":"","a":["Chaos Elemental trophy","Virius trophy","Tsutsaroth helm","Tsutsaroth pauldron","Tsutsaroth urumi"]},{"n":"Museum - Zarosian I","e":9,"by":"Velucia","l":25,"b":2635,"r":"","a":["Venator dagger","Venator light crossbow","Primis Elementis standard","Legionary gladius","Legionary square shield","Zaros effigy","Zarosian training dummy","Legatus Maximus figurine","'Solem in Umbra' painting"]},{"n":"Museum - Zarosian II","e":10,"by":"Velucia","l":81,"b":7165,"r":"","a":["Ancient timepiece","Legatus pendant","'Incite Fear' spell scroll","Pontifex signet ring","Ceremonial mace","Pontifex Maximus figurine","'Consensus ad Idem' painting","Pontifex censer","Pontifex crozier","Pontifex mitre"]},{"n":"Museum - Zarosian III","e":9,"by":"Velucia","l":107,"b":9302,"r":"","a":["'Exsanguinate' spell scroll","Necromantic focus","Zarosian ewer","Zarosian stein","'Smoke Cloud' spell scroll","Vigorem vial","Ancient magic tablet","'Animate Dead' spell scroll","Portable phylactery"]},{"n":"Museum - Zarosian IV","e":6,"by":"Velucia","l":118,"b":8512,"r":"","a":["Praetorian hood","Praetorian robes","Praetorian staff","Ancient globe","Battle plans","'Prima Legio' painting"]},{"n":"Museum - Zarosian V","e":6,"by":"Velucia","l":62,"b":4117,"r":"","a":["Apex cap","Curse tablet","Funerary urn of shadow","Infula robes","Funerary urn of smoke","Hand of the Ancients"]},{"n":"Museum - Zarosian VI","e":6,"by":"Velucia","l":64,"b":4207,"r":"","a":["Decorative amphora","Funerary urn of ice","Loarnab rod","Inquisitor's ceremonial armour","Inquisitor's ceremonial mask","Inquisitor's seal"]},{"n":"Museum - Zarosian VII","e":6,"by":"Velucia","l":67,"b":4357,"r":"","a":["Gladiator helmet","Gladiator sword","Funerary urn of blood","Funerary urn of miasma","Model chariot","'The Serpent's Fall' carving"]},{"n":"Museum - Training Weapons","e":1,"by":"Velucia","l":1,"b":1000,"r":"","a":["Centurion's dress sword"]},{"n":"Wise Am the Music Man","e":7,"by":"Wise Old Man","l":91,"b":4024,"r":"","a":["Everlight harp","Everlight trumpet","Everlight violin","Avian song-egg player","Keshik drum","Morin khuur","Songbird recorder"]},{"n":"Hat Problem","e":7,"by":"Wise Old Man","l":114,"b":6775,"r":"","a":["Imp mask","Ekeleshuun blinder mask","High priest mitre","Beastkeeper helm","Huzamogaarb chaos crown","Flat cap","Praetorian hood"]},{"n":"Hat Hoarder","e":7,"by":"Wise Old Man","l":116,"b":5995,"r":"","a":["Lesser demon mask","Greater demon mask","Ceremonial unicorn ornament","Pontifex mitre","Saragorgak star crown","Kal-i-kra chieftain crown","Tsutsaroth helm"]},{"n":"Magic Man","e":10,"by":"Wise Old Man","l":118,"b":8600,"r":"","a":["Legatus Maximus figurine","Ritual dagger","Ancient timepiece","'Incite Fear' spell scroll","'Exsanguinate' spell scroll","High priest mitre","'Smoke Cloud' spell scroll","'Animate Dead' spell scroll","Portable phylactery","Chuluu stone"]},{"n":"Knowledge is Power","e":7,"by":"Wise Old Man","l":119,"b":5584,"r":"","a":["Crest of Dagon","Ikovian gerege","Necromantic focus","Golem instruction","'The Enlightened Soul' scroll","'The Eudoxian Elements' tablet","'Da Boss Man' sculpture"]}],"hotspots":{"Makeshift pie oven":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - Thalmund's forge excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Horogothgar cooking pot (damaged)","'Da Boss Man' sculpture (damaged)","Materials (Archaeology)","Soapstone","Malachite green","Yu'biusk clay"],"Kyzaj champion's boudoir":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - South goblin tunnels excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Dorgeshuun spear (damaged)","'Forged in War' sculpture (damaged)","Materials (Archaeology)","White oak","Yu'biusk clay","Warforged bronze"],"Lodge art storage":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Star Lodge cellar excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Crest of Dagon (damaged)","'Disorder' painting (damaged)","Materials (Archaeology)","Samite silk","White oak","Vellum","Cadmium red"],"Yu'biusk animal pen":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - Animal pens excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Beastkeeper helm (damaged)","Idithuun horn ring (damaged)","'Nosorog!' sculpture (damaged)","Materials (Archaeology)","Yu'biusk clay","Fossilised bone","Vulcanised rubber","Warforged bronze"],"Dis overspill":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - The Harrowing south-east excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","'Torment' metal sculpture (damaged)","'Pandemonium' tapestry (damaged)","Materials (Archaeology)","Third Age iron","Cadmium red","Eye of Dagon","Hellfire metal"],"Administratum debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Barracks excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Legatus Maximus figurine (damaged)","'Solem in Umbra' painting (damaged)","Materials (Archaeology)","Goldrune","Zarosian insignia","Ancient vis","Tyrian purple"],"War table debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Praetorium excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Ancient globe (damaged)","Battle plans (damaged)","'Prima Legio' painting (damaged)","Materials (Archaeology)","White oak","Vellum","Tyrian purple","Ancient vis"],"Kharid-et chapel debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Chapel excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Ceremonial mace (damaged)","Pontifex Maximus figurine (damaged)","'Consensus ad Idem' painting (damaged)","Materials (Archaeology)","White oak","Third Age iron","Goldrune","Tyrian purple"],"Infernal art":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Vestibule of Futility south excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","'Lust' metal sculpture (damaged)","'The Lake of Fire' painting (damaged)","Materials (Archaeology)","Samite silk","White oak","Cadmium red","Goldrune"],"Hellfire forge":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - The Harrowing north-east excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","'Possession' metal sculpture (damaged)","Trishula (damaged)","Tsutsaroth piercing (damaged)","Materials (Archaeology)","Cadmium red","Third Age iron","Eye of Dagon","Hellfire metal"],"Ancient magick munitions":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Praetorium excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Ancient magic tablet (damaged)","Portable phylactery (damaged)","'Animate Dead' spell scroll (damaged)","Materials (Archaeology)","Vellum","Imperial steel","Ancient vis","Blood of Orcus"],"Orcus altar":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Chapel excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Necromantic focus (damaged)","'Exsanguinate' spell scroll (damaged)","Materials (Archaeology)","Vellum","Imperial steel","Blood of Orcus","Ancient vis"],"Carcerem debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Carcerem excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Pontifex signet ring (damaged)","'Incite Fear' spell scroll (damaged)","Materials (Archaeology)","Goldrune","Vellum","Blood of Orcus","Ancient vis"],"Culinarum debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Culinarum excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","'Smoke Cloud' spell scroll (damaged)","Vigorem vial (damaged)","Materials (Archaeology)","Imperial steel","Ancient vis","Vellum","Blood of Orcus"],"Prodromoi remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Mass grave excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","'Frying pan' (damaged)","Hallowed lantern (damaged)","Materials (Archaeology)","Third Age iron","Keramos","White marble"],"Stockpiled art":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Underwater cave excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","'The Pride of Padosan' painting (damaged)","'Hallowed Be the Everlight' painting (damaged)","'The Lord of Light' painting (damaged)","Materials (Archaeology)","Samite silk","White oak","Vellum","Cobalt blue"],"Bibliotheke debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Acropolis excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","'The Enlightened Soul' scroll (damaged)","'The Eudoxian Elements' tablet (damaged)","Materials (Archaeology)","Goldrune","Vellum","White marble","Star of Saradomin"],"Saurthen debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Xolo city excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Gold dish (damaged)","'Raksha' idol (damaged)","Materials (Archaeology)","Dragon metal","Orgone","Goldrune"],"Communal space":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Castle excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Spent summoning charm (damaged)","'Friendship bracelet' (damaged)","Homely totem (damaged)","Materials (Archaeology)","Felt","Soapstone","Orgone"],"Acropolis debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Acropolis excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Amphora (damaged)","Rod of Asclepius (damaged)","Materials (Archaeology)","Goldrune","Keramos","White marble","Everlight silvthril"],"Keshik ger":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Keshik memorial excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Avian song-egg player (damaged)","Keshik drum (damaged)","Morin khuur (damaged)","Materials (Archaeology)","Leather scraps","Animal furs","Armadylean yellow","White oak"],"Praesidio remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Carcerem excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Ancient timepiece (damaged)","Legatus pendant (damaged)","Materials (Archaeology)","Third Age iron","Imperial steel","Ancient vis","Goldrune"],"Tailory debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Relay station excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Aviansie dreamcoat (damaged)","Ceremonial plume (damaged)","Peacocking parasol (damaged)","Materials (Archaeology)","Samite silk","Armadylean yellow","Animal furs","Goldrune"],"Keshik weapon rack":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Nightguard tower excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Blackfire lance (damaged)","Nightguard shield (damaged)","Materials (Archaeology)","Stormguard steel","Wings of War","Aetherium alloy","Quintessence"],"Citizen remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Senntisten - Bridge excavation site","Dig sites","Senntisten Dig Site","Zarosian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","'The Serpent's Fall' carving (damaged)","Model chariot (damaged)","Funerary urn of miasma (damaged)","Materials (Archaeology)","Vellum","Tyrian purple","Imperial steel","Soapstone"],"Ministry remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Senntisten - Cathedral excavation site","Dig sites","Senntisten Dig Site","Zarosian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Apex cap (damaged)","Curse tablet (damaged)","Funerary urn of shadow (damaged)","Materials (Archaeology)","Ancient vis","Imperial steel","Soapstone","Tyrian purple"],"Weaver's hut debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Mossy peat (scenery)","Excavation sites","Moonrise - Temple periphery excavation site","Dig sites","Moonrise Dig Site","Guthixian","Havenhythe","Equilibrium League/Regions/Havenhythe","Equipment level","Artefacts","Backstrap loom (damaged)","Animal doll (damaged)","Initiate's kaunake (damaged)","Materials (Archaeology)","Cashmere","Burnt umber","White oak","Ivory","Leather scraps"],"Cauldron debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Mossy peat (scenery)","Excavation sites","Moonrise - Temple depths excavation site","Dig sites","Moonrise Dig Site","Guthixian","Havenhythe","Equilibrium League/Regions/Havenhythe","Equipment level","Artefacts","Bloodwine (damaged)","Reagent jar (damaged)","Ninbaradari mural (damaged)","Materials (Archaeology)","Burnt umber","Leather scraps","Banded limestone","Triskelion","Cashmere"],"Blood altar (excavation hotspot)":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Mossy peat (scenery)","Excavation sites","Moonrise - Temple depths excavation site","Dig sites","Moonrise Dig Site","Guthixian","Havenhythe","Equilibrium League/Regions/Havenhythe","Equipment level","Artefacts","Bloodletting dagger (damaged)","Fang of Kayazu (damaged)","Materials (Archaeology)","Ivory","Soapstone","Burnt umber","Cashmere"],"Centurion remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Senntisten soil","Excavation sites","Archaeology Guild excavation site","Dig sites","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Centurion's dress sword (damaged)","Materials (Archaeology)","Imperial iron","Purpleheart wood"],"Dis dungeon debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Dungeon of Disorder excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Branding iron (damaged)","Manacles (damaged)","Materials (Archaeology)","Third Age iron","Chaotic brimstone","Hellfire metal","Eye of Dagon"],"Chthonian trophies":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Dagon Overlook north excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Chaos Elemental trophy (damaged)","Virius trophy (damaged)","Materials (Archaeology)","White oak","Chaotic brimstone","Orthenglass","Demonhide"],"Shakroth remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Vestibule of Futility north-east excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Chaos star (damaged)","Spiked dog collar (damaged)","Materials (Archaeology)","Third Age iron","Leather scraps","Chaotic brimstone","Hellfire metal"],"Monoceros remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Mass grave excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Ceremonial unicorn ornament (damaged)","Ceremonial unicorn saddle (damaged)","Materials (Archaeology)","Cobalt blue","Leather scraps","Keramos"],"Dominion Games podium":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Dominion Games stadium excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Bronze Dominion medal (damaged)","Silver Dominion medal (damaged)","Dominion torch (damaged)","Materials (Archaeology)","Goldrune","Orthenglass","Everlight silvthril","Star of Saradomin"],"Howl's workshop debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Howl's workshop excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Chuluu stone (damaged)","Quintessence counter (damaged)","Spherical astrolabe (damaged)","Materials (Archaeology)","Aetherium alloy","Soapstone","Quintessence","Armadylean yellow"],"Keshik tower debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Dayguard tower excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Dayguard shield (damaged)","Stormguard gerege (damaged)","Materials (Archaeology)","White oak","Goldrune","Stormguard steel","Wings of War"],"Dragonkin remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Nodon hibernatorium excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Ceremonial dragonkin device (damaged)","Materials (Archaeology)","Orthenglass"],"Orthen rubble":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Nodon hibernatorium excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Ceremonial dragonkin tablet (damaged)","Materials (Archaeology)","Orthenglass"],"Castle hall rubble":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Castle excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Castle gatestone (damaged)","Engraved ring of kinship (damaged)","Materials (Archaeology)","Goldrune","Dragon metal","Orgone","Orthenglass"],"Security booth":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Depths excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Comfort gatestone (damaged)","Halak's cube (damaged)","Materials (Archaeology)","Carbon black","Orgone","Orthenglass","Compass rose"],"Warforge weapon rack":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - Thalmund's forge excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Drogokishuun hook sword (damaged)","Hobgoblin mansticker (damaged)","Materials (Archaeology)","Fossilised bone","Malachite green","Warforged bronze"],"Oikos studio debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Oikoi excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Decorative vase (damaged)","Patera bowl (damaged)","Kantharos cup (damaged)","Materials (Archaeology)","Keramos","White marble","Cobalt blue","Everlight silvthril"],"Oikos fishing hut remnants":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Oikoi excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Dominarian device (damaged)","Fishing trident (damaged)","Materials (Archaeology)","Third Age iron","Goldrune","Everlight silvthril","Star of Saradomin"],"Stadio debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Dominion Games stadium excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Dominion discus (damaged)","Dominion javelin (damaged)","Dominion pelte shield (damaged)","Materials (Archaeology)","Keramos","Third Age iron","Samite silk","Star of Saradomin"],"Optimatoi remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Underwater cave excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Kontos lance (damaged)","Doru spear (damaged)","Materials (Archaeology)","Samite silk","White oak","Everlight silvthril"],"Gladiatorial goblin remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - Crucible arena excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Ekeleshuun blinder mask (damaged)","Narogoshuun 'Hob-da-Gob' ball (damaged)","Rekeshuun war tether (damaged)","Materials (Archaeology)","Malachite green","Mark of the Kyzaj","Vulcanised rubber","Warforged bronze"],"Dragonkin remains (Desperate Measures)":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Soil","Excavation sites","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Dragonkin device (damaged)","Materials (Archaeology)","Orthenglass"],"Orthen rubble (Desperate Measures)":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Excavation sites","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Dragonkin tablet (damaged)","Materials (Archaeology)","Orthenglass"],"Dragonkin coffin":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Crypt of Varanus excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Death mask (damaged)","Dragonkin calendar (damaged)","Dragonkin staff (damaged)","Materials (Archaeology)","Orgone","Carbon black","Compass rose","Soapstone"],"Experiment workbench":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Observation outpost excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Dragon burner (damaged)","Orthenglass flask (damaged)","Materials (Archaeology)","Dragon metal","Orgone","Orthenglass"],"Autopsy table":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Observation outpost excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Dragon scalpel (damaged)","Protective goggles (damaged)","Materials (Archaeology)","Felt","Dragon metal","Orthenglass"],"Marketplace debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Senntisten - Marketplace excavation site","Dig sites","Senntisten Dig Site","Zarosian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Decorative amphora (damaged)","Funerary urn of ice (damaged)","Loarnab rod (damaged)","Materials (Archaeology)","Imperial steel","Tyrian purple","Ancient vis","Vellum"],"Goblin trainee remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - North goblin tunnels","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Garagorshuun anchor (damaged)","Ourg megahitter (damaged)","Ourg tower/goblin cower shield (damaged)","Materials (Archaeology)","Third Age iron","Leather scraps","Fossilised bone","Warforged bronze"],"Amphitheatre debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Amphitheatre excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Everlight harp (damaged)","Everlight trumpet (damaged)","Everlight violin (damaged)","Materials (Archaeology)","Goldrune","White oak","Everlight silvthril","Star of Saradomin"],"Ceramics studio debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Amphitheatre excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Folded-arm figurine (female)(damaged)","Folded-arm figurine (male)(damaged)","Materials (Archaeology)","White marble","Goldrune"],"Flight research debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Research & Development south-east excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Flat cap (damaged)","Night owl flight goggles (damaged)","Materials (Archaeology)","Samite silk","Leather scraps","Orthenglass","Armadylean yellow"],"Gladiator remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Senntisten - Colosseum excavation site","Dig sites","Senntisten Dig Site","Zarosian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Gladiator sword (damaged)","Gladiator helmet (damaged)","Funerary urn of blood (damaged)","Materials (Archaeology)","Imperial steel","Blood of Orcus","Leather scraps","Ancient vis"],"Cathedral debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Senntisten - Cathedral excavation site","Dig sites","Senntisten Dig Site","Zarosian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Infula robes (damaged)","Funerary urn of smoke (damaged)","Hand of the Ancients (damaged)","Materials (Archaeology)","Samite silk","Blood of Orcus","Goldrune","White oak"],"Tunnelling equipment repository":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Castle excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Exploratory totem (damaged)","Excavator portal mine (damaged)","Materials (Archaeology)","Dragon metal","Orgone","Compass rose","Orthenglass"],"Big High War God shrine":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - North goblin tunnels","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","High priest crozier (damaged)","High priest mitre (damaged)","High priest orb (damaged)","Materials (Archaeology)","Samite silk","Goldrune","Malachite green","Mark of the Kyzaj"],"Lodge bar storage":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Star Lodge cellar excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Hookah pipe (damaged)","Opulent wine goblet (damaged)","Materials (Archaeology)","Third Age iron","Goldrune","Orthenglass"],"Cultist footlocker":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Dungeon of Disorder excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Imp mask (damaged)","Lesser demon mask (damaged)","Greater demon mask (damaged)","Materials (Archaeology)","Leather scraps","Chaotic brimstone","Demonhide","Third Age iron"],"Byzroth remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - The Harrowing north-west excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Hellfire haladie (damaged)","Hellfire katar (damaged)","Hellfire zaghnal (damaged)","Materials (Archaeology)","White oak","Orthenglass","Leather scraps","Hellfire metal"],"Destroyed golem":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Research & Development south-west excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Golem heart (damaged)","Golem instruction (damaged)","Materials (Archaeology)","Vellum","Soapstone","Aetherium alloy","Quintessence"],"Weapons research debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Research & Development north-west excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Hawkeye lens multi-vision scope (damaged)","Talon-3 razor wing (damaged)","Materials (Archaeology)","Orthenglass","Wings of War","Stormguard steel","Aetherium alloy"],"Projection space":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Depths excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Projection attuner (damaged)","Golden projection 'needle' (damaged)","Materials (Archaeology)","Dragon metal","Goldrune","Orthenglass"],"Bandos's sanctum debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - Bandos's sanctum excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Kal-i-kra chieftain crown (damaged)","Kal-i-kra mace (damaged)","Kal-i-kra warhorn (damaged)","Materials (Archaeology)","Fossilised bone","Animal furs","Vulcanised rubber","Yu'biusk clay"],"Warforge scrap pile":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - North goblin tunnels","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Huzamogaarb chaos crown (damaged)","Saragorgak star crown (damaged)","Materials (Archaeology)","Third Age iron","Warforged bronze"],"Ikovian memorial":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Temple of Ikov excavation site","Stormguard Citadel - Welcome area excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Ikovian gerege (damaged)","Toy glider (damaged)","Toy war golem (damaged)","Materials (Archaeology)","Third Age iron","White oak","Stormguard steel","Wings of War"],"Dragonkin reliquary":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Crypt of Varanus excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Vazara (damaged)","Kilaya (damaged)","Materials (Archaeology)","Dragon metal","Compass rose","Goldrune"],"Inquisitor remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Senntisten - Marketplace excavation site","Dig sites","Senntisten Dig Site","Zarosian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Inquisitor's seal (damaged)","Inquisitor's ceremonial mask (damaged)","Inquisitor's ceremonial armour (damaged)","Materials (Archaeology)","Blood of Orcus","Zarosian insignia","Samite silk","Leather scraps"],"Lunar wheel debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Mossy peat (scenery)","Excavation sites","Moonrise - Temple periphery excavation site","Dig sites","Moonrise Dig Site","Guthixian","Havenhythe","Equilibrium League/Regions/Havenhythe","Equipment level","Artefacts","Lunar calendar (damaged)","Wolf statuette (damaged)","Ivory sickle (damaged)","Materials (Archaeology)","Banded limestone","Ivory","Triskelion"],"Shrine debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Mossy peat (scenery)","Excavation sites","Moonrise - Temple periphery excavation site","Dig sites","Moonrise Dig Site","Guthixian","Havenhythe","Equilibrium League/Regions/Havenhythe","Equipment level","Artefacts","Offering bowl (damaged)","Incense burner (damaged)","Materials (Archaeology)","Banded limestone","Cashmere","Triskelion","Burnt umber","White oak"],"Animal trophies":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Vestibule of Futility south-east excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Larupia trophy (damaged)","Lion trophy (damaged)","She-wolf trophy (damaged)","Materials (Archaeology)","Orthenglass","Animal furs","Cadmium red","Chaotic brimstone"],"Legionary remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Barracks excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Primis Elementis standard (damaged)","Legionary gladius (damaged)","Legionary square shield (damaged)","Materials (Archaeology)","Third Age iron","Samite silk","Imperial steel"],"Icyene weapon rack":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Saltwater mud","Excavation sites","Everlight - Dominion Games stadium excavation site","Dig sites","Everlight Dig Site","Saradominist","Morytania","Equilibrium League/Regions/Morytania","Equipment level","Artefacts","Kopis dagger (damaged)","Xiphos short sword (damaged)","Materials (Archaeology)","Leather scraps","Everlight silvthril"],"Moksha device":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Moksha ritual site excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Lingam stone (damaged)","Master control (damaged)","Materials (Archaeology)","Orgone","Carbon black","Compass rose"],"Aughra remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Moksha ritual site excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Meditation pipe (damaged)","Singing bowl (damaged)","Personal totem (damaged)","Materials (Archaeology)","Orgone","Dragon metal","Carbon black","Compass rose"],"Arbour rubble":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Mossy peat (scenery)","Excavation sites","Moonrise - Temple periphery excavation site","Dig sites","Moonrise Dig Site","Guthixian","Havenhythe","Equilibrium League/Regions/Havenhythe","Equipment level","Artefacts","Nakkirian seal (damaged)","Royal Game of Ba (damaged)","Materials (Archaeology)","White oak","Triskelion","Ivory"],"Crucible stands debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - Crucible stands excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Ogre Kyzaj axe (damaged)","Ork cleaver sword (damaged)","Materials (Archaeology)","Fossilised bone","Mark of the Kyzaj","Warforged bronze"],"Sacrificial altar":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Dungeon of Disorder excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Order of Dis robes (damaged)","Ritual dagger (damaged)","Materials (Archaeology)","Goldrune","Cadmium red","Eye of Dagon","Hellfire metal"],"Pontifex remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Chapel excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Pontifex censer (damaged)","Pontifex crozier (damaged)","Pontifex mitre (damaged)","Materials (Archaeology)","Zarosian insignia","Ancient vis","Goldrune","Imperial steel"],"Varanusaur remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Crypt of Varanus excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Pasaha (damaged)","Ritual bell (damaged)","Materials (Archaeology)","Compass rose","Felt","Goldrune"],"Botanical reserve":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Castle excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Storage totem (damaged)","Plant seed satchel (damaged)","Snuff box (damaged)","Materials (Archaeology)","Dragon metal","Compass rose","Felt","Carbon black"],"Praetorian remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Praetorium excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Praetorian hood (damaged)","Praetorian robes (damaged)","Praetorian staff (damaged)","Materials (Archaeology)","Samite silk","Imperial steel","Zarosian insignia","Ancient vis"],"Aetherium forge":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Howl's workshop excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Prototype godbow (damaged)","Prototype godsword (damaged)","Prototype godstaff (damaged)","Materials (Archaeology)","Goldrune","Wings of War","Aetherium alloy","Quintessence"],"Gravitron research debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Aerated sediment","Excavation sites","Stormguard Citadel - Research & Development north-west excavation site","Dig sites","Stormguard Citadel Dig Site","Armadylean","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Prototype gravimeter (damaged)","Songbird recorder (damaged)","Materials (Archaeology)","Orthenglass","Stormguard steel","Leather scraps","Quintessence"],"Traveller's station":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Daemonheim - Depths excavation site","Dig sites","Daemonheim Dig Site","Dragonkin","Wilderness","Equilibrium League/Regions/Wilderness","Equipment level","Artefacts","Portable portal generator (damaged)","Warped trinket (damaged)","Materials (Archaeology)","Dragon metal","Soapstone","Orthenglass","Goldrune"],"Venator remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Exterior excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Venator dagger (damaged)","Venator light crossbow (damaged)","Materials (Archaeology)","Third Age iron","Zarosian insignia"],"Goblin dorm debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Earthen clay","Excavation sites","Warforge - South goblin tunnels excavation site","Dig sites","Warforge Dig Site","Bandosian","Kandarin","Equilibrium League/Regions/Kandarin","Equipment level","Artefacts","Thorobshuun battle standard (damaged)","Yurkolgokh stink grenade (damaged)","Materials (Archaeology)","White oak","Malachite green","Vulcanised rubber","Yu'biusk clay"],"Tsutsaroth remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Fiery brimstone","Excavation sites","Infernal Source - Dagon Overlook south-west excavation site","Dig sites","Infernal Source Dig Site","Zamorakian","Misthalin","Equilibrium League/Regions/Misthalin","Equipment level","Artefacts","Tsutsaroth helm (damaged)","Tsutsaroth pauldron (damaged)","Tsutsaroth urumi (damaged)","Materials (Archaeology)","Third Age iron","Goldrune","Hellfire metal","Eye of Dagon"],"Castra debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Barracks excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Zaros effigy (damaged)","Zarosian training dummy (damaged)","Materials (Archaeology)","Samite silk","White oak","Third Age iron","Zarosian insignia"],"Armarium debris":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Ancient gravel (scenery)","Excavation sites","Kharid-et - Culinarum excavation site","Dig sites","Kharid-et Dig Site","Zarosian","Desert","Equilibrium League/Regions/Desert","Equipment level","Artefacts","Zarosian ewer (damaged)","Zarosian stein (damaged)","Materials (Archaeology)","Third Age iron","Zarosian insignia","Imperial steel"],"Xolo mine":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Xolo city excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Xolo hard hat (damaged)","Xolo pickaxe (damaged)","Materials (Archaeology)","Goldrune","Dragon metal","Orgone"],"Xolo remains":["Edit section: Excavation hotspot info","Edit section's source code: Excavation hotspot info","Archaeology","Volcanic ash (scenery)","Excavation sites","Orthen - Xolo city excavation site","Dig sites","Orthen Dig Site","Dragonkin","Anachronia","Equilibrium League/Regions/Anachronia","Equipment level","Artefacts","Xolo shield (damaged)","Xolo spear (damaged)","Materials (Archaeology)","Orgone","Goldrune","Felt","Dragon metal"]}};
+// END ARCHAEOLOGY_DATA
+
+// Money Makers > Archaeology: restoring artefacts for chronotes, sold on the GE.
+// The donation bin always pays 40% of the artefact's listed chronotes (Ben, 2026-11-09).
+function ArchaeologyCalc({items}) {
+  const [view, setView] = useState('collections');
+  const [open, setOpen] = useState({});
+  const [priceMode, setPriceMode] = useState('live');
+  const [level, setLevel] = useState('');
+  const [sort, setSort] = useState({key:'profit', dir:-1});
+  const data = useMemo(() => {
+    const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+    const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
+    const chronote = priceMode === 'ge' ? guideOf('Chronotes') : findItemSellPrice(items, 'Chronotes');
+    // A material with no GE price counts as 0 and is named on the row, so nothing gets hidden.
+    const unpriced = {};
+    const costOf = a => { let c = 0; for (const [m, q] of a.m) { const p = buyOf(m); if (p == null) unpriced[m] = true; else c += p * q; } return c; };
+    const noPrice = a => a.m.map(x => x[0]).filter(m => unpriced[m]);
+    const matsOf = a => { const local = (ARCHAEOLOGY_DATA.hotspots || {})[a.h] || []; return a.m.map(([name, qty]) => { const price = buyOf(name); return { name, qty, price, total: price == null ? null : price * qty, local: local.includes(name) }; }); };
+    const value = n => chronote == null ? null : applyTax(chronote) * n;
+    // Disassembly (Ben, 2026-11-09), using the wiki's Restoration profit module: ancient
+    // components are valued by making material crates and selling them (crate price after
+    // tax, minus the padded parts and protective components the crate takes), the better
+    // of small or large. Expected yield depends only on the artefact's level band.
+    const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
+    const partCost = n => buyOf(n) ?? 0;
+    const crate = (kind, size) => { const p = sellOf(`${size === 'sm' ? 'Small' : 'Large'} crate (${kind} components)`); if (p == null) return null;
+      const net = applyTax(p) - (size === 'sm' ? 25 : 100) * partCost('Padded parts') - (size === 'sm' ? 1 : 2) * partCost('Protective components');
+      const per = { historic:[100,1000], classic:[100,1000], timeworn:[5,25], vintage:[5,25] }[kind][size === 'sm' ? 0 : 1];
+      return net / per; };
+    const comp = {};
+    for (const k of ['historic','classic','timeworn','vintage']) { const v = [crate(k,'sm'), crate(k,'lg')].filter(x => x != null); comp[k] = v.length ? Math.max(...v) : null; }
+    const disValue = lvl => {
+      const c = comp;
+      if (lvl < 71) return c.historic == null || c.classic == null ? null : 0.8*20*c.historic + 0.18*5*c.classic + 0.01*(c.timeworn||0) + 0.01*(c.vintage||0);
+      const n = lvl < 91 ? 2 : lvl < 111 ? 4 : 8;
+      return c.timeworn == null || c.vintage == null ? null : 0.5*n*c.timeworn + 0.5*n*c.vintage;
+    };
+    const artefacts = Object.entries(ARCHAEOLOGY_DATA.artefacts).map(([name, a]) => {
+      const cost = costOf(a), bin = Math.floor(a.c * 0.4);
+      const dis = a.h ? disValue(a.l) : null; // artefacts with no dig site don't give ancient components
+      return { name, level:a.l, cost, unpriced:noPrice(a), mats:matsOf(a), hotspot:a.h, chronotes:a.c, bin, disProfit: dis == null ? null : dis - cost, binProfit: cost == null ? null : value(bin) - cost,
+        collProfit: cost == null ? null : value(a.c * 2) - cost, profit: cost == null ? null : value(bin) - cost };
+    }).filter(a => a.cost != null);
+    let skipped = 0;
+    const collections = [];
+    for (const c of ARCHAEOLOGY_DATA.collections) {
+      if (c.a.some(n => !ARCHAEOLOGY_DATA.artefacts[n])) { skipped++; continue; }
+      let cost = 0, chrono = c.b, level = c.l;
+      const missingMats = new Set();
+      // Each piece carries its share of the set bonus, by its chronote value.
+      const listed = c.a.reduce((t, n) => t + ARCHAEOLOGY_DATA.artefacts[n].c, 0);
+      const parts = c.a.map(n => {
+        const a = ARCHAEOLOGY_DATA.artefacts[n], pc = costOf(a), got = a.c + (listed ? c.b * a.c / listed : c.b / c.a.length);
+        return { name:n, level:a.l, cost:pc, mats:matsOf(a), hotspot:a.h, chronotes:Math.round(got), profit:value(got) - pc, unpriced:noPrice(a) };
+      });
+      for (const n of c.a) { const a = ARCHAEOLOGY_DATA.artefacts[n]; cost += costOf(a); noPrice(a).forEach(m => missingMats.add(m)); chrono += a.c; level = Math.max(level, a.l); }
+      collections.push({ name:c.n, by:c.by, level, unpriced:[...missingMats], parts, bonus:c.b, listed, pieces:c.a.length, list:c.a.join(', '), reward:c.r, cost, chronotes:chrono, profit: value(chrono) - cost });
+    }
+    return { artefacts, collections, skipped, chronote };
+  }, [items, priceMode]);
+  const lv = parseInt(level, 10);
+  const src = view === 'collections' ? data.collections : data.artefacts;
+  const rows = src.filter(r => !lv || r.level <= lv).sort((a, b) => {
+    const x = a[sort.key], y = b[sort.key];
+    return (typeof x === 'string' ? x.localeCompare(y) : (x ?? -Infinity) - (y ?? -Infinity)) * sort.dir;
+  });
+  const th = (key, label, title) => h('th', {onClick:()=>setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='name' ? 1 : -1)})), style:{cursor:'pointer'}, title}, label + (sort.key===key ? (sort.dir>0?' ▲':' ▼') : ''));
+  const gp = v => v == null ? '—' : (v>=0?'+':'') + fmt.gp(Math.round(v)) + 'gp';
+  const col = v => ({color: v>0 ? T.gold : T.red, fontWeight:'bold'});
+  const toggle = k => setOpen(o => ({...o, [k]:!o[k]}));
+  // Materials for one artefact, marking which ones its own hotspot drops.
+  const matDetail = (x, colSpan) => h('tr', null, h('td', {colSpan, style:{padding:'4px 8px 8px 20px'}},
+    h('div', {style:{fontSize:10, color:T.textDim, marginBottom:3}}, 'Dug at ' + (x.hotspot || 'unknown hotspot')),
+    x.mats.map(m => h('div', {key:m.name, style:{fontSize:11, display:'flex', gap:8}},
+      h('span', {style:{minWidth:170}}, m.qty + ' × ' + m.name),
+      h('span', {style:{color:'#e08030', minWidth:80}}, m.total == null ? 'no GE price' : fmt.gp(Math.round(m.total)) + 'gp'),
+      h('span', {style:{color: m.local ? T.green : T.textDim}}, m.local ? 'drops at this hotspot' : 'from elsewhere')))));
+  const pill = (on, label, click) => h('button', {key:label, onClick:click, style:{padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+    background: on ? 'rgba(201,168,76,0.2)' : 'transparent', border:`1px solid ${on ? T.gold : T.border}`, color: on ? T.goldBright : T.textDim}}, label);
+  return h('div', null,
+    h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center', marginBottom:10}},
+      pill(view==='collections', 'Collections', ()=>{setView('collections'); setSort({key:'profit',dir:-1});}),
+      pill(view==='artefacts', 'By artefact', ()=>{setView('artefacts'); setSort({key:'profit',dir:-1});}),
+      h('span', {style:{width:10}}),
+      pill(priceMode==='live', 'Live prices', ()=>setPriceMode('live')),
+      pill(priceMode==='ge', 'GE guide prices', ()=>setPriceMode('ge')),
+      h('span', {style:{width:10}}),
+      h('label', {style:{fontSize:11, color:T.textDim}}, 'My level ',
+        h('input', {className:'ge-input', type:'number', min:1, max:120, value:level, placeholder:'any', onChange:e=>setLevel(e.target.value), style:{width:60}}))),
+    h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      `Restoration materials are counted at the ${priceMode==='ge'?'GE guide':'live buy'} price, even ones you dug up yourself, since you could sell them instead. Chronotes are valued at ${data.chronote != null ? fmt.gp(Math.round(data.chronote))+'gp' : 'their price'} each, after 2% tax. ` +
+      (view==='collections' ? 'A collection pays each artefact’s chronotes plus its set bonus, so it only counts when you complete the whole set. Level is the highest needed for any piece.' : 'The donation bin always pays 40% of an artefact’s listed chronotes. "In a collection" is 200% of the listed value, and only pays if you finish the set.')),
+    rows.length === 0 ? h('div', {className:'empty'}, h('p', null, 'Nothing at this level.')) :
+    h('div', {className:'ge-table-wrap'}, h('table', {className:'ge-table pt-arch'},
+      view === 'collections' ?
+        h('thead', null, h('tr', null, th('name','Collection'), th('level','Level'), th('pieces','Pieces'), th('cost','Materials'), th('chronotes','Chronotes'), th('profit','Profit'))) :
+        h('thead', null, h('tr', null, th('name','Artefact'), th('level','Level'), th('cost','Materials'), th('chronotes','Listed chronotes'), th('bin','Bin chronotes'), th('profit','Bin profit'), th('collProfit','In a collection'), th('disProfit','Disassemble', 'Restore, then disassemble for ancient components, sold as material crates (wiki method)'))),
+      h('tbody', null, rows.map(r => view === 'collections' ?
+        h(React.Fragment, {key:r.name},
+          h('tr', {onClick:()=>setOpen(o => ({...o, [r.name]:!o[r.name]})), style:{cursor:'pointer'}},
+            h('td', null, (open[r.name] ? '▾ ' : '▸ ') + r.name,
+              h('div', {style:{fontSize:10, color:T.textDim}}, `${r.by} · Gives ${r.chronotes.toLocaleString()} chronotes${r.reward ? ' + ' + r.reward : ''} every time`),
+              r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null),
+            h('td', null, r.level), h('td', null, r.pieces), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit))),
+          open[r.name] && h('tr', null, h('td', {colSpan:6, style:{padding:'6px 10px 10px 22px'}},
+            h('div', {style:{fontSize:11, color:T.textDim, marginBottom:4}}, `Pieces ${r.listed.toLocaleString()} chronotes + set bonus ${r.bonus.toLocaleString()}. Each piece below includes its share of the bonus. First-time-only rewards aren't counted.`),
+            h('table', {className:'ge-table'},
+              h('thead', null, h('tr', null, ['Artefact','Level','Materials','Chronotes','Profit / loss'].map(t => h('th', {key:t}, t)))),
+              h('tbody', null, r.parts.map(p => h(React.Fragment, {key:p.name}, h('tr', {onClick:()=>toggle('a:'+r.name+p.name), style:{cursor:'pointer'}},
+                h('td', null, (open['a:'+r.name+p.name] ? '▾ ' : '▸ ') + p.name, p.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + p.unpriced.join(', ')) : null),
+                h('td', null, p.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(p.cost))+'gp'), h('td', null, p.chronotes.toLocaleString()), h('td', {style:col(p.profit)}, gp(p.profit))), open['a:'+r.name+p.name] && matDetail(p, 5)))))))) :
+        h(React.Fragment, {key:r.name}, h('tr', {onClick:()=>toggle('s:'+r.name), style:{cursor:'pointer'}}, h('td', null, (open['s:'+r.name] ? '▾ ' : '▸ ') + r.name, r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null), h('td', null, r.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', null, r.bin.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit)), h('td', {style:col(r.collProfit)}, gp(r.collProfit)), h('td', {style: r.disProfit == null ? {color:T.textDim} : col(r.disProfit)}, r.disProfit == null ? 'n/a' : gp(r.disProfit))), open['s:'+r.name] && matDetail(r, 8)))))),
+    view === 'collections' && data.skipped ? h('div', {style:{fontSize:10, color:T.textDim, marginTop:8}}, `${data.skipped} collections have a piece GEnius couldn't price yet.`) : null,
+  );
+}
+
+function SmithingFromScratch({items, onSelect}) {
+  const bars = Object.keys(SMITHING_PRODUCTS);
+  const [bar, setBar] = useState('Rune bar');
+  const [busyOnly, setBusyOnly] = useState(true);
+  const [sort, setSort] = useState({key:'perBar', dir:-1});
+  const [priceMode, setPriceMode] = useState('live');
+  const all = useMemo(() => smithingProductRows(bar, items, priceMode), [bar, items, priceMode]);
+  const rows = useMemo(() => {
+    const r = all.filter(x => x.profit != null && (!busyOnly || (x.volume || 0) >= 100));
+    return r.sort((a, b) => ((a[sort.key] ?? -Infinity) > (b[sort.key] ?? -Infinity) ? 1 : (a[sort.key] ?? -Infinity) < (b[sort.key] ?? -Infinity) ? -1 : 0) * sort.dir);
+  }, [all, busyOnly, sort]);
+  const unpriced = all.filter(x => x.profit == null).length;
+  const hidden = all.filter(x => x.profit != null).length - rows.length;
+  const barPrice = priceMode === 'ge' ? (items.find(i => i.name === bar)?.high ?? items.find(i => i.name === bar)?.low ?? null) : findItemBuyPrice(items, bar);
+  const th = (key, label, title) => h('th', {onClick:()=>setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='name' ? 1 : -1)})), style:{cursor:'pointer'}, title}, label + (sort.key===key ? (sort.dir>0?' ▲':' ▼') : ''));
+  const gp = v => (v>=0?'+':'') + fmt.gp(Math.round(v)) + 'gp';
+  return h('div', null,
+    h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', marginBottom:10}},
+      bars.map(b => h('button', {key:b, onClick:()=>setBar(b), style:{
+        padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+        background: bar===b ? 'rgba(201,168,76,0.2)' : 'transparent',
+        border:`1px solid ${bar===b ? T.gold : T.border}`, color: bar===b ? T.goldBright : T.textDim,
+      }}, b.replace(/ bar$/, '')))),
+    h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      `What every ${bar.toLowerCase()} product is worth at ${priceMode === 'ge' ? 'GE guide prices, which lag behind real trades' : 'live prices: materials at the live buy price, the product at the live sell price'}${barPrice ? ` (${bar} ${fmt.gp(Math.round(barPrice))}gp)` : ''}, after 2% tax. Upgrades (+1 and up) count every bar from the base item, as if you made the whole thing from scratch. Profit per bar is what to compare. Varrock armour only speeds up smithing progress; it doesn't save bars, so it doesn't change these numbers.`),
+    h('div', {style:{display:'flex', gap:4, marginBottom:10}},
+      [{key:'live',label:'Live prices'},{key:'ge',label:'GE guide prices'}].map(m => h('button', {key:m.key, onClick:()=>setPriceMode(m.key), style:{
+        padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+        background: priceMode===m.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+        border:`1px solid ${priceMode===m.key ? T.gold : T.border}`, color: priceMode===m.key ? T.goldBright : T.textDim,
+      }}, m.label))),
+    h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:10}},
+      h('input', {type:'checkbox', checked:busyOnly, onChange:()=>setBusyOnly(v=>!v)}),
+      h('span', {style:{color:T.textDim}}, `Only items trading 100+ a day${hidden ? ` (${hidden} hidden)` : ''}`)),
+    rows.length === 0 ? h('div', {className:'empty'}, h('p', null, 'No priced products for this bar yet.')) :
+    h('div', {className:'ge-table-wrap'},
+      h('table', {className:'ge-table pt-smith'},
+        h('thead', null, h('tr', null,
+          th('name', 'Item'), th('bars', 'Bars', 'Every bar used, from the base item up'),
+          th('cost', 'Cost', 'All materials at the live buy price'), th('revenue', 'Sells for', 'Live sell price × quantity, after 2% tax'),
+          th('profit', 'Profit'), th('perBar', 'Profit per bar'), th('volume', 'Traded/day'))),
+        h('tbody', null, rows.map(r => h('tr', {key:r.name},
+          h('td', null,
+            h('span', {className:'clickable', style:{cursor:'pointer'}, onClick:()=>onSelect && onSelect(r.name)}, (r.qty > 1 ? `${r.qty} × ` : '') + r.name),
+            r.others.length ? h('div', {style:{fontSize:10, color:T.textDim}}, '+ ' + r.others.join(', ')) : null,
+            r.liveOdd && h('span', {style:{fontSize:10, color:'#e08030', marginLeft:6}, title:'The live sell price is more than 40% away from the GE guide price. On a thinly traded item that is often a few odd trades: check a real offer first.'}, '⚠ odd price'),
+            (r.volume ?? 0) < 100 && h('span', {style:{fontSize:10, color:'#e08030', marginLeft:6}, title:'Under 100 traded a day: a batch may not sell at this price.'}, '⚠ thin')),
+          h('td', null, Math.round(r.bars * 100) / 100),
+          h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost)) + 'gp'),
+          h('td', {style:{color:T.green}}, fmt.gp(Math.round(r.revenue)) + 'gp'),
+          h('td', {style:{color: r.profit>0 ? T.gold : T.red}}, gp(r.profit)),
+          h('td', {style:{color: r.perBar>0 ? T.gold : T.red, fontWeight:'bold'}}, gp(r.perBar)),
+          h('td', {style:{color:T.textDim}}, r.volume != null ? r.volume.toLocaleString() : '—'),
+        ))))),
+    unpriced ? h('div', {style:{fontSize:10, color:T.textDim, marginTop:8}}, `${unpriced} more ${bar.toLowerCase()} products have no live or GE price (mostly untradeable or never traded) and aren't shown.`) : null,
+  );
+}
+
 function computeSmithingBarStats(recipe, items, varrockOn) {
   const varrockMultiplier = (varrockOn && recipe.varrockPct) ? 1 + recipe.varrockPct/100 : 1;
   const doubleMultiplier = recipe.doubleBarPct ? 1 + recipe.doubleBarPct/100 : 1;
@@ -14444,11 +14955,12 @@ function CraftingBuffCheckboxes({buffs, setBuffs}) {
 }
 
 function MoneyMakersTab({items, onSelect, description}) {
-  const [skill, setSkill] = useState('herblore');
+  const [skill, setSkill] = useState('archaeology');
   const [herbSub, setHerbSub] = useState('herbs');
   const [magicSub, setMagicSub] = useState('grinding');
   const [fletchingBuffs, setFletchingBuffs] = useState(FLETCHING_BUFF_DEFAULTS);
   const [varrockArmour, setVarrockArmour] = useState(false);
+  const [smithSub, setSmithSub] = useState('scratch');
   const [summoningSub, setSummoningSub] = useState('pouches');
   const [buffs, setBuffs] = useState(HERBLORE_BUFF_DEFAULTS);
   const [craftingSub, setCraftingSub] = useState('cloth');
@@ -14725,7 +15237,23 @@ function MoneyMakersTab({items, onSelect, description}) {
         ),
       ),
 
+      skill === 'archaeology' && h(ArchaeologyCalc, {items}),
+
       skill === 'smithing' && h('div', null,
+        h('div', {style:{display:'flex', gap:4, marginBottom:12}},
+          [{key:'scratch',label:'Smithing from scratch'},{key:'smelting',label:'Smelting'}].map(sub => h('button', {
+            key:sub.key, onClick:()=>setSmithSub(sub.key),
+            style:{
+              padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+              background: smithSub===sub.key ? 'rgba(201,168,76,0.2)' : 'transparent',
+              border: `1px solid ${smithSub===sub.key ? T.gold : T.border}`,
+              color: smithSub===sub.key ? T.goldBright : T.textDim,
+            }
+          }, sub.label))
+        ),
+        smithSub === 'scratch' && h(SmithingFromScratch, {items, onSelect:onSelectItem}),
+      ),
+      skill === 'smithing' && smithSub === 'smelting' && h('div', null,
         h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:12}},
           h('input', {type:'checkbox', checked:varrockArmour, onChange:()=>setVarrockArmour(v=>!v)}),
           h('span', {style:{color:T.textDim}}, 'Varrock armour', h('span',{style:{color:T.gold}},' (4%/3%/2%/1% chance of an extra bar, tier-scoped to bronze-steel/mithril-adamant/rune-necronium/bane-elder rune respectively)')),
@@ -15142,7 +15670,7 @@ function UpdateRisksBar({scope = 'yours'}) {
   const exposed = risks.reduce((sum, r) => sum + (r.value || 0), 0);
   const updates = new Set(risks.map(r => r.updateId)).size;
   return h('div', {
-    style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
+    style:{margin:'8px 12px 12px', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+T.gold, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
     title:'See everything that may be affected',
     onClick:()=>{ _alertsInitialPill = 'upcoming'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
@@ -15219,7 +15747,13 @@ function useInbox() {
   const [inbox, setInbox] = useState([]);
   useEffect(() => {
     let live = true;
-    const load = () => window.genius?.getInbox?.().then(l => { if (live && l) setInbox(l); }).catch(() => {});
+    // Same list keeps the same state, or the whole app redraws on every poll.
+    let shown = '';
+    const load = () => window.genius?.getInbox?.().then(l => {
+      if (!live || !l) return;
+      const next = JSON.stringify(l);
+      if (next !== shown) { shown = next; setInbox(l); }
+    }).catch(() => {});
     load();
     const timer = setInterval(load, 30000);
     window.addEventListener('genius-inbox-changed', load);
@@ -15245,10 +15779,23 @@ function NotifMark({marks, style}) {
 
 function InboxView({onOpenPill}) {
   const [list, setList] = useState(null);
-  const load = () => window.genius.getInbox().then(setList);
+  // What was unread when it appeared, so it stays highlighted while you're here.
+  const fresh = useRef(new Set());
+  const load = async () => {
+    const l = await window.genius.getInbox();
+    setList(l);
+    const unread = l.filter(e => !e.read);
+    if (!unread.length) return;
+    unread.forEach(e => fresh.current.add(e.id));
+    // Only what's on screen counts as seen; anything newer stays unread.
+    await window.genius.markInboxRead(null, Math.max(...unread.map(e => e.at)));
+    refreshInbox();
+  };
   useEffect(() => {
-    // Show what's unread on arrival, then count it as seen.
-    load().then(() => window.genius.markInboxRead()).then(refreshInbox);
+    load();
+    window.addEventListener('genius-inbox-changed', load);
+    const timer = setInterval(load, 30000);
+    return () => { window.removeEventListener('genius-inbox-changed', load); clearInterval(timer); };
   }, []);
   const clear = async id => { await window.genius.clearInbox(id); await load(); refreshInbox(); };
   return h('div', null,
@@ -15261,9 +15808,9 @@ function InboxView({onOpenPill}) {
       (list || []).map(e => {
         const pill = NOTIF_MARKS[e.kind] ? e.kind : null;
         return h('div', {key:e.id, style:{padding:'10px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:10, alignItems:'flex-start'}},
-          h('span', {style:{width:14, paddingTop:5, flexShrink:0}}, !e.read && h(NotifMark, {marks:[pill || 'notifications']})),
+          h('span', {style:{width:14, paddingTop:5, flexShrink:0}}, fresh.current.has(e.id) && h(NotifMark, {marks:[pill || 'notifications']})),
           h('div', {style:{flex:1, minWidth:0}},
-            h('div', {style:{color:e.read ? T.text : T.textBright, fontWeight:e.read ? 'normal' : 'bold', cursor:pill ? 'pointer' : 'default'}, onClick:()=>pill && onOpenPill(pill)}, e.title),
+            h('div', {style:{color:fresh.current.has(e.id) ? T.textBright : T.text, fontWeight:fresh.current.has(e.id) ? 'bold' : 'normal', cursor:pill ? 'pointer' : 'default'}, onClick:()=>pill && onOpenPill(pill)}, e.title),
             h('div', {style:{color:T.textDim, whiteSpace:'pre-line'}}, e.body),
             h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, new Date(e.at).toLocaleString())),
           h('button', {className:'ge-btn', style:{padding:'2px 8px', fontSize:11}, onClick:()=>clear(e.id)}, 'Clear'));
@@ -15287,7 +15834,7 @@ function AlmanacFlagsBar({scope = 'yours'}) {
   if (!rows.length) return null;
   const sells = rows.filter(r => r.action === 'sell').length, buys = rows.length - sells;
   return h('div', {
-    style:{margin:'8px 12px 0', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+NOTIF_MARKS.almanac.color, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
+    style:{margin:'8px 12px 12px', padding:'8px 10px', border:'1px solid '+T.borderDim, borderLeft:'3px solid '+NOTIF_MARKS.almanac.color, borderRadius:4, fontSize:12, cursor:'pointer', display:'flex', gap:8, alignItems:'center'},
     title:'See what the Almanac is flagging',
     onClick:()=>{ _alertsInitialPill = 'almanac'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
@@ -15372,6 +15919,123 @@ function AlertsArea(props) {
     pill === 'upcoming' && h(UpdateRisksTab, {items:props.items, onSelect:props.onSelect, description:TAB_DESCRIPTIONS.update_risks}),
     pill === 'almanac' && h(AlmanacFlagsView, {items:props.items, onSelect:props.onSelect}),
     pill === 'mine' && h(AlertsTab, props));
+}
+
+// GE offer reader (dev mode, desktop): check what was read from the screen, then
+// save it. Totals on the offer are running totals, so buys replace the offer's
+// numbers and sells only log what's new since the last read of that offer.
+const geSoldLog = () => { try { return JSON.parse(localStorage.getItem('genius_ge_sold_log') || '{}'); } catch { return {}; } };
+function GeReaderModal({offer, items, toast, onClose, onSaved}) {
+  const commas = v => v == null || v === '' ? '' : Number(v).toLocaleString();
+  const [f, setF] = useState(() => ({side:offer.side || 'buy', name:offer.name || '', quantity:commas(offer.quantity), price:commas(offer.price), filled:commas(offer.filled ?? 0), coins:commas(offer.coins ?? 0)}));
+  // Number boxes take commas and K/M/B ("60k", "1.5m"), and tidy up when you leave them.
+  const num = k => Math.round(parseGpString(f[k])) || 0;
+  const [goals, setGoals] = useState([]);
+  const [portfolio, setPortfolio] = useState({positions:[]});
+  const [offerId, setOfferId] = useState(null);
+  const [posId, setPosId] = useState(null);
+  useEffect(() => {
+    window.genius.getBuyGoals().then(setGoals);
+    window.genius.getPortfolio().then(p => p && setPortfolio(p));
+  }, []);
+  const set = k => e => setF(x => ({...x, [k]:e.target.value}));
+  const nameLow = String(f.name).trim().toLowerCase();
+  const filled = num('filled'), coins = num('coins');
+  const goal = goals.find(g => g.item_name.toLowerCase() === nameLow);
+  const known = (items || []).find(i => i.name.toLowerCase() === nameLow);
+  // The offer these totals most likely belong to: the fullest that isn't past them.
+  const offers = goal?.offers || [];
+  const guessOffer = offers.filter(o => o.bought <= filled).sort((a, b) => b.bought - a.bought)[0] || offers[0];
+  const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
+  const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
+  const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
+  // Identifies the offer, so re-reading it only logs what's new. Price stays out of
+  // it since an offer's price can be edited in-game.
+  const logKey = [nameLow, num('quantity')].join('|');
+  const alreadySold = geSoldLog()[logKey] || 0;
+  const newSold = Math.max(0, filled - alreadySold);
+  const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
+  const requireItem = () => { if (!known) { toast('Pick an item name GEnius knows', 'error'); return false; } if (!(filled > 0)) { toast('Nothing filled yet', 'error'); return false; } return true; };
+
+  const saveToGoal = async () => {
+    if (!requireItem()) return;
+    const body = offers.length
+      ? {id:goal.id, offers:offers.map(o => o.id === chosenOffer.id ? {...o, bought:filled, spent:coins} : o)}
+      : {id:goal.id, bought:filled, spent:coins};
+    const r = await window.genius.updateBuyGoalTotals(body);
+    if (!r?.success) { toast(r?.error || 'Could not save', 'error'); return; }
+    finish(known.name + ' planner updated');
+  };
+  const newGoal = async () => {
+    if (!requireItem()) return;
+    const id = Date.now().toString();
+    await window.genius.saveBuyGoal({id, item_name:known.name, item_id:known.id, target:num('quantity') || filled, max_price:num('price')});
+    await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
+    finish(known.name + ' added to the Buy Planner');
+  };
+  const newPosition = async () => {
+    if (!requireItem()) return;
+    await window.genius.savePosition({id:Date.now().toString(), item_name:known.name, quantity:filled, cost_basis:coins / filled, status:'open',
+      created_at:new Date().toISOString(), date_opened:new Date().toISOString().slice(0, 10), target_price:'', target_profit_pct:'', stop_loss:''});
+    finish(known.name + ' added to your Portfolio');
+  };
+  const saveSale = async () => {
+    if (!requireItem() || !chosenPos) return;
+    if (!(num('quantity') > 0)) { toast('Enter the offer quantity first', 'error'); return; }
+    if (!(newSold > 0)) { toast('Those sales are already logged', 'error'); return; }
+    const qty = Math.min(newSold, chosenPos.quantity);
+    // The GE shows coins after its 2% tax, and sellPosition takes the tax off itself,
+    // so it gets the price before tax. Items under 50gp aren't taxed.
+    const received = coins / filled;
+    const sellPrice = received / 0.98 >= 50 ? received / 0.98 : received;
+    const r = await window.genius.sellPosition({id:chosenPos.id, sell_price:sellPrice, quantity:qty});
+    if (!r?.success) { toast('Could not save', 'error'); return; }
+    try { localStorage.setItem('genius_ge_sold_log', JSON.stringify({...geSoldLog(), [logKey]:alreadySold + qty})); } catch {}
+    finish('Logged '+qty.toLocaleString()+' '+known.name+' sold');
+  };
+
+  const field = (label, key, isNumber) => h('label', {style:{display:'block', fontSize:11, color:T.textDim}}, label,
+    h('input', {className:'ge-input', type:'text', value:f[key], onChange:set(key),
+      onBlur: isNumber ? () => setF(x => ({...x, [key]:commas(Math.round(parseGpString(x[key])) || 0)})) : undefined,
+      style:{display:'block', width:'100%', marginTop:2}}));
+  const avg = filled > 0 ? coins / filled : 0;
+  return h('div', {style:{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16}, onClick:e=>{ if (e.target === e.currentTarget) onClose(); }},
+    h('div', {style:{background:T.bg || '#14100a', border:'1px solid '+T.gold, borderRadius:6, padding:18, width:460, maxWidth:'100%', maxHeight:'90vh', overflow:'auto'}},
+      h('div', {className:'ge-section-head'}, 'Read from the GE'),
+      offer.error ? h('p', {style:{color:'#e05050', fontSize:13}}, 'Could not read the screen: '+offer.error) :
+      h('div', {style:{fontSize:12, color:offer.confirmed ? '#4caf50' : '#f0a030', marginBottom:10}},
+        offer.confirmed ? 'Read twice, and the numbers add up. Still worth a glance.' : 'Couldn\'t confirm these. Compare every number with the GE before saving.'),
+      h('div', {style:{display:'flex', gap:6, marginBottom:10}},
+        ['buy','sell'].map(s => h('button', {key:s, className:f.side===s ? 'ge-btn gold' : 'ge-btn', onClick:()=>setF(x=>({...x, side:s}))}, s === 'buy' ? 'Buy offer' : 'Sell offer'))),
+      h('div', {style:{display:'grid', gridTemplateColumns:'1fr 1fr', gap:10, marginBottom:10}},
+        h('div', {style:{gridColumn:'1 / -1'}}, field('Item', 'name')),
+        field('Offer quantity', 'quantity', true), field('Offer price', 'price', true),
+        field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', true), field(f.side === 'buy' ? 'Coins spent so far' : 'Coins received so far', 'coins', true)),
+      !known && f.name && h('div', {style:{color:'#f0a030', fontSize:12, marginBottom:8}}, 'GEnius doesn\'t know that item name.'),
+      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
+
+      f.side === 'buy' && (goal
+        ? h('div', null,
+            offers.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which offer in the planner',
+              h('select', {className:'ge-input', value:chosenOffer?.id, onChange:e=>setOfferId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
+                offers.map(o => h('option', {key:o.id, value:o.id}, (o.label || 'Offer')+' ('+o.bought.toLocaleString()+' bought)')))),
+            h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+(offers.length ? (chosenOffer?.bought || 0) : goal.bought).toLocaleString()+' to '+filled.toLocaleString()+' bought.'),
+            h('button', {className:'ge-btn gold', onClick:saveToGoal}, 'Update planner'))
+        : h('div', {style:{display:'flex', gap:6}},
+            h('button', {className:'ge-btn gold', onClick:newGoal}, 'New planner goal'),
+            h('button', {className:'ge-btn', onClick:newPosition}, 'Add to Portfolio'))),
+
+      f.side === 'sell' && (chosenPos
+        ? h('div', null,
+            open.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which position',
+              h('select', {className:'ge-input', value:chosenPos.id, onChange:e=>setPosId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
+                open.map(p => h('option', {key:p.id, value:p.id}, p.quantity.toLocaleString()+' at '+fmt.gp(Math.round(p.cost_basis)))))),
+            h('div', {style:{fontSize:12, color:T.text, marginBottom:10}},
+              alreadySold ? alreadySold.toLocaleString()+' already logged from this offer. ' : '', 'Logs '+Math.min(newSold, chosenPos.quantity).toLocaleString()+' sold.'),
+            h('button', {className:'ge-btn gold', onClick:saveSale}, 'Log sale'))
+        : h('div', {style:{fontSize:12, color:'#f0a030'}}, 'No open position for this item to sell from.')),
+
+      h('div', {style:{marginTop:10}}, h('button', {className:'ge-btn', onClick:onClose}, 'Cancel'))));
 }
 
 function PortfolioArea(props) {
@@ -15492,6 +16156,8 @@ function App() {
     return () => window.removeEventListener('genius-goto', go);
   }, []);
   const navMarks = unreadMarks(useInbox());
+  const [geOffer, setGeOffer] = useState(null);
+  useEffect(() => { window.genius?.onGeReader?.(o => setGeOffer({...o, readAt:Date.now()})); }, []);
   const contentRef = useRef(null);
   const scrollContentTo = pos => contentRef.current?.scrollTo({top: pos, behavior:'smooth'});
   // Sidebar starts closed — only actually matters on a narrow/mobile
@@ -15603,6 +16269,7 @@ function App() {
   const {toasts, add:toast} = useToast();
   const theme = settings.theme || 'dark';
   SHOW_THUMBNAILS = settings.showThumbnails !== false;
+  FULL_NUMBERS = settings.fullNumbers === true;
   const [detailPanelWidth, setDetailPanelWidth] = useState(settings.detailPanelWidth || 296);
   useEffect(() => { if (settings.detailPanelWidth) setDetailPanelWidth(settings.detailPanelWidth); }, [settings.detailPanelWidth]);
   const panelWidthRef = useRef(detailPanelWidth);
@@ -15719,7 +16386,7 @@ function App() {
     // own interval tick, and the post-launch auto-fetch) — those never
     // touched setFetching(true) before, so the header button sat on
     // "Fetch Now" the whole time even while a real fetch (possibly a
-    // slow one, see main.js's runPython comment) was genuinely running.
+    // slow one, see main.js's runFetch comment) was genuinely running.
     window.genius.onFetchStart(() => setFetching(true));
     window.genius.onFetchComplete(d => {
       // A sync changed user data, not prices: re-read what it writes, which
@@ -16073,6 +16740,10 @@ function App() {
       )
     ),
 
+    geOffer && geOffer.reading && h('div', {style:{position:'fixed', inset:0, background:'rgba(0,0,0,0.6)', zIndex:9999, display:'flex', alignItems:'center', justifyContent:'center', padding:16}},
+      h('div', {style:{background:T.panel, border:'1px solid '+T.gold, borderRadius:6, padding:'18px 24px', color:T.text, fontSize:14}}, '📷 Screen captured. Reading your GE offer...')),
+    geOffer && !geOffer.reading && h(GeReaderModal, {key:geOffer.readAt, offer:geOffer, items, toast, onClose:()=>setGeOffer(null),
+      onSaved:async()=>{ const p = await window.genius?.getPortfolio(); if (p) setPortfolio(p); }}),
     h('div',{className:'main'},
       h('div',{className:'ge-header'},
         h('button',{
@@ -16201,4 +16872,81 @@ function App() {
   ));
 }
 
+// Ctrl+F find bar, desktop only (Ben, 2026-11-09). Searches the page's own text and
+// colours matches with the CSS Highlight API, so it never moves focus out of the box
+// (Chromium's find-in-page did, which dropped keystrokes and felt laggy).
+function FindBar() {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [res, setRes] = useState({ at: 0, total: 0 });
+  const ref = useRef(null);
+  const barRef = useRef(null);
+  const ranges = useRef([]);
+  const timer = useRef(null);
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = '::highlight(genius-find){background:rgba(201,168,76,0.45);color:inherit}::highlight(genius-find-now){background:#e08030;color:#000}';
+    document.head.appendChild(style);
+    const key = e => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault(); setOpen(true); setTimeout(() => { ref.current?.focus(); ref.current?.select(); }, 0);
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => { window.removeEventListener('keydown', key); style.remove(); };
+  }, []);
+  const clear = () => { if (window.CSS?.highlights) { CSS.highlights.delete('genius-find'); CSS.highlights.delete('genius-find-now'); } ranges.current = []; };
+  const show = (list, i) => {
+    if (!window.CSS?.highlights) return;
+    CSS.highlights.set('genius-find', new Highlight(...list));
+    if (list[i]) {
+      CSS.highlights.set('genius-find-now', new Highlight(list[i]));
+      const el = list[i].startContainer.parentElement;
+      el?.scrollIntoView({ block:'center', inline:'nearest' });
+    } else CSS.highlights.delete('genius-find-now');
+  };
+  const search = t => {
+    clear();
+    const q = t.trim().toLowerCase();
+    if (!q) { setRes({ at:0, total:0 }); return; }
+    const list = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: n =>
+      (barRef.current && barRef.current.contains(n)) || !n.nodeValue.trim() || /^(SCRIPT|STYLE)$/.test(n.parentElement?.tagName) || !n.parentElement?.offsetParent
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (let n = walker.nextNode(); n && list.length < 2000; n = walker.nextNode()) {
+      const v = n.nodeValue.toLowerCase();
+      for (let i = v.indexOf(q); i >= 0 && list.length < 2000; i = v.indexOf(q, i + q.length)) {
+        const r = new Range(); r.setStart(n, i); r.setEnd(n, i + q.length); list.push(r);
+      }
+    }
+    ranges.current = list;
+    setRes({ at: list.length ? 1 : 0, total: list.length });
+    show(list, 0);
+  };
+  const step = dir => {
+    // The page may have re-rendered since the last search; search again if so.
+    if (!ranges.current.length || !ranges.current[0].startContainer.isConnected) { search(text); return; }
+    const total = ranges.current.length;
+    const at = ((res.at - 1 + dir + total) % total) + 1;
+    setRes({ at, total });
+    show(ranges.current, at - 1);
+  };
+  const close = () => { setOpen(false); clear(); setRes({ at:0, total:0 }); };
+  if (!open) return null;
+  return h('div', {ref:barRef, style:{position:'fixed', top:44, right:18, zIndex:99990, display:'flex', alignItems:'center', gap:6,
+    background:T.panel || T.bg, border:`1px solid ${T.gold}`, borderRadius:4, padding:'5px 8px', boxShadow:'0 4px 16px rgba(0,0,0,0.5)'}},
+    h('input', {ref, className:'ge-input', value:text, placeholder:'Find on this page', style:{width:200, fontSize:12},
+      onChange:e => { const v = e.target.value; setText(v); clearTimeout(timer.current); timer.current = setTimeout(() => search(v), 150); },
+      onKeyDown:e => {
+        if (e.key === 'Escape') { e.preventDefault(); close(); }
+        else if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
+      }}),
+    h('span', {style:{fontSize:11, color:T.textDim, minWidth:54, textAlign:'center'}}, !text.trim() ? '' : res.total ? `${res.at} of ${res.total}` : 'No matches'),
+    h('button', {className:'ge-btn', title:'Previous (Shift+Enter)', style:{fontSize:11, padding:'2px 7px'}, onMouseDown:e=>e.preventDefault(), onClick:()=>step(-1)}, '▲'),
+    h('button', {className:'ge-btn', title:'Next (Enter)', style:{fontSize:11, padding:'2px 7px'}, onMouseDown:e=>e.preventDefault(), onClick:()=>step(1)}, '▼'),
+    h('button', {className:'ge-btn', title:'Close (Esc)', style:{fontSize:11, padding:'2px 7px'}, onClick:close}, '✕'));
+}
+const findRootEl = document.createElement('div');
+document.body.appendChild(findRootEl);
+createRoot(findRootEl).render(h(FindBar, null));
 createRoot(document.getElementById('root')).render(h(App,null));

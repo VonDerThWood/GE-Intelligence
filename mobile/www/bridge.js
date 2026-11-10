@@ -23111,11 +23111,27 @@
         }
         return [...byStart.values()].sort((a, b) => a[1] < b[1] ? -1 : 1);
       }
-      function estimateNextStart(events) {
+      function estimateNextStart(events, today) {
         const starts = events.map((e) => toMs(e[1])).slice(-9);
         const gaps = starts.slice(1).map((s, i) => s - starts[i]);
         if (!gaps.length) return null;
-        return starts[starts.length - 1] + median(gaps);
+        const gap = median(gaps);
+        let next = starts[starts.length - 1] + gap;
+        while (next <= today) next += gap;
+        return next;
+      }
+      function onePerItem(rows) {
+        const best = /* @__PURE__ */ new Map();
+        for (const r of rows) {
+          const had = best.get(r.id);
+          if (!had) {
+            best.set(r.id, r);
+            continue;
+          }
+          const score = (x) => x.group === "held" && x.action === "sell" ? Infinity : x.strength;
+          if (score(r) > score(had)) best.set(r.id, r);
+        }
+        return rows.filter((r) => best.get(r.id) === r);
       }
       function rate(phases, names, side) {
         let hit = 0, total = 0;
@@ -23188,7 +23204,7 @@
         const list = uniqueEvents(events);
         const upcoming = list.filter((e) => toMs(e[1]) > dayMs);
         const started = list.filter((e) => toMs(e[1]) <= dayMs);
-        const est = upcoming.length ? null : estimateNextStart(list);
+        const est = upcoming.length ? null : estimateNextStart(list, dayMs);
         const next = upcoming.length ? upcoming[0] : null;
         const nextStart = next ? toMs(next[1]) : est;
         const nextEstimated = !next;
@@ -23255,9 +23271,18 @@
           let others = 0;
           return rows.filter((r) => r.group !== "other" || ++others <= cap);
         };
+        const nowRows = onePerItem(now.sort(order));
+        const flaggedNow = new Set(nowRows.map((r) => r.id));
+        const soonRows = [];
+        const soonSeen = /* @__PURE__ */ new Set();
+        for (const r of soon.sort((a, b) => rank[a.group] - rank[b.group] || a.inDays - b.inDays || b.strength - a.strength)) {
+          if (flaggedNow.has(r.id) || soonSeen.has(r.id)) continue;
+          soonSeen.add(r.id);
+          soonRows.push(r);
+        }
         return {
-          now: capOthers(now.sort(order), OTHER_NOW_CAP),
-          soon: capOthers(soon.sort((a, b) => rank[a.group] - rank[b.group] || a.inDays - b.inDays || b.strength - a.strength), OTHER_SOON_CAP),
+          now: capOthers(nowRows, OTHER_NOW_CAP),
+          soon: capOthers(soonRows, OTHER_SOON_CAP),
           nextDxp: nextStart ? { start: toDate(nextStart), end: next ? next[2] : null, estimated: nextEstimated } : null,
           lastDxp: last ? { start: last[1], end: last[2] } : null
         };
@@ -23669,6 +23694,92 @@
           post_trough_offset_median: median(postTroughs)
         };
       }
+      var REPLAY_MIN_PRIOR = 5;
+      var REPLAY_MIN_TESTS = 8;
+      var REPLAY_DAY_WINDOW = 12;
+      var ALMANAC_DATA_VERSION = 3;
+      var REPLAY_FULL_DXPS = REPLAY_MIN_PRIOR + REPLAY_MIN_TESTS;
+      function planReplay(points, events, early = false) {
+        const pts = (points || []).filter((p) => p.price > 0).map((p) => [p.timestamp > 1e12 ? p.timestamp : p.timestamp * 1e3, p.price, p.volume || 0]).sort((a, b) => a[0] - b[0]);
+        if (pts.length < (early ? 20 : 200)) return null;
+        const minPrior = early ? 2 : REPLAY_MIN_PRIOR;
+        const firstAtOrAfter = (ts) => {
+          let lo = 0, hi = pts.length;
+          while (lo < hi) {
+            const m = lo + hi >> 1;
+            if (pts[m][0] < ts) lo = m + 1;
+            else hi = m;
+          }
+          return lo;
+        };
+        const priceAt = (ts) => {
+          const i = firstAtOrAfter(ts + 1) - 1;
+          return i >= 0 && ts - pts[i][0] <= 3 * MS_PER_DAY ? pts[i][1] : null;
+        };
+        const evs = [...events].sort((a, b) => a[1] < b[1] ? -1 : 1).map((e) => ({ start: parseDate(e[1]), end: parseDate(e[2]) }));
+        const extremes = (ev) => {
+          const from = firstAtOrAfter(ev.start), to = firstAtOrAfter(ev.end + 1);
+          if (to - from < 3) return null;
+          let lo = pts[from], hi = pts[from];
+          for (let i = from; i < to; i++) {
+            if (pts[i][1] < lo[1]) lo = pts[i];
+            if (pts[i][1] > hi[1]) hi = pts[i];
+          }
+          return { buy: Math.floor((lo[0] - ev.start) / MS_PER_DAY), sell: Math.floor((hi[0] - ev.start) / MS_PER_DAY) };
+        };
+        const daysFrom = (seen2) => {
+          const r = seen2.slice(-REPLAY_DAY_WINDOW);
+          return { buy: median(r.map((s) => s.buy)), sell: median(r.map((s) => s.sell)) };
+        };
+        const seen = [], rets = [], ctls = [];
+        evs.forEach((ev, i) => {
+          if (seen.length >= minPrior) {
+            const d2 = daysFrom(seen), buyFirst = d2.buy <= d2.sell, next = evs[i + 1];
+            const run = (shift) => {
+              const sellP = priceAt(ev.start + shift + Math.round(d2.sell) * MS_PER_DAY);
+              const buyP = buyFirst ? priceAt(ev.start + shift + Math.round(d2.buy) * MS_PER_DAY) : next ? priceAt(next.start + shift + Math.round(d2.buy) * MS_PER_DAY) : null;
+              return sellP && buyP ? (sellP * 0.98 / buyP - 1) * 100 : null;
+            };
+            const r = run(0), c = run(-45 * MS_PER_DAY);
+            if (r != null) rets.push(r);
+            if (c != null) ctls.push(c);
+          }
+          const x = extremes(ev);
+          if (x) seen.push(x);
+        });
+        if (early) {
+          const tail = pts.slice(-90);
+          if (seen.length >= REPLAY_FULL_DXPS || tail[tail.length - 1][1] < 100) return null;
+          if (!rets.length) return { dxps: seen.length, needed: REPLAY_FULL_DXPS, tests: 0, firstSeen: pts[0][0], volume: median(tail.map((p) => p[2])), passes: false };
+        } else if (rets.length < REPLAY_MIN_TESTS) return null;
+        const d = daysFrom(seen);
+        const med = median(rets), ctl = ctls.length ? median(ctls) : 0, wins = rets.filter((r) => r > 0).length;
+        if (early) {
+          const rec = rets.slice(-8), recWins = rec.filter((r) => r > 0).length;
+          return {
+            dxps: seen.length,
+            needed: REPLAY_FULL_DXPS,
+            firstSeen: pts[0][0],
+            volume: median(pts.slice(-90).map((p) => p[2])),
+            tests: rets.length,
+            wins,
+            median: round2(med),
+            control: round2(ctl),
+            recentTests: rec.length,
+            recentWins: recWins,
+            buyDay: d.buy,
+            sellDay: d.sell,
+            buyFirst: d.buy <= d.sell,
+            looksGood: med >= 3 && wins / rets.length >= 0.7 && med - ctl >= 2 && recWins / rec.length >= 0.6,
+            passes: false
+          };
+        }
+        const recent = rets.slice(-8), recentWins = recent.filter((r) => r > 0).length;
+        const last = pts.slice(-90);
+        const tradable = last[last.length - 1][1] >= 100 && median(last.map((p) => p[2])) >= 100;
+        const passes = tradable && med >= 3 && wins / rets.length >= 0.7 && med - ctl >= 2 && recentWins / recent.length >= 0.6;
+        return { tests: rets.length, wins, median: round2(med), control: round2(ctl), recentTests: recent.length, recentWins, buyDay: d.buy, sellDay: d.sell, buyFirst: d.buy <= d.sell, passes };
+      }
       function confidenceScore(tally, phase) {
         const t = tally[phase];
         if (t.total < MIN_EVENTS_FOR_CONFIDENCE) return null;
@@ -23696,9 +23807,11 @@
         } else {
           merged.timing = liveT || seedT;
         }
+        if (live.replay) merged.replay = live.replay;
+        if (live.early) merged.early = live.early;
         return merged;
       }
-      async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null, itemNames = null, useSeed = true, events = null) {
+      async function computeDxpData(allItemIds, getHistoryPointsFn, itemLimits = null, itemNames = null, useSeed = true, events = null, replayEvents = null) {
         if (events === null) events = EVENTS;
         itemLimits = itemLimits || {};
         itemNames = itemNames || {};
@@ -23712,7 +23825,9 @@
             const tally = classifyItem(points, parsed, events);
             const timing = bestBuySellDays(points, parsed, events);
             const hasSignal = PHASES.some((p) => confidenceScore(tally, p));
-            if (!hasSignal && !timing) continue;
+            const replay = planReplay(points, replayEvents || events);
+            const early = replay ? null : planReplay(points, replayEvents || events, true);
+            if (!hasSignal && !timing && !early) continue;
             const phases = {};
             for (const p of PHASES) {
               phases[p] = {
@@ -23730,12 +23845,14 @@
               name: itemNames[itemId] ?? itemId,
               limit: itemLimits[itemId] ?? null,
               phases,
-              timing
+              timing,
+              replay,
+              ...early ? { early } : {}
             };
           }
           if (b + BATCH < allItemIds.length) await new Promise((res) => setTimeout(res, 0));
         }
-        const meta = { event_count: events.length };
+        const meta = { event_count: events.length, version: ALMANAC_DATA_VERSION };
         if (!useSeed) {
           live._meta = meta;
           return live;
@@ -23762,6 +23879,8 @@
         windowedExtreme,
         classifyItem,
         bestBuySellDays,
+        planReplay,
+        ALMANAC_DATA_VERSION,
         confidenceScore,
         loadSeed,
         mergeEntry,
@@ -23850,6 +23969,26 @@
               {
                 name: "Dinosaur hide",
                 effect: "Big Game Hunter drop rate 1/10 to 1/6."
+              },
+              {
+                name: "Trimmed masterwork melee helm",
+                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+              },
+              {
+                name: "Trimmed masterwork melee platebody",
+                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+              },
+              {
+                name: "Trimmed masterwork melee platelegs",
+                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+              },
+              {
+                name: "Trimmed masterwork melee gloves",
+                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+              },
+              {
+                name: "Trimmed masterwork melee boots",
+                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
               }
             ]
           }
@@ -24889,6 +25028,8 @@
         let historyRefreshActive = false;
         let historyFetchActive = false;
         let historyFetchStop = false;
+        let historyRefreshStop = false;
+        const pause = (ms) => new Promise((r) => setTimeout(r, ms));
         let historyInitial300Done = store2.get("historyInitial300Done", false);
         const HISTORY_UNAVAILABLE_TTL = 24 * 36e5;
         const recentUnavailable = () => {
@@ -24924,6 +25065,8 @@
         let dxpIntelCache = null;
         let dxpIntelInFlight = null;
         let dxpIntelComputedAt = store2.get("dxpIntelComputedAt", 0);
+        let almanacEventsVersion = 0;
+        let dxpIntelFailedAt = 0;
         let signalTrendCache = null;
         let signalTrendInFlight = null;
         async function saveAthCache() {
@@ -25147,9 +25290,20 @@
         }
         const HISTORY_FETCH_CONCURRENCY = platform === "mobile" ? 8 : 12;
         async function runHistoryQueue(onProgress) {
-          if (historyFetchActive) return;
+          if (historyFetchActive) {
+            if (!historyFetchStop) return;
+            while (historyFetchActive) await pause(250);
+          }
           historyFetchActive = true;
           historyFetchStop = false;
+          try {
+            while (historyRefreshActive) await pause(250);
+            await runHistoryQueueInner(onProgress);
+          } finally {
+            historyFetchActive = false;
+          }
+        }
+        async function runHistoryQueueInner(onProgress) {
           let done = 0;
           const total = historyFetchQueue.length;
           let failedIds = [];
@@ -25191,7 +25345,6 @@
             await Promise.all(Array.from({ length: HISTORY_FETCH_CONCURRENCY }, retryWorker));
           }
           await saveHistory();
-          historyFetchActive = false;
           if (failedIds.length) {
             const m = store2.get("historyUnavailable", {}) || {}, now = Date.now();
             for (const id of failedIds) m[String(id)] = now;
@@ -25284,13 +25437,14 @@
           if (readOnlyHistory) return { refreshed: 0, skipped: "read-only" };
           if (historyRefreshActive || historyFetchActive) return { refreshed: 0, skipped: "busy" };
           historyRefreshActive = true;
+          historyRefreshStop = false;
           let refreshed = 0;
           try {
             await historyLoadedPromise;
             const now = Date.now();
             const stale = [...historyPopulatedIds].filter((id) => /^\d+$/.test(id) && (historyLatestTs[id] || 0) < now - HISTORY_REFRESH_STALE_MS && (historyRefreshAttempt[id] || 0) < now - 12 * 36e5).sort((a, b) => (historyLatestTs[a] || 0) - (historyLatestTs[b] || 0)).slice(0, maxItems);
             for (const id of stale) {
-              if (historyFetchActive) break;
+              if (historyFetchActive || historyRefreshStop) break;
               historyRefreshAttempt[id] = Date.now();
               const incremental = (historyLatestTs[id] || 0) > now - HISTORY_INCREMENTAL_MAX_MS;
               if (await (incremental ? fetchRecentHistory(id) : fetchHistoryForItemOnce(id, 12e3))) {
@@ -25318,6 +25472,17 @@
         async function stopHistoryPopulation() {
           historyFetchStop = true;
           return { success: true };
+        }
+        async function prepareForQuit() {
+          historyFetchStop = true;
+          historyRefreshStop = true;
+          const until = Date.now() + 4e3;
+          while ((historyFetchActive || historyRefreshActive) && Date.now() < until) await pause(100);
+          try {
+            await saveHistory();
+          } catch (e) {
+            console.error("[history] Save on quit failed:", e.message);
+          }
         }
         async function getItemHistory(itemId) {
           if (String(itemId).startsWith("untradeable_")) return null;
@@ -25382,7 +25547,7 @@
         let dxpIntelDiskServed = false;
         const ALMANAC_STATS_SINCE = "2023-06-01";
         async function getDxpIntelligence({ forceFresh = false } = {}) {
-          if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion) {
+          if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion && dxpIntelCache.eventsVersion === almanacEventsVersion) {
             return dxpIntelCache.data;
           }
           if (!forceFresh && dxpIntelCache) {
@@ -25394,13 +25559,15 @@
             dxpIntelInFlight = storage2.readJSON(path.join(dataDir, "dxp_intelligence.json"), null);
             const onDisk = await dxpIntelInFlight;
             dxpIntelInFlight = null;
-            if (onDisk && Object.keys(onDisk).length) {
-              dxpIntelCache = { historyVersion: -1, data: onDisk };
+            const current = onDisk?._meta?.version === require_dxp_intelligence().ALMANAC_DATA_VERSION;
+            if (onDisk && current && Object.keys(onDisk).length) {
+              dxpIntelCache = { historyVersion: -1, eventsVersion: -1, data: onDisk };
               maybeRefreshAlmanac().catch(() => {
               });
               return onDisk;
             }
           }
+          const eventsAtStart = almanacEventsVersion;
           dxpIntelInFlight = (async () => {
             await historyLoadedPromise;
             try {
@@ -25414,7 +25581,8 @@
                 }
               }
               const todayStr = (/* @__PURE__ */ new Date()).toISOString().slice(0, 10);
-              const events = uniqueEvents((await loadEvents(dataDir)).filter((e) => e[1] >= ALMANAC_STATS_SINCE && e[2] < todayStr));
+              const finished = uniqueEvents((await loadEvents(dataDir)).filter((e) => e[2] < todayStr));
+              const events = finished.filter((e) => e[1] >= ALMANAC_STATS_SINCE);
               const out = await computeDxpData(
                 [...historyPopulatedIds],
                 async (id) => {
@@ -25425,19 +25593,22 @@
                 itemLimits,
                 itemNames,
                 true,
-                events
+                events,
+                finished
               );
               await storage2.writeJSON(path.join(dataDir, "dxp_intelligence.json"), out);
-              dxpIntelCache = { historyVersion, data: out };
+              dxpIntelCache = { historyVersion, eventsVersion: eventsAtStart, data: out };
               dxpIntelComputedAt = Date.now();
               store2.set("dxpIntelComputedAt", dxpIntelComputedAt);
               return out;
             } catch (e) {
               console.error("[DXP Intel] Error:", e.message);
+              dxpIntelFailedAt = Date.now();
               throw e;
             }
           })();
-          dxpIntelInFlight.finally(() => {
+          dxpIntelInFlight.catch(() => {
+          }).finally(() => {
             dxpIntelInFlight = null;
           });
           return dxpIntelInFlight;
@@ -25855,6 +26026,7 @@
             if (tease) {
               entry.teasedOn = tease.date;
               tease.status = "dated";
+              entry.datesTease = tease.url;
               const teases = store2.get("dxpTeases", {});
               teases[dates[0]] = tease.date;
               store2.set("dxpTeases", teases);
@@ -25871,12 +26043,19 @@
             } else if (expect) {
               entry.status = "teased";
               entry.expected = expect;
-              if (det.some((d) => d.status === "teased" && d.expected === expect)) entry.notified = true;
+              if (det.some((d) => (d.status === "teased" || d.status === "dismissed" || d.status === "dated") && d.expected === expect)) entry.notified = true;
             } else {
               entry.notified = true;
             }
           }
-          store2.set("dxpNewsDetections", [...det, entry].slice(-30));
+          const latest = store2.get("dxpNewsDetections", []);
+          if (latest.some((d) => d.url === entry.url)) return;
+          const linked = entry.datesTease;
+          delete entry.datesTease;
+          const merged = [...latest.map((d) => linked && d.url === linked ? { ...d, status: "dated" } : d), entry];
+          const keepTease = (d) => d.status === "teased" && Date.now() - /* @__PURE__ */ new Date(d.date + "T12:00:00") < 120 * 864e5;
+          const tail = merged.slice(-30);
+          store2.set("dxpNewsDetections", [...merged.slice(0, -30).filter(keepTease), ...tail]);
         }
         async function fetchNewsPage(url) {
           if (!/^https:\/\/secure\.runescape\.com\//.test(url || "")) return null;
@@ -26027,15 +26206,41 @@
           }
         }
         const CAL_PRIORITY = ["dxp", "release", "seasonal", "marketplace", "livestream", "maintenance", "other"];
-        async function getAlmanacSignals() {
-          const { loadEvents } = require_dxp_intelligence();
-          const intel = await storage2.readJSON(path.join(dataDir, "dxp_intelligence.json"), null);
+        let almanacIntel = null, almanacIntelAt = 0;
+        async function loadAlmanacIntel() {
+          if (almanacIntel && Date.now() - almanacIntelAt < 36e5) return almanacIntel;
+          const full = await storage2.readJSON(path.join(dataDir, "dxp_intelligence.json"), null);
+          if (!full) return null;
+          const slim = {};
+          for (const [id, e] of Object.entries(full)) {
+            if (id === "_meta" || !e || !e.timing) continue;
+            const phases = {};
+            for (const [name, p] of Object.entries(e.phases || {})) phases[name] = p && { rise: p.rise, drop: p.drop, total: p.total };
+            slim[id] = { name: e.name, timing: e.timing, phases };
+          }
+          almanacIntel = slim;
+          almanacIntelAt = Date.now();
+          return slim;
+        }
+        let almanacSignals = null, almanacSignalsAt = 0;
+        function getAlmanacSignals() {
+          if (!almanacSignals || Date.now() - almanacSignalsAt > 6e4) {
+            almanacSignalsAt = Date.now();
+            almanacSignals = computeAlmanacSignals().catch((e) => {
+              almanacSignals = null;
+              throw e;
+            });
+          }
+          return almanacSignals;
+        }
+        async function computeAlmanacSignals() {
+          const intel = await loadAlmanacIntel();
           if (!intel) return { now: [], soon: [], nextDxp: null, lastDxp: null };
           const latest = await storage2.readJSON(path.join(dataDir, "latest.json"), {});
           const portfolio = await readPortfolio();
           const held = /* @__PURE__ */ new Map();
-          for (const p of portfolio.positions) {
-            if (p.status !== "open" || !(p.quantity > 0)) continue;
+          for (const p of portfolio.positions || []) {
+            if (p.status !== "open" || !(p.quantity > 0) || !p.item_name) continue;
             const k = p.item_name.toLowerCase();
             const h = held.get(k) || { name: p.item_name, quantity: 0, spent: 0 };
             h.quantity += p.quantity;
@@ -26043,7 +26248,7 @@
             held.set(k, h);
           }
           const holdings = [...held.values()].map((h) => ({ name: h.name, quantity: h.quantity, cost: h.spent / h.quantity }));
-          const events = (await loadEvents(dataDir)).filter((e) => e[1] >= ALMANAC_STATS_SINCE);
+          const events = (await storage2.readJSON(path.join(dataDir, "dxp_events.json"), [])).filter((e) => e[1] >= ALMANAC_STATS_SINCE);
           const out = computeSignals({
             intel,
             events,
@@ -26143,6 +26348,8 @@
           if (out.length) store2.set("updateRiskNotified", [...notified, ...out.flatMap((n) => n.keys)]);
           return out;
         }
+        const isNameReleaseDate = (e) => /\bname release\b|\brelease\b.*\bnames\b/i.test(e.label || "") || /^name release\b(?!.*(?:\band\b|&))/i.test(e.postTitle || "");
+        const fixCalendarCategory = (e) => e.category === "release" && isNameReleaseDate(e) ? { ...e, category: "seasonal" } : e;
         async function getNewsCalendar(opts = {}) {
           const cal = await storage2.readJSON(calendarFile, { entries: [], processed: {} });
           const pastDays = Math.max(0, Math.min(400, Number(opts && opts.pastDays) || 0));
@@ -26151,7 +26358,7 @@
           const escRe = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
           const mentions = (name, text) => new RegExp("\\b" + escRe(name) + "\\b", "i").test(text);
           const isCancelled = (e) => cancelled.some((c) => String(e.postDate) < String(c.postDate) && mentions(c.name, e.label + " " + e.postTitle));
-          const upcoming = cal.entries.filter((e) => (e.end || e.start) >= today && !isCancelled(e));
+          const upcoming = cal.entries.map(fixCalendarCategory).filter((e) => (e.end || e.start) >= today && !isCancelled(e));
           const GENERIC = /^(community|future updates|game updates|dev blogs?|behind the scenes|your feedback|events|support|technical|website|shop|news|update|updates)$/i;
           const PAGE_TITLE = /RuneScape\s*-\s*RuneScape|^News\s*-\s/i;
           const goodLabel = (l) => l && !PAGE_TITLE.test(l) && l.length <= 70 && !/^[\d:.,]/.test(l) && /^[A-Z"']/.test(l) && !GENERIC.test(l.trim()) && !/\b(is|are|the|a|an|to|of|and|on|by|in|for|until|from|will|be|at|with)$/i.test(l.trim());
@@ -26202,6 +26409,7 @@
             store2.set("newsRead", read);
           }
           const cal = await storage2.readJSON(calendarFile, { entries: [], processed: {} });
+          cal.entries = cal.entries.map(fixCalendarCategory);
           const datesByPost = {};
           for (const e of cal.entries) (datesByPost[e.postUrl] = datesByPost[e.postUrl] || []).push(e);
           const dxpByUrl = Object.fromEntries(store2.get("dxpNewsDetections", []).map((d) => [d.url, d]));
@@ -26295,6 +26503,7 @@
           const local = await storage2.readJSON(localPath, []);
           await storage2.writeJSON(localPath, [ev, ...local], { pretty: true });
           dxpIntelComputedAt = 0;
+          almanacEventsVersion++;
           return { added: true };
         }
         async function getDxpNewsDetections() {
@@ -27568,6 +27777,7 @@
         }
         async function maybeRefreshAlmanac() {
           if (dxpIntelInFlight || Date.now() - dxpIntelComputedAt < 24 * 36e5) return;
+          if (Date.now() - dxpIntelFailedAt < 36e5) return;
           await getDxpIntelligence({ forceFresh: true });
         }
         async function maybeBuildSimilarityTable() {
@@ -28320,7 +28530,7 @@
           }
           if (!pos) {
             pos = {
-              id: Date.now().toString(),
+              id: newPositionId(),
               item_name: goal.item_name,
               status: "open",
               created_at: (/* @__PURE__ */ new Date()).toISOString(),
@@ -28393,10 +28603,19 @@
           return { success: true };
         }
         const saleNet = (price, qty) => price >= 50 ? Math.round(price * qty * 0.98) : price * qty;
+        let lastPositionId = 0;
+        const newPositionId = () => {
+          let t = Date.now();
+          if (t <= lastPositionId) t = lastPositionId + 1;
+          lastPositionId = t;
+          return String(t);
+        };
         async function sellPosition({ id, sell_price, quantity, alch = false }) {
           const p = await readPortfolio();
           const pos = p.positions.find((x) => x.id === id);
           if (!pos) return { success: false };
+          if (pos.status && pos.status !== "open") return { success: false, error: "This position is already closed" };
+          if (!(Number(quantity) > 0)) return { success: false, error: "Invalid quantity" };
           const net = alch ? sell_price * quantity : saleNet(sell_price, quantity);
           const tax = sell_price * quantity - net;
           const cost = pos.cost_basis * quantity;
@@ -28418,7 +28637,7 @@
           } else {
             p.positions.push({
               ...pos,
-              id: Date.now().toString(),
+              id: newPositionId(),
               quantity,
               status: "sold",
               sold_price: sell_price,
@@ -28436,6 +28655,7 @@
           const p = await readPortfolio();
           const pos = p.positions.find((x) => x.id === id);
           if (!pos) return { success: false, error: "Position not found" };
+          if (pos.status && pos.status !== "open") return { success: false, error: "This position is already closed" };
           if (!outputItemName || !outputQuantity || outputQuantity <= 0) {
             return { success: false, error: "Output item and quantity are required" };
           }
@@ -28454,28 +28674,32 @@
           const totalCost = inputCostUsed + (Number(extraCost) || 0);
           const newCostBasis = Math.round(totalCost / outputQuantity);
           const now = (/* @__PURE__ */ new Date()).toISOString();
-          let n = 0;
+          const conversion_id = newPositionId();
           for (const { pos: inp, qty } of inputs) {
             if (qty >= inp.quantity) {
               inp.status = "converted";
               inp.converted_to = outputItemName;
               inp.converted_quantity = inp.quantity;
               inp.converted_at = now;
+              inp.conversion_id = conversion_id;
             } else {
               p.positions.push({
                 ...inp,
-                id: (Date.now() + 10 + n++).toString(),
+                id: newPositionId(),
                 quantity: qty,
                 status: "converted",
                 converted_to: outputItemName,
                 converted_quantity: qty,
-                converted_at: now
+                converted_at: now,
+                conversion_id
               });
               inp.quantity -= qty;
             }
           }
           p.positions.push({
-            id: (Date.now() + 1).toString(),
+            id: newPositionId(),
+            conversion_id,
+            conversion_output: true,
             item_name: outputItemName,
             quantity: outputQuantity,
             cost_basis: newCostBasis,
@@ -28499,6 +28723,22 @@
             delete pos.sold_quantity;
             delete pos.realized_pl;
             delete pos.sold_at;
+            delete pos.sold_via;
+          } else if (pos.conversion_id) {
+            const cid = pos.conversion_id;
+            const out = p.positions.find((x) => x.conversion_id === cid && x.conversion_output);
+            if (out && (out.status !== "open" || out.sold_quantity)) {
+              return { success: false, error: `The ${out.item_name} made from this has already been sold or changed. Reopen that first.` };
+            }
+            for (const x of p.positions) {
+              if (x.conversion_id !== cid || x.conversion_output) continue;
+              x.status = "open";
+              delete x.converted_to;
+              delete x.converted_quantity;
+              delete x.converted_at;
+              delete x.conversion_id;
+            }
+            if (out) p.positions = p.positions.filter((x) => x !== out);
           } else {
             pos.status = "open";
             delete pos.converted_to;
@@ -29053,8 +29293,8 @@
           store2.set("inbox", inbox.slice(0, INBOX_MAX));
           store2.set("almanacDigestLog", log);
         }
-        function markInboxRead(kind) {
-          store2.set("inbox", store2.get("inbox", []).map((e) => !kind || e.kind === kind ? { ...e, read: true } : e));
+        function markInboxRead(kind, upTo) {
+          store2.set("inbox", store2.get("inbox", []).map((e) => (!kind || e.kind === kind) && (!upTo || e.at <= upTo) ? { ...e, read: true } : e));
           return { success: true };
         }
         function clearInbox(id) {
@@ -29172,6 +29412,7 @@
           getFoodHeal,
           maybeBuildSimilarityTable,
           maybeRefreshAlmanac,
+          prepareForQuit,
           // alerts
           getAlerts,
           saveAlert,
@@ -31367,7 +31608,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "2.8.0",
+        version: "2.9.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",
@@ -31404,7 +31645,9 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             "!node_modules/tslib/**"
           ],
           asarUnpack: [
-            "src/backend-js/data/**/*"
+            "src/backend-js/data/**/*",
+            "node_modules/tesseract.js/**/*",
+            "node_modules/tesseract.js-core/**/*"
           ],
           extraResources: [
             {
@@ -31427,6 +31670,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             icon: "assets/icon.ico"
           },
           nsis: {
+            artifactName: "GEnius.Setup.${version}.${ext}",
             oneClick: false,
             allowToChangeInstallationDirectory: true,
             createDesktopShortcut: true,
@@ -31445,7 +31689,8 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
           "@capacitor/filesystem": "^8.1.2",
           "@capacitor/local-notifications": "^8.2.0",
           "@capacitor/preferences": "^8.0.1",
-          qrcode: "^1.5.4"
+          qrcode: "^1.5.4",
+          "tesseract.js": "^7.0.0"
         }
       };
     }
@@ -31647,7 +31892,13 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     }
     for (const n of await a.getUpdateRiskNotifications()) await fireNotification(n.title, n.body);
     for (const n of await a.getDxpNotifications()) await fireNotification(n.title, n.body);
-    for (const n of await a.getAlmanacNotifications()) await fireNotification(n.title, n.body);
+    try {
+      const almanac = await a.getAlmanacNotifications();
+      for (const n of almanac) await fireNotification(n.title, n.body);
+      if (almanac.length) await syncRunnerState();
+    } catch (e) {
+      console.error("[GEnius] Almanac check failed:", e.message);
+    }
     const digest = await a.getWatchlistDigest();
     if (digest) await fireNotification(digest.title, digest.body);
     const portfolioDigest = await a.getPortfolioDigest();
@@ -31659,22 +31910,45 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     if (store.get("notifications", true)) for (const al of triggered) await fireNotification(al.title, al.body);
   }
   var fetchInFlight = null;
+  var fetchQueued = null;
   var firstFetchResolve;
   var firstFetchDone = new Promise((res) => {
     firstFetchResolve = res;
   });
-  function runFetch(mode) {
-    if (fetchInFlight) return fetchInFlight;
-    fetchInFlight = runFetchOnce(mode).finally(() => {
+  var fetchCovers = (running, wanted) => running === wanted || running === "full";
+  function runFetch(mode = "prices") {
+    if (fetchInFlight && fetchCovers(fetchInFlight.mode, mode)) return fetchInFlight.promise;
+    if (fetchInFlight) {
+      if (fetchQueued) {
+        if (!fetchCovers(fetchQueued.mode, mode)) fetchQueued.mode = "full";
+        return fetchQueued.promise;
+      }
+      const q = { mode };
+      q.promise = fetchInFlight.promise.catch(() => {
+      }).then(() => {
+        fetchQueued = null;
+        return runFetch(q.mode);
+      });
+      fetchQueued = q;
+      return q.promise;
+    }
+    const promise = runFetchOnce(mode).finally(() => {
       fetchInFlight = null;
       firstFetchResolve();
     });
-    return fetchInFlight;
+    fetchInFlight = { mode, promise };
+    return promise;
   }
   async function runFetchOnce(mode) {
+    let a, runJs;
+    try {
+      a = await ensureApi();
+      runJs = require_run().main;
+    } catch (error) {
+      emit("fetch-error", { error: error.message });
+      throw error;
+    }
     emit("fetch-start", { mode });
-    const a = await ensureApi();
-    const { main: runJs } = require_run();
     try {
       await a.historyLoadedPromise;
       const argv = [`--mode=${mode || "prices"}`, `--data-dir=${DATA_DIR}`];
@@ -31745,7 +32019,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         await collectBackgroundInbox(a2);
         return a2.getInbox();
       },
-      markInboxRead: async (kind) => (await ensureApi()).markInboxRead(kind),
+      markInboxRead: async (kind, upTo) => (await ensureApi()).markInboxRead(kind, upTo),
       clearInbox: async (id) => (await ensureApi()).clearInbox(id),
       syncRole: "phone",
       syncStatus: async () => (await ensureApi()).sync.clientStatus(),
@@ -31761,6 +32035,11 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       syncNow: (opts) => runSync(opts),
       syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
       getItemLiveHistory: (id, days) => a.getItemLiveHistory(id, days),
+      // Hourly archive is desktop-only (live-hourly.js uses fs/zlib).
+      getItemLiveHourly: async () => [],
+      getItemDailyRange: async () => [],
+      getLiveHourlyStatus: async () => null,
+      syncLiveHourly: async () => ({ saved: 0 }),
       getItemLiveTimeseries: (id, lookback) => a.getItemLiveTimeseries(id, lookback),
       getLaunches: async () => a.getLaunches(),
       getDropSources: (name) => a.getDropSources(name),
@@ -31794,6 +32073,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         detailPanelWidth: store.get("detailPanelWidth", 296),
         columnWidths: store.get("columnWidths", {}),
         showThumbnails: store.get("showThumbnails", true),
+        fullNumbers: store.get("fullNumbers", false),
         devMode: store.get("devMode", false),
         dateFormat: store.get("dateFormat", "MM/DD/YYYY"),
         overpricedThreshold: store.get("overpricedThreshold", 30),
@@ -32056,6 +32336,11 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
   var lastFetchOkAt = 0;
   App.addListener("appStateChange", ({ isActive }) => {
     if (!isActive || !store) return;
+    if (store.get("liveMonitoring", false)) {
+      GeniusMonitor.isRunning().then((r) => {
+        if (!r?.running) return startLiveMonitoring();
+      }).catch((e) => console.error("[GEnius] Live monitoring restart failed:", e.message));
+    }
     const intervalMs = store.get("fetchInterval", 15) * 60 * 1e3;
     if (Date.now() - lastFetchOkAt >= intervalMs) {
       runFetch("prices").catch((e) => console.error("[GEnius] Resume fetch failed:", e.message));
