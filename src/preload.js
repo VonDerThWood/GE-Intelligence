@@ -37,6 +37,8 @@ contextBridge.exposeInMainWorld('genius', {
   getItemDailyRange: (id, days) => ipcRenderer.invoke('get-item-daily-range', id, days),
   getLiveHourlyStatus: () => ipcRenderer.invoke('get-live-hourly-status'),
   syncLiveHourly: () => ipcRenderer.invoke('sync-live-hourly'),
+  findInPage: (text, opts) => ipcRenderer.invoke('find-in-page', text, opts),
+  onFoundInPage: (cb) => { ipcRenderer.removeAllListeners('found-in-page'); ipcRenderer.on('found-in-page', (_, r) => cb(r)); },
   getItemLiveTimeseries: (id, lookback) => ipcRenderer.invoke('get-item-live-timeseries', id, lookback),
   getLaunches:           () => ipcRenderer.invoke('get-launches'),
   getDropSources:        (name) => ipcRenderer.invoke('get-drop-sources', name),

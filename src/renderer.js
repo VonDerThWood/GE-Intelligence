@@ -14754,7 +14754,7 @@ function ArchaeologyCalc({items}) {
   return h('div', null,
     h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', alignItems:'center', marginBottom:10}},
       pill(view==='collections', 'Collections', ()=>{setView('collections'); setSort({key:'profit',dir:-1});}),
-      pill(view==='artefacts', 'Single artefacts', ()=>{setView('artefacts'); setSort({key:'profit',dir:-1});}),
+      pill(view==='artefacts', 'By artefact', ()=>{setView('artefacts'); setSort({key:'profit',dir:-1});}),
       h('span', {style:{width:10}}),
       pill(priceMode==='live', 'Live prices', ()=>setPriceMode('live')),
       pill(priceMode==='ge', 'GE guide prices', ()=>setPriceMode('ge')),
@@ -16871,4 +16871,41 @@ function App() {
   ));
 }
 
+// Ctrl+F find bar, desktop only (Ben, 2026-11-09). Uses Chromium's find-in-page,
+// which highlights every match on screen; Enter / Shift+Enter step through them.
+function FindBar() {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [res, setRes] = useState(null);
+  const ref = useRef(null);
+  useEffect(() => {
+    if (!window.genius?.findInPage) return;
+    window.genius.onFoundInPage(r => { if (r.final !== false) setRes(r); });
+    const key = e => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault(); setOpen(true); setTimeout(() => { ref.current?.focus(); ref.current?.select(); }, 0);
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
+  const close = () => { setOpen(false); setRes(null); window.genius.findInPage(''); };
+  const run = (t, opts) => { if (!t) { setRes(null); window.genius.findInPage(''); return; } window.genius.findInPage(t, opts); };
+  if (!open) return null;
+  return h('div', {style:{position:'fixed', top:44, right:18, zIndex:99990, display:'flex', alignItems:'center', gap:6,
+    background:T.panel || T.bg, border:`1px solid ${T.gold}`, borderRadius:4, padding:'5px 8px', boxShadow:'0 4px 16px rgba(0,0,0,0.5)'}},
+    h('input', {ref, className:'ge-input', value:text, placeholder:'Find on this page', style:{width:200, fontSize:12},
+      onChange:e => { setText(e.target.value); run(e.target.value); },
+      onKeyDown:e => {
+        if (e.key === 'Escape') { e.preventDefault(); close(); }
+        else if (e.key === 'Enter') { e.preventDefault(); run(text, {findNext:true, forward:!e.shiftKey}); }
+      }}),
+    h('span', {style:{fontSize:11, color:T.textDim, minWidth:54, textAlign:'center'}}, !text ? '' : res && res.total ? `${res.active} of ${res.total}` : 'No matches'),
+    h('button', {className:'ge-btn', title:'Previous (Shift+Enter)', style:{fontSize:11, padding:'2px 7px'}, onClick:()=>run(text, {findNext:true, forward:false})}, '▲'),
+    h('button', {className:'ge-btn', title:'Next (Enter)', style:{fontSize:11, padding:'2px 7px'}, onClick:()=>run(text, {findNext:true, forward:true})}, '▼'),
+    h('button', {className:'ge-btn', title:'Close (Esc)', style:{fontSize:11, padding:'2px 7px'}, onClick:close}, '✕'));
+}
+const findRootEl = document.createElement('div');
+document.body.appendChild(findRootEl);
+createRoot(findRootEl).render(h(FindBar, null));
 createRoot(document.getElementById('root')).render(h(App,null));

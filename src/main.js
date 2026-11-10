@@ -113,6 +113,7 @@ function createWindow() {
     },
     show: false
   });
+  mainWindow.webContents.on('found-in-page', (_, r) => notifyRenderer('found-in-page', { active: r.activeMatchOrdinal, total: r.matches, final: r.finalUpdate }));
   // Re-assert immediately after creation, not just in the constructor —
   // closes the gap where the window surface can briefly render as
   // transparent before the page's first paint, with hardware acceleration off.
@@ -719,6 +720,11 @@ ipcMain.handle('get-inbox', () => api.getInbox());
 ipcMain.handle('test-seed-inbox', (_, list) => { if (isTestMode) store.set('inbox', list); });
 ipcMain.handle('mark-inbox-read', (_, kind, upTo) => api.markInboxRead(kind, upTo));
 ipcMain.handle('clear-inbox', (_, id) => api.clearInbox(id));
+// Ctrl+F find bar (Ben, 2026-11-09): Chromium's own find-in-page, results sent back.
+ipcMain.handle('find-in-page', async (e, text, opts) => {
+  if (!text) { e.sender.stopFindInPage('clearSelection'); return null; }
+  return e.sender.findInPage(text, opts || {});
+});
 ipcMain.handle('get-item-live-hourly', async (_, itemId, days) => liveHourly ? liveHourly.getItem(itemId, days) : []);
 ipcMain.handle('get-item-daily-range', async (_, itemId, days) => liveHourly ? liveHourly.getItemDailyRange(itemId, days) : []);
 ipcMain.handle('get-live-hourly-status', async () => liveHourly ? liveHourly.status() : null);
