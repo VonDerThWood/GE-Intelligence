@@ -14691,9 +14691,28 @@ function ArchaeologyCalc({items}) {
     const noPrice = a => a.m.map(x => x[0]).filter(m => unpriced[m]);
     const matsOf = a => { const local = (ARCHAEOLOGY_DATA.hotspots || {})[a.h] || []; return a.m.map(([name, qty]) => { const price = buyOf(name); return { name, qty, price, total: price == null ? null : price * qty, local: local.includes(name) }; }); };
     const value = n => chronote == null ? null : applyTax(chronote) * n;
+    // Disassembly (Ben, 2026-11-09), using the wiki's Restoration profit module: ancient
+    // components are valued by making material crates and selling them (crate price after
+    // tax, minus the padded parts and protective components the crate takes), the better
+    // of small or large. Expected yield depends only on the artefact's level band.
+    const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
+    const partCost = n => buyOf(n) ?? 0;
+    const crate = (kind, size) => { const p = sellOf(`${size === 'sm' ? 'Small' : 'Large'} crate (${kind} components)`); if (p == null) return null;
+      const net = applyTax(p) - (size === 'sm' ? 25 : 100) * partCost('Padded parts') - (size === 'sm' ? 1 : 2) * partCost('Protective components');
+      const per = { historic:[100,1000], classic:[100,1000], timeworn:[5,25], vintage:[5,25] }[kind][size === 'sm' ? 0 : 1];
+      return net / per; };
+    const comp = {};
+    for (const k of ['historic','classic','timeworn','vintage']) { const v = [crate(k,'sm'), crate(k,'lg')].filter(x => x != null); comp[k] = v.length ? Math.max(...v) : null; }
+    const disValue = lvl => {
+      const c = comp;
+      if (lvl < 71) return c.historic == null || c.classic == null ? null : 0.8*20*c.historic + 0.18*5*c.classic + 0.01*(c.timeworn||0) + 0.01*(c.vintage||0);
+      const n = lvl < 91 ? 2 : lvl < 111 ? 4 : 8;
+      return c.timeworn == null || c.vintage == null ? null : 0.5*n*c.timeworn + 0.5*n*c.vintage;
+    };
     const artefacts = Object.entries(ARCHAEOLOGY_DATA.artefacts).map(([name, a]) => {
       const cost = costOf(a), bin = Math.floor(a.c * 0.4);
-      return { name, level:a.l, cost, unpriced:noPrice(a), mats:matsOf(a), hotspot:a.h, chronotes:a.c, bin, binProfit: cost == null ? null : value(bin) - cost,
+      const dis = a.h ? disValue(a.l) : null; // artefacts with no dig site don't give ancient components
+      return { name, level:a.l, cost, unpriced:noPrice(a), mats:matsOf(a), hotspot:a.h, chronotes:a.c, bin, disProfit: dis == null ? null : dis - cost, binProfit: cost == null ? null : value(bin) - cost,
         collProfit: cost == null ? null : value(a.c * 2) - cost, profit: cost == null ? null : value(bin) - cost };
     }).filter(a => a.cost != null);
     let skipped = 0;
@@ -14749,7 +14768,7 @@ function ArchaeologyCalc({items}) {
     h('div', {className:'ge-table-wrap'}, h('table', {className:'ge-table pt-arch'},
       view === 'collections' ?
         h('thead', null, h('tr', null, th('name','Collection'), th('level','Level'), th('pieces','Pieces'), th('cost','Materials'), th('chronotes','Chronotes'), th('profit','Profit'))) :
-        h('thead', null, h('tr', null, th('name','Artefact'), th('level','Level'), th('cost','Materials'), th('chronotes','Listed chronotes'), th('bin','Bin chronotes'), th('profit','Bin profit'), th('collProfit','In a collection'))),
+        h('thead', null, h('tr', null, th('name','Artefact'), th('level','Level'), th('cost','Materials'), th('chronotes','Listed chronotes'), th('bin','Bin chronotes'), th('profit','Bin profit'), th('collProfit','In a collection'), th('disProfit','Disassemble', 'Restore, then disassemble for ancient components, sold as material crates (wiki method)'))),
       h('tbody', null, rows.map(r => view === 'collections' ?
         h(React.Fragment, {key:r.name},
           h('tr', {onClick:()=>setOpen(o => ({...o, [r.name]:!o[r.name]})), style:{cursor:'pointer'}},
@@ -14764,7 +14783,7 @@ function ArchaeologyCalc({items}) {
               h('tbody', null, r.parts.map(p => h(React.Fragment, {key:p.name}, h('tr', {onClick:()=>toggle('a:'+r.name+p.name), style:{cursor:'pointer'}},
                 h('td', null, (open['a:'+r.name+p.name] ? '▾ ' : '▸ ') + p.name, p.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + p.unpriced.join(', ')) : null),
                 h('td', null, p.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(p.cost))+'gp'), h('td', null, p.chronotes.toLocaleString()), h('td', {style:col(p.profit)}, gp(p.profit))), open['a:'+r.name+p.name] && matDetail(p, 5)))))))) :
-        h(React.Fragment, {key:r.name}, h('tr', {onClick:()=>toggle('s:'+r.name), style:{cursor:'pointer'}}, h('td', null, (open['s:'+r.name] ? '▾ ' : '▸ ') + r.name, r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null), h('td', null, r.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', null, r.bin.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit)), h('td', {style:col(r.collProfit)}, gp(r.collProfit))), open['s:'+r.name] && matDetail(r, 7)))))),
+        h(React.Fragment, {key:r.name}, h('tr', {onClick:()=>toggle('s:'+r.name), style:{cursor:'pointer'}}, h('td', null, (open['s:'+r.name] ? '▾ ' : '▸ ') + r.name, r.unpriced.length ? h('div', {style:{fontSize:10, color:'#e08030'}}, '⚠ Cost leaves out: ' + r.unpriced.join(', ')) : null), h('td', null, r.level), h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost))+'gp'), h('td', null, r.chronotes.toLocaleString()), h('td', null, r.bin.toLocaleString()), h('td', {style:col(r.profit)}, gp(r.profit)), h('td', {style:col(r.collProfit)}, gp(r.collProfit)), h('td', {style: r.disProfit == null ? {color:T.textDim} : col(r.disProfit)}, r.disProfit == null ? 'n/a' : gp(r.disProfit))), open['s:'+r.name] && matDetail(r, 8)))))),
     view === 'collections' && data.skipped ? h('div', {style:{fontSize:10, color:T.textDim, marginTop:8}}, `${data.skipped} collections have a piece GEnius couldn't price yet.`) : null,
   );
 }
@@ -14935,7 +14954,7 @@ function CraftingBuffCheckboxes({buffs, setBuffs}) {
 }
 
 function MoneyMakersTab({items, onSelect, description}) {
-  const [skill, setSkill] = useState('herblore');
+  const [skill, setSkill] = useState('archaeology');
   const [herbSub, setHerbSub] = useState('herbs');
   const [magicSub, setMagicSub] = useState('grinding');
   const [fletchingBuffs, setFletchingBuffs] = useState(FLETCHING_BUFF_DEFAULTS);
