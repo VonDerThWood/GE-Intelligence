@@ -14813,7 +14813,7 @@ function ArchaeologyCalc({items}) {
         h('td', {style: r.profit == null ? {} : col(r.profit)}, gp(r.profit)),
         h('td', {style:{color:T.textDim}}, r.volume != null ? r.volume.toLocaleString() : '—')),
         open['m:'+r.name] && h('tr', null, h('td', {colSpan:8, style:{padding:'6px 10px 10px 22px', fontSize:11}},
-          h('div', {style:{color:T.textDim, marginBottom:3}}, 'Special: always one of these'),
+          h('div', {style:{color:T.textDim, marginBottom:3}}, r.special.reduce((t, x) => t + x.chance, 0) > 0.99 ? 'Special: always one of these' : 'Special: a chance of one of these'),
           r.special.map(x => h('div', {key:x.name, style:{display:'flex', gap:10}},
             h('span', {style:{minWidth:200}}, `${x.qty} × ${x.name}`), h('span', {style:{minWidth:50}}, Math.round(x.chance*100)+'%'),
             h('span', {style:{color:T.textDim}}, x.each == null ? 'no crate price' : fmt.gp(Math.round(x.each))+'gp each, via crates'))),
