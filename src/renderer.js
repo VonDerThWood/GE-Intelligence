@@ -16871,38 +16871,78 @@ function App() {
   ));
 }
 
-// Ctrl+F find bar, desktop only (Ben, 2026-11-09). Uses Chromium's find-in-page,
-// which highlights every match on screen; Enter / Shift+Enter step through them.
+// Ctrl+F find bar, desktop only (Ben, 2026-11-09). Searches the page's own text and
+// colours matches with the CSS Highlight API, so it never moves focus out of the box
+// (Chromium's find-in-page did, which dropped keystrokes and felt laggy).
 function FindBar() {
   const [open, setOpen] = useState(false);
   const [text, setText] = useState('');
-  const [res, setRes] = useState(null);
+  const [res, setRes] = useState({ at: 0, total: 0 });
   const ref = useRef(null);
+  const barRef = useRef(null);
+  const ranges = useRef([]);
+  const timer = useRef(null);
   useEffect(() => {
-    if (!window.genius?.findInPage) return;
-    window.genius.onFoundInPage(r => { if (r.final !== false) setRes(r); });
+    const style = document.createElement('style');
+    style.textContent = '::highlight(genius-find){background:rgba(201,168,76,0.45);color:inherit}::highlight(genius-find-now){background:#e08030;color:#000}';
+    document.head.appendChild(style);
     const key = e => {
       if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
         e.preventDefault(); setOpen(true); setTimeout(() => { ref.current?.focus(); ref.current?.select(); }, 0);
       }
     };
     window.addEventListener('keydown', key);
-    return () => window.removeEventListener('keydown', key);
+    return () => { window.removeEventListener('keydown', key); style.remove(); };
   }, []);
-  const close = () => { setOpen(false); setRes(null); window.genius.findInPage(''); };
-  const run = (t, opts) => { if (!t) { setRes(null); window.genius.findInPage(''); return; } window.genius.findInPage(t, opts); };
+  const clear = () => { if (window.CSS?.highlights) { CSS.highlights.delete('genius-find'); CSS.highlights.delete('genius-find-now'); } ranges.current = []; };
+  const show = (list, i) => {
+    if (!window.CSS?.highlights) return;
+    CSS.highlights.set('genius-find', new Highlight(...list));
+    if (list[i]) {
+      CSS.highlights.set('genius-find-now', new Highlight(list[i]));
+      const el = list[i].startContainer.parentElement;
+      el?.scrollIntoView({ block:'center', inline:'nearest' });
+    } else CSS.highlights.delete('genius-find-now');
+  };
+  const search = t => {
+    clear();
+    const q = t.trim().toLowerCase();
+    if (!q) { setRes({ at:0, total:0 }); return; }
+    const list = [];
+    const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT, { acceptNode: n =>
+      (barRef.current && barRef.current.contains(n)) || !n.nodeValue.trim() || /^(SCRIPT|STYLE)$/.test(n.parentElement?.tagName) || !n.parentElement?.offsetParent
+        ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT });
+    for (let n = walker.nextNode(); n && list.length < 2000; n = walker.nextNode()) {
+      const v = n.nodeValue.toLowerCase();
+      for (let i = v.indexOf(q); i >= 0 && list.length < 2000; i = v.indexOf(q, i + q.length)) {
+        const r = new Range(); r.setStart(n, i); r.setEnd(n, i + q.length); list.push(r);
+      }
+    }
+    ranges.current = list;
+    setRes({ at: list.length ? 1 : 0, total: list.length });
+    show(list, 0);
+  };
+  const step = dir => {
+    // The page may have re-rendered since the last search; search again if so.
+    if (!ranges.current.length || !ranges.current[0].startContainer.isConnected) { search(text); return; }
+    const total = ranges.current.length;
+    const at = ((res.at - 1 + dir + total) % total) + 1;
+    setRes({ at, total });
+    show(ranges.current, at - 1);
+  };
+  const close = () => { setOpen(false); clear(); setRes({ at:0, total:0 }); };
   if (!open) return null;
-  return h('div', {style:{position:'fixed', top:44, right:18, zIndex:99990, display:'flex', alignItems:'center', gap:6,
+  return h('div', {ref:barRef, style:{position:'fixed', top:44, right:18, zIndex:99990, display:'flex', alignItems:'center', gap:6,
     background:T.panel || T.bg, border:`1px solid ${T.gold}`, borderRadius:4, padding:'5px 8px', boxShadow:'0 4px 16px rgba(0,0,0,0.5)'}},
     h('input', {ref, className:'ge-input', value:text, placeholder:'Find on this page', style:{width:200, fontSize:12},
-      onChange:e => { setText(e.target.value); run(e.target.value); },
+      onChange:e => { const v = e.target.value; setText(v); clearTimeout(timer.current); timer.current = setTimeout(() => search(v), 150); },
       onKeyDown:e => {
         if (e.key === 'Escape') { e.preventDefault(); close(); }
-        else if (e.key === 'Enter') { e.preventDefault(); run(text, {findNext:true, forward:!e.shiftKey}); }
+        else if (e.key === 'Enter') { e.preventDefault(); step(e.shiftKey ? -1 : 1); }
       }}),
-    h('span', {style:{fontSize:11, color:T.textDim, minWidth:54, textAlign:'center'}}, !text ? '' : res && res.total ? `${res.active} of ${res.total}` : 'No matches'),
-    h('button', {className:'ge-btn', title:'Previous (Shift+Enter)', style:{fontSize:11, padding:'2px 7px'}, onClick:()=>run(text, {findNext:true, forward:false})}, '▲'),
-    h('button', {className:'ge-btn', title:'Next (Enter)', style:{fontSize:11, padding:'2px 7px'}, onClick:()=>run(text, {findNext:true, forward:true})}, '▼'),
+    h('span', {style:{fontSize:11, color:T.textDim, minWidth:54, textAlign:'center'}}, !text.trim() ? '' : res.total ? `${res.at} of ${res.total}` : 'No matches'),
+    h('button', {className:'ge-btn', title:'Previous (Shift+Enter)', style:{fontSize:11, padding:'2px 7px'}, onMouseDown:e=>e.preventDefault(), onClick:()=>step(-1)}, '▲'),
+    h('button', {className:'ge-btn', title:'Next (Enter)', style:{fontSize:11, padding:'2px 7px'}, onMouseDown:e=>e.preventDefault(), onClick:()=>step(1)}, '▼'),
     h('button', {className:'ge-btn', title:'Close (Esc)', style:{fontSize:11, padding:'2px 7px'}, onClick:close}, '✕'));
 }
 const findRootEl = document.createElement('div');
