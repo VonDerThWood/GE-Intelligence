@@ -311,6 +311,7 @@ async function runFetchOnce(mode) {
     emit('fetch-complete', { mode, timestamp: Date.now() });
     // Smaller batch than desktop's 500 — mobile data and battery.
     if (mode !== 'news') a.syncLiveHistory().catch(a.noteError('live price archive'));
+    if (mode !== 'news') a.recordNetWorth().catch(a.noteError('net worth snapshot'));
     runSync().catch(() => {});
     if (mode !== 'news') a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(a.noteError('history refresh / similarity / Almanac'));
   } catch (error) {
@@ -554,6 +555,10 @@ async function buildGenius() {
         return { error: e.message };
       }
     },
+    getBackgroundErrors:   () => a.getBackgroundErrors(),
+    clearBackgroundErrors: () => a.clearBackgroundErrors(),
+    getNetWorthHistory:    () => a.getNetWorthHistory(),
+    recordNetWorth:        () => a.recordNetWorth(),
     importData: async () => {
       try {
         const text = await pickJSONFile();

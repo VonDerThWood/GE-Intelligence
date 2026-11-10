@@ -28467,6 +28467,78 @@
           });
           return run;
         };
+        const netWorthFile = path.join(dataDir, "net_worth.json");
+        async function recordNetWorth() {
+          const p = await readPortfolio();
+          const open = (p.positions || []).filter((x) => !x.status || x.status === "open");
+          const data = await getData();
+          const byName = {};
+          for (const it of data.items || []) byName[it.name.toLowerCase()] = it;
+          let value = 0, cost = 0, priced = 0;
+          for (const pos of open) {
+            const it = byName[(pos.item_name || "").toLowerCase()];
+            const guide = it ? it.high || it.low || 0 : 0;
+            const live = it && it.liveSell != null && guide && it.liveSell <= guide * 5 && it.liveSell >= guide / 5 ? it.liveSell : null;
+            const each = live ?? guide;
+            cost += (pos.cost_basis || 0) * (pos.quantity || 0);
+            if (each) {
+              value += saleNet(each, pos.quantity || 0);
+              priced++;
+            }
+          }
+          const doc = await storage2.readJSON(netWorthFile, { days: {} });
+          doc.days[localDateStr()] = { value: Math.round(value), cost: Math.round(cost), positions: open.length, priced };
+          await storage2.writeJSON(netWorthFile, doc);
+          return doc.days[localDateStr()];
+        }
+        async function getNetWorthHistory() {
+          const doc = await storage2.readJSON(netWorthFile, { days: {} });
+          return Object.entries(doc.days).sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ date, ...v }));
+        }
+        function toCsv(rows, cols) {
+          const cell = (v) => {
+            if (v == null) return "";
+            const s = String(v);
+            return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+          };
+          return [cols.map((c) => cell(c[0])).join(","), ...rows.map((r) => cols.map((c) => cell(typeof c[1] === "function" ? c[1](r) : r[c[1]])).join(","))].join("\r\n") + "\r\n";
+        }
+        async function buildCsvExport() {
+          const p = await readPortfolio();
+          const pos = p.positions || [];
+          const open = pos.filter((x) => !x.status || x.status === "open");
+          const closed = pos.filter((x) => x.status === "sold" || x.status === "converted");
+          const t = p.tax_stats || {};
+          return {
+            "genius-open-positions.csv": toCsv(open, [
+              ["Item", "item_name"],
+              ["Quantity", "quantity"],
+              ["Cost each", "cost_basis"],
+              ["Total cost", (r) => Math.round((r.cost_basis || 0) * (r.quantity || 0))],
+              ["Date opened", "date_opened"],
+              ["Made from", "converted_from"],
+              ["Notes", "notes"]
+            ]),
+            "genius-closed-trades.csv": toCsv(closed, [
+              ["Item", "item_name"],
+              ["Result", "status"],
+              ["Quantity", (r) => r.sold_quantity ?? r.converted_quantity ?? r.quantity],
+              ["Cost each", "cost_basis"],
+              ["Sold each", "sold_price"],
+              ["Profit/loss after tax", (r) => r.realized_pl != null ? Math.round(r.realized_pl) : ""],
+              ["Sold by", (r) => r.sold_via === "alch" ? "High alch" : r.status === "sold" ? "GE" : ""],
+              ["Converted to", "converted_to"],
+              ["Date opened", "date_opened"],
+              ["Date closed", (r) => (r.sold_at || r.converted_at || "").slice(0, 10)]
+            ]),
+            "genius-tax.csv": toCsv([t], [
+              ["Today", (r) => Math.round(r.today_tax || 0)],
+              ["This week", (r) => Math.round(r.week_tax || 0)],
+              ["This month", (r) => Math.round(r.month_tax || 0)],
+              ["Lifetime", (r) => Math.round(r.lifetime_tax || 0)]
+            ])
+          };
+        }
         async function readPortfolio() {
           return storage2.readJSON(portfolioFile, { positions: [], tax_stats: defaultTaxStats() });
         }
@@ -29468,6 +29540,13 @@
           prepareForQuit,
           noteError,
           getBackgroundErrors: async () => store2.get("backgroundErrors", []),
+          clearBackgroundErrors: async () => {
+            store2.set("backgroundErrors", []);
+            return { success: true };
+          },
+          recordNetWorth: withUserData(recordNetWorth),
+          getNetWorthHistory,
+          buildCsvExport: withUserData(buildCsvExport),
           // alerts
           getAlerts,
           saveAlert: withUserData(saveAlert),
@@ -32016,6 +32095,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       lastFetchOkAt = Date.now();
       emit("fetch-complete", { mode, timestamp: Date.now() });
       if (mode !== "news") a.syncLiveHistory().catch(a.noteError("live price archive"));
+      if (mode !== "news") a.recordNetWorth().catch(a.noteError("net worth snapshot"));
       runSync().catch(() => {
       });
       if (mode !== "news") a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(a.noteError("history refresh / similarity / Almanac"));
@@ -32307,6 +32387,10 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
           return { error: e.message };
         }
       },
+      getBackgroundErrors: () => a.getBackgroundErrors(),
+      clearBackgroundErrors: () => a.clearBackgroundErrors(),
+      getNetWorthHistory: () => a.getNetWorthHistory(),
+      recordNetWorth: () => a.recordNetWorth(),
       importData: async () => {
         try {
           const text = await pickJSONFile();

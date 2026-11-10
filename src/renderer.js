@@ -10428,9 +10428,16 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
           if (res?.error) { toast('Import failed: '+res.error,'error'); return; }
           toast('Data imported — restart GEnius to see all changes','success');
         }},'⬇ Import Backup'),
+        window.genius?.exportCsv && h('button',{className:'ge-btn',title:'Open positions, closed trades and tax as CSV files for Excel or Google Sheets',onClick:async()=>{
+          const res = await window.genius.exportCsv();
+          if (res?.canceled) return;
+          if (res?.error) toast('Export failed: '+res.error,'error');
+          else toast(`Saved ${res.count} spreadsheets to ${res.savedTo}`,'success');
+        }},'⬆ Export Spreadsheets'),
       ),
       h(AutoBackupRestore, {toast}),
     ),
+    h(BackgroundProblems, {toast}),
 
     h(UpdateRiskSettings),
 
@@ -11671,6 +11678,117 @@ function positionRisk(quantity, item, days, heldSince) {
       h('div', {style:{color:T.textDim, marginTop:4}}, 'About behaviour and selling, not where the price goes next.')) };
 }
 
+// Net worth over time (Ben, 2026-11-10): one point per day from net_worth.json,
+// recorded after each fetch (open positions at live sell after tax, and cost).
+function NetWorthChart() {
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('genius_networth_open') !== '0'; } catch { return true; } });
+  const [rows, setRows] = useState(null);
+  const [hover, setHover] = useState(null);
+  useEffect(() => {
+    if (!window.genius?.getNetWorthHistory) return;
+    (window.genius.recordNetWorth ? window.genius.recordNetWorth().catch(() => null) : Promise.resolve())
+      .then(() => window.genius.getNetWorthHistory()).then(r => setRows(r || [])).catch(() => setRows([]));
+  }, []);
+  const toggle = () => setOpen(v => { try { localStorage.setItem('genius_networth_open', v ? '0' : '1'); } catch {} return !v; });
+  if (!rows) return null;
+  const w = 640, ht = 150, L = 60, R = 10;
+  const last = rows[rows.length - 1];
+  const vals = rows.flatMap(r => [r.value, r.cost]);
+  const mn = Math.min(...vals), mx = Math.max(...vals), rng = (mx - mn) || 1;
+  const x = i => L + (rows.length < 2 ? 0 : i / (rows.length - 1)) * (w - L - R);
+  const y = v => ht - 10 - ((v - mn) / rng) * (ht - 24);
+  const line = k => rows.map((r, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(r[k]).toFixed(1)).join(' ');
+  const first = rows[0];
+  const change = rows.length > 1 && first.value ? (last.value / first.value - 1) * 100 : null;
+  const hv = hover != null ? rows[hover] : null;
+  return h('div', {style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`}},
+    h('div', {style:{display:'flex', alignItems:'center', gap:8, cursor:'pointer'}, onClick:toggle},
+      h('span', {style:{fontSize:11, color:T.textDim}}, open ? '▾' : '▸'),
+      h('span', {style:{fontSize:11, fontWeight:'bold', color:T.gold, letterSpacing:'0.05em'}}, 'NET WORTH OVER TIME'),
+      last && h('span', {style:{fontSize:11, color:T.text}}, fmt.gp(last.value) + 'gp'),
+      change != null && h('span', {style:{fontSize:11, color: change >= 0 ? T.green : T.red}}, (change >= 0 ? '+' : '') + change.toFixed(1) + '% since ' + first.date)),
+    open && (rows.length < 2
+      ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', padding:'6px 0 2px 18px'}}, 'Started today. GEnius adds a point each day after a fetch, so the chart fills in from here.')
+      : h('div', {style:{position:'relative'}},
+          h('svg', {viewBox:`0 0 ${w} ${ht}`, style:{width:'100%', maxWidth:w, height:'auto', display:'block'},
+            onMouseLeave:()=>setHover(null),
+            onMouseMove:e => { const b = e.currentTarget.getBoundingClientRect(); const px = (e.clientX - b.left) / b.width * w; setHover(Math.max(0, Math.min(rows.length - 1, Math.round((px - L) / (w - L - R) * (rows.length - 1))))); }},
+            [mx, (mx + mn) / 2, mn].map((v, i) => h('text', {key:i, x:L - 6, y:y(v) + 3, textAnchor:'end', fontSize:10, fill:T.textDim}, fmt.gp(v))),
+            h('path', {d:line('cost'), fill:'none', stroke:T.textDim, strokeWidth:1.2, strokeDasharray:'4 3'}),
+            h('path', {d:line('value'), fill:'none', stroke:T.gold, strokeWidth:2}),
+            hv && h('line', {x1:x(hover), x2:x(hover), y1:4, y2:ht - 6, stroke:T.border})),
+          h('div', {style:{fontSize:10, color:T.textDim, display:'flex', gap:12, paddingLeft:L}},
+            hv ? h('span', null, `${hv.date}: worth ${fmt.gp(hv.value)}gp, cost ${fmt.gp(hv.cost)}gp, ${hv.positions} open positions`)
+               : [h('span', {key:'a'}, h('span', {style:{color:T.gold}}, '━ '), 'What your open positions would sell for (live, after tax)'),
+                  h('span', {key:'b'}, '┅ What you paid for them')]))));
+}
+
+// Settings > Background problems (Ben, 2026-11-10): the last 20 failures of work
+// GEnius does on its own after fetches, which used to fail without a trace.
+function BackgroundProblems({toast}) {
+  const [list, setList] = useState(null);
+  const load = () => window.genius?.getBackgroundErrors?.().then(r => setList(r || [])).catch(() => setList([]));
+  useEffect(() => { load(); }, []);
+  if (!window.genius?.getBackgroundErrors) return null;
+  return h('div', {style:{marginBottom:20}},
+    h('div', {className:'ge-section-head'}, 'Background problems'),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8, lineHeight:1.5}},
+      'Work GEnius does by itself after each fetch: refreshing price history, rebuilding the Almanac, saving live prices. If any of it fails, it shows here, so a quiet failure can\'t go unnoticed.'),
+    !list ? null : !list.length
+      ? h('div', {style:{fontSize:12, color:T.green}}, '✓ No problems recorded.')
+      : h('div', null,
+          list.map((e, i) => h('div', {key:i, style:{fontSize:11, padding:'4px 0', borderBottom:`1px solid ${T.borderDim}`}},
+            h('span', {style:{color:T.textDim, marginRight:8}}, new Date(e.at).toLocaleString()),
+            h('span', {style:{color:'#e08030', marginRight:6}}, e.what + ':'),
+            h('span', {style:{color:T.text}}, e.error))),
+          h('button', {className:'ge-btn', style:{fontSize:11, padding:'3px 10px', marginTop:8}, onClick:async () => { await window.genius.clearBackgroundErrors(); load(); toast('Cleared', 'success'); }}, 'Clear')));
+}
+
+// Ctrl+K quick search (Ben, 2026-11-10): jump to any item, tab or Money Makers skill.
+function QuickSearch({items, tabs, onTab, onItem}) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [sel, setSel] = useState(0);
+  const ref = useRef(null);
+  useEffect(() => {
+    const key = e => {
+      if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault(); setOpen(true); setQ(''); setSel(0); setTimeout(() => ref.current?.focus(), 0);
+      }
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
+  const results = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return tabs.slice(0, 8).map(x => ({ kind:'Tab', label:x.label, go:() => onTab(x.id) }));
+    const score = name => { const n = name.toLowerCase(); return n === t ? 0 : n.startsWith(t) ? 1 : n.includes(' ' + t) ? 2 : n.includes(t) ? 3 : 9; };
+    const out = [];
+    for (const x of tabs) { const sc = score(x.label); if (sc < 9) out.push({ kind:'Tab', label:x.label, sc, go:() => onTab(x.id) }); }
+    for (const sk of MONEY_MAKER_SKILLS) { const sc = score(sk.label + ' money makers'); if (sc < 9) out.push({ kind:'Money Makers', label:sk.label, sc, go:() => { onTab('money_makers'); setTimeout(() => window.dispatchEvent(new CustomEvent('genius-money-skill', {detail:sk.key})), 50); } }); }
+    for (const it of items) { const sc = score(it.name); if (sc < 9) out.push({ kind:'Item', label:it.name, sc: sc + 0.5, vol: it.volume || 0, go:() => onItem(it) }); }
+    return out.sort((a, b) => a.sc - b.sc || (b.vol || 0) - (a.vol || 0)).slice(0, 12);
+  }, [q, items, tabs]);
+  if (!open) return null;
+  const pick = r => { setOpen(false); r && r.go(); };
+  return h('div', {style:{position:'fixed', inset:0, zIndex:99995, background:'rgba(0,0,0,0.45)', display:'flex', justifyContent:'center', alignItems:'flex-start', paddingTop:'12vh'}, onMouseDown:e => { if (e.target === e.currentTarget) setOpen(false); }},
+    h('div', {style:{width:'min(560px, 92vw)', background:T.panel || T.bg, border:`1px solid ${T.gold}`, borderRadius:6, boxShadow:'0 10px 40px rgba(0,0,0,0.6)', overflow:'hidden'}},
+      h('input', {ref, className:'ge-input', value:q, placeholder:'Jump to an item, tab or money maker…', style:{width:'100%', boxSizing:'border-box', fontSize:14, padding:'10px 12px', border:'none', borderBottom:`1px solid ${T.border}`, borderRadius:0},
+        onChange:e => { setQ(e.target.value); setSel(0); },
+        onKeyDown:e => {
+          if (e.key === 'Escape') { e.preventDefault(); setOpen(false); }
+          else if (e.key === 'ArrowDown') { e.preventDefault(); setSel(i => Math.min(results.length - 1, i + 1)); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); setSel(i => Math.max(0, i - 1)); }
+          else if (e.key === 'Enter') { e.preventDefault(); pick(results[sel]); }
+        }}),
+      h('div', {style:{maxHeight:'50vh', overflowY:'auto'}},
+        results.length ? results.map((r, i) => h('div', {key:r.kind + r.label, onMouseEnter:() => setSel(i), onMouseDown:e => { e.preventDefault(); pick(r); },
+          style:{display:'flex', justifyContent:'space-between', padding:'7px 12px', cursor:'pointer', fontSize:13, background: i === sel ? 'rgba(201,168,76,0.18)' : 'transparent', color:T.text}},
+          h('span', null, r.label), h('span', {style:{fontSize:11, color:T.textDim}}, r.kind)))
+        : h('div', {style:{padding:'10px 12px', fontSize:12, color:T.textDim}}, 'Nothing matches.')),
+      h('div', {style:{fontSize:10, color:T.textDim, padding:'5px 12px', borderTop:`1px solid ${T.borderDim}`}}, '↑↓ to move · Enter to open · Esc to close')));
+}
+
 function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeletePosition, onSellPosition, onConvertPosition, onReopenPosition, onSelect, toast, devMode, userShorthands, dateFormat}) {
   // Same MM/DD/YYYY vs DD/MM/YYYY vs YYYY-MM-DD Settings preference the
   // chart already respects (Ben, 2026-09-09: "can we add dates to the
@@ -12283,6 +12401,8 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         h('div',{className:'ov-lbl', title:'Profit & Loss already locked in from positions you\'ve actually sold, after GE tax.'},'Realized P&L')
       ),
     ),
+
+    h(NetWorthChart, null),
 
     // Toolbar
     h('div',{style:{padding:'8px 12px',borderBottom:`1px solid ${T.border}`,display:'flex',justifyContent:'space-between',alignItems:'center'}},
@@ -15025,6 +15145,8 @@ function CraftingBuffCheckboxes({buffs, setBuffs}) {
 
 function MoneyMakersTab({items, onSelect, description}) {
   const [skill, setSkill] = useState('archaeology');
+  // Ctrl+K can open a skill directly (QuickSearch).
+  useEffect(() => { const go = e => setSkill(e.detail); window.addEventListener('genius-money-skill', go); return () => window.removeEventListener('genius-money-skill', go); }, []);
   const [herbSub, setHerbSub] = useState('herbs');
   const [magicSub, setMagicSub] = useState('grinding');
   const [fletchingBuffs, setFletchingBuffs] = useState(FLETCHING_BUFF_DEFAULTS);
@@ -16914,6 +17036,7 @@ function App() {
             onSaveAlert:upsertAlert, onSaveReminder:upsertReminder, toast}),
         ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)}),
+      !IS_PHONE && h(QuickSearch, {items, tabs: NAV.filter(n => n.id && n.label), onTab: id => { setTab(id); setSelected(null); }, onItem: it => setSelected(it)}),
       showTour && h(WelcomeTour, {onDone:dismissTour})
       )
     ),

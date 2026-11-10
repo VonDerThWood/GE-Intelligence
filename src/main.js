@@ -238,6 +238,7 @@ function runFetch(mode = 'prices') {
       // takes a few minutes and must never hold up the fetch itself.
       // Same idea for the daily live price archive (live-history.js).
       if (mode !== 'news') api.syncLiveHistory().catch(api.noteError('live price archive'));
+      if (mode !== 'news') api.recordNetWorth().catch(api.noteError('net worth snapshot'));
       // Hourly archive (live-hourly.js) is opt-in: Settings > Hourly price history.
       if (mode !== 'news' && store.get('saveHourlyPrices', false) && !isTestMode) liveHourly?.sync().catch(api.noteError('hourly price archive'));
       if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(api.noteError('history refresh / similarity / Almanac'));
@@ -620,6 +621,25 @@ ipcMain.handle('export-data', async () => {
     return { error: e.message };
   }
 });
+
+// Spreadsheet export (Ben, 2026-11-10): pick a folder, write one CSV per sheet.
+ipcMain.handle('export-csv', async () => {
+  const { dialog } = require('electron');
+  const { filePaths, canceled } = await dialog.showOpenDialog({ title: 'Choose a folder for the spreadsheets', properties: ['openDirectory', 'createDirectory'] });
+  if (canceled || !filePaths.length) return { canceled: true };
+  try {
+    const files = await api.buildCsvExport();
+    const fsp = require('fs').promises;
+    for (const [name, text] of Object.entries(files)) await fsp.writeFile(path.join(filePaths[0], name), '\ufeff' + text, 'utf8'); // BOM so Excel reads UTF-8
+    return { success: true, savedTo: filePaths[0], count: Object.keys(files).length };
+  } catch (e) {
+    return { error: e.message };
+  }
+});
+ipcMain.handle('get-background-errors', () => api.getBackgroundErrors());
+ipcMain.handle('clear-background-errors', () => api.clearBackgroundErrors());
+ipcMain.handle('get-net-worth-history', () => api.getNetWorthHistory());
+ipcMain.handle('record-net-worth', () => api.recordNetWorth());
 
 ipcMain.handle('import-data', async () => {
   const { dialog } = require('electron');

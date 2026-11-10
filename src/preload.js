@@ -147,6 +147,11 @@ contextBridge.exposeInMainWorld('genius', {
 
   // Data portability
   exportData: () => ipcRenderer.invoke('export-data'),
+  exportCsv: () => ipcRenderer.invoke('export-csv'),
+  getBackgroundErrors: () => ipcRenderer.invoke('get-background-errors'),
+  clearBackgroundErrors: () => ipcRenderer.invoke('clear-background-errors'),
+  getNetWorthHistory: () => ipcRenderer.invoke('get-net-worth-history'),
+  recordNetWorth: () => ipcRenderer.invoke('record-net-worth'),
   importData: () => ipcRenderer.invoke('import-data'),
 
   // Utility
