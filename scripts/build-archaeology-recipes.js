@@ -120,9 +120,10 @@ async function pages(titles) {
     if (k < 0) continue;
     const rest = t.slice(k).split('|');
     const parts = [];
-    for (let j = 2; j + 1 < rest.length && /^\d+\/\d+$/.test(rest[j + 1]); j += 2) {
-      const [a, b] = rest[j + 1].split('/').map(Number);
-      parts.push([rest[j].trim(), a / b]);
+    // Most pages give a fraction (35/100); some only say Often / Rarely etc.
+    for (let j = 2; j + 1 < rest.length && /^(\d+\/\d+|Always|Often|Sometimes|Rarely|Very rarely)$/i.test(rest[j + 1].trim()); j += 2) {
+      const c = rest[j + 1].trim();
+      parts.push([rest[j].trim(), /\//.test(c) ? c.split('/').map(Number).reduce((x, y) => x / y) : c]);
     }
     materials[name].n = { junk: junk ? +junk[1] / 100 : null, count: +rest[1] || 1, parts };
   }
