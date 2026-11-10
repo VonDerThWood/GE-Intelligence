@@ -104,6 +104,28 @@ async function pages(titles) {
     if (!comps.length) continue;
     materials[name] = { lvl: num(field(box, 'level') || 0), always: /yes/i.test(field(box, 'alwaysgivesaspecialmaterial') || ''), c: comps };
   }
+  // The full breakdown (Ben, 2026-11-10: "show ALL of the materials"): base junk
+  // chance, how many normal materials per disassembly, and each one's chance,
+  // read from the rendered Disassembly section of the material's page.
+  for (const name of Object.keys(materials)) {
+    const r = await api({ action: 'parse', page: name, redirects: 1, prop: 'text' });
+    await sleep(200);
+    const html = r.parse?.text['*'] || '';
+    const i = html.indexOf('id="Disassembly"');
+    if (i < 0) continue;
+    const t = html.slice(i, html.indexOf('<h2', i + 50)).replace(/<img[^>]*>/g, '').replace(/<[^>]+>/g, '|')
+      .replace(/&#160;/g, ' ').replace(/\|[\s|]*\|/g, '|').replace(/\s+/g, ' ');
+    const junk = t.match(/junk\| chance\|[^|]*\|\s*\|?([\d.]+)\|%/);
+    const k = t.indexOf('Material count|');
+    if (k < 0) continue;
+    const rest = t.slice(k).split('|');
+    const parts = [];
+    for (let j = 2; j + 1 < rest.length && /^\d+\/\d+$/.test(rest[j + 1]); j += 2) {
+      const [a, b] = rest[j + 1].split('/').map(Number);
+      parts.push([rest[j].trim(), a / b]);
+    }
+    materials[name].n = { junk: junk ? +junk[1] / 100 : null, count: +rest[1] || 1, parts };
+  }
   console.log('materials with ancient components', Object.keys(materials).length);
   const file = path.join(__dirname, '..', 'src', 'renderer.js');
   let src = fs.readFileSync(file, 'utf8');
