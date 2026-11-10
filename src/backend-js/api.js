@@ -125,6 +125,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   let historyRefreshActive = false;
   let historyFetchActive = false;
   let historyFetchStop = false;
+  let historyRefreshStop = false; // asks refreshStaleHistory to finish its current item and stop
+  const pause = ms => new Promise(r => setTimeout(r, ms));
   let historyInitial300Done = store.get('historyInitial300Done', false);
   // Items whose history couldn't be fetched even after the in-session
   // retries (usually brand-new items WeirdGloop has no history for yet).
@@ -191,6 +193,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // Last real Almanac computation (ms), persisted so a relaunch doesn't
   // redo a ~50s (desktop) / 90s+ (mobile) recompute that ran an hour ago.
   let dxpIntelComputedAt = store.get('dxpIntelComputedAt', 0);
+  // The Almanac depends on price history AND the list of DXP events; this counts
+  // event changes so a new DXP rebuilds it even when history hasn't changed
+  // (state-machine audit, 2026-11-09).
+  let almanacEventsVersion = 0;
+  let dxpIntelFailedAt = 0; // a failed rebuild waits an hour instead of retrying every fetch
   let signalTrendCache = null;     // { historyVersion, result }
   let signalTrendInFlight = null;  // shared in-flight Promise — see comment at getSignalTrend
 
@@ -561,9 +568,26 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   const HISTORY_FETCH_CONCURRENCY = platform === 'mobile' ? 8 : 12;
 
   async function runHistoryQueue(onProgress) {
-    if (historyFetchActive) return;
+    if (historyFetchActive) {
+      // A run that was asked to stop is still winding down: start once it's done,
+      // instead of silently dropping this request (state-machine audit, 2026-11-09).
+      if (!historyFetchStop) return;
+      while (historyFetchActive) await pause(250);
+    }
     historyFetchActive = true;
     historyFetchStop = false;
+    try {
+      // The background refresh gives way at its next item; wait so the two never
+      // write the same history at once.
+      while (historyRefreshActive) await pause(250);
+      await runHistoryQueueInner(onProgress);
+    } finally {
+      // Always cleared: an error used to leave this stuck on, and every later
+      // backfill and background refresh then said "busy" for the whole session.
+      historyFetchActive = false;
+    }
+  }
+  async function runHistoryQueueInner(onProgress) {
     let done = 0;
     const total = historyFetchQueue.length;
     let failedIds = [];
@@ -647,7 +671,6 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     }
 
     await saveHistory();
-    historyFetchActive = false;
     if (failedIds.length) {
       const m = store.get('historyUnavailable', {}) || {}, now = Date.now();
       for (const id of failedIds) m[String(id)] = now;
@@ -766,6 +789,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (readOnlyHistory) return { refreshed: 0, skipped: 'read-only' };
     if (historyRefreshActive || historyFetchActive) return { refreshed: 0, skipped: 'busy' };
     historyRefreshActive = true;
+    historyRefreshStop = false;
     let refreshed = 0;
     try {
       await historyLoadedPromise;
@@ -776,7 +800,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         .sort((a, b) => (historyLatestTs[a] || 0) - (historyLatestTs[b] || 0))
         .slice(0, maxItems);
       for (const id of stale) {
-        if (historyFetchActive) break; // a user-started backfill takes priority
+        if (historyFetchActive || historyRefreshStop) break; // a user-started backfill (or quitting) takes priority
         historyRefreshAttempt[id] = Date.now();
         const incremental = (historyLatestTs[id] || 0) > now - HISTORY_INCREMENTAL_MAX_MS;
         if (await (incremental ? fetchRecentHistory(id) : fetchHistoryForItemOnce(id, 12000))) {
@@ -805,6 +829,17 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   async function stopHistoryPopulation() {
     historyFetchStop = true;
     return { success: true };
+  }
+
+  // Called before the app exits (state-machine audit, 2026-11-09): stops the
+  // backfill and background refresh at their next item, waits up to 4s for them,
+  // then saves any history still only in memory.
+  async function prepareForQuit() {
+    historyFetchStop = true;
+    historyRefreshStop = true;
+    const until = Date.now() + 4000;
+    while ((historyFetchActive || historyRefreshActive) && Date.now() < until) await pause(100);
+    try { await saveHistory(); } catch (e) { console.error('[history] Save on quit failed:', e.message); }
   }
 
   async function getItemHistory(itemId) {
@@ -905,7 +940,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // run — historyVersion (bumped on every real history update) stands in
     // for the old "stat history.json's mtime" check, which doesn't work
     // now that history is per-item files.
-    if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion) {
+    if (dxpIntelCache && dxpIntelCache.historyVersion === historyVersion && dxpIntelCache.eventsVersion === almanacEventsVersion) {
       return dxpIntelCache.data;
     }
     // A stale placeholder (disk-served, or a previous real computation that
@@ -968,7 +1003,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // (kicked off below, fire-and-forget, on its own separate in-flight
         // cycle) still runs the real computation and replaces this
         // placeholder once it's ready.
-        dxpIntelCache = { historyVersion: -1, data: onDisk };
+        dxpIntelCache = { historyVersion: -1, eventsVersion: -1, data: onDisk };
         // This used to call getDxpIntelligence() without forceFresh, which
         // just returned the cache set above — the "background recompute"
         // never ran and the Almanac only updated on a manual Refresh (found
@@ -981,6 +1016,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // computation below, same as if this block never ran.
     }
 
+    const eventsAtStart = almanacEventsVersion;
     dxpIntelInFlight = (async () => {
       await historyLoadedPromise;
       try {
@@ -1017,16 +1053,18 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
           itemLimits, itemNames, true, events, finished
         );
         await storage.writeJSON(path.join(dataDir, 'dxp_intelligence.json'), out);
-        dxpIntelCache = { historyVersion, data: out };
+        dxpIntelCache = { historyVersion, eventsVersion: eventsAtStart, data: out };
         dxpIntelComputedAt = Date.now();
         store.set('dxpIntelComputedAt', dxpIntelComputedAt);
         return out;
       } catch (e) {
         console.error('[DXP Intel] Error:', e.message);
+        dxpIntelFailedAt = Date.now();
         throw e;
       }
     })();
-    dxpIntelInFlight.finally(() => { dxpIntelInFlight = null; });
+    // .catch first: the chained promise is otherwise an unhandled rejection on failure.
+    dxpIntelInFlight.catch(() => {}).finally(() => { dxpIntelInFlight = null; });
     return dxpIntelInFlight;
   }
 
@@ -1558,6 +1596,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       if (tease) {
         entry.teasedOn = tease.date;
         tease.status = 'dated';
+        entry.datesTease = tease.url;
         const teases = store.get('dxpTeases', {});
         teases[dates[0]] = tease.date;           // DXP start date -> first tease date
         store.set('dxpTeases', teases);
@@ -1577,12 +1616,20 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         entry.status = 'teased';
         entry.expected = expect;
         // Several posts often tease the same DXP — only notify for the first.
-        if (det.some(d => d.status === 'teased' && d.expected === expect)) entry.notified = true;
+        // A tease you dismissed counts too (state-machine audit, 2026-11-09).
+        if (det.some(d => (d.status === 'teased' || d.status === 'dismissed' || d.status === 'dated') && d.expected === expect)) entry.notified = true;
       } else {
         entry.notified = true; // passing mention — nothing to tell Ben
       }
     }
-    store.set('dxpNewsDetections', [...det, entry].slice(-30));
+    const latest = store.get('dxpNewsDetections', []);
+    if (latest.some(d => d.url === entry.url)) return; // saved by a parallel check
+    const linked = entry.datesTease;
+    delete entry.datesTease;
+    const merged = [...latest.map(d => (linked && d.url === linked ? { ...d, status: 'dated' } : d)), entry];
+    const keepTease = d => d.status === 'teased' && Date.now() - new Date(d.date + 'T12:00:00') < 120 * 86400000;
+    const tail = merged.slice(-30);
+    store.set('dxpNewsDetections', [...merged.slice(0, -30).filter(keepTease), ...tail]);
   }
 
   // ─── News calendar ───────────────────────────────────────────────────────
@@ -2083,6 +2130,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const local = await storage.readJSON(localPath, []);
     await storage.writeJSON(localPath, [ev, ...local], { pretty: true });
     dxpIntelComputedAt = 0; // fold it into the Almanac on the next check
+    almanacEventsVersion++;
     return { added: true };
   }
 
@@ -3217,6 +3265,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // the day's refreshed history get folded in without a manual Refresh.
   async function maybeRefreshAlmanac() {
     if (dxpIntelInFlight || Date.now() - dxpIntelComputedAt < 24 * 3600000) return;
+    if (Date.now() - dxpIntelFailedAt < 3600000) return;
     await getDxpIntelligence({ forceFresh: true });
   }
 
@@ -4374,7 +4423,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       return;
     }
     if (!pos) {
-      pos = { id: Date.now().toString(), item_name: goal.item_name, status: 'open',
+      pos = { id: newPositionId(), item_name: goal.item_name, status: 'open',
         created_at: new Date().toISOString(), date_opened: localDateStr(), planner_goal_id: goal.id,
         target_price: '', target_profit_pct: '', stop_loss: '' };
       p.positions.push(pos);
@@ -4452,10 +4501,19 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // alch: true (Ben, 2026-10-26) = high alched instead of sold. sell_price is
   // then the alch value minus a nature rune, and there's no GE tax.
+  // Position ids are timestamps; two changes in the same millisecond used to be
+  // able to share one (state-machine audit, 2026-11-09).
+  let lastPositionId = 0;
+  const newPositionId = () => { let t = Date.now(); if (t <= lastPositionId) t = lastPositionId + 1; lastPositionId = t; return String(t); };
+
   async function sellPosition({ id, sell_price, quantity, alch = false }) {
     const p = await readPortfolio();
     const pos = p.positions.find(x => x.id === id);
     if (!pos) return { success: false };
+    // Only open positions can be sold: a second click from an out-of-date screen
+    // used to sell it again and count the tax twice.
+    if (pos.status && pos.status !== 'open') return { success: false, error: 'This position is already closed' };
+    if (!(Number(quantity) > 0)) return { success: false, error: 'Invalid quantity' };
 
     const net = alch ? sell_price * quantity : saleNet(sell_price, quantity);
     const tax = sell_price * quantity - net;
@@ -4475,7 +4533,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       pos.sold_quantity = pos.quantity; pos.realized_pl = realized_pl; pos.sold_at = now;
       Object.assign(pos, via);
     } else {
-      p.positions.push({ ...pos, id: Date.now().toString(), quantity, status:'sold',
+      p.positions.push({ ...pos, id: newPositionId(), quantity, status:'sold',
         sold_price:sell_price, sold_quantity:quantity, realized_pl, sold_at:now, ...via });
       pos.quantity -= quantity;
     }
@@ -4501,6 +4559,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const p = await readPortfolio();
     const pos = p.positions.find(x => x.id === id);
     if (!pos) return { success: false, error: 'Position not found' };
+    if (pos.status && pos.status !== 'open') return { success: false, error: 'This position is already closed' };
     if (!outputItemName || !outputQuantity || outputQuantity <= 0) {
       return { success: false, error: 'Output item and quantity are required' };
     }
@@ -4522,20 +4581,22 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const newCostBasis = Math.round(totalCost / outputQuantity);
 
     const now = new Date().toISOString();
-    let n = 0;
+    const conversion_id = newPositionId();
     for (const { pos: inp, qty } of inputs) {
       if (qty >= inp.quantity) {
         inp.status = 'converted'; inp.converted_to = outputItemName;
-        inp.converted_quantity = inp.quantity; inp.converted_at = now;
+        inp.converted_quantity = inp.quantity; inp.converted_at = now; inp.conversion_id = conversion_id;
       } else {
-        p.positions.push({ ...inp, id: (Date.now() + 10 + n++).toString(), quantity: qty, status:'converted',
-          converted_to: outputItemName, converted_quantity: qty, converted_at: now });
+        p.positions.push({ ...inp, id: newPositionId(), quantity: qty, status:'converted',
+          converted_to: outputItemName, converted_quantity: qty, converted_at: now, conversion_id });
         inp.quantity -= qty;
       }
     }
 
     p.positions.push({
-      id: (Date.now() + 1).toString(),
+      id: newPositionId(),
+      conversion_id,
+      conversion_output: true,
       item_name: outputItemName,
       quantity: outputQuantity,
       cost_basis: newCostBasis,
@@ -4569,8 +4630,24 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       p.tax_stats = p.tax_stats || defaultTaxStats();
       p.tax_stats.lifetime_tax = Math.max(0, (p.tax_stats.lifetime_tax || 0) - tax);
       pos.status = 'open';
-      delete pos.sold_price; delete pos.sold_quantity; delete pos.realized_pl; delete pos.sold_at;
+      delete pos.sold_price; delete pos.sold_quantity; delete pos.realized_pl; delete pos.sold_at; delete pos.sold_via;
+    } else if (pos.conversion_id) {
+      // Undo the whole conversion (state-machine audit, 2026-11-09): reopening one
+      // input used to leave the made item open too, so both were counted. Only
+      // while the made item is untouched; once it's sold or changed, say so.
+      const cid = pos.conversion_id; // copied: the loop below clears it on pos itself
+      const out = p.positions.find(x => x.conversion_id === cid && x.conversion_output);
+      if (out && (out.status !== 'open' || out.sold_quantity)) {
+        return { success: false, error: `The ${out.item_name} made from this has already been sold or changed. Reopen that first.` };
+      }
+      for (const x of p.positions) {
+        if (x.conversion_id !== cid || x.conversion_output) continue;
+        x.status = 'open';
+        delete x.converted_to; delete x.converted_quantity; delete x.converted_at; delete x.conversion_id;
+      }
+      if (out) p.positions = p.positions.filter(x => x !== out);
     } else {
+      // Older conversions weren't linked to what they made, so only this side reopens.
       // Reopening the converted-away side only — doesn't touch the output
       // position convertPosition created, same as it doesn't get deleted
       // by anything else either. No tax to refund; none was charged.
@@ -5286,7 +5363,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications: toInbox('almanac', 'dxp_news', getDxpNewsNotifications), parseDxpDates, parseDxpTease,
     getNewsCalendar, extractNewsDates, fetchNewsPage,
     getNewsFeed, getNewsBadgeCount, markNewsRead, getNewsBadgePrefs, setNewsBadgePrefs,
-    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup, getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac,
+    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup, getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit,
     // alerts
     getAlerts, saveAlert, deleteAlert, getTriggeredAlerts: toInbox('mine', 'price_alert', getTriggeredAlerts), markAlertsFiredInBackground,
     // overrides

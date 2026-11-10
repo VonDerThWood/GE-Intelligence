@@ -167,7 +167,7 @@ function createTray() {
 
   const contextMenu = Menu.buildFromTemplate([
     { label: 'Open GEnius', click: () => { mainWindow.show(); mainWindow.focus(); } },
-    { label: 'Fetch Now', click: () => runPython('prices').catch(() => {}) },
+    { label: 'Fetch Now', click: () => runFetch('prices').catch(() => {}) },
     { type: 'separator' },
     { label: 'Quit', click: () => { isQuitting = true; app.quit(); } }
   ]);
@@ -184,10 +184,27 @@ function createTray() {
 // initial fetch and the renderer's Fetch Now could otherwise overlap and
 // interleave their writes to the same data files. A request made while a
 // fetch is already running just shares that fetch's result.
-let fetchInFlight = null;
-function runPython(mode = 'prices') {
-  if (fetchInFlight) return fetchInFlight;
-  fetchInFlight = (async () => {
+//
+// Each fetch has a type: 'prices', 'news' or 'full' (both). A caller only shares
+// the running fetch if that fetch covers what it asked for; otherwise its fetch
+// runs straight after (state-machine audit, 2026-11-09: a 'full' request used to
+// get a prices-only result while news was marked as fetched).
+let fetchInFlight = null; // { mode, promise }
+let fetchQueued = null;   // { mode, promise }: at most one fetch waits its turn
+const fetchCovers = (running, wanted) => running === wanted || running === 'full';
+function runFetch(mode = 'prices') {
+  if (fetchInFlight && fetchCovers(fetchInFlight.mode, mode)) return fetchInFlight.promise;
+  if (fetchInFlight) {
+    if (fetchQueued) {
+      if (!fetchCovers(fetchQueued.mode, mode)) fetchQueued.mode = 'full'; // read when it starts
+      return fetchQueued.promise;
+    }
+    const q = { mode };
+    q.promise = fetchInFlight.promise.catch(() => {}).then(() => { fetchQueued = null; return runFetch(q.mode); });
+    fetchQueued = q;
+    return q.promise;
+  }
+  const promise = (async () => {
     const { main: runJs } = require('./backend-js/run.js');
     const webhookUrl = store.get('discordWebhook', '');
     const argv = [`--mode=${mode}`, `--data-dir=${dataDir}`];
@@ -230,7 +247,8 @@ function runPython(mode = 'prices') {
       throw error;
     }
   })().finally(() => { fetchInFlight = null; });
-  return fetchInFlight;
+  fetchInFlight = { mode, promise };
+  return promise;
 }
 
 function notifyRenderer(channel, data) {
@@ -407,12 +425,12 @@ function startScheduler() {
     const lastNewsFetch = store.get('lastNewsFetch', 0);
     const newsStale = Date.now() - lastNewsFetch > 60 * 60 * 1000;
     if (newsStale) {
-      store.set('lastNewsFetch', Date.now());
-      runPython('full').catch(() => {});
+      // Marked fresh only once a full fetch has actually finished.
+      runFetch('full').then(() => store.set('lastNewsFetch', Date.now())).catch(() => {});
     } else {
-      runPython('prices').catch(() => {});
+      runFetch('prices').catch(() => {});
     }
-    // Alert/digest/reminder checks now run inside runPython, after the
+    // Alert/digest/reminder checks now run inside runFetch, after the
     // fetch finishes, instead of here against the previous fetch's data.
   }, ms);
 }
@@ -443,7 +461,7 @@ ipcMain.handle('get-data', () => {
   // finish registering, not a blind guess at total startup time.
   if (!didInitialFetch) {
     didInitialFetch = true;
-    setTimeout(() => runPython('prices').catch(() => {}), 500);
+    setTimeout(() => runFetch('prices').catch(() => {}), 500);
   }
   return api.getData();
 });
@@ -464,7 +482,7 @@ ipcMain.handle('get-dxp-events', async () => {
 
 ipcMain.handle('fetch-now', async (_, mode) => {
   try {
-    await runPython(mode || 'prices');
+    await runFetch(mode || 'prices');
     if (!mode || mode === 'full') store.set('lastNewsFetch', Date.now());
     // Ben, 2026-08-09: a manual Fetch Now never re-checked alerts/reminders/
     // digests against the fresh data it just pulled — only the scheduler's
@@ -474,7 +492,7 @@ ipcMain.handle('fetch-now', async (_, mode) => {
     // exact same check was run directly outside the app. Running the same
     // checks the scheduler runs here too, so a manual refresh behaves the
     // same way as waiting for the next automatic one. (Those checks now
-    // run inside runPython itself, before fetch-complete is sent.)
+    // run inside runFetch itself, before fetch-complete is sent.)
     return { success: true };
   }
   catch (e) { return { success: false, error: e.message }; }
@@ -918,7 +936,9 @@ app.on('before-quit', (event) => {
   stopScheduler();
   if (quitFlushed || !store) return;
   event.preventDefault();
-  store.flush().finally(() => { quitFlushed = true; app.quit(); });
+  // Also lets history stop and save first (state-machine audit, 2026-11-09);
+  // prepareForQuit gives up after 4s, so quitting is never held for long.
+  Promise.allSettled([store.flush(), api?.prepareForQuit?.()]).finally(() => { quitFlushed = true; app.quit(); });
 });
 
 // Allow installer/Windows shutdown to close the app properly

@@ -12654,7 +12654,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
             const res = await onReopenPosition(ctxMenu.pos.id);
             setCtxMenu(null);
             if (res?.success) toast('Position reopened', 'success');
-            else toast('Could not reopen position', 'error');
+            else toast(res?.error || 'Could not reopen position', 'error');
           },
           style:{padding:'8px 12px', fontSize:12, color:T.text, cursor:'pointer', display:'flex', alignItems:'center', gap:6},
           onMouseEnter: e => e.currentTarget.style.background = 'rgba(255,255,255,0.06)',
@@ -12681,6 +12681,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         const res = await onSellPosition(opts);
         setSellModal(null);
         if (res?.success) toast(`${opts.alch ? 'Alched' : 'Sold'}! Net P&L: ${res.realized_pl>=0?'+':''}${fmt.gp(res.realized_pl)}gp`, 'success');
+        else toast(res?.error || 'Could not sell', 'error');
       }
     }),
     convertModal && h(ConvertModal, {position:convertModal, allItems:items, userShorthands, onClose:()=>setConvertModal(null),
@@ -16385,7 +16386,7 @@ function App() {
     // own interval tick, and the post-launch auto-fetch) — those never
     // touched setFetching(true) before, so the header button sat on
     // "Fetch Now" the whole time even while a real fetch (possibly a
-    // slow one, see main.js's runPython comment) was genuinely running.
+    // slow one, see main.js's runFetch comment) was genuinely running.
     window.genius.onFetchStart(() => setFetching(true));
     window.genius.onFetchComplete(d => {
       // A sync changed user data, not prices: re-read what it writes, which

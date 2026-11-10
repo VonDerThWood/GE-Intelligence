@@ -185,7 +185,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   // avgVolume below. historyStatsOverride is api.js's computeHistoryStats()
   // result — precomputed {historyVolAvg, historyPrevPrice}, one item's
   // full history read+processed+evicted at a time — passed in by main.js/
-  // bridge.js's runPython so this doesn't need a second read of its own.
+  // bridge.js's runFetch so this doesn't need a second read of its own.
   // This USED to receive the raw, fully-loaded historyData object instead
   // (computing these same two maps itself, inline, below) — changed
   // 2026-08-03 when historyData stopped being eagerly held in memory for

@@ -256,24 +256,47 @@ async function runNotificationChecks() {
   if (store.get('notifications', true)) for (const al of triggered) await fireNotification(al.title, al.body);
 }
 
-// Mirrors main.js's runPython() — runs run.js's main() in-process and emits
+// Mirrors main.js's runFetch() — runs run.js's main() in-process and emits
 // the same fetch-complete/fetch-error events the desktop build does, so
 // renderer.js's existing onFetchComplete/onFetchError handlers work as-is.
 // One fetch at a time, same as main.js — overlapping callers share it.
-let fetchInFlight = null;
+// A caller only shares the running fetch if it covers what was asked for
+// ('full' = prices + news); otherwise its fetch runs right after (2026-11-09).
+let fetchInFlight = null; // { mode, promise }
+let fetchQueued = null;
 let firstFetchResolve;
 const firstFetchDone = new Promise(res => { firstFetchResolve = res; });
-function runFetch(mode) {
-  if (fetchInFlight) return fetchInFlight;
-  fetchInFlight = runFetchOnce(mode).finally(() => { fetchInFlight = null; firstFetchResolve(); });
-  return fetchInFlight;
+const fetchCovers = (running, wanted) => running === wanted || running === 'full';
+function runFetch(mode = 'prices') {
+  if (fetchInFlight && fetchCovers(fetchInFlight.mode, mode)) return fetchInFlight.promise;
+  if (fetchInFlight) {
+    if (fetchQueued) {
+      if (!fetchCovers(fetchQueued.mode, mode)) fetchQueued.mode = 'full';
+      return fetchQueued.promise;
+    }
+    const q = { mode };
+    q.promise = fetchInFlight.promise.catch(() => {}).then(() => { fetchQueued = null; return runFetch(q.mode); });
+    fetchQueued = q;
+    return q.promise;
+  }
+  const promise = runFetchOnce(mode).finally(() => { fetchInFlight = null; firstFetchResolve(); });
+  fetchInFlight = { mode, promise };
+  return promise;
 }
 async function runFetchOnce(mode) {
   // Same as main.js: tells the header to show its spinner. Was missing on
   // mobile, so a running fetch looked identical to an idle one.
+  let a, runJs;
+  try {
+    a = await ensureApi();
+    runJs = require('../../src/backend-js/run.js').main;
+  } catch (error) {
+    // Nothing started, so no spinner: just report it (state-machine audit,
+    // 2026-11-09: fetch-start used to go out first and never get cleared).
+    emit('fetch-error', { error: error.message });
+    throw error;
+  }
   emit('fetch-start', { mode });
-  const a = await ensureApi();
-  const { main: runJs } = require('../../src/backend-js/run.js');
   try {
     await a.historyLoadedPromise;
     const argv = [`--mode=${mode || 'prices'}`, `--data-dir=${DATA_DIR}`];
@@ -622,6 +645,13 @@ function startLiveMonitoring() {
 let lastFetchOkAt = 0;
 App.addListener('appStateChange', ({ isActive }) => {
   if (!isActive || !store) return;
+  // Live monitoring is switched on but Android stopped the service (battery
+  // saver, a memory squeeze): start it again (state-machine audit, 2026-11-09).
+  // It used to come back only on the next app launch.
+  if (store.get('liveMonitoring', false)) {
+    GeniusMonitor.isRunning().then(r => { if (!r?.running) return startLiveMonitoring(); })
+      .catch(e => console.error('[GEnius] Live monitoring restart failed:', e.message));
+  }
   const intervalMs = store.get('fetchInterval', 15) * 60 * 1000;
   if (Date.now() - lastFetchOkAt >= intervalMs) {
     runFetch('prices').catch(e => console.error('[GEnius] Resume fetch failed:', e.message));
@@ -642,7 +672,7 @@ async function startScheduler() {
 }
 
 // 3s delay, not 1s — matches main.js's desktop startup stagger
-// (setTimeout(() => runPython('prices'), 3000)). Confirmed for real this
+// (setTimeout(() => runFetch('prices'), 3000)). Confirmed for real this
 // mattered on mobile too: the initial fetch is real synchronous work
 // competing with the page's own initial render/hydration for the same
 // single JS thread, and giving the UI a moment to settle first measurably
