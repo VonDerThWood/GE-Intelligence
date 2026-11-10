@@ -214,7 +214,10 @@ addEventListener('checkNotifications', async (resolve, reject) => {
     // --- Reminders (pure date checks, no price data needed) ---
     let remindersChanged = false;
     for (const r of reminders) {
-      const todayStr = new Date().toISOString().slice(0, 10);
+      // Your own calendar day, like the desktop: the due date is one you picked,
+      // and the UTC date fired reminders ~5 hours early in the US (bug audit, 2026-11-09).
+      const n = new Date();
+      const todayStr = `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
       if (r.fired || !r.dueDate || r.dueDate > todayStr) continue;
       queue(r.itemName ? `Reminder: ${r.itemName}` : 'GEnius Reminder', r.message || 'Reminder due.', 'mine', 'reminder');
       r.fired = true;

@@ -310,9 +310,9 @@ async function runFetchOnce(mode) {
     lastFetchOkAt = Date.now();
     emit('fetch-complete', { mode, timestamp: Date.now() });
     // Smaller batch than desktop's 500 — mobile data and battery.
-    if (mode !== 'news') a.syncLiveHistory().catch(() => {});
+    if (mode !== 'news') a.syncLiveHistory().catch(a.noteError('live price archive'));
     runSync().catch(() => {});
-    if (mode !== 'news') a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {});
+    if (mode !== 'news') a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(a.noteError('history refresh / similarity / Almanac'));
   } catch (error) {
     emit('fetch-error', { error: error.message });
     throw error;
@@ -430,7 +430,7 @@ async function buildGenius() {
     saveSettings: (settings) => {
       Object.entries(settings).forEach(([k, v]) => store.set(k, v));
       startScheduler(); // picks up a changed fetchInterval immediately, same as main.js's save-settings handler
-      if (store.get('liveMonitoring', false)) startLiveMonitoring().catch(() => {});
+      if (store.get('liveMonitoring', false)) startLiveMonitoring().catch(e => console.error('[GEnius] Live monitoring start failed:', e.message));
       syncRunnerState();
       return { success: true };
     },

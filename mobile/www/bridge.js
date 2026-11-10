@@ -22737,7 +22737,7 @@
         return Array.from(r, (b) => CODE_CHARS[b % CODE_CHARS.length]).join("");
       }
       var fresh = (ts) => Math.abs(Date.now() - Number(ts)) < CLOCK_SKEW_MS;
-      function createSync({ dataDir, store: store2, writePortfolio, buildExportBundle }) {
+      function createSync({ dataDir, store: store2, writePortfolio, buildExportBundle, withUserData = (fn) => fn }) {
         const portfolioFile = path.join(dataDir, "portfolio.json");
         const alertsFile = path.join(dataDir, "alerts.json");
         const eventsFile = path.join(dataDir, "dxp_events.json");
@@ -22825,7 +22825,8 @@
           store2.set("syncDevices", { ...devices(), [hello.deviceId]: { name: String(hello.name || "Phone").slice(0, 60), key: secret, pairedAt: Date.now(), lastSyncAt: null } });
           return { status: 200, body: { c: await seal(key, { key: secret }) } };
         }
-        async function hubSync(deviceId, lastRev, phoneState) {
+        const hubSync = (...args) => withUserData(hubSyncInner)(...args);
+        async function hubSyncInner(deviceId, lastRev, phoneState) {
           const hubState = await readState();
           const file = baseFile(deviceId);
           const saved = await storage2.readJSON(file, null);
@@ -22914,7 +22915,12 @@
           if (r.status !== 200 || !r.data?.c) return { error: r.data?.error || "unreachable" };
           const out = await open(key, r.data.c);
           if (out.error) return { error: out.error };
-          const changed = await applyIfChanged(mine, out.state);
+          const changed = await withUserData(async () => {
+            const now = await readState();
+            if (JSON.stringify(now) !== JSON.stringify(mine)) return null;
+            return applyIfChanged(mine, out.state);
+          })();
+          if (changed === null) return { success: true, changed: false, retry: true };
           store2.set("syncClient", { ...clientInfo(), lastRev: out.rev, lastSyncAt: Date.now() });
           return { success: true, changed, conflicts: out.conflicts || 0 };
         }
@@ -25028,6 +25034,14 @@
         let historyRefreshActive = false;
         let historyFetchActive = false;
         let historyFetchStop = false;
+        const noteError = (label) => (e) => {
+          const msg = e && e.message || String(e);
+          console.error(`[${label}] failed:`, msg);
+          try {
+            store2.set("backgroundErrors", [{ at: Date.now(), what: label, error: msg }, ...store2.get("backgroundErrors", []) || []].slice(0, 20));
+          } catch {
+          }
+        };
         let historyRefreshStop = false;
         const pause = (ms) => new Promise((r) => setTimeout(r, ms));
         let historyInitial300Done = store2.get("historyInitial300Done", false);
@@ -25072,19 +25086,22 @@
         async function saveAthCache() {
           try {
             await storage2.writeJSON(athCacheFile, athCache);
-          } catch {
+          } catch (e) {
+            noteError("save ath_cache")(e);
           }
         }
         async function saveSnapshots() {
           try {
             await storage2.writeJSON(snapshotFile, snapshotData);
-          } catch {
+          } catch (e) {
+            noteError("save price_snapshots")(e);
           }
         }
         async function saveItemStatsCache() {
           try {
             await storage2.writeJSON(itemStatsFile, Object.fromEntries(itemStatsCache));
-          } catch {
+          } catch (e) {
+            noteError("save item_stats")(e);
           }
         }
         async function loadHistory() {
@@ -25148,7 +25165,8 @@
               if (++newSummaries % 500 === 0) {
                 try {
                   await storage2.writeJSON(historySummaryFile, historySummary);
-                } catch {
+                } catch (e) {
+                  noteError("save history summary")(e);
                 }
               }
             }
@@ -25157,7 +25175,8 @@
           if (summaryChanged) {
             try {
               await storage2.writeJSON(historySummaryFile, historySummary);
-            } catch {
+            } catch (e) {
+              noteError("save history summary")(e);
             }
           }
           return { historyVolAvg, historyPrevPrice, historyPrevPriceTs, historyFirstTs: { ...historyFirstTs } };
@@ -25216,7 +25235,8 @@
           if (!readOnlyHistory) {
             try {
               await storage2.writeJSON(historySummaryFile, historySummary);
-            } catch {
+            } catch (e) {
+              noteError("save history summary")(e);
             }
           }
           if (readOnlyHistory) {
@@ -25520,7 +25540,8 @@
                 athCache[key] = { data: [...cached, ...newer.map((p) => ({ timestamp: p.timestamp, high: p.price || p.high, low: p.price || p.low, volume: p.volume || 0 }))] };
                 try {
                   await storage2.writeJSON(athCacheFile, athCache);
-                } catch {
+                } catch (e) {
+                  noteError("save ath_cache")(e);
                 }
               }
             }
@@ -25562,8 +25583,7 @@
             const current = onDisk?._meta?.version === require_dxp_intelligence().ALMANAC_DATA_VERSION;
             if (onDisk && current && Object.keys(onDisk).length) {
               dxpIntelCache = { historyVersion: -1, eventsVersion: -1, data: onDisk };
-              maybeRefreshAlmanac().catch(() => {
-              });
+              maybeRefreshAlmanac().catch(noteError("Almanac rebuild"));
               return onDisk;
             }
           }
@@ -25907,8 +25927,7 @@
             }
             if (!store2.get("dxpRescan_2026_10")) {
               const recent = Object.values(arch.posts).filter((p) => p.date && Date.now() - /* @__PURE__ */ new Date(p.date + "T12:00:00") <= 60 * 864e5);
-              for (const p of recent) await detectDxpNews(p).catch(() => {
-              });
+              for (const p of recent) await detectDxpNews(p).catch(noteError("DXP news check"));
               store2.set("dxpRescan_2026_10", true);
             }
             await backfillCalendar(arch);
@@ -26345,7 +26364,7 @@
           if (!settings.enabled) return [];
           const notified = store2.get("updateRiskNotified", []);
           const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified, { includeWatched: settings.includeWatched });
-          if (out.length) store2.set("updateRiskNotified", [...notified, ...out.flatMap((n) => n.keys)]);
+          if (out.length) store2.set("updateRiskNotified", [...notified, ...out.flatMap((n) => n.keys)].slice(-3e3));
           return out;
         }
         const isNameReleaseDate = (e) => /\bname release\b|\brelease\b.*\bnames\b/i.test(e.label || "") || /^name release\b(?!.*(?:\band\b|&))/i.test(e.postTitle || "");
@@ -27788,8 +27807,7 @@
         async function getSimilarItems(itemId) {
           if (!simTable) simTable = await storage2.readJSON(similarityFile, null);
           if (!simTable) {
-            maybeBuildSimilarityTable().catch(() => {
-            });
+            maybeBuildSimilarityTable().catch(noteError("similarity table"));
             return { pending: true, together: [], opposite: [] };
           }
           const me = simTable.r[String(itemId)];
@@ -28442,6 +28460,13 @@
             month_date: localDateStr(n).slice(0, 7)
           };
         }
+        let userDataQueue = Promise.resolve();
+        const withUserData = (fn) => (...args) => {
+          const run = userDataQueue.then(() => fn(...args), () => fn(...args));
+          userDataQueue = run.catch(() => {
+          });
+          return run;
+        };
         async function readPortfolio() {
           return storage2.readJSON(portfolioFile, { positions: [], tax_stats: defaultTaxStats() });
         }
@@ -29351,7 +29376,7 @@
           getDropSources,
           getLiveItemPrice,
           getItemLiveTimeseries,
-          sync: createSync({ dataDir, store: store2, writePortfolio, buildExportBundle }),
+          sync: createSync({ dataDir, store: store2, writePortfolio, buildExportBundle, withUserData }),
           getUpdateRisks,
           dismissUpdateRisk,
           getUpdateRiskNotifications: toInbox("upcoming", "update_risk", getUpdateRiskNotifications),
@@ -29367,17 +29392,17 @@
           // item detail panel — "turns into"
           getItemProducts,
           // portfolio
-          getPortfolio,
-          savePosition,
-          deletePosition,
-          sellPosition,
-          convertPosition,
-          reopenPosition,
+          getPortfolio: withUserData(getPortfolio),
+          savePosition: withUserData(savePosition),
+          deletePosition: withUserData(deletePosition),
+          sellPosition: withUserData(sellPosition),
+          convertPosition: withUserData(convertPosition),
+          reopenPosition: withUserData(reopenPosition),
           getBuyGoals,
-          saveBuyGoal,
-          deleteBuyGoal,
-          updateBuyGoalTotals,
-          getBuyGoalNotifications: toInbox("mine", "buy_goal", getBuyGoalNotifications),
+          saveBuyGoal: withUserData(saveBuyGoal),
+          deleteBuyGoal: withUserData(deleteBuyGoal),
+          updateBuyGoalTotals: withUserData(updateBuyGoalTotals),
+          getBuyGoalNotifications: toInbox("mine", "buy_goal", withUserData(getBuyGoalNotifications)),
           recordOpportunities,
           getOpportunityHistory,
           refreshStaleHistory,
@@ -29408,24 +29433,26 @@
           getChartAnalysis,
           askItem,
           listAutoBackups,
-          restoreAutoBackup,
+          restoreAutoBackup: withUserData(restoreAutoBackup),
           getFoodHeal,
           maybeBuildSimilarityTable,
           maybeRefreshAlmanac,
           prepareForQuit,
+          noteError,
+          getBackgroundErrors: async () => store2.get("backgroundErrors", []),
           // alerts
           getAlerts,
-          saveAlert,
-          deleteAlert,
-          getTriggeredAlerts: toInbox("mine", "price_alert", getTriggeredAlerts),
-          markAlertsFiredInBackground,
+          saveAlert: withUserData(saveAlert),
+          deleteAlert: withUserData(deleteAlert),
+          getTriggeredAlerts: toInbox("mine", "price_alert", withUserData(getTriggeredAlerts)),
+          markAlertsFiredInBackground: withUserData(markAlertsFiredInBackground),
           // overrides
           getOverrides,
           saveOverrides,
           // misc
           getData,
           buildExportBundle,
-          applyImportBundle,
+          applyImportBundle: withUserData(applyImportBundle),
           runAutoBackup,
           // notification checks (see comment above — what to fire is shared,
           // how to actually show it natively is platform-specific glue)
@@ -31960,12 +31987,10 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       await runNotificationChecks().catch((e) => console.error("[GEnius] Notification check failed:", e.message));
       lastFetchOkAt = Date.now();
       emit("fetch-complete", { mode, timestamp: Date.now() });
-      if (mode !== "news") a.syncLiveHistory().catch(() => {
-      });
+      if (mode !== "news") a.syncLiveHistory().catch(a.noteError("live price archive"));
       runSync().catch(() => {
       });
-      if (mode !== "news") a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(() => {
-      });
+      if (mode !== "news") a.refreshStaleHistory(50).then(() => a.maybeBuildSimilarityTable()).then(() => a.maybeRefreshAlmanac()).catch(a.noteError("history refresh / similarity / Almanac"));
     } catch (error) {
       emit("fetch-error", { error: error.message });
       throw error;
@@ -32082,8 +32107,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       saveSettings: (settings) => {
         Object.entries(settings).forEach(([k, v]) => store.set(k, v));
         startScheduler();
-        if (store.get("liveMonitoring", false)) startLiveMonitoring().catch(() => {
-        });
+        if (store.get("liveMonitoring", false)) startLiveMonitoring().catch((e) => console.error("[GEnius] Live monitoring start failed:", e.message));
         syncRunnerState();
         return { success: true };
       },

@@ -56,7 +56,7 @@ function newCode() {
 }
 const fresh = ts => Math.abs(Date.now() - Number(ts)) < CLOCK_SKEW_MS;
 
-function createSync({ dataDir, store, writePortfolio, buildExportBundle }) {
+function createSync({ dataDir, store, writePortfolio, buildExportBundle, withUserData = fn => fn }) {
   const portfolioFile = path.join(dataDir, 'portfolio.json');
   const alertsFile = path.join(dataDir, 'alerts.json');
   const eventsFile = path.join(dataDir, 'dxp_events.json');
@@ -144,7 +144,9 @@ function createSync({ dataDir, store, writePortfolio, buildExportBundle }) {
     return { status: 200, body: { c: await seal(key, { key: secret }) } };
   }
 
-  async function hubSync(deviceId, lastRev, phoneState) {
+  // Whole read-merge-save takes its turn with other portfolio/alert changes.
+  const hubSync = (...args) => withUserData(hubSyncInner)(...args);
+  async function hubSyncInner(deviceId, lastRev, phoneState) {
     const hubState = await readState();
     const file = baseFile(deviceId);
     const saved = await storage.readJSON(file, null);
@@ -235,7 +237,12 @@ function createSync({ dataDir, store, writePortfolio, buildExportBundle }) {
     if (r.status !== 200 || !r.data?.c) return { error: r.data?.error || 'unreachable' };
     const out = await open(key, r.data.c);
     if (out.error) return { error: out.error };
-    const changed = await applyIfChanged(mine, out.state);
+    const changed = await withUserData(async () => {
+      const now = await readState();
+      if (JSON.stringify(now) !== JSON.stringify(mine)) return null; // edited during the sync
+      return applyIfChanged(mine, out.state);
+    })();
+    if (changed === null) return { success: true, changed: false, retry: true };
     // Only after the data is saved. If that fails, the hub still has this rev's
     // predecessor as `previous`, so the next sync merges correctly.
     store.set('syncClient', { ...clientInfo(), lastRev: out.rev, lastSyncAt: Date.now() });

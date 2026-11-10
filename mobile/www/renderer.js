@@ -560,6 +560,11 @@ function ChangeDisplay({change_1d, price}) {
 // 5,000,000gp cap, which was an OSRS-only mechanic that had been wrongly
 // applied here, affecting the margin calculator and item detail panel too.
 const applyTax = price => price < 50 ? price : Math.floor(price * 0.98);
+// Dates the user picks are their own calendar days. new Date('2026-11-09') reads as
+// UTC midnight, the evening before in the US, so a position bought today showed
+// "1 day held" by evening (bug audit, 2026-11-09).
+const localDayStr = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+const dayStartMs = s => { if (!s) return 0; const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s); return m ? new Date(+m[1], +m[2] - 1, +m[3]).getTime() : new Date(s).getTime(); };
 // Net proceeds of a whole sale (price × qty) after GE tax — must match
 // saleNet() in backend-js/api.js, which records the actual sale.
 const saleNet = (price, qty) => price >= 50 ? Math.round(price * qty * 0.98) : price * qty;
@@ -11885,7 +11890,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   // Same-item positions group under one row with a chevron (Ben, 2026-11-04). The
   // risk badge sits on the combined stack, since they'd all sell into one market.
   const posGroups = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
-  const heldSinceOf = p => new Date(p.date_opened || p.created_at).getTime() || null;
+  const heldSinceOf = p => dayStartMs(p.date_opened || p.created_at) || null;
   const heldText = ts => {
     if (!ts || !isFinite(ts)) return '—';
     const days = Math.floor((Date.now() - ts) / 86400000);
@@ -12065,7 +12070,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     const pricedOpen = openPos.filter(p => p.currentPrice > 0);
     const plOf = p => p.realized_pl || 0;
     const saleCost = p => (p.cost_basis || 0) * (p.sold_quantity || p.quantity || 0);
-    const daysHeld = p => Math.floor((Date.now() - new Date(p.date_opened || p.created_at).getTime()) / 86400000);
+    const daysHeld = p => Math.floor((Date.now() - dayStartMs(p.date_opened || p.created_at)) / 86400000);
     const losses = sales.filter(p => plOf(p) < 0);
 
     // Biggest single realized loss — highest tier earned only
@@ -15976,7 +15981,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const newPosition = async () => {
     if (!requireItem()) return;
     await window.genius.savePosition({id:Date.now().toString(), item_name:known.name, quantity:filled, cost_basis:coins / filled, status:'open',
-      created_at:new Date().toISOString(), date_opened:new Date().toISOString().slice(0, 10), target_price:'', target_profit_pct:'', stop_loss:''});
+      created_at:new Date().toISOString(), date_opened:localDayStr(), target_price:'', target_profit_pct:'', stop_loss:''});
     finish(known.name + ' added to your Portfolio');
   };
   const saveSale = async () => {

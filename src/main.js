@@ -237,10 +237,10 @@ function runFetch(mode = 'prices') {
       // most out-of-date items per fetch). Deliberately not awaited — it
       // takes a few minutes and must never hold up the fetch itself.
       // Same idea for the daily live price archive (live-history.js).
-      if (mode !== 'news') api.syncLiveHistory().catch(() => {});
+      if (mode !== 'news') api.syncLiveHistory().catch(api.noteError('live price archive'));
       // Hourly archive (live-hourly.js) is opt-in: Settings > Hourly price history.
-      if (mode !== 'news' && store.get('saveHourlyPrices', false) && !isTestMode) liveHourly?.sync().catch(() => {});
-      if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(() => {});
+      if (mode !== 'news' && store.get('saveHourlyPrices', false) && !isTestMode) liveHourly?.sync().catch(api.noteError('hourly price archive'));
+      if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(api.noteError('history refresh / similarity / Almanac'));
     } catch (error) {
       console.error('[run.js] Error:', error.message);
       notifyRenderer('fetch-error', { error: error.message });

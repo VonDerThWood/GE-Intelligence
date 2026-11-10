@@ -125,6 +125,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   let historyRefreshActive = false;
   let historyFetchActive = false;
   let historyFetchStop = false;
+  const noteError = label => e => {
+    const msg = (e && e.message) || String(e);
+    console.error(`[${label}] failed:`, msg);
+    try { store.set('backgroundErrors', [{ at: Date.now(), what: label, error: msg }, ...(store.get('backgroundErrors', []) || [])].slice(0, 20)); } catch {}
+  };
   let historyRefreshStop = false; // asks refreshStaleHistory to finish its current item and stop
   const pause = ms => new Promise(r => setTimeout(r, ms));
   let historyInitial300Done = store.get('historyInitial300Done', false);
@@ -202,13 +207,13 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   let signalTrendInFlight = null;  // shared in-flight Promise — see comment at getSignalTrend
 
   async function saveAthCache() {
-    try { await storage.writeJSON(athCacheFile, athCache); } catch {}
+    try { await storage.writeJSON(athCacheFile, athCache); } catch (e) { noteError('save ath_cache')(e); }
   }
   async function saveSnapshots() {
-    try { await storage.writeJSON(snapshotFile, snapshotData); } catch {}
+    try { await storage.writeJSON(snapshotFile, snapshotData); } catch (e) { noteError('save price_snapshots')(e); }
   }
   async function saveItemStatsCache() {
-    try { await storage.writeJSON(itemStatsFile, Object.fromEntries(itemStatsCache)); } catch {}
+    try { await storage.writeJSON(itemStatsFile, Object.fromEntries(itemStatsCache)); } catch (e) { noteError('save item_stats')(e); }
   }
 
   // ─── Price history ──────────────────────────────────────────────────────
@@ -327,11 +332,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         summaryChanged = true;
         // Save progress every 500 so a phone that closes GEnius mid-pass
         // doesn't lose the whole first run.
-        if (++newSummaries % 500 === 0) { try { await storage.writeJSON(historySummaryFile, historySummary); } catch {} }
+        if (++newSummaries % 500 === 0) { try { await storage.writeJSON(historySummaryFile, historySummary); } catch (e) { noteError('save history summary')(e); } }
       }
       applySummary(key, sum, cutoff90dSec);
     }
-    if (summaryChanged) { try { await storage.writeJSON(historySummaryFile, historySummary); } catch {} }
+    if (summaryChanged) { try { await storage.writeJSON(historySummaryFile, historySummary); } catch (e) { noteError('save history summary')(e); } }
     return { historyVolAvg, historyPrevPrice, historyPrevPriceTs, historyFirstTs: { ...historyFirstTs } };
 
     function applySummary(key, sum, cutoff90d) {
@@ -388,7 +393,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // These items' history changed, so their computeHistoryStats summaries are stale.
     if (!historySummary) historySummary = await storage.readJSON(historySummaryFile, {}) || {};
     for (const id of dirtyHistoryIds) delete historySummary[String(id)];
-    if (!readOnlyHistory) { try { await storage.writeJSON(historySummaryFile, historySummary); } catch {} }
+    if (!readOnlyHistory) { try { await storage.writeJSON(historySummaryFile, historySummary); } catch (e) { noteError('save history summary')(e); } }
     if (readOnlyHistory) { dirtyHistoryIds.clear(); return; } // test mode: keep in memory only
     const toSave = [...dirtyHistoryIds];
     dirtyHistoryIds.clear();
@@ -897,7 +902,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         const newer = hist.filter(p => p.timestamp > lastCachedTs);
         if (newer.length) {
           athCache[key] = { data: [...cached, ...newer.map(p => ({timestamp:p.timestamp, high:p.price||p.high, low:p.price||p.low, volume:p.volume||0}))] };
-          try { await storage.writeJSON(athCacheFile, athCache); } catch {}
+          try { await storage.writeJSON(athCacheFile, athCache); } catch (e) { noteError('save ath_cache')(e); }
         }
       }
       return athCache[key].data;
@@ -1009,7 +1014,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // never ran and the Almanac only updated on a manual Refresh (found
         // 2026-10-07: file still dated June 29). Now: recompute if the last
         // real one is over a day old.
-        maybeRefreshAlmanac().catch(() => {});
+        maybeRefreshAlmanac().catch(noteError('Almanac rebuild'));
         return onDisk;
       }
       // Nothing usable on disk (fresh install) — fall through to the real
@@ -1443,7 +1448,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // one more look with the fixed detector.
       if (!store.get('dxpRescan_2026_10')) {
         const recent = Object.values(arch.posts).filter(p => p.date && Date.now() - new Date(p.date + 'T12:00:00') <= 60 * 86400000);
-        for (const p of recent) await detectDxpNews(p).catch(() => {});
+        for (const p of recent) await detectDxpNews(p).catch(noteError('DXP news check'));
         store.set('dxpRescan_2026_10', true);
       }
       await backfillCalendar(arch);
@@ -1952,7 +1957,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (!settings.enabled) return [];
     const notified = store.get('updateRiskNotified', []);
     const out = buildUpdateRiskNotifications(await getUpdateRisks(), notified, { includeWatched: settings.includeWatched });
-    if (out.length) store.set('updateRiskNotified', [...notified, ...out.flatMap(n => n.keys)]);
+    if (out.length) store.set('updateRiskNotified', [...notified, ...out.flatMap(n => n.keys)].slice(-3000)); // capped: it only ever grew (bug audit, 2026-11-09)
     return out;
   }
 
@@ -3278,7 +3283,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   async function getSimilarItems(itemId) {
     if (!simTable) simTable = await storage.readJSON(similarityFile, null);
-    if (!simTable) { maybeBuildSimilarityTable().catch(() => {}); return { pending: true, together: [], opposite: [] }; }
+    if (!simTable) { maybeBuildSimilarityTable().catch(noteError('similarity table')); return { pending: true, together: [], opposite: [] }; }
     const me = simTable.r[String(itemId)];
     if (!me) return { together: [], opposite: [], tooFlat: true };
     const out = [];
@@ -4324,6 +4329,18 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       month_date: localDateStr(n).slice(0,7) };
   }
 
+  // Portfolio and alerts are read, changed and written back with waits in
+  // between, so two changes at once (the UI, a background check, phone sync)
+  // could each save over the other. Every outside call that writes them takes
+  // its turn in this queue (bug audit, 2026-11-09). Only exported entry points
+  // are wrapped, never internal calls, so nothing ever waits on itself.
+  let userDataQueue = Promise.resolve();
+  const withUserData = fn => (...args) => {
+    const run = userDataQueue.then(() => fn(...args), () => fn(...args));
+    userDataQueue = run.catch(() => {});
+    return run;
+  };
+
   async function readPortfolio() {
     return storage.readJSON(portfolioFile, { positions:[], tax_stats:defaultTaxStats() });
   }
@@ -5347,7 +5364,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDropSources,
     getLiveItemPrice,
     getItemLiveTimeseries,
-    sync: createSync({ dataDir, store, writePortfolio, buildExportBundle }),
+    sync: createSync({ dataDir, store, writePortfolio, buildExportBundle, withUserData }),
     getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications: toInbox('upcoming', 'update_risk', getUpdateRiskNotifications), getUpdateRiskSettings, setUpdateRiskSettings,
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
@@ -5357,19 +5374,21 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // item detail panel — "turns into"
     getItemProducts,
     // portfolio
-    getPortfolio, savePosition, deletePosition, sellPosition, convertPosition, reopenPosition,
-    getBuyGoals, saveBuyGoal, deleteBuyGoal, updateBuyGoalTotals, getBuyGoalNotifications: toInbox('mine', 'buy_goal', getBuyGoalNotifications),
+    getPortfolio: withUserData(getPortfolio), savePosition: withUserData(savePosition), deletePosition: withUserData(deletePosition),
+    sellPosition: withUserData(sellPosition), convertPosition: withUserData(convertPosition), reopenPosition: withUserData(reopenPosition),
+    getBuyGoals, saveBuyGoal: withUserData(saveBuyGoal), deleteBuyGoal: withUserData(deleteBuyGoal), updateBuyGoalTotals: withUserData(updateBuyGoalTotals),
+    getBuyGoalNotifications: toInbox('mine', 'buy_goal', withUserData(getBuyGoalNotifications)),
     recordOpportunities, getOpportunityHistory, refreshStaleHistory,
     getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications: toInbox('almanac', 'dxp_news', getDxpNewsNotifications), parseDxpDates, parseDxpTease,
     getNewsCalendar, extractNewsDates, fetchNewsPage,
     getNewsFeed, getNewsBadgeCount, markNewsRead, getNewsBadgePrefs, setNewsBadgePrefs,
-    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup, getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit,
+    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, getBackgroundErrors: async () => store.get('backgroundErrors', []),
     // alerts
-    getAlerts, saveAlert, deleteAlert, getTriggeredAlerts: toInbox('mine', 'price_alert', getTriggeredAlerts), markAlertsFiredInBackground,
+    getAlerts, saveAlert: withUserData(saveAlert), deleteAlert: withUserData(deleteAlert), getTriggeredAlerts: toInbox('mine', 'price_alert', withUserData(getTriggeredAlerts)), markAlertsFiredInBackground: withUserData(markAlertsFiredInBackground),
     // overrides
     getOverrides, saveOverrides,
     // misc
-    getData, buildExportBundle, applyImportBundle, runAutoBackup,
+    getData, buildExportBundle, applyImportBundle: withUserData(applyImportBundle), runAutoBackup,
     // notification checks (see comment above — what to fire is shared,
     // how to actually show it natively is platform-specific glue)
     getDxpNotifications: toInbox('almanac', 'dxp', getDxpNotifications),
