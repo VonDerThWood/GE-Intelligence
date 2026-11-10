@@ -782,6 +782,10 @@ const LIVE_LOOKBACKS = [
   {key:'30d', label:'30D'},
   {key:'6m',  label:'6M'},
   {key:'1y',  label:'1Y'},
+  // GEnius's own hourly archive (live-hourly.js), desktop only: every hour since
+  // Settings > Hourly price history was switched on, beyond the wiki's ~2 weeks
+  // of hourly detail (Ben, 2026-11-10).
+  ...(typeof window !== 'undefined' && window.genius?.syncRole === 'phone' ? [] : [{key:'saved', label:'Saved hourly', title:'Every hour GEnius has saved (Settings > Hourly price history)'}]),
 ];
 
 // Carries the last known value forward across null buckets (no trade that
@@ -957,7 +961,11 @@ function LiveTimeseriesSection({itemId}) {
     if (!open || !itemId) return;
     setLoading(true);
     setZoomHours(null);
-    window.genius?.getItemLiveTimeseries(itemId, lookback).then(ts => {
+    const load = lookback === 'saved'
+      ? window.genius.getItemLiveHourly(itemId, 400).then(rows => (rows || []).map(r => ({
+          timestamp: Date.parse(r.time + ':00:00Z'), instabuy: r.buy, instasell: r.sell, buyVolume: r.buyVol, sellVolume: r.sellVol })))
+      : window.genius?.getItemLiveTimeseries(itemId, lookback);
+    load.then(ts => {
       setData(ts && ts.length ? ts : null);
       setLoading(false);
     }).catch(() => { setData(null); setLoading(false); });
@@ -1029,7 +1037,9 @@ function LiveTimeseriesSection({itemId}) {
         ),
       ),
       loading && h('div', {style:{fontSize:11, color:T.textDim, padding:'20px 0', textAlign:'center'}}, '⏳ Loading live data…'),
-      !loading && !zoomedData && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', padding:'12px 0'}}, 'No live data available for this item/range.'),
+      !loading && !zoomedData && h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic', padding:'12px 0'}}, lookback === 'saved'
+        ? 'Nothing saved for this item yet. Turn on Settings > Hourly price history to keep every hour.'
+        : 'No live data available for this item/range.'),
       !loading && zoomedData && h(LiveTimeseriesChart, {data: zoomedData}),
       !loading && recommendation && h('div', {style:{marginTop:8, fontSize:11, color:T.text}}, recommendation),
       !loading && recommendation && h('div', {
@@ -3019,7 +3029,7 @@ function QuickAlertPopup({item, pos, onClose, onSaveAlert, onSaveReminder, toast
   const [message, setMessage] = useState('');
 
   const needsPrice  = ['above','below','live_above','live_below'].includes(condition);
-  const needsPct    = ['pct_up','pct_down','score_above'].includes(condition);
+  const needsPct    = ['pct_up','pct_down','score_above','stopped_falling'].includes(condition);
   const needsSignal = condition === 'signal';
 
   const saveAlert = async () => {
@@ -7401,6 +7411,7 @@ const ALERT_CONDITIONS = [
   {value:'signal',     label:'Signal triggers'},
   {value:'alch',       label:'Becomes alch-profitable'},
   {value:'score_above',label:'Opportunity Score rises above'},
+  {value:'stopped_falling',label:'Stops falling (after dropping %)'},
 ];
 const ALERT_SIGNALS = ['SURGE','DUMP','ACCUMULATION','DISTRIBUTION','FRENZY','HIGH_VOL','OVERPRICED','UNDERPRICED','WIDE_SPREAD'];
 
@@ -7415,6 +7426,7 @@ function alertSummary(a) {
     case 'signal':   return `signal: ${a.signal_type||''}`;
     case 'alch':     return 'alch profit';
     case 'score_above': return `score > ${a.pct}`;
+    case 'stopped_falling': return `stopped falling after -${a.pct}%`;
     default:         return a.condition;
   }
 }
@@ -7504,7 +7516,7 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
   const cancelEditReminder = () => { setRemEditId(null); setRemForm(REM_BLANK); };
 
   const needsPrice  = ['above','below','live_above','live_below'].includes(form.condition);
-  const needsPct    = ['pct_up','pct_down','score_above'].includes(form.condition);
+  const needsPct    = ['pct_up','pct_down','score_above','stopped_falling'].includes(form.condition);
   const needsSignal = form.condition === 'signal';
 
   const submit = async () => {

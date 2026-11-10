@@ -4717,7 +4717,28 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (changed) await storage.writeJSON(alertsFile, alerts, { pretty: true });
   }
 
-  function _alertConditionHit(alert, item) {
+  // "Stopped falling" (Ben, 2026-11-10, watching Malachi's tooth): from the saved
+  // live daily prices (complete UTC days, mid of buy and sell). True when the item
+  // fell at least alert.pct% from its 30-day high to its lowest day, has made no
+  // new low for 3+ days, and is still within 10% of that low (not already bounced).
+  async function stoppedFallingInfo(item, minDropPct) {
+    if (!item.id) return null;
+    const days = (await liveHistory.getItem(item.id, 30))
+      .map(d => ({ date: d.date, p: d.buy && d.sell ? (d.buy + d.sell) / 2 : (d.buy || d.sell) }))
+      .filter(d => d.p);
+    if (days.length < 7) return null;
+    let hi = 0, hiAt = -1;
+    days.forEach((d, i) => { if (d.p > hi) { hi = d.p; hiAt = i; } });
+    let lo = Infinity, loAt = -1;
+    days.forEach((d, i) => { if (i > hiAt && d.p <= lo) { lo = d.p; loAt = i; } });
+    if (loAt < 0) return null;
+    const now = days[days.length - 1].p;
+    const drop = (1 - lo / hi) * 100;
+    const flatDays = days.length - 1 - loAt;
+    return { hit: drop >= (minDropPct || 15) && flatDays >= 3 && now <= lo * 1.10, drop, hi, lo, now, flatDays };
+  }
+
+  function _alertConditionHit(alert, item, ctx) {
     const condition = alert.condition || 'above';
     const price = item.high || item.low || 0;
     const liveRef = item.liveBuy ?? item.liveSell;
@@ -4735,10 +4756,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (condition === 'signal') return signals.includes(alert.signal_type || '');
     if (condition === 'alch') return signals.includes('ALCH');
     if (condition === 'score_above') return item.score != null && item.score >= pct;
+    if (condition === 'stopped_falling') return !!ctx?.hit;
     return false;
   }
 
-  function _alertMessage(alert, item) {
+  function _alertMessage(alert, item, ctx) {
     const condition = alert.condition || 'above';
     const name = alert.item_name;
     const price = item.high || item.low || 0;
@@ -4754,6 +4776,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       case 'signal':     return `${name} triggered signal ${alert.signal_type||''} — price: ${_fmtGpAlert(price)}gp`;
       case 'alch':       return `${name} is now alch-profitable — price: ${_fmtGpAlert(price)}gp`;
       case 'score_above': return `${name} Opportunity Score rose above ${alert.pct||0} — now ${item.score ?? '—'}`;
+      case 'stopped_falling': return ctx ? `${name} looks like it has stopped falling: down ${ctx.drop.toFixed(0)}% from its 30-day high (${_fmtGpAlert(ctx.hi)}gp), no new low for ${ctx.flatDays} days, now ${_fmtGpAlert(ctx.now)}gp` : `${name} has stopped falling`;
       default:           return `${name} alert triggered`;
     }
   }
@@ -4789,10 +4812,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     for (const a of alerts) {
       const item = priceMap[(a.item_name || '').toLowerCase()];
       if (!item) continue;
-      const hit = _alertConditionHit(a, item);
+      const ctx = a.condition === 'stopped_falling' ? await stoppedFallingInfo(item, a.pct).catch(() => null) : null;
+      const hit = _alertConditionHit(a, item, ctx);
       const wasActive = !!a.active;
       if (hit && !wasActive) {
-        triggered.push({ key: `alert_${a.id}_${Date.now()}`, title: `Alert: ${a.item_name}`, body: _alertMessage(a, item) });
+        triggered.push({ key: `alert_${a.id}_${Date.now()}`, title: `Alert: ${a.item_name}`, body: _alertMessage(a, item, ctx) });
         a.firedAt = Date.now();
         changed = true;
       }
