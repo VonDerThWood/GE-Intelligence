@@ -13844,14 +13844,15 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
    processing step itself being free or cheap, not by market timing.
    ──────────────────────────────────────────────────────────────── */
 const MONEY_MAKER_SKILLS = [
-  {key:'herblore',     label:'Herblore'},
-  {key:'divination',   label:'Divination'},
+  // Alphabetical (Ben, 2026-11-09).
+  {key:'archaeology',  label:'Archaeology'},
   {key:'construction', label:'Construction'},
+  {key:'crafting',     label:'Crafting'},
+  {key:'divination',   label:'Divination'},
+  {key:'fletching',    label:'Fletching'},
+  {key:'herblore',     label:'Herblore'},
   {key:'magic',        label:'Magic'},
   {key:'smithing',     label:'Smithing'},
-  {key:'archaeology',  label:'Archaeology'},
-  {key:'crafting',     label:'Crafting'},
-  {key:'fletching',    label:'Fletching'},
   {key:'summoning',    label:'Summoning'},
 ];
 
