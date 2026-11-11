@@ -844,10 +844,19 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     compactRunning = true;
     try {
       await historyLoadedPromise;
-      await saveHistory();                      // nothing unsaved in memory first
-      store.set('historyCompact', true);        // from now on, saves write the compact format
-      const r = await storage.compactDirItems(historyDir, { onProgress });
-      return { success: !r.failed.length, ...r };
+      // Wait for any history download to finish, then hold the same "busy" flag
+      // the background refresh uses, so no download runs during the conversion.
+      while (historyFetchActive || historyRefreshActive) await pause(500);
+      historyRefreshActive = true;
+      try {
+        await saveHistory();                    // nothing unsaved in memory first
+        store.set('historyCompact', true);      // from now on, saves write the compact format
+        const t = Date.now();
+        const r = await storage.compactDirItems(historyDir, { onProgress });
+        console.log(`[history] Compact format: converted ${r.converted}/${r.total} in ${((Date.now() - t) / 1000).toFixed(0)}s` + (r.failed.length ? `, ${r.failed.length} left as before` : ''));
+        if (!r.failed.length) store.set('historyCompactDone', Date.now());
+        return { success: !r.failed.length, ...r };
+      } finally { historyRefreshActive = false; }
     } finally { compactRunning = false; }
   }
 

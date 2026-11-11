@@ -157,14 +157,22 @@ async function compactDirItems(dirPath, { onProgress, shouldStop } = {}) {
   for (const f of olds) {
     if (shouldStop && shouldStop()) break;
     const id = f.slice(0, -5);
+    const jsonFile = path.join(dirPath, f), gzFile = path.join(dirPath, `${id}.json.gz`);
     try {
-      const raw = await fs.promises.readFile(path.join(dirPath, f), 'utf8');
+      let raw;
+      try { raw = await fs.promises.readFile(jsonFile, 'utf8'); }
+      catch (e) { if (e.code === 'ENOENT') { done++; continue; } throw e; } // a save already converted it
       const points = JSON.parse(raw);
-      const gzFile = path.join(dirPath, `${id}.json.gz`);
       await atomicWriteBuffer(gzFile, zlib.gzipSync(JSON.stringify(pack(points)), { level: 9 }));
       const back = unpack(JSON.parse(zlib.gunzipSync(await fs.promises.readFile(gzFile)).toString('utf8')));
-      if (JSON.stringify(back) !== JSON.stringify(points)) { await rmQuiet(gzFile); failed.push(id); continue; }
-      await fs.promises.unlink(path.join(dirPath, f));
+      if (JSON.stringify(back) !== JSON.stringify(points)) {
+        // Either a real mismatch, or the app saved a newer copy of this item in
+        // the meantime (that save removes the .json). Only undo our file when
+        // the old one is still there; otherwise the newer save is what's on disk.
+        if (await pathExists(jsonFile)) { await rmQuiet(gzFile); failed.push(id); }
+        done++; continue;
+      }
+      await rmQuiet(jsonFile);
     } catch (e) { failed.push(id); }
     done++;
     if (onProgress && done % 100 === 0) onProgress(done, olds.length);

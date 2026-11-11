@@ -954,6 +954,15 @@ app.whenReady().then(async () => {
   // than blocking startup. Even with the async-batched reads in api.js,
   // there's no reason to make window creation wait on it.
   api.loadHistory();
+  // v3.0.0: convert price history to the compact format once, in the
+  // background (about a minute; GEnius stays usable). Resumes on the next
+  // launch if it's interrupted. Never in test mode.
+  if (!isTestMode && !store.get('historyCompactDone', 0)) {
+    api.historyLoadedPromise.then(() => new Promise(r => setTimeout(r, 15000)))
+      .then(() => api.compactHistory())
+      .then(r => { if (r && r.error) console.log('[history] Compact format not run:', r.error); })
+      .catch(api.noteError('history compression'));
+  }
   api.runAutoBackup().catch(e => console.error('[autobackup] failed:', e.message));
   startScheduler();
   // Initial post-launch price fetch now triggers off the renderer's own
