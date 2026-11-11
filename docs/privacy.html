@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GEnius Privacy Policy</title>
+<meta name="description" content="What GEnius does and doesn't do with your data.">
+<link rel="icon" href="assets/favicon.ico">
+<style>
+  :root { --bg:#1a1206; --panel:#2b1f0e; --border:#6b4c1e; --text:#f0d98a; --text-dim:#b89b5e; --gold:#c9a84c; --bright:#fff3d0; }
+  body { margin:0; background:var(--bg); color:var(--text); font-family: Georgia, 'Times New Roman', serif; line-height:1.65; }
+  main { max-width:760px; margin:0 auto; padding:40px 16px 60px; }
+  h1 { color:var(--gold); font-size:2rem; margin:0 0 4px; }
+  h2 { color:var(--gold); font-size:1.2rem; margin:32px 0 8px; border-bottom:1px solid var(--border); padding-bottom:4px; }
+  p, li { color:var(--text); }
+  .dim { color:var(--text-dim); font-size:.95rem; }
+  a { color:var(--bright); }
+  ul { padding-left:22px; }
+  code { background:var(--panel); padding:1px 5px; border-radius:3px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>GEnius Privacy Policy</h1>
+  <p class="dim">Last updated: November 10, 2026 · <a href="./">Back to GEnius</a></p>
+
+  <p>GEnius is a free, open-source Grand Exchange market app for RuneScape 3, for Windows and Android.
+  It has no accounts and no server of its own. Your data stays on your devices, and in your own Google Drive
+  only if you switch on Google Drive sync.</p>
+
+  <h2>What GEnius stores</h2>
+  <p>Everything you enter (portfolio, alerts, watchlists, notes, reminders, settings) and the price history GEnius
+  downloads are stored on your own device. GEnius does not collect analytics, does not track you, and does not send
+  your data to the developer or anyone else.</p>
+
+  <h2>What GEnius connects to</h2>
+  <ul>
+    <li><strong>Public price and news sources</strong>: the RuneScape Wiki, WeirdGloop and the official RuneScape news,
+    to download prices and news. These requests contain no personal data.</li>
+    <li><strong>GitHub</strong>, to check whether a new version of GEnius is available.</li>
+    <li><strong>A Discord webhook</strong>, only if you add one yourself in Settings, to post your own alerts there.</li>
+    <li><strong>Your own PC</strong>, if you pair your phone for home Wi-Fi sync. That traffic stays on your home network and is encrypted.</li>
+    <li><strong>Your own Google Drive</strong>, only if you switch on Google Drive sync (below).</li>
+  </ul>
+
+  <h2>Google Drive sync</h2>
+  <p>Google Drive sync is optional and off until you connect it. When you connect, Google shows its own sign-in page;
+  GEnius never sees your Google password.</p>
+  <ul>
+    <li>GEnius asks only for the <code>drive.file</code> permission. With it, GEnius can see and change <strong>only the
+    one file it creates itself</strong>, <code>GEnius sync.json</code>. It cannot see, read or change any other file in your Drive.</li>
+    <li>It also asks for your email address, only to show which Google account is connected.</li>
+    <li>The sync file holds the same data you entered in GEnius (portfolio, alerts, watchlists, notes, reminders,
+    shorthands), so your other devices can stay in step. It lives in your Drive, under your control. GEnius and its
+    developer have no access to it.</li>
+    <li>The sign-in is kept on your device, encrypted with your operating system's own protection where available.
+    Disconnecting in Settings removes it from the device and revokes it at Google. You can also remove GEnius's access
+    at any time in your Google Account under Security, Third-party apps.</li>
+  </ul>
+  <p>GEnius's use of information received from Google APIs adheres to the
+  <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>,
+  including the Limited Use requirements. Google data is used only to sync your own GEnius data between your own devices,
+  and is never sold, shared, or used for advertising.</p>
+
+  <h2>Deleting your data</h2>
+  <p>Uninstalling GEnius removes its app; its data folder can be deleted from your device. To remove the sync copy, delete
+  <code>GEnius sync.json</code> from your Google Drive.</p>
+
+  <h2>Contact</h2>
+  <p>Questions: open an issue on <a href="https://github.com/VonDerThWood/GE-Intelligence/issues">GitHub</a>.</p>
+
+  <p class="dim">GEnius is a third-party tool and is not affiliated with Jagex or RuneScape.</p>
+</main>
+</body>
+</html>
