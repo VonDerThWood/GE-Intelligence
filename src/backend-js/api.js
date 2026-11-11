@@ -400,7 +400,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     await Promise.all(toSave.map(async id => {
       if (!historyData[id]) return; // nothing in memory to write (shouldn't happen now, but never retry-loop on it)
       try {
-        await storage.writeDirItem(historyDir, id, historyData[id]);
+        await storage.writeDirItem(historyDir, id, historyData[id], { compact: store.get('historyCompact', false) });
         historyPopulatedIds.add(String(id));
         // Evict from the live session cache once it's confirmed safely on
         // disk — this is the other half of the lazy-load fix (see
@@ -829,6 +829,26 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       historyRefreshActive = false;
     }
     return { refreshed };
+  }
+
+  // ─── v3.0.0 history compression (Ben, 2026-11-11) ───────────────────────
+  // One-time conversion of every data/history/<id>.json to the compact format
+  // (storage.compactDirItems: write, read back, compare, then delete the old
+  // file). From then on every save writes the compact format. Desktop only for
+  // now; never in test mode (that reads Ben's real history read-only).
+  let compactRunning = false;
+  async function compactHistory(onProgress) {
+    if (readOnlyHistory) return { error: 'read-only (test mode)' };
+    if (platform !== 'desktop' || !storage.compactDirItems) return { error: 'not available on this platform yet' };
+    if (compactRunning) return { error: 'already running' };
+    compactRunning = true;
+    try {
+      await historyLoadedPromise;
+      await saveHistory();                      // nothing unsaved in memory first
+      store.set('historyCompact', true);        // from now on, saves write the compact format
+      const r = await storage.compactDirItems(historyDir, { onProgress });
+      return { success: !r.failed.length, ...r };
+    } finally { compactRunning = false; }
   }
 
   async function stopHistoryPopulation() {
@@ -5460,7 +5480,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications: toInbox('almanac', 'dxp_news', getDxpNewsNotifications), parseDxpDates, parseDxpTease,
     getNewsCalendar, extractNewsDates, fetchNewsPage,
     getNewsFeed, getNewsBadgeCount, markNewsRead, getNewsBadgePrefs, setNewsBadgePrefs,
-    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, getBackgroundErrors: async () => store.get('backgroundErrors', []),
+    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, compactHistory, getHistoryCompact: async () => store.get('historyCompact', false), getBackgroundErrors: async () => store.get('backgroundErrors', []),
     clearBackgroundErrors: async () => { store.set('backgroundErrors', []); return { success: true }; },
     recordNetWorth: withUserData(recordNetWorth), getNetWorthHistory, buildCsvExport: withUserData(buildCsvExport),
     // alerts

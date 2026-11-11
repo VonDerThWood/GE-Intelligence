@@ -103,12 +103,75 @@ async function deleteFile(filePath) {
   try { await fs.promises.unlink(filePath); } catch {}
 }
 
+// Lists <name>.json files. A compressed per-item history file (<id>.json.gz,
+// v3.0.0) is listed under its plain name, so callers see one entry per item
+// whichever format it's in.
 async function listJSONFiles(dirPath) {
   try {
-    return (await fs.promises.readdir(dirPath)).filter(f => f.endsWith('.json'));
+    const names = new Set();
+    for (const f of await fs.promises.readdir(dirPath)) {
+      if (f.endsWith('.json')) names.add(f);
+      else if (f.endsWith('.json.gz')) names.add(f.slice(0, -3));
+    }
+    return [...names];
   } catch {
     return [];
   }
+}
+
+// ─── Compact per-item history (v3.0.0, Ben 2026-11-11) ───────────────────
+// history-format.js packs a history into columns of differences; gzipped it's
+// ~27x smaller and exactly lossless. Readers accept both formats, preferring
+// the compressed file when both exist.
+const zlib = require('zlib');
+const { pack, unpack } = require('./history-format.js');
+async function readItemFile(dirPath, id) {
+  const gz = path.join(dirPath, `${id}.json.gz`);
+  try {
+    return unpack(JSON.parse(zlib.gunzipSync(await fs.promises.readFile(gz)).toString('utf8')));
+  } catch (e) {
+    if (e.code !== 'ENOENT') throw e;
+  }
+  return unpack(JSON.parse(await fs.promises.readFile(path.join(dirPath, `${id}.json`), 'utf8')));
+}
+async function atomicWriteBuffer(filePath, buf) {
+  const tmp = filePath + '.tmp';
+  await fs.promises.writeFile(tmp, buf);
+  for (let i = 0; ; i++) {
+    try { await fs.promises.rename(tmp, filePath); return; }
+    catch (e) {
+      if (i >= 9 || !['EPERM', 'EBUSY', 'EACCES'].includes(e.code)) throw e;
+      await new Promise(r => setTimeout(r, 50 * (i + 1)));
+    }
+  }
+}
+const rmQuiet = async p => { try { await fs.promises.unlink(p); } catch {} };
+
+// Converts every old <id>.json in a directory to <id>.json.gz, one file at a
+// time: write the compact file, read it back, check it matches EXACTLY, and
+// only then delete the old one. Safe to stop and resume (a crash leaves both,
+// and the compact one wins on read only after it was written whole).
+async function compactDirItems(dirPath, { onProgress, shouldStop } = {}) {
+  const olds = (await fs.promises.readdir(dirPath)).filter(f => /^\d+\.json$/.test(f));
+  let done = 0, failed = [];
+  for (const f of olds) {
+    if (shouldStop && shouldStop()) break;
+    const id = f.slice(0, -5);
+    try {
+      const raw = await fs.promises.readFile(path.join(dirPath, f), 'utf8');
+      const points = JSON.parse(raw);
+      const gzFile = path.join(dirPath, `${id}.json.gz`);
+      await atomicWriteBuffer(gzFile, zlib.gzipSync(JSON.stringify(pack(points)), { level: 9 }));
+      const back = unpack(JSON.parse(zlib.gunzipSync(await fs.promises.readFile(gzFile)).toString('utf8')));
+      if (JSON.stringify(back) !== JSON.stringify(points)) { await rmQuiet(gzFile); failed.push(id); continue; }
+      await fs.promises.unlink(path.join(dirPath, f));
+    } catch (e) { failed.push(id); }
+    done++;
+    if (onProgress && done % 100 === 0) onProgress(done, olds.length);
+    if (done % 50 === 0) await new Promise(r => setTimeout(r, 0)); // keep the app responsive
+  }
+  if (onProgress) onProgress(done, olds.length);
+  return { converted: done - failed.length, failed, total: olds.length };
 }
 
 // Batched async load of a directory of per-id JSON files into one plain
@@ -128,7 +191,7 @@ async function loadDirBatched(dirPath, { batchSize = 200 } = {}) {
     await Promise.all(batch.map(async f => {
       const id = f.slice(0, -5);
       try {
-        out[id] = JSON.parse(await fs.promises.readFile(path.join(dirPath, f), 'utf8'));
+        out[id] = /^\d+$/.test(id) ? await readItemFile(dirPath, id) : JSON.parse(await fs.promises.readFile(path.join(dirPath, f), 'utf8'));
       } catch (e) {
         console.warn(`[storage] Skipping unreadable file ${f} in ${dirPath}:`, e.message);
       }
@@ -152,15 +215,24 @@ async function loadDirBatched(dirPath, { batchSize = 200 } = {}) {
 // Item files are always <numeric id>.json — refuse anything else so an id
 // can never become a path (e.g. '../x') no matter which caller passed it.
 const isItemFileId = id => /^\d+$/.test(String(id));
-async function writeDirItem(dirPath, id, data) {
+// compact: write the compressed format (and remove the old file); otherwise
+// the old format (and remove any compressed copy, which would otherwise win
+// on read and be stale).
+async function writeDirItem(dirPath, id, data, { compact = false } = {}) {
   if (!isItemFileId(id)) return;
   await ensureDir(dirPath);
-  await atomicWrite(path.join(dirPath, `${id}.json`), JSON.stringify(data));
+  if (compact) {
+    await atomicWriteBuffer(path.join(dirPath, `${id}.json.gz`), zlib.gzipSync(JSON.stringify(pack(data)), { level: 9 }));
+    await rmQuiet(path.join(dirPath, `${id}.json`));
+  } else {
+    await atomicWrite(path.join(dirPath, `${id}.json`), JSON.stringify(data));
+    await rmQuiet(path.join(dirPath, `${id}.json.gz`));
+  }
 }
 
 async function readDirItem(dirPath, id) {
   if (!isItemFileId(id)) return null;
-  return readJSON(path.join(dirPath, `${id}.json`), null);
+  try { return await readItemFile(dirPath, id); } catch { return null; }
 }
 
 async function pathExists(filePath) {
@@ -263,4 +335,5 @@ module.exports = {
   listJSONFiles, loadDirBatched, writeDirItem, readDirItem,
   migrateLegacyHistoryFile, createKVStore, resolveWritable,
   deleteFile,
+  compactDirItems,
 };

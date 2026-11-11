@@ -22948,7 +22948,9 @@
           pairWith,
           syncNow,
           clientStatus,
-          unpairClient
+          unpairClient,
+          // shared with cloud-sync.js: the same safe read and backup-then-save
+          state: { readState, applyIfChanged }
         };
       }
       module.exports = { createSync };
@@ -25248,7 +25250,7 @@
           await Promise.all(toSave.map(async (id) => {
             if (!historyData[id]) return;
             try {
-              await storage2.writeDirItem(historyDir, id, historyData[id]);
+              await storage2.writeDirItem(historyDir, id, historyData[id], { compact: store2.get("historyCompact", false) });
               historyPopulatedIds.add(String(id));
               delete historyData[id];
             } catch (e) {
@@ -25488,6 +25490,22 @@
             historyRefreshActive = false;
           }
           return { refreshed };
+        }
+        let compactRunning = false;
+        async function compactHistory(onProgress) {
+          if (readOnlyHistory) return { error: "read-only (test mode)" };
+          if (platform !== "desktop" || !storage2.compactDirItems) return { error: "not available on this platform yet" };
+          if (compactRunning) return { error: "already running" };
+          compactRunning = true;
+          try {
+            await historyLoadedPromise;
+            await saveHistory();
+            store2.set("historyCompact", true);
+            const r = await storage2.compactDirItems(historyDir, { onProgress });
+            return { success: !r.failed.length, ...r };
+          } finally {
+            compactRunning = false;
+          }
         }
         async function stopHistoryPopulation() {
           historyFetchStop = true;
@@ -29539,6 +29557,8 @@
           maybeRefreshAlmanac,
           prepareForQuit,
           noteError,
+          compactHistory,
+          getHistoryCompact: async () => store2.get("historyCompact", false),
           getBackgroundErrors: async () => store2.get("backgroundErrors", []),
           clearBackgroundErrors: async () => {
             store2.set("backgroundErrors", []);

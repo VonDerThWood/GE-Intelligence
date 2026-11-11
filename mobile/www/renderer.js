@@ -2534,6 +2534,33 @@ function UpdateRiskSettings() {
     row('includeWatched', 'Also notify for my Watchlist and DXP watchlist', !s.enabled));
 }
 
+// Settings > Google Drive sync (Ben, 2026-11-10): sync through one file in the
+// user's own Drive, so the phone stays in step away from home. Desktop for now.
+function CloudSyncSettings({toast}) {
+  const [st, setSt] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const load = () => window.genius.cloudStatus().then(setSt).catch(() => {});
+  useEffect(() => { if (window.genius?.cloudStatus) load(); }, []);
+  if (!window.genius?.cloudStatus || !st) return null;
+  const run = async (fn, okMsg) => { setBusy(true); try { const r = await fn(); if (r?.error) toast(r.error === 'suspicious' ? 'Stopped: this sync would have removed most of your portfolio. Nothing was changed.' : r.error === 'not_configured' ? 'Google Drive sync is not set up yet' : 'Google Drive: ' + r.error, 'error'); else if (okMsg) toast(typeof okMsg === 'function' ? okMsg(r) : okMsg, 'success'); } finally { setBusy(false); load(); } };
+  const last = st.last ? new Date(st.last.at).toLocaleString(undefined, {month:'short', day:'numeric', hour:'numeric', minute:'2-digit'}) : 'never';
+  return h('div', {style:{marginBottom:20}},
+    h('div', {className:'ge-section-head'}, 'Google Drive sync'),
+    h('div', {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      'Keeps your portfolio, alerts, watchlists, notes, reminders and shorthands in step through one file in your own Google Drive, so it works away from home too. GEnius can only see that one file, not the rest of your Drive. Syncs after every fetch.'),
+    !st.configured ? h('div', {style:{fontSize:12, color:T.textDim}}, 'Not set up yet: GEnius needs a Google sign-in key first (see GOOGLE_DRIVE_SETUP.md).')
+    : !st.connected ? h('button', {className:'ge-btn gold', disabled:busy, onClick:() => run(() => window.genius.cloudConnect(), r => 'Connected' + (r.email ? ' as ' + r.email : ''))}, busy ? 'Waiting for Google sign-in in your browser…' : 'Connect Google Drive')
+    : h('div', null,
+        h('div', {style:{fontSize:12, color:T.text, marginBottom:6}}, '✓ Connected', st.email ? ' as ' + st.email : '', h('span', {style:{color:T.textDim}}, ' · last synced ' + last + (st.last?.conflicts ? ' · ' + st.last.conflicts + ' conflict(s), the cloud copy was kept' : ''))),
+        h('label', {style:{display:'flex', alignItems:'center', gap:6, fontSize:12, marginBottom:8, cursor:'pointer'}},
+          h('input', {type:'checkbox', checked:st.enabled, onChange:e => run(() => window.genius.cloudSetEnabled(e.target.checked))}), 'Sync automatically after each fetch'),
+        h('div', {style:{display:'flex', gap:8, flexWrap:'wrap'}},
+          h('button', {className:'ge-btn gold', disabled:busy, onClick:() => run(() => window.genius.cloudSyncNow(), r => r.changed ? 'Synced: this PC was updated' : r.uploaded ? 'Synced: your changes were saved to Drive' : 'Already in step')}, busy ? 'Syncing…' : 'Sync now'),
+          h('button', {className:'ge-btn', disabled:busy, title:'Make the cloud copy match this PC exactly (other devices take it on their next sync)', onClick:() => { if (confirm('Replace the Google Drive copy with this PC\'s data?')) run(() => window.genius.cloudSyncNow({startOver:true}), 'The cloud copy now matches this PC'); }}, 'Use this PC\'s data'),
+          h('button', {className:'ge-btn', disabled:busy, title:'Replace this PC\'s data with the cloud copy (a backup is saved first)', onClick:() => { if (confirm('Replace this PC\'s data with the Google Drive copy? A backup is saved first.')) run(() => window.genius.cloudSyncNow({useCloud:true}), 'This PC now matches the cloud copy'); }}, 'Use the cloud copy'),
+          h('button', {className:'ge-btn', disabled:busy, onClick:() => { if (confirm('Disconnect Google Drive? Your data stays on this PC and in Drive.')) run(() => window.genius.cloudDisconnect(), 'Disconnected'); }}, 'Disconnect'))));
+}
+
 function SyncSettings({toast}) {
   const role = window.genius?.syncRole;
   if (!role) return null;
@@ -10442,6 +10469,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     h(UpdateRiskSettings),
 
     h(SyncSettings, {toast}),
+    h(CloudSyncSettings, {toast}),
 
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Custom Shorthands'),
