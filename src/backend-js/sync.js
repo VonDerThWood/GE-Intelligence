@@ -260,6 +260,8 @@ function createSync({ dataDir, store, writePortfolio, buildExportBundle, withUse
     startPairing, cancelPairing, handleRequest, listDevices, unpairDevice, getConflicts, clearConflicts,
     // phone
     pairWith, syncNow, clientStatus, unpairClient,
+    // shared with cloud-sync.js: the same safe read and backup-then-save
+    state: { readState, applyIfChanged },
   };
 }
 

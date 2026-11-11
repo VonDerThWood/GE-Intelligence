@@ -1,4 +1,4 @@
-const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, globalShortcut, desktopCapturer, screen } = require('electron');
+const { app, BrowserWindow, Tray, Menu, ipcMain, nativeImage, shell, Notification, globalShortcut, desktopCapturer, screen, safeStorage } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const storage = require('./backend-js/storage.js');
@@ -77,6 +77,7 @@ const resourcesPath = isDev
 // dataDir must be set after app is ready (app.getPath requires it)
 let dataDir;
 let liveHourly = null; // live-hourly.js, created once dataDir is known
+let googleAuth = null, cloudSync = null; // Google Drive sync (google-auth.js, cloud-sync.js)
 
 // ─── Window ───────────────────────────────────────────────────────────────────
 function createWindow() {
@@ -239,6 +240,13 @@ function runFetch(mode = 'prices') {
       // Same idea for the daily live price archive (live-history.js).
       if (mode !== 'news') api.syncLiveHistory().catch(api.noteError('live price archive'));
       if (mode !== 'news') api.recordNetWorth().catch(api.noteError('net worth snapshot'));
+      // Google Drive sync after each fetch, when switched on and connected.
+      if (store.get('cloudSyncEnabled', false) && googleAuth?.status().connected && !isTestMode) {
+        cloudSync.syncNow().then(r => {
+          if (r?.error && r.error !== 'suspicious') api.noteError('Google Drive sync')(new Error(r.error));
+          if (r?.changed) notifyRenderer('fetch-complete', { mode: 'sync', timestamp: Date.now() });
+        }).catch(api.noteError('Google Drive sync'));
+      }
       // Hourly archive (live-hourly.js) is opt-in: Settings > Hourly price history.
       if (mode !== 'news' && store.get('saveHourlyPrices', false) && !isTestMode) liveHourly?.sync().catch(api.noteError('hourly price archive'));
       if (mode !== 'news') api.refreshStaleHistory(500).then(() => api.maybeBuildSimilarityTable()).then(() => api.maybeRefreshAlmanac()).catch(api.noteError('history refresh / similarity / Almanac'));
@@ -637,6 +645,23 @@ ipcMain.handle('export-csv', async () => {
   }
 });
 ipcMain.handle('get-background-errors', () => api.getBackgroundErrors());
+ipcMain.handle('cloud-status', () => ({ ...(googleAuth ? googleAuth.status() : { configured: false }), enabled: store.get('cloudSyncEnabled', false), last: cloudSync?.last() || null, conflicts: (cloudSync?.conflicts() || []).length }));
+ipcMain.handle('cloud-connect', async () => {
+  try {
+    const r = await googleAuth.connect();
+    if (r.success) store.set('cloudSyncEnabled', true);
+    return r;
+  } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('cloud-disconnect', async () => { store.set('cloudSyncEnabled', false); return googleAuth.disconnect(); });
+ipcMain.handle('cloud-set-enabled', (_, on) => { store.set('cloudSyncEnabled', !!on); return { success: true }; });
+ipcMain.handle('cloud-sync-now', async (_, opts) => {
+  try {
+    const r = await cloudSync.syncNow(opts || {});
+    if (r?.changed) notifyRenderer('fetch-complete', { mode: 'sync', timestamp: Date.now() });
+    return r;
+  } catch (e) { return { error: e.message }; }
+});
 ipcMain.handle('clear-background-errors', () => api.clearBackgroundErrors());
 ipcMain.handle('get-net-worth-history', () => api.getNetWorthHistory());
 ipcMain.handle('record-net-worth', () => api.recordNetWorth());
@@ -898,6 +923,23 @@ app.whenReady().then(async () => {
   api = await createGeniusApi({ dataDir, store, platform: 'desktop',
     ...(isTestMode ? { historyDirOverride: path.join(REAL_USER_DATA, 'data', 'history'), readOnlyHistory: true } : {}) });
 
+  // Google Drive sync. The OAuth client comes from google-oauth.json in the
+  // GEnius data folder (GOOGLE_DRIVE_SETUP.md); without it the feature says
+  // "not set up yet".
+  googleAuth = require('./google-auth.js').createGoogleAuth({
+    store, safeStorage, openExternal: url => shell.openExternal(url),
+    readConfig: () => {
+      for (const p of [path.join(app.getPath('userData'), 'google-oauth.json'), path.join(REAL_USER_DATA, 'google-oauth.json')]) {
+        try { const raw = JSON.parse(require('fs').readFileSync(p, 'utf8')); return raw.installed || raw.web || raw; } catch {}
+      }
+      return null;
+    },
+  });
+  {
+    const { createCloudSync, createDriveTransport } = require('./backend-js/cloud-sync.js');
+    cloudSync = createCloudSync({ dataDir, store, ...api.sync.state, withUserData: fn => fn, deviceName: 'PC',
+      transport: createDriveTransport({ getToken: () => googleAuth.getToken(), store }) });
+  }
   liveHourly = require('./backend-js/live-hourly.js').createLiveHourly({ dataDir: isTestMode ? path.join(REAL_USER_DATA, 'data') : dataDir });
   createWindow();
   updateGeReaderShortcut();

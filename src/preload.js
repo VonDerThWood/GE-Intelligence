@@ -148,6 +148,11 @@ contextBridge.exposeInMainWorld('genius', {
   // Data portability
   exportData: () => ipcRenderer.invoke('export-data'),
   exportCsv: () => ipcRenderer.invoke('export-csv'),
+  cloudStatus: () => ipcRenderer.invoke('cloud-status'),
+  cloudConnect: () => ipcRenderer.invoke('cloud-connect'),
+  cloudDisconnect: () => ipcRenderer.invoke('cloud-disconnect'),
+  cloudSetEnabled: (on) => ipcRenderer.invoke('cloud-set-enabled', on),
+  cloudSyncNow: (opts) => ipcRenderer.invoke('cloud-sync-now', opts),
   getBackgroundErrors: () => ipcRenderer.invoke('get-background-errors'),
   clearBackgroundErrors: () => ipcRenderer.invoke('clear-background-errors'),
   getNetWorthHistory: () => ipcRenderer.invoke('get-net-worth-history'),
