@@ -2909,6 +2909,41 @@ function TradePriceBox({item, livePrice}) {
   );
 }
 
+// "Good right now" (Max's feedback via Ben, 2026-11-12: "to find good items is
+// not the easiest"). The top 5 flips from the Flips tab's own rules
+// (computeFlipStats: live prices, after tax, liquid, sanity-checked), by
+// realistic profit, each with plain buy/sell prices and one click into the item.
+function GoodRightNow({items, onSelect, onNavigate}) {
+  const {top, count} = useMemo(() => {
+    const ok = (items || []).map(it => ({it, s: computeFlipStats(it)})).filter(x => x.s.qualifies);
+    ok.sort((a, b) => (b.s.realisticProfit || 0) - (a.s.realisticProfit || 0));
+    return {top: ok.slice(0, 5), count: ok.length};
+  }, [items]);
+  if (!top.length) return null;
+  const g = n => fmt.gp(Math.round(n)) + 'gp';
+  return h('div', {style:{marginBottom:20, padding:'10px 12px', background:'rgba(201,168,76,0.06)', border:`1px solid ${T.border}`, borderRadius:6}},
+    h('div', {style:{display:'flex', alignItems:'baseline', gap:8, marginBottom:6, flexWrap:'wrap'}},
+      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'Good right now'),
+      h('div', {style:{fontSize:11, color:T.textDim}}, 'Flips that pay after the 2% tax at live prices. Buy with an offer at the first price, sell at the second.'),
+    ),
+    top.map(({it, s}) => h('div', {
+      key: it.id, onClick: () => onSelect && onSelect(it),
+      style:{display:'flex', alignItems:'center', gap:10, padding:'5px 6px', borderRadius:3, cursor:'pointer', fontSize:12, flexWrap:'wrap'},
+      onMouseEnter: e => { e.currentTarget.style.background = T.panel2; }, onMouseLeave: e => { e.currentTarget.style.background = 'transparent'; },
+    },
+      h('div', {style:{flex:'1 1 160px', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
+      h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}}, g(it.liveBuy))),
+      h('div', {style:{minWidth:150, textAlign:'right', whiteSpace:'nowrap'}},
+        h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
+        h('span', {style:{color:T.textDim, fontSize:11}}, ' · +' + fmt.gp(Math.round(s.realisticProfit)) + ' per buy limit')),
+    )),
+    h('div', {style:{marginTop:6, fontSize:11}},
+      h('span', {style:{color:T.gold, cursor:'pointer', textDecoration:'underline'}, onClick: () => onNavigate && onNavigate('flips')}, `See all ${count.toLocaleString()} in Flips →`),
+      h('span', {style:{color:T.textDim}}, '  Prices move fast: check the item\'s "What to offer" box before you buy.'),
+    ),
+  );
+}
+
 // Automated read of the item's live flip margin — same math/thresholds
 // as the Flips tab (computeFlipStats), surfaced here too since "it never
 // hurts to have some extra data" even though FlipCalculator right below
@@ -4248,10 +4283,11 @@ function PhoneFold({style, children}) {
   const [long, setLong] = useState(false);
   const ref = useRef(null);
   useEffect(() => { const el = ref.current; if (el) setLong(el.scrollHeight > el.clientHeight + 2); });
-  if (!IS_PHONE) return h('div', {style}, children);
+  // Desktop folds too since 2026-11-12 (Max: "just a massive amount of info"):
+  // the page guides now explain each page, so the long explainers start short.
   return h('div', {style, onClick: () => (long || open) && setOpen(o => !o)},
-    h('div', {ref, style: open ? null : {display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', overflow:'hidden'}}, children),
-    (long || open) && h('div', {style:{color:T.gold, fontSize:11, marginTop:3, cursor:'pointer'}}, open ? 'Show less ▴' : 'More ▾'));
+    h('div', {ref, style: open ? null : {display:'-webkit-box', WebkitLineClamp: IS_PHONE ? 3 : 2, WebkitBoxOrient:'vertical', overflow:'hidden'}}, children),
+    (long || open) && h('div', {style:{color:T.gold, fontSize:11, marginTop:3, cursor:'pointer'}}, open ? 'Show less ▴' : 'More detail ▾'));
 }
 
 function useStickyTableHeader(wrapRef, theadRef) {
@@ -5353,6 +5389,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
   return h('div', {style:{padding:'12px 14px'}},
     description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
+
+    h(GoodRightNow, {items, onSelect, onNavigate}),
 
     // ── Mood + Item of the Day ───────────────────────────────────
     h('div', {className:'dash-mood-row', style:{display:'flex', gap:8, marginBottom:20}},
