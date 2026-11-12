@@ -16340,6 +16340,127 @@ const TAB_DESCRIPTIONS = {
   seasonal_intel: 'Seasonal Events — Christmas, Halloween, Summer, and Easter market patterns from historical research.',
 };
 
+/* ─── Page guides (Max's feedback via Ben, 2026-11-12) ────────── */
+// "It's a bit of a maze... perhaps a tutorial per page?" A short card the
+// first time each page is opened: what it's for, how to read it, what to try
+// first. Ben: a "?" at the top of every page replays it, and the card says so.
+// Plain words, no feature lists: the welcome tour already covers discovery.
+const ITEM_TAB_GUIDE = {
+  title: 'Item category pages',
+  points: [
+    'Every tradeable item in this category, with its price and how it moved today. Click a column header to sort.',
+    'Click any item to open its panel on the right. The "What to offer" box there tells you what to offer to buy or sell, and whether flipping it pays after tax.',
+    'Star an item to put it on your Watchlist.',
+  ],
+};
+const PAGE_GUIDES = {
+  dashboard: { title: 'Dashboard', points: [
+    'A quick look at the whole market today: what is rising, what is falling, and your own positions and alerts at a glance.',
+    'Click any item name to open its panel with prices, history and what to offer.',
+    'New here? Try Flips next for items you can buy and sell for a profit right now.',
+  ]},
+  flips: { title: 'Flips', points: [
+    'Items you can buy and resell for a profit right now: buy with an offer at the "Buy" price, sell at the "Sell" price. Profit is after the 2% GE tax.',
+    'Sorted by realistic profit, which takes into account how much of the item actually trades in a day. Use the Min Profit buttons to hide small flips.',
+    'Prices move fast: click an item and check its "What to offer" box before you put in an offer. The Flagged pill lists items that only look profitable.',
+  ]},
+  opportunities: { title: 'Opportunities', points: [
+    'Items doing something unusual today, like a price jump, heavy buying or selling, or a big volume spike. Each one gets a 0-100 score.',
+    'Unusual is not the same as good: read the signal badges and the item panel before buying. Some of these are traps.',
+    'Track record shows how past high-scoring items actually did afterwards.',
+  ]},
+  top_movers: { title: 'Top Movers', points: [
+    'The biggest price rises and falls, with the signals behind them (SURGE, DUMP, FRENZY and so on).',
+    'A big move with little volume is often one odd trade, not a real trend. Check the volume column.',
+  ]},
+  market: { title: 'Market', points: [
+    'The whole Grand Exchange by sector: which areas are heating up or cooling down today.',
+    'Click a sector or an item to dig in.',
+  ]},
+  watchlist: { title: 'Watchlist', points: [
+    'The items you have starred, all in one place with today\'s prices.',
+    'Star items from any table or item panel. To be told when a price hits a level, set an alert from the item panel.',
+  ]},
+  portfolio: { title: 'Portfolio', points: [
+    'Log what you actually bought: item, quantity and price. GEnius tracks its value at live prices and your profit after tax.',
+    'When you sell, record it on the position to keep a history of closed trades and tax paid. The Buy Planner pill helps you stock up on items with a buy limit.',
+  ]},
+  money_makers: { title: 'Money Makers', points: [
+    'Skilling methods ranked by profit at today\'s prices: what it costs to make something and what it sells for, after tax.',
+    'Pick a skill to see its methods. Rows with a chevron (▸) open to show the full breakdown.',
+  ]},
+  dxp_intel: { title: 'GEnius Almanac', points: [
+    'How items have moved around past Double XP weekends, tested on old events before anything is recommended.',
+    'Recommendations lists the plans that held up in testing. Click the 📋 icon for the plan in plain English, with real dates once a DXP is announced.',
+    'These are history, not guarantees. Sell-first plans only make sense if you already own the item.',
+  ]},
+  alerts: { title: 'Notifications', points: [
+    'Inbox keeps every notification GEnius has sent you. Upcoming Changes warns when a game update could hit items you hold or watch.',
+    'My Alerts is where you set your own: a price above or below a level, a % move, or "stops falling" after a drop.',
+  ]},
+  news: { title: 'News', points: [
+    'RuneScape news and game updates, with the items each one might affect.',
+    'Double XP announcements here also feed the Almanac\'s dates.',
+  ]},
+  compare: { title: 'Compare', points: [
+    'Put items side by side to compare prices, history and stats.',
+    'Add items from their panel or the search box here.',
+  ]},
+  alch: { title: 'Alch', points: [
+    'Items where buying and casting High Alchemy makes a profit after the nature rune.',
+    'Profit uses live prices. Mind the buy limit: it caps how many you can alch per 4 hours.',
+  ]},
+  monster_lookup: { title: 'Monster Lookup', points: [
+    'Type a monster\'s name to see its drop table priced at today\'s values, and roughly what a kill is worth.',
+  ]},
+  expensive: { title: 'High Value', points: [
+    'Every item over your price threshold (change it in Settings). Big items trade rarely, so check how recently it last traded before trusting a price.',
+  ]},
+  settings: { title: 'Settings', points: [
+    'Fetching, notifications, sync between devices, backups and how things look.',
+    'Replay the first-run welcome tour from here. Page guides like this one come back with the ? at the top of any page.',
+  ]},
+};
+const pageGuideFor = tab => PAGE_GUIDES[tab] || (NAV.some(n => n.id === tab) && !['about'].includes(tab) ? ITEM_TAB_GUIDE : null);
+const PG_SEEN = 'pageGuidesSeen', PG_OFF = 'pageGuidesOff';
+const pgRead = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const pgWrite = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+function PageGuide({tab}) {
+  const guide = pageGuideFor(tab);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!guide) { setOpen(false); return; }
+    const seen = pgRead(PG_SEEN, {});
+    setOpen(!seen[tab] && !pgRead(PG_OFF, false));
+  }, [tab]);
+  if (!guide) return null;
+  const close = () => { pgWrite(PG_SEEN, {...pgRead(PG_SEEN, {}), [tab]: Date.now()}); setOpen(false); };
+  return h(React.Fragment, null,
+    // The "?" sits at the top right, on the same row as the page's quip.
+    h('button', {
+      className:'page-guide-btn', title:'How this page works', 'aria-label':'How this page works',
+      onClick:() => setOpen(o => !o),
+      style:{position:'absolute', top:6, right:14, zIndex:5, width:22, height:22, borderRadius:'50%', padding:0,
+        border:`1px solid ${open ? T.gold : T.border}`, background: open ? 'rgba(201,168,76,0.2)' : T.panel,
+        color: open ? T.goldBright : T.textDim, fontSize:12, fontWeight:'bold', cursor:'pointer', lineHeight:'20px'},
+    }, '?'),
+    open && h('div', {style:{margin:'36px 14px 10px', padding:'12px 14px', background:'rgba(201,168,76,0.08)',
+        border:`1px solid ${T.gold}`, borderRadius:6, fontSize:12, color:T.text, lineHeight:1.55}},
+      h('div', {style:{fontWeight:'bold', color:T.goldBright, marginBottom:6}}, 'How this page works: ' + guide.title),
+      h('ul', {style:{margin:'0 0 8px', paddingLeft:18}}, guide.points.map((p, i) => h('li', {key:i, style:{marginBottom:3}}, p))),
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+        h('button', {className:'ge-btn gold', onClick:close}, 'Got it'),
+        h('span', {style:{fontSize:11, color:T.textDim}}, 'You can see this again anytime with the ? at the top right of the page.'),
+        !pgRead(PG_OFF, false) && h('button', {
+          onClick:() => { pgWrite(PG_OFF, true); close(); },
+          style:{marginLeft:'auto', background:'none', border:'none', color:T.textDim, fontSize:10, cursor:'pointer', textDecoration:'underline'},
+        }, 'Don\'t show these automatically'),
+      ),
+    ),
+  );
+}
+
 /* ─── Nav config ─────────────────────────────────────────────── */
 const NAV = [
   {id:'dashboard',      label:'Dashboard',        icon:'◈'},
@@ -17023,7 +17144,8 @@ function App() {
           h('button',{className:'scroll-jump-btn',title:'Scroll to top',onClick:()=>scrollContentTo(0)},'▲'),
           h('button',{className:'scroll-jump-btn',title:'Scroll to bottom',onClick:()=>scrollContentTo(contentRef.current?.scrollHeight||0)},'▼')
         ),
-        h('div',{className:'content',style:{flex:1},ref:contentRef},
+        h('div',{className:'content',style:{flex:1,position:'relative'},ref:contentRef},
+          h(PageGuide,{tab}),
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30,officialTop100}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,removedItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
