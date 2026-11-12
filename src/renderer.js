@@ -4948,7 +4948,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const {totalInvested, totalCurrent, unrealizedPL, unrealizedPct} = useMemo(() => {
     let inv = 0, cur = 0;
     for (const pos of openPositions) {
-      const it = items.find(i => i.name.toLowerCase() === (pos.item_name||'').toLowerCase());
+      const it = itemByName(items, (pos.item_name||''));
       const price = liveSellOf(it) || 0;
       inv += pos.cost_basis * pos.quantity;
       cur += price * pos.quantity;
@@ -4961,7 +4961,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   // Personal — alerts
   const alertCount = (alerts||[]).length;
   const triggeredAlerts = useMemo(() => (alerts||[]).filter(a => {
-    const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+    const it = itemByName(items, (a.item_name||''));
     if (!it) return false;
     const price = it.high || it.low || 0;
     if (a.condition === 'above') return price >= a.price;
@@ -7165,7 +7165,7 @@ function EventDetail({event, items, userShorthands, onSaved, onDeleted, onOpen, 
     h('div', {style:{display:'flex', gap:8, marginBottom:14, maxWidth:420}},
       h('div', {style:{flex:1}}, h(ItemAutocomplete, {items, value:addItem, onChange:setAddItem, placeholder:'Add an affected item...', userShorthands})),
       h('button', {className:'ge-btn', onClick:() => {
-        const it = items.find(i => i.name.toLowerCase() === addItem.toLowerCase());
+        const it = itemByName(items, addItem);
         if (!it) { toast('Pick an item from the list', 'error'); return; }
         if (!draft.items.includes(it.name)) setDraft(d => ({...d, items:[...d.items, it.name]}));
         setAddItem('');
@@ -7514,7 +7514,7 @@ function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toas
             h('div',{
               style:{color: onSelect ? T.gold : T.text, fontSize:12, fontWeight:500, cursor: onSelect ? 'pointer' : 'default', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'},
               onClick: onSelect ? () => {
-                const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+                const it = itemByName(items, (a.item_name||''));
                 if (it) onSelect(it);
               } : undefined,
             }, a.item_name),
@@ -11977,7 +11977,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     (async () => {
       const out = {};
       for (const p of losers) {
-        const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
+        const it = itemByName(items, (p.item_name || ''));
         if (!it) continue;
         const be = breakEvenPrice(p.cost_basis);
         const [hist, snaps] = await Promise.all([
@@ -12011,7 +12011,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     (async () => {
       const out = {}, daily = {};
       for (const p of openPos) {
-        const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
+        const it = itemByName(items, (p.item_name || ''));
         if (!it || it.untradeable) continue;
         const allDays = await loadDailyPrices(it.id);
         daily[p.id] = allDays;
@@ -12080,7 +12080,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   const breakEvenOf = breakEvenPrice;
   const riskBadgeFor = list => {
     const first = list[0];
-    const it = !first.removedItem && items.find(i => i.name.toLowerCase() === (first.item_name || '').toLowerCase());
+    const it = !first.removedItem && itemByName(items, (first.item_name || ''));
     const days = dailyById[first.id];
     if (!it || !days) return null;
     const qty = list.reduce((sum, p) => sum + p.quantity, 0);
@@ -12575,7 +12575,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         )
       ),
       allocView === 'item' && allocations.map(({name,val,pct}) => {
-        const allocItem = onSelect && items && items.find(i => i.name.toLowerCase() === name.toLowerCase());
+        const allocItem = onSelect && items && itemByName(items, name);
         return h('div',{key:name,style:{marginBottom:8}},
           h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}},
             h('span',{
@@ -14225,7 +14225,7 @@ const HUMIDIFY_RUNES = [{name:'Astral rune', qty:1}];
 
 function findItemPrice(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   return it ? (it.high ?? it.low ?? null) : null;
 }
 // Ben (2026-08-11): Money Makers margins need to reflect what you'd
@@ -14261,28 +14261,43 @@ function liveSellOf(it) {
   const ge = it.high ?? it.low ?? null;
   return _sanityLivePrice(it.liveSell, ge) ?? ge ?? null;
 }
+// Name -> item index, built once per items array (i.e. once per price fetch).
+// The find* helpers below used to scan all ~7,500 items for every lookup, and
+// the Money Makers calculators do thousands of lookups per render: opening
+// Archaeology lagged badly (Ben, 2026-11-12).
+const _itemNameIndex = new WeakMap();
+function itemByName(items, name) {
+  if (!name || !items) return null;
+  let idx = _itemNameIndex.get(items);
+  if (!idx) {
+    idx = new Map();
+    for (const i of items) { const k = i.name && i.name.toLowerCase(); if (k && !idx.has(k)) idx.set(k, i); } // first match wins, like .find()
+    _itemNameIndex.set(items, idx);
+  }
+  return idx.get(name.toLowerCase()) || null;
+}
 function findItemBuyPrice(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   if (!it) return null;
   const gePrice = it.high ?? it.low ?? null;
   return _sanityLivePrice(it.liveBuy, gePrice) ?? gePrice ?? null;
 }
 function findItemSellPrice(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   if (!it) return null;
   const gePrice = it.high ?? it.low ?? null;
   return _sanityLivePrice(it.liveSell, gePrice) ?? gePrice ?? null;
 }
 function findItemLimit(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   return it ? (it.limit || null) : null;
 }
 function findItemVolume(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   return it ? (it.volume ?? null) : null;
 }
 
@@ -14830,7 +14845,7 @@ function flattenSmithingMats(name, mult = 1, depth = 0) {
 }
 // One row per product of `bar`, at live prices (buy materials, sell the product, 2% tax).
 function smithingProductRows(bar, items, priceMode = 'live') {
-  const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+  const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
   const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
   const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
   const byName = {};
@@ -14871,7 +14886,7 @@ function ArchaeologyCalc({items}) {
   const [level, setLevel] = useState('');
   const [sort, setSort] = useState({key:'profit', dir:-1});
   const data = useMemo(() => {
-    const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+    const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
     const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
     const chronote = priceMode === 'ge' ? guideOf('Chronotes') : findItemSellPrice(items, 'Chronotes');
     // A material with no GE price counts as 0 and is named on the row, so nothing gets hidden.
@@ -15365,7 +15380,7 @@ function MoneyMakersTab({items, onSelect, description}) {
 
   const onSelectItem = (itemName) => {
     if (!onSelect) return;
-    const it = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+    const it = itemByName(items, itemName);
     if (it) onSelect(it);
   };
 
@@ -17005,7 +17020,7 @@ function App() {
         tabs: () => NAV.filter(n => n.id).map(n => n.id),
         goto: async id => { setTab(id); await wait(500); return testStateRef.current.tab; },
         openItem: async name => {
-          const it = testStateRef.current.items.find(i => i.name.toLowerCase() === String(name).toLowerCase());
+          const it = itemByName(testStateRef.current.items, String(name));
           if (!it) return false;
           setSelected(it); await wait(500); return true;
         },
