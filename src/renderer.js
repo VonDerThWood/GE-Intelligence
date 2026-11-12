@@ -16390,9 +16390,12 @@ const PAGE_GUIDES = {
     'Pick a skill to see its methods. Rows with a chevron (▸) open to show the full breakdown.',
   ]},
   dxp_intel: { title: 'GEnius Almanac', points: [
-    'How items have moved around past Double XP weekends, tested on old events before anything is recommended.',
-    'Recommendations lists the plans that held up in testing. Click the 📋 icon for the plan in plain English, with real dates once a DXP is announced.',
-    'These are history, not guarantees. Sell-first plans only make sense if you already own the item.',
+    'How prices have behaved around recurring events, from GEnius\'s own research. Four pills, one per kind of event. The bar at the top flags anything worth knowing right now.',
+    '📅 DXP Weekend: how items moved around past Double XP weekends, tested on old events before anything is recommended. Click 📋 for a plan in plain English, with real dates once a DXP is announced. Sell-first plans only make sense if you already own the item.',
+    '🗓️ Seasonal Events: Christmas, Halloween, Summer and Easter price patterns from past years.',
+    '📜 Game Updates: how past updates moved the prices of the items they touched, to see what a similar update might do.',
+    '🚀 Launches: every new item by update, from launch through its lowest price to today, at live prices.',
+    'All of it is history, not a guarantee.',
   ]},
   alerts: { title: 'Notifications', points: [
     'Inbox keeps every notification GEnius has sent you. Upcoming Changes warns when a game update could hit items you hold or watch.',
