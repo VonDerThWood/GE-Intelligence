@@ -2868,6 +2868,47 @@ function BigMacLine({price, bondGP, isLive}) {
   );
 }
 
+// "What price do I buy and sell at?" (Max via Ben, 2026-11-12: "not 100%
+// clear what price to buy and sell at"). Replaces the old "Live Price:
+// Buy X / Sell Y" box, whose "Buy" was the instant-buy price, i.e. what
+// impatient buyers paid, which new users read as "the price to buy at".
+// Says it in plain words: the patient offer, the instant price, and whether
+// flipping pays after tax (same rules as the Flips tab, computeFlipStats).
+function TradePriceBox({item, livePrice}) {
+  // Fresh per-item fetch when we have it, else the last fetch's live prices.
+  const hi = livePrice?.high ?? item.liveBuy, lo = livePrice?.low ?? item.liveSell;
+  const hiT = livePrice?.highTime ?? item.liveBuyTime, loT = livePrice?.lowTime ?? item.liveSellTime;
+  const stats = useMemo(() => computeFlipStats({...item, liveBuy:hi, liveSell:lo, liveBuyTime:hiT, liveSellTime:loT}), [item, hi, lo, hiT, loT]);
+  const box = {marginTop:8, padding:'8px 10px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11, lineHeight:1.55};
+  const head = h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4}}, 'What to offer (live prices)');
+  if (hi == null || lo == null) {
+    return h('div', {style:box}, head,
+      h('div', {style:{color:T.textDim}}, livePrice === null && item.liveBuy == null
+        ? 'Loading live prices...'
+        : `No recent live trades for this item. The GE guide price (${fmt.gp(item.high || item.low || 0)}gp) is the only guide, and it can be well off.`));
+  }
+  const g = n => h('span', {style:{color:T.textBright, fontWeight:600}}, fmt.gp(Math.round(n)) + 'gp');
+  const ago = t => t ? h('span', {style:{color:T.textDim, fontSize:10}}, ' (last trade ' + timeAgo(t) + ')') : null;
+  const net = applyTax(hi), margin = net - lo;
+  return h('div', {style:box}, head,
+    h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ago(loT), ', or pay ', g(hi), ' to get it instantly.'),
+    h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ago(hiT), ', or take ', g(lo), ' to sell instantly.'),
+    h('div', {style:{marginTop:5, paddingTop:5, borderTop:`1px solid ${T.borderDim}`}},
+      stats.qualifies
+        ? [h('span', {key:'a', style:{color:T.green, fontWeight:'bold'}}, 'Worth flipping: '),
+           'buy at ', g(lo), ', sell at ', g(hi), ' = ', h('span', {key:'b', style:{color:T.green, fontWeight:600}}, '+' + fmt.gp(Math.round(margin)) + 'gp each'), ' after 2% tax',
+           item.limit ? [' (', h('span', {key:'c', style:{color:T.goldBright}}, '+' + fmt.gp(Math.round(stats.profitForLimit)) + 'gp'), ` per ${item.limit.toLocaleString()} buy limit)`] : null, '.']
+        : margin <= 0
+          ? [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Not worth flipping right now: '),
+             `selling at ${fmt.gp(hi)}gp leaves ${fmt.gp(net)}gp after tax, ${margin === 0 ? 'the same as' : 'less than'} the ${fmt.gp(lo)}gp you'd pay.`]
+          : [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Small or risky flip: '),
+             'buy at ', g(lo), ', sell at ', g(hi), ' = +' + fmt.gp(Math.round(margin)) + 'gp each after 2% tax',
+             item.limit ? ` (+${fmt.gp(Math.round(stats.profitForLimit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
+             '. The Flips tab leaves it out: ', stats.disqualifyReason]
+    )
+  );
+}
+
 // Automated read of the item's live flip margin — same math/thresholds
 // as the Flips tab (computeFlipStats), surfaced here too since "it never
 // hurts to have some extra data" even though FlipCalculator right below
@@ -3443,25 +3484,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       // Live instant-buy/instant-sell prices from the wiki's real-time
       // prices API — fresher and per-price-timestamped, unlike item.high/
       // item.low above which come from the app's 15-min gazbot dump.
-      !item.untradeable && livePrice && (livePrice.high != null || livePrice.low != null) && h('div', {
-        style:{marginTop:8, padding:'6px 8px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11}
-      },
-        h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4}}, 'Live Price'),
-        h('div', {className:'row', style:{gap:14}},
-          livePrice.high != null && h('div', null,
-            h('span', {style:{color:T.green}}, '● '),
-            h('span', {style:{color:T.textDim}}, 'Buy '),
-            h('span', {style:{color:T.text, fontWeight:600}}, gpFmt(livePrice.high)+'gp'),
-            livePrice.highTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.highTime))
-          ),
-          livePrice.low != null && h('div', null,
-            h('span', {style:{color:'#e08030'}}, '● '),
-            h('span', {style:{color:T.textDim}}, 'Sell '),
-            h('span', {style:{color:T.text, fontWeight:600}}, gpFmt(livePrice.low)+'gp'),
-            livePrice.lowTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.lowTime))
-          ),
-        )
-      )
+      !item.untradeable && h(TradePriceBox, {item, livePrice})
     ),
     h('div', {className:'detail-body'},
       h('div', {className:'sparkline-wrap', onClick:()=>setChartOpen(true), title:'Click to enlarge'},
