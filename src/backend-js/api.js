@@ -236,6 +236,12 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // path harmlessly, since it never has a legacy file to find).
       await storage.migrateLegacyHistoryFile(historyFile, historyDir);
       existingFiles = await storage.listJSONFiles(historyDir); // migration writes files directly; re-list to pick them up
+      // A brand-new desktop install starts in the compact format, so there's
+      // nothing to convert later (v3.0.0). The phone has no gzip yet.
+      if (existingFiles.length === 0 && platform === 'desktop' && !readOnlyHistory) {
+        store.set('historyCompact', true);
+        store.set('historyCompactDone', Date.now());
+      }
     }
     // A cheap directory LISTING (filenames only), not loadDirBatched's old
     // full-content read of every file — see the historyData/
@@ -585,6 +591,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // The background refresh gives way at its next item; wait so the two never
       // write the same history at once.
       while (historyRefreshActive) await pause(250);
+      await maybeImportHistoryPack(onProgress);
       await runHistoryQueueInner(onProgress);
     } finally {
       // Always cleared: an error used to leave this stuck on, and every later
@@ -592,6 +599,33 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       historyFetchActive = false;
     }
   }
+  // First start (v3.0.0, Ben 2026-11-11): instead of ~7,400 paced WeirdGloop
+  // requests (45+ minutes), download one ready-made history pack attached to the latest GitHub release
+  // (~1 minute). The normal queue then fetches anything the pack lacked, and
+  // the rolling refresh tops up the days since the pack was built. Desktop
+  // only for now (the phone has no gzip yet); never in test mode. Any failure
+  // just falls back to the normal one-by-one fetch.
+  const HISTORY_PACK_URL = 'https://github.com/VonDerThWood/GE-Intelligence/releases/latest/download/history-pack.jsonl.gz';
+  async function maybeImportHistoryPack(onProgress) {
+    if (readOnlyHistory || !storage.importHistoryPack || platform !== 'desktop') return;
+    if (historyPopulatedIds.size >= 500 || historyFetchQueue.length < 500) return;
+    if (store.get('historyPackTried', 0) > Date.now() - 6 * 3600000) return; // a failed try isn't repeated every launch
+    store.set('historyPackTried', Date.now());
+    store.set('historyCompact', true); // the pack's files are compact
+    const t = Date.now(), total = historyFetchQueue.length;
+    let n = 0;
+    try {
+      const r = await storage.importHistoryPack(historyDir, HISTORY_PACK_URL, {
+        skip: new Set(historyPopulatedIds),
+        onItem: id => { historyPopulatedIds.add(id); if (++n % 100 === 0 && onProgress) onProgress(0, total); },
+      });
+      console.log(`[history] History pack: ${r.imported} items in ${((Date.now() - t) / 1000).toFixed(0)}s` + (r.complete ? `, built ${r.builtAt}` : ', download cut short (the rest fetch normally)'));
+    } catch (e) {
+      console.log(`[history] History pack not used (${e.message}); fetching one by one. ${n} items came in first.`);
+    }
+    if (onProgress) onProgress(0, total);
+  }
+
   async function runHistoryQueueInner(onProgress) {
     let done = 0;
     const total = historyFetchQueue.length;

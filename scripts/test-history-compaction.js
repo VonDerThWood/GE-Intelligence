@@ -9,11 +9,12 @@ const ok = (c, m) => { console.log((c ? 'ok  ' : 'FAIL') + ' ' + m); if (!c) fai
 
 (async () => {
   const real = path.join(process.env.APPDATA, 'GEnius', 'data', 'history');
-  const ids = fs.readdirSync(real).filter(f => /^\d+\.json$/.test(f)).slice(0, 300).map(f => f.slice(0, -5));
+  const ids = (await storage.listJSONFiles(real)).filter(f => /^\d+\.json$/.test(f)).slice(0, 300).map(f => f.slice(0, -5));
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'genius-compact-'));
   const hist = path.join(dir, 'history');
   fs.mkdirSync(hist);
-  for (const id of ids) fs.copyFileSync(path.join(real, id + '.json'), path.join(hist, id + '.json'));
+  // Real history may already be compact: write old-format copies to convert.
+  for (const id of ids) fs.writeFileSync(path.join(hist, id + '.json'), JSON.stringify(await storage.readDirItem(real, id)));
   const original = Object.fromEntries(ids.map(id => [id, fs.readFileSync(path.join(hist, id + '.json'), 'utf8')]));
 
   const store = await storage.createKVStore(path.join(dir, 'config.json'));

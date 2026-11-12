@@ -134,6 +134,16 @@ async function readItemFile(dirPath, id) {
   }
   return unpack(JSON.parse(await fs.promises.readFile(path.join(dirPath, `${id}.json`), 'utf8')));
 }
+// Synchronous version for research scripts: an item's history points in
+// either format, or null if there's none.
+function readDirItemSync(dirPath, id) {
+  try {
+    const gz = path.join(dirPath, `${id}.json.gz`);
+    if (fs.existsSync(gz)) return unpack(JSON.parse(zlib.gunzipSync(fs.readFileSync(gz)).toString('utf8')));
+    const plain = path.join(dirPath, `${id}.json`);
+    return fs.existsSync(plain) ? unpack(JSON.parse(fs.readFileSync(plain, 'utf8'))) : null;
+  } catch { return null; }
+}
 async function atomicWriteBuffer(filePath, buf) {
   const tmp = filePath + '.tmp';
   await fs.promises.writeFile(tmp, buf);
@@ -180,6 +190,66 @@ async function compactDirItems(dirPath, { onProgress, shouldStop } = {}) {
   }
   if (onProgress) onProgress(done, olds.length);
   return { converted: done - failed.length, failed, total: olds.length };
+}
+
+// ─── History pack (v3.0.0, Ben 2026-11-11) ──────────────────────────────
+// One gzipped file holding every item's compact history, so a new install
+// reads one download instead of ~7,400 WeirdGloop requests (45+ min -> ~1).
+// Format, one line each: "<id>\t<compact JSON from history-format pack()>",
+// ending with "#end\t<item count>\t<built ISO date>".
+// Built by scripts/build-history-pack.js.
+async function writeHistoryPack(dirPath, outFile, { onProgress } = {}) {
+  const ids = (await listJSONFiles(dirPath)).map(f => f.slice(0, -5)).filter(id => /^\d+$/.test(id));
+  const gz = zlib.createGzip({ level: 9 });
+  const out = fs.createWriteStream(outFile);
+  const finished = new Promise((res, rej) => { out.on('finish', res); out.on('error', rej); gz.on('error', rej); });
+  gz.pipe(out);
+  const put = s => (gz.write(s) ? null : new Promise(r => gz.once('drain', r)));
+  let n = 0;
+  for (const id of ids) {
+    const points = await readItemFile(dirPath, id).catch(() => null);
+    if (!Array.isArray(points) || !points.length) continue;
+    await put(`${id}\t${JSON.stringify(pack(points))}\n`);
+    if (++n % 500 === 0 && onProgress) onProgress(n, ids.length);
+  }
+  gz.end(`#end\t${n}\t${new Date().toISOString()}\n`);
+  await finished;
+  return { items: n };
+}
+
+// Downloads a history pack and writes each item it has that `skip` doesn't
+// as a compact file. Items are written as they arrive, so a dropped download
+// still keeps everything before the break (the normal fetch fills the rest).
+async function importHistoryPack(dirPath, url, { skip = new Set(), onItem, timeoutMs = 15 * 60000 } = {}) {
+  const { Readable } = require('stream');
+  const readline = require('readline');
+  const res = await fetch(url, { headers: { 'User-Agent': 'GEnius (github.com/VonDerThWood/GE-Intelligence)' }, signal: AbortSignal.timeout(timeoutMs) });
+  if (!res.ok) throw new Error('history pack: HTTP ' + res.status);
+  await ensureDir(dirPath);
+  // pipeline() passes a dropped connection or corrupt data on as an error
+  // (plain .pipe() doesn't, and the error crashed the import).
+  const gunzip = zlib.createGunzip();
+  let streamError = null;
+  require('stream').pipeline(Readable.fromWeb(res.body), gunzip, e => { if (e) streamError = e; });
+  gunzip.on('error', () => {});
+  const lines = readline.createInterface({ input: gunzip, crlfDelay: Infinity });
+  lines.on('error', () => {});
+  let imported = 0, complete = false, builtAt = null;
+  for await (const line of lines) {
+    const tab = line.indexOf('\t');
+    if (tab < 0) continue;
+    const id = line.slice(0, tab);
+    if (id === '#end') { complete = true; builtAt = line.split('\t')[2] || null; break; }
+    if (!/^\d+$/.test(id) || skip.has(id)) continue;
+    const json = line.slice(tab + 1);
+    let points;
+    try { points = unpack(JSON.parse(json)); } catch { continue; } // a bad line is skipped; that item gets fetched normally
+    if (!Array.isArray(points) || !points.length || !points.every(p => p && typeof p.timestamp === 'number')) continue;
+    await atomicWriteBuffer(path.join(dirPath, `${id}.json.gz`), zlib.gzipSync(json, { level: 9 }));
+    imported++;
+    if (onItem) onItem(id);
+  }
+  return { imported, complete, builtAt, error: streamError ? streamError.message : null };
 }
 
 // Batched async load of a directory of per-id JSON files into one plain
@@ -344,4 +414,7 @@ module.exports = {
   migrateLegacyHistoryFile, createKVStore, resolveWritable,
   deleteFile,
   compactDirItems,
+  readDirItemSync,
+  writeHistoryPack,
+  importHistoryPack,
 };
