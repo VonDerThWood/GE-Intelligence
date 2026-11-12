@@ -5014,12 +5014,15 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   }, [activeSignal, activeIndexId, activeSector]);
   const tradeableItems = useMemo(() => items.filter(it => !it.untradeable), [items]);
 
-  const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000)
+  // Sane lists (Ben, 2026-11-12): skip items whose live buy and sell are over 3x
+  // apart (e.g. a juju potion at B 89K / S 721) or that trade under 20 a day.
+  const saneMarket = it => (it.avgVolume || 0) >= 20 && !(it.liveBuy > 0 && it.liveSell > 0 && Math.max(it.liveBuy, it.liveSell) / Math.min(it.liveBuy, it.liveSell) > 3);
+  const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000 && saneMarket(it))
     .sort((a,b) => (b.change_1d||0)-(a.change_1d||0)).slice(0,6), [tradeableItems]);
-  const fallers = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) < 0 && it.high > 1000)
+  const fallers = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) < 0 && it.high > 1000 && saneMarket(it))
     .sort((a,b) => (a.change_1d||0)-(b.change_1d||0)).slice(0,6), [tradeableItems]);
   const volume  = useMemo(() => [...tradeableItems]
-    .filter(it => it.signals && (it.signals.includes('FRENZY') || it.signals.includes('HIGH_VOL')))
+    .filter(it => it.signals && (it.signals.includes('FRENZY') || it.signals.includes('HIGH_VOL')) && saneMarket(it))
     .sort((a,b) => {
       const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
       const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
@@ -5253,8 +5256,14 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   }, [tradeableItems]);
 
   const sectionStyle = {marginBottom:20};
+  // Collapsible sections, remembered (Ben, 2026-11-12: Dashboard was ~4 screens).
+  const [folds, setFolds] = useState(() => { try { return JSON.parse(localStorage.getItem('genius_dash_folds')) || {}; } catch { return {}; } });
+  const isOpen = id => !folds[id];
+  const toggleFold = id => setFolds(f => { const n = {...f, [id]: !f[id]}; try { localStorage.setItem('genius_dash_folds', JSON.stringify(n)); } catch {} return n; });
   const headingStyle = {fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase',
     color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:10};
+  const FoldHead = (id, label) => h('div', {style:{...headingStyle, cursor:'pointer', userSelect:'none'}, title: isOpen(id) ? 'Collapse' : 'Expand', onClick:() => toggleFold(id)},
+    h('span', {style:{color:T.textDim, marginRight:6}}, isOpen(id) ? '▾' : '▸'), label);
   const cardRowStyle = {display:'flex', flexWrap:'wrap', gap:8};
 
   // Index card
@@ -5563,8 +5572,58 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     h(UpdateRisksBar, {scope:'yours'}),
     h(AlmanacFlagsBar),
     h(GoodRightNow, {items, onSelect, onNavigate}),
+    // ── Personal command center ──────────────────────────────────
+
+    // Watchlist movers
+    h('div', {style:sectionStyle},
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('watchlist'), title:'Go to Watchlist'},
+        h('span', null, 'Your Watchlist'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
+      watchlistItems.length === 0
+        ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
+            'No items watched yet. Star any item to track it here.')
+        : watchlistMovers.length === 0
+          ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No price movement on watched items today.')
+          : watchlistMovers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
+    ),
+
+    // Portfolio snapshot
+    openPositions.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('portfolio'), title:'Go to Portfolio'},
+        h('span', null, 'Portfolio'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, fmt.gp(totalCurrent)+'gp'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, `Current Value (${openPositions.length} positions)`)),
+        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color: unrealizedPL >= 0 ? T.green : T.red}},
+            (unrealizedPL >= 0 ? '+' : '') + fmt.gp(unrealizedPL) + 'gp'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
+            `Unrealized P&L (${unrealizedPct >= 0 ? '+' : ''}${unrealizedPct.toFixed(1)}%)`))
+      )
+    ),
+
+    // Alerts status
+    alertCount > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Alerts'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, alertCount),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Alerts Set')),
+        triggeredAlerts.length > 0 && h('div', {style:{background:T.panel, border:`1px solid ${T.gold}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.gold}}, triggeredAlerts.length),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Conditions Met'))
+      ),
+      triggeredAlerts.length > 0 && h('div', {style:{marginTop:8}},
+        triggeredAlerts.slice(0,3).map(a =>
+          h('div', {key:a.id, style:{fontSize:12, color:T.gold, padding:'3px 0'}},
+            `⚡ ${a.item_name} — ${['above','live_above'].includes(a.condition) ? 'above' : ['below','live_below'].includes(a.condition) ? 'below' : 'signal'} ${a.price ? fmt.gp(a.price)+'gp' : a.signal||''}`)
+        )
+      )
+    ),
+
     h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
-    h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
     // ── News Item Mentions ───────────────────────────────────────
     (() => {
@@ -5648,7 +5707,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     // ── Sector Heat Map ──────────────────────────────────────────
     h('div', {style:{...sectionStyle, position:'relative'}},
       h('div', {style:{display:'flex', alignItems:'center', gap:5}},
-        h('div', {style:headingStyle}, 'Sector Heat Map'),
+        FoldHead('heatmap', 'Sector Heat Map'),
         h('span', {
           onClick: e => {
             e.stopPropagation();
@@ -5700,79 +5759,23 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
           t.l
         )),
       ), document.body),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
+      isOpen('heatmap') && h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
         sectorHeat.map(sector => h(SectorCard, {key:sector.label, sector, onClick:()=>setActiveSector(sector)}))
       )
     ),
 
-    // ── Personal command center ──────────────────────────────────
-
-    // Watchlist movers
-    h('div', {style:sectionStyle},
-      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('watchlist'), title:'Go to Watchlist'},
-        h('span', null, 'Your Watchlist'),
-        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
-      watchlistItems.length === 0
-        ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
-            'No items watched yet. Star any item to track it here.')
-        : watchlistMovers.length === 0
-          ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No price movement on watched items today.')
-          : watchlistMovers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
-    ),
-
-    // Portfolio snapshot
-    openPositions.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('portfolio'), title:'Go to Portfolio'},
-        h('span', null, 'Portfolio'),
-        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, fmt.gp(totalCurrent)+'gp'),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, `Current Value (${openPositions.length} positions)`)),
-        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color: unrealizedPL >= 0 ? T.green : T.red}},
-            (unrealizedPL >= 0 ? '+' : '') + fmt.gp(unrealizedPL) + 'gp'),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
-            `Unrealized P&L (${unrealizedPct >= 0 ? '+' : ''}${unrealizedPct.toFixed(1)}%)`))
-      )
-    ),
-
-    // Alerts status
-    alertCount > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Alerts'),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, alertCount),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Alerts Set')),
-        triggeredAlerts.length > 0 && h('div', {style:{background:T.panel, border:`1px solid ${T.gold}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.gold}}, triggeredAlerts.length),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Conditions Met'))
-      ),
-      triggeredAlerts.length > 0 && h('div', {style:{marginTop:8}},
-        triggeredAlerts.slice(0,3).map(a =>
-          h('div', {key:a.id, style:{fontSize:12, color:T.gold, padding:'3px 0'}},
-            `⚡ ${a.item_name} — ${['above','live_above'].includes(a.condition) ? 'above' : ['below','live_below'].includes(a.condition) ? 'below' : 'signal'} ${a.price ? fmt.gp(a.price)+'gp' : a.signal||''}`)
-        )
-      )
-    ),
-
-    h('div', {style:{borderTop:`1px solid ${T.borderDim}`, marginBottom:16}}),
-
     // Market indexes
     indexes.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Market Indexes'),
-      h('div', {style:cardRowStyle},
+      FoldHead('indexes', 'Market Indexes'),
+      isOpen('indexes') && h('div', {style:cardRowStyle},
         indexes.map(idx => h(IndexCard, {key:idx.name, idx}))
       )
     ),
 
     // Stat pills
     h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Market Pulse'),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright}}, tradeableItems.length.toLocaleString()),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Items Tracked')),
+      FoldHead('pulse', 'Market Pulse'),
+      isOpen('pulse') && h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
         h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
           h('div', {style:{fontSize:18, fontWeight:'bold', color:T.green}}, rising.toLocaleString()),
           h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Rising Today')),
@@ -5784,14 +5787,15 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Active signals
     h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Active Signals'),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+      FoldHead('signals', 'Active Signals'),
+      isOpen('signals') && h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
         Object.entries(signalCounts).map(([sig, cnt]) => h(SignalPill, {key:sig, signal:sig, count:cnt}))
       )
     ),
 
     // Top movers
-    h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', marginBottom:20}},
+    FoldHead('movers', 'Top Gainers & Losers'),
+    isOpen('movers') && h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', marginBottom:20}},
       h('div', {style:{flex:'1 1 200px', minWidth:200}},
         h('div', {style:headingStyle}, 'Top Gainers'),
         risers.length
@@ -5808,14 +5812,14 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Volume anomalies
     volume.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Volume Anomalies'),
-      volume.map(it => h(MiniRow, {key:it.id, it, showChange:false}))
+      FoldHead('volume', 'Volume Anomalies'),
+      isOpen('volume') && volume.map(it => h(MiniRow, {key:it.id, it, showChange:false}))
     ),
 
     // Hall of Shame
     hallOfShame.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, '🏛️ Hall of Shame'),
-      h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
+      FoldHead('shame', '🏛️ Hall of Shame'),
+      isOpen('shame') && h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
         hallOfShame.map((entry, i) =>
           h('div', {
             key:i,
@@ -5848,8 +5852,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Hall of Glory
     hallOfGlory.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, '🏆 Hall of Glory'),
-      h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
+      FoldHead('glory', '🏆 Hall of Glory'),
+      isOpen('glory') && h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
         hallOfGlory.map((entry, i) =>
           h('div', {
             key:i,
@@ -16506,6 +16510,7 @@ const PAGE_GUIDES = {
   dashboard: { title: 'Dashboard', points: [
     'A quick look at the whole market today: what is rising, what is falling, and your own positions and alerts at a glance.',
     'Click any item name to open its panel with prices, history and what to offer.',
+    'Click a section\'s heading (▾) to fold it away. GEnius remembers what you folded.',
     'New here? Try Flips next for items you can buy and sell for a profit right now.',
   ]},
   flips: { title: 'Flips', points: [
