@@ -2909,6 +2909,74 @@ function TradePriceBox({item, livePrice}) {
   );
 }
 
+// Risk for many items at once (Max via Ben, 2026-11-12: "separate sections for
+// interesting offers and match them with risk"). Same positionRisk as the item
+// panel's ITEM RISK badge, worked out in the background a few items at a time
+// and kept for the session as just the level (0 Low, 1 Medium, 2 High, null =
+// not enough history), so 600 flips don't hold years of prices in memory.
+const _riskLevelCache = new Map(); // id -> {at, level}
+const RISK_TTL = 6 * 3600000;
+let _riskQueue = [], _riskRunning = 0;
+const _riskListeners = new Set();
+async function _riskOne(item) {
+  const yearAgo = Date.now() - 365 * 86400000;
+  const [hist, snaps] = await Promise.all([
+    window.genius?.getItemHistoryLocal(item.id).catch(() => null),
+    window.genius?.getPriceSnapshots(item.id).catch(() => null),
+  ]);
+  const byDay = new Map();
+  for (const pt of [...(hist || []), ...(snaps || [])]) {
+    if (!pt.price) continue;
+    const ts = pt.timestamp > 1e12 ? pt.timestamp : pt.timestamp * 1000;
+    if (ts < yearAgo - 2 * 86400000) continue;
+    const d = Math.floor(ts / 86400000), prev = byDay.get(d);
+    if (!prev || ts > prev.ts) byDay.set(d, {ts, price: pt.price});
+  }
+  const r = positionRisk(null, item, [...byDay.values()].sort((a, b) => a.ts - b.ts), yearAgo);
+  return r ? ['RISK_LOW', 'RISK_MEDIUM', 'RISK_HIGH'].indexOf(r.signal) : null;
+}
+function _riskPump() {
+  while (_riskRunning < 4 && _riskQueue.length) {
+    const item = _riskQueue.shift();
+    const hit = _riskLevelCache.get(item.id);
+    if (hit && Date.now() - hit.at < RISK_TTL) continue;
+    _riskRunning++;
+    _riskOne(item).catch(() => null).then(level => {
+      _riskLevelCache.set(item.id, {at: Date.now(), level});
+      _riskRunning--;
+      if (_riskLevelCache.size % 20 === 0 || !_riskQueue.length) _riskListeners.forEach(f => f());
+      _riskPump();
+    });
+  }
+}
+// Returns {levels: Map id -> 0/1/2/null for the items done so far, pending: count}.
+function useRiskLevels(items) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const f = () => bump(n => n + 1);
+    _riskListeners.add(f);
+    const ids = new Set(_riskQueue.map(i => i.id));
+    for (const it of items) {
+      const hit = _riskLevelCache.get(it.id);
+      if ((!hit || Date.now() - hit.at >= RISK_TTL) && !ids.has(it.id)) _riskQueue.push(it);
+    }
+    _riskPump();
+    return () => _riskListeners.delete(f);
+  }, [items]);
+  const levels = new Map();
+  let pending = 0;
+  for (const it of items) { const hit = _riskLevelCache.get(it.id); if (hit) levels.set(it.id, hit.level); else pending++; }
+  return {levels, pending};
+}
+const RISK_NAMES = ['Low', 'Medium', 'High'];
+const RISK_COLORS = () => [T.green, T.gold, T.red];
+function RiskTag({level}) {
+  if (level == null) return h('span', {style:{fontSize:10, color:T.textDim}}, '—');
+  const c = RISK_COLORS()[level];
+  return h('span', {title:'Same as the ITEM RISK badge in the item panel: how much it swings, its biggest drop over the past year, its spread and how much it trades. Not a forecast.',
+    style:{fontSize:10, color:c, border:`1px solid ${c}`, borderRadius:3, padding:'0 5px', whiteSpace:'nowrap'}}, RISK_NAMES[level]);
+}
+
 // "Good right now" (Max's feedback via Ben, 2026-11-12: "to find good items is
 // not the easiest"). The top 5 flips from the Flips tab's own rules
 // (computeFlipStats: live prices, after tax, liquid, sanity-checked), by
@@ -2919,6 +2987,8 @@ function GoodRightNow({items, onSelect, onNavigate}) {
     ok.sort((a, b) => (b.s.realisticProfit || 0) - (a.s.realisticProfit || 0));
     return {top: ok.slice(0, 5), count: ok.length};
   }, [items]);
+  const topItems = useMemo(() => top.map(x => x.it), [top]);
+  const risk = useRiskLevels(topItems);
   if (!top.length) return null;
   const g = n => fmt.gp(Math.round(n)) + 'gp';
   return h('div', {style:{marginBottom:20, padding:'10px 12px', background:'rgba(201,168,76,0.06)', border:`1px solid ${T.border}`, borderRadius:6}},
@@ -2932,6 +3002,7 @@ function GoodRightNow({items, onSelect, onNavigate}) {
       onMouseEnter: e => { e.currentTarget.style.background = T.panel2; }, onMouseLeave: e => { e.currentTarget.style.background = 'transparent'; },
     },
       h('div', {style:{flex:'1 1 160px', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
+      risk.levels.has(it.id) && h(RiskTag, {level: risk.levels.get(it.id)}),
       h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}}, g(it.liveBuy))),
       h('div', {style:{minWidth:150, textAlign:'right', whiteSpace:'nowrap'}},
         h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
@@ -13919,7 +13990,7 @@ const FLIP_PROFIT_FILTERS = [
   {label:'10M+',   value:10000000},
 ];
 function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, description}) {
-  const [pillTab, setPillTab] = useState('flips'); // 'flips' | 'flagged'
+  const [pillTab, setPillTab] = useState('flips'); // 'flips' (all) | 'r0' | 'r1' | 'r2' (risk level) | 'flagged'
   const [sort, setSort] = useState({key:'realisticProfit', dir:-1});
   const [page, setPage] = useState(0);
   // Defaults to 1M+ (Ben: "That would cut it down from over 900 results
@@ -13939,7 +14010,14 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
   // volume) — those aren't interesting to look at, just noise.
   const flagged = useMemo(() => allStats.filter(it => !it.qualifies && it.disqualifyCategory === 'spread'), [allStats]);
 
-  const filtered = useMemo(() => flips.filter(it => it.profitForLimit >= minProfit), [flips, minProfit]);
+  // Risk pills (Max via Ben, 2026-11-12): same ITEM RISK as the item panel, worked out in the background.
+  const risk = useRiskLevels(flips);
+  const riskCount = [0, 1, 2].map(l => flips.filter(it => risk.levels.get(it.id) === l).length);
+  const riskTab = /^r[012]$/.test(pillTab) ? Number(pillTab[1]) : null;
+  const filtered = useMemo(() => flips
+    .map(it => ({...it, riskLevel: risk.levels.has(it.id) ? risk.levels.get(it.id) : null}))
+    .filter(it => it.profitForLimit >= minProfit && (riskTab == null || it.riskLevel === riskTab)),
+    [flips, minProfit, riskTab, risk.levels.size, risk.pending]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a,b) => {
@@ -13962,7 +14040,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
     h('div', {style:{padding:'14px'}},
       h('div', {style:{display:'flex', gap:4, marginBottom:12}},
-        ['flips','flagged'].map(v => h('button', {
+        ['flips','r0','r1','r2','flagged'].map(v => h('button', {
           key:v, onClick:()=>setPillTab(v),
           style:{
             padding:'4px 12px', fontSize:11, cursor:'pointer', borderRadius:3,
@@ -13970,8 +14048,11 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
             border: `1px solid ${pillTab===v ? T.gold : T.border}`,
             color: pillTab===v ? T.goldBright : T.textDim,
           }
-        }, v==='flips' ? `Flips (${flips.length.toLocaleString()})` : `Flagged (${flagged.length.toLocaleString()})`))
+        }, v==='flips' ? `All flips (${flips.length.toLocaleString()})` : v==='flagged' ? `Flagged (${flagged.length.toLocaleString()})` : `${RISK_NAMES[v[1]]} risk (${riskCount[v[1]].toLocaleString()})`))
       ),
+      riskTab != null && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}},
+        'Risk is the same as the ITEM RISK badge in the item panel: how much the item swings, its biggest drop over the past year, its spread and how much it trades. It describes behaviour, not where the price goes next.',
+        risk.pending ? ` Still working out risk for ${risk.pending.toLocaleString()} items, so these counts will grow for a moment.` : ''),
       pillTab === 'flagged' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `Items that look like a huge margin on paper but got excluded from Flips for a spread-sanity reason — a stale isolated print, one side badly overpaid relative to the other, or a price well past what the item is actually worth. Kept visible here instead of silently vanishing, since knowing WHY something's excluded beats it just not being there.`
       ),
@@ -13997,10 +14078,10 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
               )
             )
       ),
-      pillTab === 'flips' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      pillTab !== 'flagged' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `${flips.length.toLocaleString()} items with a live buy/sell spread worth flipping (${sorted.length.toLocaleString()} shown at the current profit filter). Margin = instabuy minus 2% GE tax, minus instasell — the real spread available right now, not just today's price change. Excludes low-volume items (near-zero-volume items let a single fluke print swing the numbers wildly), sell prices dumped too far under the item's GE price, prices that are stale relative to how often this specific item normally trades (6-48 hours depending on its typical volume — a single old instant-buy print nobody's matched since, not something you could actually get filled at now), one side badly overpaid relative to the other, a huge volume spike on an item that barely trades at all normally (a wash-trade signature), and — for items where alching is basically the whole economic purpose — buy prices well above what alching that item is actually worth. A genuine high-volume demand spike is allowed through even far above GE price.`
       ),
-      pillTab === 'flips' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
+      pillTab !== 'flagged' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
         h('span', {style:{fontSize:10, color:T.textDim, marginRight:2}}, 'Min Profit (buy limit):'),
         FLIP_PROFIT_FILTERS.map(opt => h('button', {
           key:opt.value,
@@ -14013,7 +14094,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
           }
         }, opt.label))
       ),
-      pillTab === 'flips' && (sorted.length === 0
+      pillTab !== 'flagged' && (sorted.length === 0
         ? h('div', {className:'empty'}, h('div', {className:'icon'}, '◎'), h('p', null,
             flips.length === 0 ? 'No live flip data available yet — give the app a moment to fetch it.' : 'No items meet this profit filter — try lowering it.'
           ))
@@ -14021,6 +14102,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
             h('table', {className:'ge-table pt-flips'},
               h('thead', null, h('tr', null,
                 h('th', {onClick:()=>tog('name'), style:{cursor:'pointer'}}, 'Item'+arrow('name')),
+                h('th', {onClick:()=>tog('riskLevel'), style:{cursor:'pointer'}, title:'Same as the ITEM RISK badge in the item panel. Not a forecast.'}, 'Risk'+arrow('riskLevel')),
                 h('th', {onClick:()=>tog('liveSell'), style:{cursor:'pointer'}}, 'Buy'+arrow('liveSell')),
                 h('th', {onClick:()=>tog('liveBuy'), style:{cursor:'pointer'}}, 'Sell'+arrow('liveBuy')),
                 h('th', {onClick:()=>tog('volume'), style:{cursor:'pointer'}, title:'How liquid this market actually is — a big margin on near-zero volume isn\'t very useful.'}, 'Volume'+arrow('volume')),
@@ -14035,6 +14117,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 key:it.id, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it),
               },
                 h('td', null, it.name),
+                h('td', null, it.riskLevel == null && risk.pending ? h('span', {style:{fontSize:10, color:T.textDim}}, '…') : h(RiskTag, {level: it.riskLevel})),
                 h('td', {style:{color:'#e08030'}}, fmt.gp(it.liveSell)+'gp'),
                 h('td', {style:{color:T.green}}, fmt.gp(it.liveBuy)+'gp'),
                 h('td', null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
@@ -14051,12 +14134,12 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
               )))
             )
           )),
-      pillTab === 'flips' && sorted.length > FLIP_PAGE_SIZE && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:10, fontSize:11}},
+      pillTab !== 'flagged' && sorted.length > FLIP_PAGE_SIZE && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:10, fontSize:11}},
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:11}, disabled:pageClamped===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Prev'),
         h('span', {style:{color:T.textDim}}, `Page ${pageClamped+1} of ${totalPages} (${sorted.length.toLocaleString()} total)`),
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:11}, disabled:pageClamped>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1,p+1))}, 'Next →'),
       ),
-      pillTab === 'flips' && h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
+      pillTab !== 'flagged' && h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
         '⚠ Live buy/sell reflects the most recent real trades, not a live order book — by the time you place an offer, the spread may already have moved or closed. Buy limits reset per 4 hours; volume figures are daily totals, not what\'s available to trade this instant.'
       ),
     )
@@ -16415,6 +16498,7 @@ const PAGE_GUIDES = {
   flips: { title: 'Flips', points: [
     'Items you can buy and resell for a profit right now: buy with an offer at the "Buy" price, sell at the "Sell" price. Profit is after the 2% GE tax.',
     'Sorted by realistic profit, which takes into account how much of the item actually trades in a day. Use the Min Profit buttons to hide small flips.',
+    'The Low, Medium and High risk pills split the flips by how wild each item has been over the past year (same as the ITEM RISK badge). Low and Medium are the calmer picks.',
     'Prices move fast: click an item and check its "What to offer" box before you put in an offer. The Flagged pill lists items that only look profitable.',
   ]},
   opportunities: { title: 'Opportunities', points: [
