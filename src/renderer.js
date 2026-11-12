@@ -13848,6 +13848,7 @@ const FLIP_SANITY_HIGH = 2;   // only used for the alch-anchor detection
 // daily volume and gets caught there, while a genuine rush has real
 // volume behind the higher price and correctly passes.
 const FLIP_ALCH_CEILING_MULT = 1.3;
+const FLIP_ALCH_ANCHOR_LOW = 0.8; // alch must be at least 80% of the guide price to count as what sets it
 // Alch only functions as a real economic anchor once the item's actually
 // worth enough to bother — nobody alchs a 270gp item in practice, the
 // nature rune cost and the clicks aren't worth it, so treating alch
@@ -13954,7 +13955,10 @@ function computeFlipStats(it) {
   // given real market liquidity, not a theoretical ceiling.
   const realisticProfit = margin * Math.min(limit, it.avgVolume || 0);
   const gePrice = it.high || it.low || 0;
-  const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_SANITY_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
+  // Alching only sets an item's price when the price sits near the alch value.
+  // Was 0.5x-2x of guide, which counted Apex hide chaps + 5 (alch 1.78m, trades
+  // ~6m) as an alch item (Ben, 2026-11-12: "it's like ~2m above that").
+  const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_ALCH_ANCHOR_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
   const ceiling = alchIsAnchor ? Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT : Infinity;
   const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit };
 
