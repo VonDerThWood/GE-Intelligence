@@ -13964,7 +13964,11 @@ function computeFlipStats(it) {
   if (profitForLimit < FLIP_MIN_PROFIT_FOR_LIMIT) return { ...base, qualifies:false, disqualifyReason:`Profit for a full buy limit (${fmt.gp(profitForLimit)}gp) is under Flips' ${fmt.gp(FLIP_MIN_PROFIT_FOR_LIMIT)}gp floor — too small a margin to be worth the buy-limit slot.` };
   if ((it.volume||0) < FLIP_MIN_VOLUME) return { ...base, qualifies:false, disqualifyReason:`Daily volume (${(it.volume||0).toLocaleString()}) is below Flips' liquidity floor of ${FLIP_MIN_VOLUME} — too thin to trust a single live print.` };
   if (!(gePrice > 0 && it.liveSell >= gePrice*FLIP_SANITY_LOW)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live sell price is far under this item\'s established GE price — likely a one-off fluke/glitch dump rather than a real, repeatable margin.' };
-  if (it.liveBuy > ceiling) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
+  // Only when the buy side is high ON ITS OWN: if the live sell is above the
+  // ceiling too, the whole market moved up (real demand), not a mistake fill.
+  // Ben, 2026-11-12: Apex hide chaps + 5 (alch 1.78m, guide 3.14m) trading
+  // 5.94m-8.17m on 5x its usual volume was wrongly flagged; nobody alches it.
+  if (it.liveBuy > ceiling && !(it.liveSell > ceiling)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
   if (it.liveSell > 0 && it.liveBuy / it.liveSell > FLIP_MAX_BUY_SELL_RATIO) {
     return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Live buy is ${(it.liveBuy/it.liveSell).toFixed(1)}x live sell — one side is being overpaid in isolation, not a real two-sided market.` };
   }
