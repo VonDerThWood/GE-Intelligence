@@ -15,6 +15,19 @@
 const fs = require('fs'), path = require('path');
 const { readDirItemSync } = require('../src/backend-js/storage.js');
 
+// Cloud sessions reach the internet through a proxy that Node's fetch ignores
+// unless NODE_USE_ENV_PROXY=1 (and the proxy's CA) is set at startup. If a
+// proxy is configured and that isn't, re-run this script with them set.
+{
+  const proxy = process.env.HTTPS_PROXY || process.env.https_proxy;
+  if (proxy && !process.env.NODE_USE_ENV_PROXY) {
+    const env = { ...process.env, NODE_USE_ENV_PROXY: '1' };
+    const ca = '/root/.ccr/ca-bundle.crt';
+    if (!env.NODE_EXTRA_CA_CERTS && require('fs').existsSync(ca)) env.NODE_EXTRA_CA_CERTS = ca;
+    const r = require('child_process').spawnSync(process.execPath, process.argv.slice(1), { env, stdio: 'inherit' });
+    process.exit(r.status == null ? 1 : r.status);
+  }
+}
 process.stdout.on('error', e => { if (e.code === 'EPIPE') process.exit(0); }); // output piped into head etc.
 const DATA = path.join(process.env.APPDATA || '', 'GEnius', 'data');
 const UA = { 'User-Agent': 'GEnius research (github.com/VonDerThWood/GE-Intelligence)' };
