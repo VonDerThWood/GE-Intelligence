@@ -2989,14 +2989,20 @@ function GoodRightNow({items, onSelect, onNavigate}) {
   }, [items]);
   const topItems = useMemo(() => top.map(x => x.it), [top]);
   const risk = useRiskLevels(topItems);
+  // Collapsible, remembered (Ben, 2026-11-12).
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('genius_goodnow_open') !== '0'; } catch { return true; } });
+  const toggle = () => setOpen(v => { try { localStorage.setItem('genius_goodnow_open', v ? '0' : '1'); } catch {} return !v; });
   if (!top.length) return null;
   const g = n => fmt.gp(Math.round(n)) + 'gp';
-  return h('div', {style:{marginBottom:20, padding:'10px 12px', background:'rgba(201,168,76,0.06)', border:`1px solid ${T.border}`, borderRadius:6}},
-    h('div', {style:{display:'flex', alignItems:'baseline', gap:8, marginBottom:6, flexWrap:'wrap'}},
-      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'Good right now'),
-      h('div', {style:{fontSize:11, color:T.textDim}}, 'Flips that pay after the 2% tax at live prices. Buy with an offer at the first price, sell at the second.'),
+  return h('div', {style:{margin:'0 0 16px', padding:'10px 12px', background:'rgba(201,168,76,0.06)', border:`1px solid ${T.border}`, borderRadius:6}},
+    h('div', {onClick:toggle, title: open ? 'Collapse' : 'Expand', style:{display:'flex', alignItems:'baseline', gap:8, marginBottom: open ? 6 : 0, flexWrap:'wrap', cursor:'pointer'}},
+      h('span', {style:{fontSize:11, color:T.textDim}}, open ? '▾' : '▸'),
+      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'Good potential flips right now'),
+      open
+        ? h('div', {style:{fontSize:11, color:T.textDim}}, 'Flips that pay after the 2% tax at live prices. Buy with an offer at the first price, sell at the second.')
+        : h('div', {style:{fontSize:11, color:T.textDim}}, `${count.toLocaleString()} flips right now. Top: ${top[0].it.name}, +${g(top[0].s.margin)} each.`),
     ),
-    top.map(({it, s}) => h('div', {
+    open && top.map(({it, s}) => h('div', {
       key: it.id, onClick: () => onSelect && onSelect(it),
       style:{display:'flex', alignItems:'center', gap:10, padding:'5px 6px', borderRadius:3, cursor:'pointer', fontSize:12, flexWrap:'wrap'},
       onMouseEnter: e => { e.currentTarget.style.background = T.panel2; }, onMouseLeave: e => { e.currentTarget.style.background = 'transparent'; },
@@ -3008,7 +3014,7 @@ function GoodRightNow({items, onSelect, onNavigate}) {
         h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
         h('span', {style:{color:T.textDim, fontSize:11}}, ' · +' + fmt.gp(Math.round(s.realisticProfit)) + ' per buy limit')),
     )),
-    h('div', {style:{marginTop:6, fontSize:11}},
+    open && h('div', {style:{marginTop:6, fontSize:11}},
       h('span', {style:{color:T.gold, cursor:'pointer', textDecoration:'underline'}, onClick: () => onNavigate && onNavigate('flips')}, `See all ${count.toLocaleString()} in Flips →`),
       h('span', {style:{color:T.textDim}}, '  Prices move fast: check the item\'s "What to offer" box before you buy.'),
     ),
@@ -5461,8 +5467,6 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   return h('div', {style:{padding:'12px 14px'}},
     description && h('div', {style:{padding:'4px 0 12px', fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5, borderBottom:`1px solid ${T.borderDim}`, marginBottom:16}}, description),
 
-    h(GoodRightNow, {items, onSelect, onNavigate}),
-
     // ── Mood + Item of the Day ───────────────────────────────────
     h('div', {className:'dash-mood-row', style:{display:'flex', gap:8, marginBottom:20}},
 
@@ -5558,6 +5562,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     h(UpdateRisksBar, {scope:'yours'}),
     h(AlmanacFlagsBar),
+    h(GoodRightNow, {items, onSelect, onNavigate}),
     h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
     h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
