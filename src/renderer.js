@@ -13974,6 +13974,7 @@ function flipMaxPriceAgeMs(avgVolume) {
 // threshold is only ~1.4x — so this only catches the genuinely extreme
 // cases (Imphide 869x, Raw cod 12.2x) without choking on a real spike.
 const FLIP_MAX_BUY_SELL_RATIO = 5;
+const FLIP_MAX_SIDE_RANGE = 1.5; // highest/lowest recent price on one side (Ben, 2026-11-12)
 // Volume-anomaly check (Ben, 2026-07-31): a coordinated wash trade can
 // make liveBuy and liveSell agree with each other perfectly (same person
 // controls both sides), which sails straight past every check above —
@@ -14044,6 +14045,17 @@ function computeFlipStats(it) {
   // Ben, 2026-11-12: Apex hide chaps + 5 (alch 1.78m, guide 3.14m) trading
   // 5.94m-8.17m on 5x its usual volume was wrongly flagged; nobody alches it.
   if (it.liveBuy > ceiling && !(it.liveSell > ceiling)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
+  // Prices all over the place (Ben, 2026-11-12: Ring of Fortune, bought at
+  // 2.8m-10m and sold at 960k-3.2m in 5 hours on a 1m item). A real market's
+  // recent prices on one side sit close together.
+  const av = it.liveAvg;
+  if (av) {
+    const wild = (lo, hi) => lo > 0 && hi / lo > FLIP_MAX_SIDE_RANGE;
+    if (wild(av.buyLo, av.buyHi) || wild(av.sellLo, av.sellHi)) {
+      const r = wild(av.buyLo, av.buyHi) ? `bought at ${fmt.gp(av.buyLo)}-${fmt.gp(av.buyHi)}` : `sold at ${fmt.gp(av.sellLo)}-${fmt.gp(av.sellHi)}`;
+      return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Prices all over the place: ${r} in the recent trades, so there's no steady price to flip at.` };
+    }
+  }
   if (it.liveSell > 0 && it.liveBuy / it.liveSell > FLIP_MAX_BUY_SELL_RATIO) {
     return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Live buy is ${(it.liveBuy/it.liveSell).toFixed(1)}x live sell — one side is being overpaid in isolation, not a real two-sided market.` };
   }
@@ -16803,7 +16815,8 @@ function App() {
       if (!r || r.buy == null || r.sell == null) return { ...it, liveAvg: null, liveLatest: latest };
       return { ...it,
         liveBuy: r.buy, liveSell: r.sell, liveBuyTime: r.buyTime, liveSellTime: r.sellTime,
-        liveAvg: { buyUnits: r.buyUnits, sellUnits: r.sellUnits, from: r.from, at: recentPrices.at },
+        liveAvg: { buyUnits: r.buyUnits, sellUnits: r.sellUnits, from: r.from, at: recentPrices.at,
+          buyLo: r.buyLo, buyHi: r.buyHi, sellLo: r.sellLo, sellHi: r.sellHi },
         liveLatest: latest };
     });
   }, [rawItems, recentPrices]);

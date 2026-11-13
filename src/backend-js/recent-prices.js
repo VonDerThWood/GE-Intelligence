@@ -23,6 +23,17 @@ const FIVE_MIN_HOURS = 2;   // 5-minute blocks this far back, hourly before
 const REFRESH_MS = 4.5 * 60000;
 const GAP_MS = 250;
 
+// Weighted median of block prices, plus the lowest and highest block price.
+// Blocks of a busy item hold hundreds of trades each, so their spread is small;
+// a thin item's blocks are single trades, so lo/hi show how erratic it is.
+function side(pts) {
+  const sorted = pts.slice().sort((a, b) => a[0] - b[0]);
+  const total = sorted.reduce((t, p) => t + p[1], 0);
+  let acc = 0, mid = sorted[0][0];
+  for (const [price, n] of sorted) { acc += n; if (acc * 2 >= total) { mid = price; break; } }
+  return { mid: Math.max(1, Math.round(mid)), lo: Math.round(sorted[0][0]), hi: Math.round(sorted[sorted.length - 1][0]) };
+}
+
 function createRecentPrices() {
   const blocks = new Map(); // "5m:<ts>" | "1h:<ts>" -> {start, end, data: Map id -> [buyAvg, buyUnits, sellAvg, sellUnits]}
   let latest = {}, result = null, at = 0, running = null;
@@ -64,20 +75,25 @@ function createRecentPrices() {
     for (const b of ordered) for (const id of b.data.keys()) ids.add(id);
     const out = {};
     for (const id of ids) {
-      let bSum = 0, bN = 0, sSum = 0, sN = 0, from = null, buyTime = null, sellTime = null;
+      let bN = 0, sN = 0, from = null, buyTime = null, sellTime = null;
+      const bPts = [], sPts = []; // [price, units] per block
       for (const b of ordered) {
         const v = b.data.get(id);
         if (v) {
-          if (v[1] && v[0]) { bSum += v[0] * v[1]; bN += v[1]; if (!buyTime) buyTime = b.end; }
-          if (v[3] && v[2]) { sSum += v[2] * v[3]; sN += v[3]; if (!sellTime) sellTime = b.end; }
+          if (v[1] && v[0]) { bPts.push([v[0], v[1]]); bN += v[1]; if (!buyTime) buyTime = b.end; }
+          if (v[3] && v[2]) { sPts.push([v[2], v[3]]); sN += v[3]; if (!sellTime) sellTime = b.end; }
         }
         from = b.start;
         if (bN >= TARGET_UNITS && sN >= TARGET_UNITS) break;
       }
       if (bN < MIN_UNITS || sN < MIN_UNITS) continue;
+      // Middle price weighted by units (Ben, 2026-11-12: Ring of Fortune's one
+      // 10m buy dragged a plain average to 4.4m on a 1m item). lo/hi let the
+      // app flag a side whose prices are all over the place.
+      const bs = side(bPts), ss = side(sPts);
       out[id] = {
-        buy: Math.max(1, Math.round(bSum / bN)), buyUnits: bN, buyTime,
-        sell: Math.max(1, Math.round(sSum / sN)), sellUnits: sN, sellTime, from,
+        buy: bs.mid, buyUnits: bN, buyTime, buyLo: bs.lo, buyHi: bs.hi,
+        sell: ss.mid, sellUnits: sN, sellTime, sellLo: ss.lo, sellHi: ss.hi, from,
       };
     }
     for (const [id, l] of Object.entries(latest)) {
