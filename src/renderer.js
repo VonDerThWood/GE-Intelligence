@@ -2874,7 +2874,9 @@ function BigMacLine({price, bondGP, isLive}) {
 // impatient buyers paid, which new users read as "the price to buy at".
 // Says it in plain words: the patient offer, the instant price, and whether
 // flipping pays after tax (same rules as the Flips tab, computeFlipStats).
-function TradePriceBox({item, livePrice}) {
+function TradePriceBox({item, livePrice, gpFmt}) {
+  // Follows the panel's Rounded/Exact price toggle (Ben, 2026-11-12).
+  const f = gpFmt || fmt.gp;
   // Fresh per-item fetch when we have it, else the last fetch's live prices.
   const hi = livePrice?.high ?? item.liveBuy, lo = livePrice?.low ?? item.liveSell;
   const hiT = livePrice?.highTime ?? item.liveBuyTime, loT = livePrice?.lowTime ?? item.liveSellTime;
@@ -2885,9 +2887,9 @@ function TradePriceBox({item, livePrice}) {
     return h('div', {style:box}, head,
       h('div', {style:{color:T.textDim}}, livePrice === null && item.liveBuy == null
         ? 'Loading live prices...'
-        : `No recent live trades for this item. The GE guide price (${fmt.gp(item.high || item.low || 0)}gp) is the only guide, and it can be well off.`));
+        : `No recent live trades for this item. The GE guide price (${f(item.high || item.low || 0)}gp) is the only guide, and it can be well off.`));
   }
-  const g = n => h('span', {style:{color:T.textBright, fontWeight:600}}, fmt.gp(Math.round(n)) + 'gp');
+  const g = n => h('span', {style:{color:T.textBright, fontWeight:600}}, f(Math.round(n)) + 'gp');
   const ago = t => t ? h('span', {style:{color:T.textDim, fontSize:10}}, ' (last trade ' + timeAgo(t) + ')') : null;
   const net = applyTax(hi), margin = net - lo;
   return h('div', {style:box}, head,
@@ -2896,14 +2898,14 @@ function TradePriceBox({item, livePrice}) {
     h('div', {style:{marginTop:5, paddingTop:5, borderTop:`1px solid ${T.borderDim}`}},
       stats.qualifies
         ? [h('span', {key:'a', style:{color:T.green, fontWeight:'bold'}}, 'Worth flipping: '),
-           'buy at ', g(lo), ', sell at ', g(hi), ' = ', h('span', {key:'b', style:{color:T.green, fontWeight:600}}, '+' + fmt.gp(Math.round(margin)) + 'gp each'), ' after 2% tax',
-           item.limit ? [' (', h('span', {key:'c', style:{color:T.goldBright}}, '+' + fmt.gp(Math.round(stats.profitForLimit)) + 'gp'), ` per ${item.limit.toLocaleString()} buy limit)`] : null, '.']
+           'buy at ', g(lo), ', sell at ', g(hi), ' = ', h('span', {key:'b', style:{color:T.green, fontWeight:600}}, '+' + f(Math.round(margin)) + 'gp each'), ' after 2% tax',
+           item.limit ? [' (', h('span', {key:'c', style:{color:T.goldBright}}, '+' + f(Math.round(stats.profitForLimit)) + 'gp'), ` per ${item.limit.toLocaleString()} buy limit)`] : null, '.']
         : margin <= 0
           ? [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Not worth flipping right now: '),
-             `selling at ${fmt.gp(hi)}gp leaves ${fmt.gp(net)}gp after tax, ${margin === 0 ? 'the same as' : 'less than'} the ${fmt.gp(lo)}gp you'd pay.`]
+             `selling at ${f(hi)}gp leaves ${f(net)}gp after tax, ${margin === 0 ? 'the same as' : 'less than'} the ${f(lo)}gp you'd pay.`]
           : [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Small or risky flip: '),
-             'buy at ', g(lo), ', sell at ', g(hi), ' = +' + fmt.gp(Math.round(margin)) + 'gp each after 2% tax',
-             item.limit ? ` (+${fmt.gp(Math.round(stats.profitForLimit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
+             'buy at ', g(lo), ', sell at ', g(hi), ' = +' + f(Math.round(margin)) + 'gp each after 2% tax',
+             item.limit ? ` (+${f(Math.round(stats.profitForLimit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
              '. The Flips tab leaves it out: ', stats.disqualifyReason]
     )
   );
@@ -3631,7 +3633,28 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       // Live instant-buy/instant-sell prices from the wiki's real-time
       // prices API — fresher and per-price-timestamped, unlike item.high/
       // item.low above which come from the app's 15-min gazbot dump.
-      !item.untradeable && h(TradePriceBox, {item, livePrice})
+      // Live buy/sell right under the guide price (Ben, 2026-11-12: missed it
+      // after the What to offer box replaced it).
+      !item.untradeable && livePrice && (livePrice.high != null || livePrice.low != null) && h('div', {
+        style:{marginTop:8, padding:'6px 8px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11}
+      },
+        h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4}}, 'Live Price'),
+        h('div', {className:'row', style:{gap:14}},
+          livePrice.high != null && h('div', null,
+            h('span', {style:{color:T.green}}, '● '),
+            h('span', {style:{color:T.textDim}}, 'Buy '),
+            h('span', {style:{color:T.text, fontWeight:600}}, gpFmt(livePrice.high)+'gp'),
+            livePrice.highTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.highTime))
+          ),
+          livePrice.low != null && h('div', null,
+            h('span', {style:{color:'#e08030'}}, '● '),
+            h('span', {style:{color:T.textDim}}, 'Sell '),
+            h('span', {style:{color:T.text, fontWeight:600}}, gpFmt(livePrice.low)+'gp'),
+            livePrice.lowTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.lowTime))
+          ),
+        )
+      ),
+      !item.untradeable && h(TradePriceBox, {item, livePrice, gpFmt})
     ),
     h('div', {className:'detail-body'},
       h('div', {className:'sparkline-wrap', onClick:()=>setChartOpen(true), title:'Click to enlarge'},
