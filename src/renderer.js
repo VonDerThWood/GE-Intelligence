@@ -3415,9 +3415,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   // Drop sources — deliberately NOT auto-fetched like wikiStats above.
   // Ben: this is a click-to-check lookup for unusual items, not something
   // that should fire a wiki request on every item click.
-  const [dropSources, setDropSources] = useState(null); // null = not fetched, {sources:[...]} once loaded
   const [quickAlertPos, setQuickAlertPos] = useState(null); // null = closed, {left,top,...} once open
-  const [dropSourcesLoading, setDropSourcesLoading] = useState(false);
   // "Turns into" — unlike Drop sources above, this IS auto-fetched on open
   // (Ben's ask, 2026-08-02): a much lighter page than a full drop table, and
   // useful often enough (grimy->clean herbs, raw->cooked food, augmenting
@@ -3456,8 +3454,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     if (!item) return;
     setWikiStats(null);
     setStatsLoading(true);
-    setDropSources(null);
-    setDropSourcesLoading(false);
     setProducts(null);
     setProductSort(null);
     if (!item.untradeable) {
@@ -3980,20 +3976,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         !item.untradeable && h('button',{
           className:'ge-btn',
           style:{fontSize:11, padding:'3px 10px'},
-          disabled: dropSourcesLoading,
-          title:'Fetch where this item drops from, straight from the RS Wiki — not saved, just a quick lookup',
-          onClick:()=>{
-            if (dropSourcesLoading) return;
-            setDropSourcesLoading(true);
-            window.genius?.getDropSources(item.name).then(res => {
-              setDropSources(res || {sources:[]});
-              setDropSourcesLoading(false);
-            }).catch(() => { setDropSources({sources:[]}); setDropSourcesLoading(false); });
-          }
-        }, dropSourcesLoading ? '⏳ Loading…' : '🐲 Drop sources'),
-        !item.untradeable && h('button',{
-          className:'ge-btn',
-          style:{fontSize:11, padding:'3px 10px'},
           title:'Items whose prices have historically moved together with this one (beyond the overall market)',
           onClick:()=>{
             setSimilar('loading');
@@ -4015,26 +3997,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             similar.opposite.map(o => h('div', {key:o.id, style:{display:'flex', justifyContent:'space-between', fontSize:11, padding:'2px 0'}},
               h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => { const it = (allItems || []).find(i => i.id === o.id); it && onSelectItem && onSelectItem(it); }}, o.name),
               h('span', {style:{color:T.red}, title:`Correlation ${o.corr.toFixed(2)} over ${o.weeks} weeks`}, Math.round(-o.corr * 100) + '% opposite'))))),
-
-      dropSources && h('div', {style:{marginTop:8}},
-        dropSources.sources.length === 0
-          ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'No monster drop sources listed on the wiki page — probably bought, made, or otherwise not a drop.')
-          : h('table', {style:{width:'100%', borderCollapse:'collapse', fontSize:11}},
-              h('thead', null, h('tr', null,
-                h('th', {style:{textAlign:'left', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px 0', borderBottom:`1px solid ${T.border}`}}, 'Source'),
-                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Qty'),
-                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 0 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Rarity'),
-              )),
-              h('tbody', null, dropSources.sources.map((s,i) => h('tr', {key:i},
-                h('td', {style:{padding:'3px 4px 3px 0', color:T.text}}, s.source),
-                h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.textDim}}, s.quantity || '—'),
-                h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color:T.gold}}, s.rarity || '—'),
-              )))
-            ),
-        dropSources.totalCount > dropSources.sources.length && h('div', {
-          style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:4},
-        }, `+ ${dropSources.totalCount - dropSources.sources.length} more sources — see full list on the wiki`)
-      ),
 
       products && products.products.length > 0 && h('div', {style:{marginTop:12}},
         h('div', {className:'ge-section-head'}, 'Turns Into'),
@@ -16608,7 +16570,7 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
         field('Offer quantity', 'quantity', true), field('Offer price', 'price', true),
         field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', true), field(f.side === 'buy' ? 'Coins spent so far' : 'Coins received so far', 'coins', true)),
       !known && f.name && h('div', {style:{color:'#f0a030', fontSize:12, marginBottom:8}}, 'GEnius doesn\'t know that item name.'),
-      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
+      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+(localStorage.getItem('genius_detail_full_price')==='1'?Math.round(avg).toLocaleString():fmt.gp(Math.round(avg)))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
 
       f.side === 'buy' && (goal
         ? h('div', null,
