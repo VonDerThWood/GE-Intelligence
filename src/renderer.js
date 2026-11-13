@@ -16523,7 +16523,11 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const known = (items || []).find(i => i.name.toLowerCase() === nameLow);
   // The offer these totals most likely belong to: the fullest that isn't past them.
   const offers = goal?.offers || [];
-  const guessOffer = offers.filter(o => o.bought <= filled).sort((a, b) => b.bought - a.bought)[0] || offers[0];
+  // Offers are labelled "<quantity> @ <price>" when the reader adds them, so the
+  // same offer is found again next time; otherwise the fullest not past these totals.
+  const offerLabel = `${num('quantity').toLocaleString()} @ ${num('price').toLocaleString()}`;
+  const guessOffer = offers.find(o => o.label === offerLabel)
+    || offers.filter(o => o.bought <= filled).sort((a, b) => b.bought - a.bought)[0] || offers[0];
   const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
   const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
   const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
@@ -16545,6 +16549,18 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
     const r = await window.genius.updateBuyGoalTotals(body);
     if (!r?.success) { toast(r?.error || 'Could not save', 'error'); return; }
     finish(known.name + ' planner updated');
+  };
+  // A second offer for the same item (another account, or a new bid) goes in
+  // beside the first instead of overwriting it (Ben, 2026-11-13: his main's new
+  // Primal extract offer tried to set the planner from 30,000 bought to 0).
+  const updateLowers = goal && filled < (offers.length ? (chosenOffer?.bought || 0) : (goal.bought || 0));
+  const addOffer = async () => {
+    if (!requireItem(true)) return;
+    const base = offers.length ? offers : [{id:'o' + goal.id, label:'First offer', bought:goal.bought || 0, spent:goal.spent || 0}];
+    const next = [...base, {id:Date.now().toString(), label:offerLabel, bought:filled, spent:coins}];
+    const r = await window.genius.updateBuyGoalTotals({id:goal.id, offers:next});
+    if (!r?.success) { toast(r?.error || 'Could not save', 'error'); return; }
+    finish('Added as another offer to the ' + known.name + ' planner');
   };
   const newGoal = async () => {
     if (!requireItem(true)) return;
@@ -16600,7 +16616,10 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
               h('select', {className:'ge-input', value:chosenOffer?.id, onChange:e=>setOfferId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
                 offers.map(o => h('option', {key:o.id, value:o.id}, (o.label || 'Offer')+' ('+o.bought.toLocaleString()+' bought)')))),
             h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+(offers.length ? (chosenOffer?.bought || 0) : goal.bought).toLocaleString()+' to '+filled.toLocaleString()+' bought.'),
-            h('button', {className:'ge-btn gold', onClick:saveToGoal}, 'Update planner'))
+            updateLowers && h('div', {style:{fontSize:12, color:'#f0a030', marginBottom:8}}, 'Updating would LOWER the bought count, so this is probably a different offer (another account or a new bid). Add it as another offer instead.'),
+            h('div', {style:{display:'flex', gap:6, flexWrap:'wrap'}},
+              h('button', {className: updateLowers ? 'ge-btn' : 'ge-btn gold', onClick:saveToGoal}, 'Update planner'),
+              h('button', {className: updateLowers ? 'ge-btn gold' : 'ge-btn', onClick:addOffer}, 'Add as another offer')))
         : h('div', {style:{display:'flex', gap:6}},
             h('button', {className:'ge-btn gold', onClick:newGoal}, 'New planner goal'),
             h('button', {className:'ge-btn', onClick:newPosition}, 'Add to Portfolio'))),
