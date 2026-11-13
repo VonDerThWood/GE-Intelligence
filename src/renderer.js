@@ -3409,6 +3409,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     if (!item.untradeable) {
       window.genius?.getLiveItemPrice(item.id).then(price => {
         setLivePrice(price || {});
+        if (price) window.dispatchEvent(new CustomEvent('genius-live-price', {detail: {id: item.id, ...price}}));
       }).catch(() => setLivePrice({}));
     }
   }, [item?.id]);
@@ -16750,6 +16751,28 @@ function App() {
   // Items Jagex removed from the GE (run.js removedItems): kept out of
   // `items` so market scans skip them; Watchlist/Portfolio show them labelled.
   const [removedItems, setRemovedItems] = useState([]);
+  // One live price everywhere (Ben, 2026-11-12): when the item panel pulls a
+  // fresh live price, every table showing that item takes it too, instead of
+  // keeping the last fetch's numbers.
+  useEffect(() => {
+    const onLive = e => {
+      const p = e.detail;
+      if (!p || p.id == null || (p.high == null && p.low == null)) return;
+      setItems(prev => {
+        const i = prev.findIndex(x => x.id === p.id);
+        if (i < 0) return prev;
+        const it = prev[i];
+        if (it.liveBuy === p.high && it.liveSell === p.low) return prev;
+        const next = prev.slice();
+        next[i] = {...it,
+          liveBuy: p.high ?? it.liveBuy, liveSell: p.low ?? it.liveSell,
+          liveBuyTime: p.highTime ?? it.liveBuyTime, liveSellTime: p.lowTime ?? it.liveSellTime};
+        return next;
+      });
+    };
+    window.addEventListener('genius-live-price', onLive);
+    return () => window.removeEventListener('genius-live-price', onLive);
+  }, []);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
   const [officialTop100, setOfficialTop100] = useState({byWindow:{}});
