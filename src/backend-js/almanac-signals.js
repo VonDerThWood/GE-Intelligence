@@ -50,7 +50,9 @@ function estimateNextStart(events, today) {
   const starts = events.map(e => toMs(e[1])).slice(-9);
   const gaps = starts.slice(1).map((s, i) => s - starts[i]);
   if (!gaps.length) return null;
-  const gap = median(gaps);
+  // From 2026 on there are 2 DXPs a year, not 4 (Ben, 2026-11-13), so the old
+  // ~3-month median gap would guess the next one far too early.
+  const gap = starts[starts.length - 1] >= toMs('2026-01-01') ? 182 * DAY : median(gaps);
   let next = starts[starts.length - 1] + gap;
   // Data that's behind (a phone missing a DXP) mustn't give a date in the past.
   while (next <= today) next += gap;
