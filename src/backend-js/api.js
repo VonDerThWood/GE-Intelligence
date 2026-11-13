@@ -33,6 +33,7 @@ const storage = require('./storage.js');
 const catalogue = require('./catalogue.js');
 const { createLiveHistory } = require('./live-history.js');
 const { createRecentPrices } = require('./recent-prices.js');
+const { createDropSources } = require('./drop-sources.js');
 const { createSync } = require('./sync.js');
 const { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require('./update-risks.js');
 const { computeSignals, buildDigest, uniqueEvents } = require('./almanac-signals.js');
@@ -301,6 +302,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // all expire on the same fetch.
   const liveHistory = createLiveHistory({ dataDir, platform });
   const recentPrices = createRecentPrices();
+  const dropSources = createDropSources({ storage, path, dataDir });
   const historySummaryFile = path.join(dataDir, 'history_summary_cache.json');
   let historySummary = null;
   const median = arr => { const v = arr.filter(x => x !== null && x !== undefined).sort((a, b) => a - b); if (!v.length) return null; const m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : Math.floor((v[m - 1] + v[m]) / 2); };
@@ -2017,6 +2019,25 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return { enabled: true, includeWatched: true, ...store.get('updateRiskSettings', {}) };
   }
   async function setUpdateRiskSettings(s) { store.set('updateRiskSettings', s); }
+  // New drop sources for items you hold or watch (Ben, 2026-11-13: Blood Knights
+  // started dropping Elder seed x5 and it fell ~90% in four days).
+  async function getDropSourceNotifications() {
+    if (store.get('dropSourceAlerts', true) === false) return [];
+    const portfolio = await readPortfolio();
+    const names = (portfolio.positions || []).filter(p => p.status === 'open' && p.item_name).map(p => p.item_name);
+    const watched = new Set([...store.get('watchlist', []), ...store.get('dxpWatchlist', [])].map(String));
+    if (watched.size) {
+      const latest = await storage.readJSON(path.join(dataDir, 'latest.json'), {});
+      for (const it of latest.items || []) if (watched.has(String(it.id))) names.push(it.name);
+    }
+    if (!names.length) return [];
+    const found = await dropSources.check(names);
+    return found.map(f => ({
+      title: `New drop source: ${f.item}`,
+      body: `${f.source} now drops it (${f.qty && f.qty !== '1' ? 'x' + f.qty + ', ' : ''}${f.rarity || 'rate unknown'}). A new source can sink the price fast: Elder seed fell about 90% in four days after Blood Knights started dropping it.`,
+    }));
+  }
+
   async function getUpdateRiskNotifications() {
     const settings = getUpdateRiskSettings();
     if (!settings.enabled) return [];
@@ -5512,6 +5533,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLiveNormal: (id) => liveHistory.getNormal(id),
+    getDropWatch: (name) => dropSources.get(String(name || '')),
+    getDropSourceNotifications: toInbox('mine', 'drop_sources', getDropSourceNotifications),
     getRecentPrices: (force) => recentPrices.get(!!force),
     getLiveFalling: (ids) => liveHistory.getFalling(Array.isArray(ids) ? ids.slice(0, 5000) : []),
     getLaunches,

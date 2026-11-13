@@ -2941,6 +2941,40 @@ function TradePriceBox({item, livePrice, gpFmt}) {
   );
 }
 
+// Where an item drops, from its RS Wiki page (Ben, 2026-11-13). Sources that
+// appeared in the last 60 days are flagged: a new boss with a stacked drop can
+// sink an item (Blood Knights dropped Elder seed x5, ~90% fall in four days).
+function DropSourcesBox({item}) {
+  const [data, setData] = useState(undefined); // undefined loading, null none
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setData(undefined); setOpen(false);
+    if (!item?.name || !window.genius?.getDropWatch) { setData(null); return; }
+    let dead = false;
+    window.genius.getDropWatch(item.name).then(d => { if (!dead) setData(d || null); }).catch(() => { if (!dead) setData(null); });
+    return () => { dead = true; };
+  }, [item?.name]);
+  if (!data || !data.sources) return null;
+  const list = Object.entries(data.sources).map(([source, s]) => ({source, ...s}));
+  if (!list.length) return null;
+  const recent = s => s.firstSeen && Date.now() - s.firstSeen < 60 * 86400000;
+  const fresh = list.filter(recent);
+  const dateOf = t => new Date(t).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+  return h('div', {style:{marginTop:10, fontSize:11, border:`1px solid ${fresh.length ? 'rgba(224,128,48,0.5)' : T.borderDim}`, borderRadius:4, padding:'6px 8px', background: fresh.length ? 'rgba(224,128,48,0.08)' : 'transparent'}},
+    h('div', {onClick:() => setOpen(v => !v), style:{cursor:'pointer', display:'flex', gap:6, alignItems:'baseline'}},
+      h('span', {style:{color:T.textDim}}, open ? '▾' : '▸'),
+      h('span', {style:{color:T.textDim, textTransform:'uppercase', fontSize:9, letterSpacing:'0.05em'}}, `Where it drops (${list.length})`),
+      fresh.length ? h('span', {style:{color:'#e08030', fontWeight:600}}, `${fresh.length} new source${fresh.length > 1 ? 's' : ''}`) : null),
+    fresh.map(s => h('div', {key:'n' + s.source, style:{marginTop:4, color:T.text}},
+      h('b', {style:{color:'#e08030'}}, 'New: '), `${s.source} (${s.qty && s.qty !== '1' ? 'x' + s.qty + ', ' : ''}${s.rarity || '?'}), first seen ${dateOf(s.firstSeen)}. New sources can sink a price fast.`)),
+    open && h('div', {style:{marginTop:4}},
+      list.map(s => h('div', {key:s.source, style:{display:'flex', gap:8, color: recent(s) ? '#e08030' : T.textDim, padding:'1px 0'}},
+        h('span', {style:{flex:1}}, s.source),
+        h('span', null, s.qty && s.qty !== '1' ? 'x' + s.qty : ''),
+        h('span', {style:{minWidth:80, textAlign:'right'}}, s.rarity || ''))),
+      h('div', {style:{color:T.textDim, fontSize:10, marginTop:4}}, 'From the RS Wiki. GEnius checks items you hold or watch daily and notifies you when a new source appears.')));
+}
+
 // Risk for many items at once (Max via Ben, 2026-11-12: "separate sections for
 // interesting offers and match them with risk"). Same positionRisk as the item
 // panel's ITEM RISK badge, worked out in the background a few items at a time
@@ -3705,6 +3739,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       // Chart analysis sits right under the chart (Ben, 2026-10-09: it was
       // easy to miss lower down, half behind the panel's scroll arrows).
       h(ChartAnalysis, {item}),
+      !item.untradeable && h(DropSourcesBox, {item}),
       h(AskItem, {item}),
       item.untradeable
         ? [

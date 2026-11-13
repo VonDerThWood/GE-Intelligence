@@ -250,6 +250,8 @@ async function runNotificationChecks() {
   for (const r of await a.getDueReminders()) await fireNotification(r.title, r.body);
   for (const g of await a.getBuyGoalNotifications()) await fireNotification(g.title, g.body);
   for (const d of await a.getDxpNewsNotifications()) await fireNotification(d.title, d.body);
+  try { for (const d of await a.getDropSourceNotifications()) await fireNotification(d.title, d.body); }
+  catch (e) { console.error('[GEnius] Drop source check failed:', e.message); }
   // Alerts are always evaluated (fired state + Discord); the Settings
   // checkbox only controls the popup — same as main.js's checkPriceAlerts.
   const triggered = await a.getTriggeredAlerts();
@@ -384,6 +386,7 @@ async function buildGenius() {
     syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
     getItemLiveHistory:     (id, days) => a.getItemLiveHistory(id, days),
     getLiveNormal:          (id) => a.getLiveNormal(id),
+    getDropWatch:           (name) => a.getDropWatch(name),
     getRecentPrices:        (force) => a.getRecentPrices(force),
     getLiveFalling:         (ids) => a.getLiveFalling(ids),
     // Hourly archive is desktop-only (live-hourly.js uses fs/zlib).
