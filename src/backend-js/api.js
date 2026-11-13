@@ -3219,6 +3219,79 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return releases;
   }
 
+  // ─── New-source drops (Ben, 2026-11-13) ───────────────────────────────────
+  // A new boss's drop table isn't known before release, but players fill in
+  // its wiki page within hours. Every refresh, read the drop tables of releases
+  // from the last 60 days (the Launches list) and flag every tradeable item
+  // they drop: a new source usually shifts its price (Blood Knights drop Elder
+  // seed x5 and it fell ~90% in four days). Releases without a drop table
+  // (areas, quests, events) simply add nothing.
+  // data/new_source_drops.json: { releases: { "<date> <name>": { name, date, page, items: { <id>: { name, firstSeen, quantity, rarity, notified } } } } }
+  const newSourceFile = path.join(dataDir, 'new_source_drops.json');
+  const NEW_SOURCE_DAYS = 60;
+  let newSourceCache = null, newSourceRunning = null;
+  async function refreshNewSourceDrops() {
+    const doc = await storage.readJSON(newSourceFile, { releases: {} });
+    const since = localDateStr(new Date(Date.now() - NEW_SOURCE_DAYS * 86400000));
+    const recent = (await getLaunches()).filter(r => r.date >= since && r.date <= localDateStr());
+    const byName = Object.fromEntries(((await getData()).items || []).map(i => [i.name.toLowerCase(), i]));
+    for (const r of recent) {
+      const key = `${r.date} ${r.name}`;
+      const entry = doc.releases[key] || (doc.releases[key] = { name: r.name, date: r.date, page: null, items: {} });
+      try {
+        if (!entry.page) {
+          const res = await fetch(`https://runescape.wiki/api.php?action=opensearch&format=json&limit=1&search=${encodeURIComponent(r.name)}`,
+            { headers: { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' }, signal: AbortSignal.timeout(8000) });
+          entry.page = (await res.json())?.[1]?.[0] || null;
+          if (!entry.page) continue;
+        }
+        // Fresh copy every refresh: the table grows as players report drops.
+        monsterHtmlCache.delete(entry.page);
+        for (const k of [...monsterDropsCache.keys()]) if (k.startsWith(entry.page + '::')) monsterDropsCache.delete(k);
+        const drops = await getMonsterDrops(entry.page);
+        for (const d of drops?.drops || []) {
+          const it = byName[String(d.item || '').toLowerCase()];
+          if (!it || entry.items[it.id]) continue;
+          entry.items[it.id] = { name: it.name, firstSeen: Date.now(), quantity: d.quantity || null, rarity: d.rarity || null };
+        }
+      } catch (e) { console.log(`[new-source] ${r.name}: ${e.message}`); }
+    }
+    for (const k of Object.keys(doc.releases)) if (doc.releases[k].date < since) delete doc.releases[k];
+    await storage.writeJSON(newSourceFile, doc);
+    return doc;
+  }
+  // { <itemId>: { release, date, page, firstSeen, quantity, rarity } } for the UI flags.
+  async function getNewSourceDrops(force = false) {
+    if (!force && newSourceCache && Date.now() - newSourceCache.at < 30 * 60000) return newSourceCache.map;
+    if (!newSourceRunning) newSourceRunning = refreshNewSourceDrops().finally(() => { newSourceRunning = null; });
+    const doc = await newSourceRunning;
+    const map = {};
+    for (const rel of Object.values(doc.releases)) for (const [id, it] of Object.entries(rel.items)) {
+      if (!map[id] || rel.date > map[id].date) map[id] = { release: rel.name, date: rel.date, page: rel.page, firstSeen: it.firstSeen, quantity: it.quantity, rarity: it.rarity };
+    }
+    newSourceCache = { at: Date.now(), map };
+    return map;
+  }
+  // Notify once per item when something you hold or watch shows up in a new
+  // release's drop table.
+  async function getNewSourceNotifications() {
+    if (store.get('dropSourceAlerts', true) === false) return [];
+    await getNewSourceDrops(true);
+    const doc = await storage.readJSON(newSourceFile, { releases: {} });
+    const portfolio = await readPortfolio();
+    const held = new Set((portfolio.positions || []).filter(p => p.status === 'open' && p.item_name).map(p => p.item_name.toLowerCase()));
+    const watched = new Set([...store.get('watchlist', []), ...store.get('dxpWatchlist', [])].map(String));
+    const out = [];
+    for (const rel of Object.values(doc.releases)) for (const [id, it] of Object.entries(rel.items)) {
+      if (it.notified || !(held.has(it.name.toLowerCase()) || watched.has(String(id)))) continue;
+      it.notified = Date.now();
+      out.push({ title: `${it.name} drops from ${rel.name}`,
+        body: `New since ${rel.date}${it.quantity ? `: ${it.quantity}` : ''}${it.rarity ? ` (${it.rarity})` : ''}. ${held.has(it.name.toLowerCase()) ? 'You hold it. ' : ''}A new source often shifts the price; Elder seed fell about 90% in four days after Blood Knights.` });
+    }
+    if (out.length) await storage.writeJSON(newSourceFile, doc);
+    return out;
+  }
+
   // Ben's rule across every event: of the new items with a 60-day price,
   // how many ended below their first price, and the median change.
   async function getNewItemsSummary() {
@@ -5533,6 +5606,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
     getLiveNormal: (id) => liveHistory.getNormal(id),
+    getNewSourceDrops: (force) => getNewSourceDrops(!!force),
+    getNewSourceNotifications: toInbox('mine', 'new_source', getNewSourceNotifications),
     getDropWatch: (name) => dropSources.get(String(name || '')),
     getDropSourceNotifications: toInbox('mine', 'drop_sources', getDropSourceNotifications),
     getRecentPrices: (force) => recentPrices.get(!!force),

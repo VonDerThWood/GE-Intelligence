@@ -2921,8 +2921,15 @@ function TradePriceBox({item, livePrice, gpFmt}) {
         ? [h('b', {key:'a', style:{color:T.green}}, `${Math.round(-vsNormal * 100)}% below its normal price. `),
            `Normally sells around ${f(Math.round(normal.sell))}gp (90-day median).`]
         : `About its normal price (90-day median sell ${f(Math.round(normal.sell))}gp).`,
-    normal.yearLow ? ` Lowest since ${monthName(normal.since)}: ${f(Math.round(normal.yearLow))}gp (${monthName(normal.yearLowDate)}).` : null);
-  return h('div', {style:box}, head, normalLine,
+    normal.yearLow ? ` Lowest since ${monthName(normal.since)}: ${f(Math.round(normal.yearLow))}gp (${monthName(normal.yearLowDate)}).` : null,
+    item.newSource && Date.now() - Date.parse(item.newSource.date) < 90 * 86400000
+      ? ` That normal includes prices from before ${item.newSource.release}, so it may not apply any more.` : null);
+  const ns = item.newSource;
+  const newSourceLine = ns && h('div', {style:{marginBottom:5, padding:'4px 6px', borderRadius:3, fontSize:10.5, lineHeight:1.45,
+      background:'rgba(224,128,48,0.12)', border:'1px solid rgba(224,128,48,0.45)', color:T.text}},
+    h('b', {style:{color:'#e08030'}}, `⚠ New drop from ${ns.release}`),
+    ` (released ${ns.date}${ns.quantity ? '; ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}). A new source often shifts the price, usually down as supply grows. Elder seed fell about 90% in four days after Blood Knights started dropping it.`);
+  return h('div', {style:box}, head, newSourceLine, normalLine,
     h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ', or pay ', g(hi), ' to get it instantly.'),
     h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ', or take ', g(lo), ' to sell instantly.'),
     h('div', {style:{marginTop:5, paddingTop:5, borderTop:`1px solid ${T.borderDim}`}},
@@ -3064,6 +3071,12 @@ function useRiskLevels(items) {
   return {levels, falling, pending};
 }
 const _liveFalling = new Set(), _liveFallingChecked = new Map(); // id -> last checked
+// "New drop" (Ben, 2026-11-13): a release from the last 60 days drops this item.
+function NewSourceTag({ns}) {
+  if (!ns) return null;
+  return h('span', {title:`Drops from ${ns.release} (released ${ns.date})${ns.quantity ? ', ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}. A new source often shifts the price: Elder seed fell about 90% in four days after Blood Knights started dropping it.`,
+    style:{fontSize:9, padding:'1px 5px', borderRadius:3, border:'1px solid rgba(224,128,48,0.6)', color:'#e08030', whiteSpace:'nowrap', letterSpacing:'0.03em'}}, '⚠ New drop');
+}
 function FallingTag() {
   return h('span', {title:'Made a new 6-month low in the last 14 days, so it is still falling. GEnius research found that buying a drop only paid off once the price had stopped falling.',
     style:{fontSize:10, color:'#e08030', border:'1px dashed #e08030', borderRadius:3, padding:'0 5px', whiteSpace:'nowrap', marginLeft:4}}, '↓ Still falling');
@@ -3110,6 +3123,7 @@ function GoodRightNow({items, onSelect, onNavigate}) {
       h('div', {style:{flex:'1 1 160px', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
       risk.levels.has(it.id) && h(RiskTag, {level: risk.levels.get(it.id)}),
       risk.falling.has(it.id) && h(FallingTag),
+      it.newSource && h(NewSourceTag, {ns: it.newSource}),
       h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}, title:avgTitle(it, 'sell')}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}, title:avgTitle(it, 'buy')}, g(it.liveBuy))),
       h('div', {style:{minWidth:150, textAlign:'right', whiteSpace:'nowrap'}},
         h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
@@ -14294,7 +14308,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
               },
                 h('td', null, it.name),
                 h('td', null, it.riskLevel == null && risk.pending ? h('span', {style:{fontSize:10, color:T.textDim}}, '…') : h(RiskTag, {level: it.riskLevel}),
-                  risk.falling.has(it.id) && h('div', {style:{marginTop:3}}, h(FallingTag))),
+                  risk.falling.has(it.id) && h('div', {style:{marginTop:3}}, h(FallingTag)),
+                  it.newSource && h('div', {style:{marginTop:3}}, h(NewSourceTag, {ns: it.newSource}))),
                 h('td', {style:{color:'#e08030'}, title:avgTitle(it, 'sell')}, fmt.gp(it.liveSell)+'gp', h(LatestDiff, {avg:it.liveSell, latest:it.liveLatest?.sell})),
                 h('td', {style:{color:T.green}, title:avgTitle(it, 'buy')}, fmt.gp(it.liveBuy)+'gp', h(LatestDiff, {avg:it.liveBuy, latest:it.liveLatest?.buy})),
                 h('td', null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
@@ -16866,10 +16881,25 @@ function App() {
     window.addEventListener('genius-recent-refresh', onFetch);
     return () => { dead = true; clearInterval(t); window.removeEventListener('genius-recent-refresh', onFetch); };
   }, []);
+  // Items a release from the last 60 days drops (Ben, 2026-11-13): flagged
+  // everywhere, since a new source usually shifts the price. Refreshed with
+  // the live prices; the backend re-reads those drop tables each time.
+  const [newSource, setNewSource] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    const load = () => window.genius?.getNewSourceDrops?.().then(m => { if (!dead && m) setNewSource(m); }).catch(() => {});
+    load();
+    const t = setInterval(load, 15 * 60000);
+    window.addEventListener('genius-recent-refresh', load);
+    return () => { dead = true; clearInterval(t); window.removeEventListener('genius-recent-refresh', load); };
+  }, []);
   const items = useMemo(() => {
     const rp = recentPrices?.prices;
-    if (!rp) return rawItems;
-    return rawItems.map(it => {
+    const ns = newSource || {};
+    if (!rp && !newSource) return rawItems;
+    return rawItems.map(it0 => {
+      const it = ns[it0.id] ? { ...it0, newSource: ns[it0.id] } : it0;
+      if (!rp) return it;
       if (it.untradeable) return it;
       const r = rp[it.id];
       const latest = r ? { buy: r.latestBuy ?? null, buyTime: r.latestBuyTime ?? null, sell: r.latestSell ?? null, sellTime: r.latestSellTime ?? null } : null;
@@ -16880,7 +16910,7 @@ function App() {
           buyLo: r.buyLo, buyHi: r.buyHi, sellLo: r.sellLo, sellHi: r.sellHi },
         liveLatest: latest };
     });
-  }, [rawItems, recentPrices]);
+  }, [rawItems, recentPrices, newSource]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
   const [officialTop100, setOfficialTop100] = useState({byWindow:{}});

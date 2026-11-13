@@ -411,6 +411,12 @@ async function checkAlmanacDigest() {
   }
 }
 
+async function checkNewSourceDrops() {
+  for (const n of await api.getNewSourceNotifications()) {
+    new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
+  }
+}
+
 async function checkDropSources() {
   for (const n of await api.getDropSourceNotifications()) {
     new Notification({ title: n.title, body: n.body, icon: path.join(resourcesPath, 'assets', 'icon.ico') }).show();
@@ -425,7 +431,7 @@ async function checkUpdateRisks() {
 
 async function runAllChecks() {
   if (isTestMode) return; // no notifications or Discord from a test instance
-  for (const check of [checkUpdateRisks, checkDxpNotifications, checkAlmanacDigest, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews, checkDropSources]) {
+  for (const check of [checkUpdateRisks, checkDxpNotifications, checkAlmanacDigest, checkWatchlistDigest, checkPortfolioDigest, checkReminders, checkPriceAlerts, checkBuyGoals, checkDxpNews, checkDropSources, checkNewSourceDrops]) {
     try { await check(); } catch (e) { console.error(`[Checks] ${check.name} failed:`, e.message); }
   }
 }
@@ -800,6 +806,7 @@ ipcMain.handle('get-live-hourly-status', async () => liveHourly ? liveHourly.sta
 ipcMain.handle('sync-live-hourly', async () => liveHourly && !isTestMode ? liveHourly.sync() : { saved: 0 });
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
 ipcMain.handle('get-live-normal', async (_, id) => api.getLiveNormal(id));
+ipcMain.handle('get-new-source-drops', async (_, force) => api.getNewSourceDrops(force));
 ipcMain.handle('get-drop-watch', async (_, name) => api.getDropWatch(name));
 ipcMain.handle('get-recent-prices', async (_, force) => api.getRecentPrices(force));
 ipcMain.handle('get-live-falling', async (_, ids) => api.getLiveFalling(ids));
