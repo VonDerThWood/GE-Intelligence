@@ -2881,6 +2881,16 @@ function TradePriceBox({item, livePrice, gpFmt}) {
   // agree; the Live Price line above keeps the single latest trade.
   const hi = item.liveBuy, lo = item.liveSell;
   const stats = useMemo(() => computeFlipStats(item), [item]);
+  // Normal price check (Ben, 2026-11-13): a DXP spike nearly set his dip bids
+  // ~60% above Summoning focus's normal price.
+  const [normal, setNormal] = useState(null);
+  useEffect(() => {
+    setNormal(null);
+    if (item.untradeable || !window.genius?.getLiveNormal) return;
+    let dead = false;
+    window.genius.getLiveNormal(item.id).then(n => { if (!dead) setNormal(n || null); }).catch(() => {});
+    return () => { dead = true; };
+  }, [item.id]);
   const box = {marginTop:8, padding:'8px 10px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11, lineHeight:1.55};
   const av = item.liveAvg;
   const head = h('div', null,
@@ -2896,7 +2906,23 @@ function TradePriceBox({item, livePrice, gpFmt}) {
   }
   const g = n => h('span', {style:{color:T.textBright, fontWeight:600}}, f(Math.round(n)) + 'gp');
   const net = applyTax(hi), margin = net - lo;
-  return h('div', {style:box}, head,
+  // How today compares with the item's normal (90-day median) instant-sell.
+  const vsNormal = normal && normal.sell ? (lo - normal.sell) / normal.sell : null;
+  const monthName = d => d ? new Date(d + 'T12:00:00Z').toLocaleString('en', {month:'short', day:'numeric'}) : '';
+  const normalLine = vsNormal == null ? null : h('div', {style:{
+      marginBottom:5, padding:'4px 6px', borderRadius:3, fontSize:10.5, lineHeight:1.45,
+      background: vsNormal >= 0.15 ? 'rgba(224,128,48,0.12)' : 'transparent',
+      border: vsNormal >= 0.15 ? '1px solid rgba(224,128,48,0.45)' : 'none',
+      color: vsNormal >= 0.15 ? T.text : T.textDim}},
+    vsNormal >= 0.15
+      ? [h('b', {key:'a', style:{color:'#e08030'}}, `${Math.round(vsNormal * 100)}% above its normal price. `),
+         `Normally sells around ${f(Math.round(normal.sell))}gp (90-day median). Spikes usually fall back, so don't set dip bids from today's price.`]
+      : vsNormal <= -0.15
+        ? [h('b', {key:'a', style:{color:T.green}}, `${Math.round(-vsNormal * 100)}% below its normal price. `),
+           `Normally sells around ${f(Math.round(normal.sell))}gp (90-day median).`]
+        : `About its normal price (90-day median sell ${f(Math.round(normal.sell))}gp).`,
+    normal.yearLow ? ` Lowest since ${monthName(normal.since)}: ${f(Math.round(normal.yearLow))}gp (${monthName(normal.yearLowDate)}).` : null);
+  return h('div', {style:box}, head, normalLine,
     h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ', or pay ', g(hi), ' to get it instantly.'),
     h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ', or take ', g(lo), ' to sell instantly.'),
     h('div', {style:{marginTop:5, paddingTop:5, borderTop:`1px solid ${T.borderDim}`}},

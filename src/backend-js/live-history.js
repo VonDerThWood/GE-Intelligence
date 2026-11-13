@@ -144,7 +144,33 @@ function createLiveHistory({ dataDir, platform = 'desktop' }) {
     return Object.keys(low).filter(id => low[id].n >= 30 && low[id].date >= recentCut);
   }
 
-  return { sync, getItem, getFalling };
+  // An item's NORMAL price (Ben, 2026-11-13: a DXP spike nearly set his bids
+  // ~60% above normal): median daily instant-buy and instant-sell over the last
+  // 90 days, plus the lowest daily instant-sell in the last year.
+  async function getNormal(id, days = 90) {
+    id = String(id);
+    const cutoff = dayStr(Date.now() - days * DAY_MS), yearCut = dayStr(Date.now() - 365 * DAY_MS);
+    const months = (await storage.listJSONFiles(dir)).filter(f => /^\d{4}-\d{2}\.json$/.test(f)).map(f => f.slice(0, 7)).filter(m => m >= yearCut.slice(0, 7)).sort();
+    const buys = [], sells = [];
+    let low = null, lowDate = null, since = null;
+    for (const m of months) {
+      const doc = await storage.readJSON(monthFile(m), { days: {} });
+      for (const date of Object.keys(doc.days)) {
+        const r = doc.days[date][id];
+        if (!r || date < yearCut) continue;
+        if (!since || date < since) since = date;
+        if (r[2] > 0 && (low == null || r[2] < low)) { low = r[2]; lowDate = date; }
+        if (date < cutoff) continue;
+        if (r[0] > 0) buys.push(r[0]);
+        if (r[2] > 0) sells.push(r[2]);
+      }
+    }
+    const med = a => { if (!a.length) return null; const s = a.sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; };
+    if (sells.length < 20) return null;
+    return { buy: med(buys), sell: med(sells), days: sells.length, yearLow: low, yearLowDate: lowDate, since };
+  }
+
+  return { sync, getItem, getFalling, getNormal };
 }
 
 module.exports = { createLiveHistory };

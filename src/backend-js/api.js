@@ -5511,6 +5511,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications: toInbox('upcoming', 'update_risk', getUpdateRiskNotifications), getUpdateRiskSettings, setUpdateRiskSettings,
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
+    getLiveNormal: (id) => liveHistory.getNormal(id),
     getRecentPrices: (force) => recentPrices.get(!!force),
     getLiveFalling: (ids) => liveHistory.getFalling(Array.isArray(ids) ? ids.slice(0, 5000) : []),
     getLaunches,
