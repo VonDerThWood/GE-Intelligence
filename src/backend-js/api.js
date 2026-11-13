@@ -32,6 +32,7 @@ const path = require('path');
 const storage = require('./storage.js');
 const catalogue = require('./catalogue.js');
 const { createLiveHistory } = require('./live-history.js');
+const { createRecentPrices } = require('./recent-prices.js');
 const { createSync } = require('./sync.js');
 const { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require('./update-risks.js');
 const { computeSignals, buildDigest, uniqueEvents } = require('./almanac-signals.js');
@@ -299,6 +300,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // slides, so entries also expire after 7-14 days, staggered so they don't
   // all expire on the same fetch.
   const liveHistory = createLiveHistory({ dataDir, platform });
+  const recentPrices = createRecentPrices();
   const historySummaryFile = path.join(dataDir, 'history_summary_cache.json');
   let historySummary = null;
   const median = arr => { const v = arr.filter(x => x !== null && x !== undefined).sort((a, b) => a - b); if (!v.length) return null; const m = Math.floor(v.length / 2); return v.length % 2 ? v[m] : Math.floor((v[m - 1] + v[m]) / 2); };
@@ -5509,6 +5511,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getUpdateRisks, dismissUpdateRisk, getUpdateRiskNotifications: toInbox('upcoming', 'update_risk', getUpdateRiskNotifications), getUpdateRiskSettings, setUpdateRiskSettings,
     syncLiveHistory: () => liveHistory.sync(),
     getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
+    getRecentPrices: (force) => recentPrices.get(!!force),
     getLiveFalling: (ids) => liveHistory.getFalling(Array.isArray(ids) ? ids.slice(0, 5000) : []),
     getLaunches,
     // monster lookup

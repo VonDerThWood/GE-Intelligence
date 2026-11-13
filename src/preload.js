@@ -33,6 +33,7 @@ contextBridge.exposeInMainWorld('genius', {
   syncGetConflicts: () => ipcRenderer.invoke('sync-get-conflicts'),
   syncClearConflicts: () => ipcRenderer.invoke('sync-clear-conflicts'),
   getItemLiveHistory: (id, days) => ipcRenderer.invoke('get-item-live-history', id, days),
+  getRecentPrices: (force) => ipcRenderer.invoke('get-recent-prices', force),
   getLiveFalling: (ids) => ipcRenderer.invoke('get-live-falling', ids),
   getItemLiveHourly: (id, days) => ipcRenderer.invoke('get-item-live-hourly', id, days),
   getItemDailyRange: (id, days) => ipcRenderer.invoke('get-item-daily-range', id, days),

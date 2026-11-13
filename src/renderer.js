@@ -2877,12 +2877,17 @@ function BigMacLine({price, bondGP, isLive}) {
 function TradePriceBox({item, livePrice, gpFmt}) {
   // Follows the panel's Rounded/Exact price toggle (Ben, 2026-11-12).
   const f = gpFmt || fmt.gp;
-  // Fresh per-item fetch when we have it, else the last fetch's live prices.
-  const hi = livePrice?.high ?? item.liveBuy, lo = livePrice?.low ?? item.liveSell;
-  const hiT = livePrice?.highTime ?? item.liveBuyTime, loT = livePrice?.lowTime ?? item.liveSellTime;
-  const stats = useMemo(() => computeFlipStats({...item, liveBuy:hi, liveSell:lo, liveBuyTime:hiT, liveSellTime:loT}), [item, hi, lo, hiT, loT]);
+  // Same recent-trade averages Flips uses (Ben, 2026-11-12), so the two always
+  // agree; the Live Price line above keeps the single latest trade.
+  const hi = item.liveBuy, lo = item.liveSell;
+  const stats = useMemo(() => computeFlipStats(item), [item]);
   const box = {marginTop:8, padding:'8px 10px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11, lineHeight:1.55};
-  const head = h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em', marginBottom:4}}, 'What to offer (live prices)');
+  const av = item.liveAvg;
+  const head = h('div', null,
+    h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em'}}, av ? 'What to offer (average of recent trades)' : 'What to offer (live prices)'),
+    av && h('div', {style:{color:T.textDim, fontSize:10, marginBottom:4}},
+      `Average of the last ${av.buyUnits.toLocaleString()} bought and ${av.sellUnits.toLocaleString()} sold (${timeAgo(av.from).replace(/ ago$/, '')} of trading).`),
+    !av && h('div', {style:{marginBottom:4}}));
   if (hi == null || lo == null) {
     return h('div', {style:box}, head,
       h('div', {style:{color:T.textDim}}, livePrice === null && item.liveBuy == null
@@ -2890,11 +2895,10 @@ function TradePriceBox({item, livePrice, gpFmt}) {
         : `No recent live trades for this item. The GE guide price (${f(item.high || item.low || 0)}gp) is the only guide, and it can be well off.`));
   }
   const g = n => h('span', {style:{color:T.textBright, fontWeight:600}}, f(Math.round(n)) + 'gp');
-  const ago = t => t ? h('span', {style:{color:T.textDim, fontSize:10}}, ' (last trade ' + timeAgo(t) + ')') : null;
   const net = applyTax(hi), margin = net - lo;
   return h('div', {style:box}, head,
-    h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ago(loT), ', or pay ', g(hi), ' to get it instantly.'),
-    h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ago(hiT), ', or take ', g(lo), ' to sell instantly.'),
+    h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ', or pay ', g(hi), ' to get it instantly.'),
+    h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ', or take ', g(lo), ' to sell instantly.'),
     h('div', {style:{marginTop:5, paddingTop:5, borderTop:`1px solid ${T.borderDim}`}},
       stats.qualifies
         ? [h('span', {key:'a', style:{color:T.green, fontWeight:'bold'}}, 'Worth flipping: '),
@@ -3035,7 +3039,7 @@ function GoodRightNow({items, onSelect, onNavigate}) {
       h('span', {style:{fontSize:11, color:T.textDim}}, open ? '▾' : '▸'),
       h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'Good potential flips right now'),
       open
-        ? h('div', {style:{fontSize:11, color:T.textDim}}, 'Flips that pay after the 2% tax at live prices. Buy with an offer at the first price, sell at the second.')
+        ? h('div', {style:{fontSize:11, color:T.textDim}}, 'Flips that pay after the 2% tax, using averages of recent trades on each side (at least 5, up to 6 hours back). Buy with an offer at the first price, sell at the second.')
         : h('div', {style:{fontSize:11, color:T.textDim}}, `${count.toLocaleString()} flips right now. Top: ${top[0].it.name}, +${g(top[0].s.margin)} each.`),
     ),
     open && top.map(({it, s}) => h('div', {
@@ -3046,7 +3050,7 @@ function GoodRightNow({items, onSelect, onNavigate}) {
       h('div', {style:{flex:'1 1 160px', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
       risk.levels.has(it.id) && h(RiskTag, {level: risk.levels.get(it.id)}),
       risk.falling.has(it.id) && h(FallingTag),
-      h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}}, g(it.liveBuy))),
+      h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}, title:avgTitle(it, 'sell')}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}, title:avgTitle(it, 'buy')}, g(it.liveBuy))),
       h('div', {style:{minWidth:150, textAlign:'right', whiteSpace:'nowrap'}},
         h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
         h('span', {style:{color:T.textDim, fontSize:11}}, ' · +' + fmt.gp(Math.round(s.realisticProfit)) + ' per buy limit')),
@@ -3409,7 +3413,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     if (!item.untradeable) {
       window.genius?.getLiveItemPrice(item.id).then(price => {
         setLivePrice(price || {});
-        if (price) window.dispatchEvent(new CustomEvent('genius-live-price', {detail: {id: item.id, ...price}}));
       }).catch(() => setLivePrice({}));
     }
   }, [item?.id]);
@@ -14004,6 +14007,11 @@ function computeFlipStats(it) {
   if (it.untradeable || it.liveBuy == null || it.liveSell == null) {
     return { qualifies: false, disqualifyReason: 'No live buy/sell data available for this item.' };
   }
+  // Recent-trade averages loaded but this item had under 5 traded on a side
+  // in the last ~6 hours (Ben, 2026-11-12: at least 5 per side).
+  if (it.liveAvg === null) {
+    return { qualifies: false, disqualifyReason: 'Fewer than 5 bought or sold in the last 6 hours: too little trading to trust a price.' };
+  }
   const margin = applyTax(it.liveBuy) - it.liveSell;
   const roiPct = it.liveSell > 0 ? (margin / it.liveSell) * 100 : 0;
   const limit = it.limit || 0;
@@ -14065,6 +14073,23 @@ const FLIP_PROFIT_FILTERS = [
   {label:'5M+',    value:5000000},
   {label:'10M+',   value:10000000},
 ];
+// Flips prices are averages of recent trades (Ben, 2026-11-12). When the very
+// latest trade on that side is 3%+ away from the average, say so: the price is
+// moving right now.
+function avgTitle(it, side) {
+  const a = it.liveAvg;
+  if (!a) return undefined;
+  return side === 'sell'
+    ? 'Average of the last ' + a.sellUnits.toLocaleString() + ' sold instantly, over ' + (timeAgo(a.from) || '').replace(/ ago$/, '') + '.'
+    : 'Average of the last ' + a.buyUnits.toLocaleString() + ' bought instantly, over ' + (timeAgo(a.from) || '').replace(/ ago$/, '') + '.';
+}
+function LatestDiff({avg, latest}) {
+  if (!avg || !latest) return null;
+  const d = (latest - avg) / avg;
+  if (Math.abs(d) < 0.03) return null;
+  return h('div', {style:{fontSize:10, color:T.textDim, marginTop:2}, title:'The single most recent trade on this side, vs the average shown above.'},
+    'Latest: ' + fmt.gp(latest) + (d > 0 ? ' ↑' : ' ↓'));
+}
 function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, description}) {
   const [pillTab, setPillTab] = useState('flips'); // 'flips' (all) | 'r0' | 'r1' | 'r2' (risk level) | 'flagged'
   const [sort, setSort] = useState({key:'realisticProfit', dir:-1});
@@ -14157,6 +14182,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
       pillTab !== 'flagged' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `${flips.length.toLocaleString()} items with a live buy/sell spread worth flipping (${sorted.length.toLocaleString()} shown at the current profit filter). Margin = instabuy minus 2% GE tax, minus instasell — the real spread available right now, not just today's price change. Excludes low-volume items (near-zero-volume items let a single fluke print swing the numbers wildly), sell prices dumped too far under the item's GE price, prices that are stale relative to how often this specific item normally trades (6-48 hours depending on its typical volume — a single old instant-buy print nobody's matched since, not something you could actually get filled at now), one side badly overpaid relative to the other, a huge volume spike on an item that barely trades at all normally (a wash-trade signature), and — for items where alching is basically the whole economic purpose — buy prices well above what alching that item is actually worth. A genuine high-volume demand spike is allowed through even far above GE price.`
       ),
+      pillTab !== 'flagged' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}},
+        'Buy and Sell are averages of recent trades on each side: at least 5 bought and 5 sold, going back up to 6 hours. Hover a price to see how many. "Latest" shows when the newest trade is 3% or more away from the average.'),
       pillTab !== 'flagged' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
         h('span', {style:{fontSize:10, color:T.textDim, marginRight:2}}, 'Min Profit (buy limit):'),
         FLIP_PROFIT_FILTERS.map(opt => h('button', {
@@ -14195,8 +14222,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('td', null, it.name),
                 h('td', null, it.riskLevel == null && risk.pending ? h('span', {style:{fontSize:10, color:T.textDim}}, '…') : h(RiskTag, {level: it.riskLevel}),
                   risk.falling.has(it.id) && h('div', {style:{marginTop:3}}, h(FallingTag))),
-                h('td', {style:{color:'#e08030'}}, fmt.gp(it.liveSell)+'gp'),
-                h('td', {style:{color:T.green}}, fmt.gp(it.liveBuy)+'gp'),
+                h('td', {style:{color:'#e08030'}, title:avgTitle(it, 'sell')}, fmt.gp(it.liveSell)+'gp', h(LatestDiff, {avg:it.liveSell, latest:it.liveLatest?.sell})),
+                h('td', {style:{color:T.green}, title:avgTitle(it, 'buy')}, fmt.gp(it.liveBuy)+'gp', h(LatestDiff, {avg:it.liveBuy, latest:it.liveLatest?.buy})),
                 h('td', null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
                 h('td', {style:{color:T.gold}}, fmt.gp(it.margin)+'gp'),
                 h('td', {style:{color: it.roiPct>=5 ? T.green : T.textDim}}, it.roiPct.toFixed(2)+'%'),
@@ -16747,32 +16774,39 @@ function App() {
   // only applies under ~700px; on desktop .sidebar ignores this entirely
   // and stays permanently visible regardless of this state).
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [items, setItems] = useState([]);
+  const [rawItems, setItems] = useState([]);
   // Items Jagex removed from the GE (run.js removedItems): kept out of
   // `items` so market scans skip them; Watchlist/Portfolio show them labelled.
   const [removedItems, setRemovedItems] = useState([]);
-  // One live price everywhere (Ben, 2026-11-12): when the item panel pulls a
-  // fresh live price, every table showing that item takes it too, instead of
-  // keeping the last fetch's numbers.
+  // One set of live prices everywhere (Ben, 2026-11-12): every item's buy and
+  // sell are averages of recent trading on each side (recent-prices.js),
+  // refreshed for ALL items together every 5 minutes, so the panel, Flips and
+  // the Dashboard always agree and nothing changes just because you clicked.
+  // Items with fewer than 5 traded on a side get liveAvg null (not a flip).
+  const [recentPrices, setRecentPrices] = useState(null);
   useEffect(() => {
-    const onLive = e => {
-      const p = e.detail;
-      if (!p || p.id == null || (p.high == null && p.low == null)) return;
-      setItems(prev => {
-        const i = prev.findIndex(x => x.id === p.id);
-        if (i < 0) return prev;
-        const it = prev[i];
-        if (it.liveBuy === p.high && it.liveSell === p.low) return prev;
-        const next = prev.slice();
-        next[i] = {...it,
-          liveBuy: p.high ?? it.liveBuy, liveSell: p.low ?? it.liveSell,
-          liveBuyTime: p.highTime ?? it.liveBuyTime, liveSellTime: p.lowTime ?? it.liveSellTime};
-        return next;
-      });
-    };
-    window.addEventListener('genius-live-price', onLive);
-    return () => window.removeEventListener('genius-live-price', onLive);
+    let dead = false;
+    const load = force => window.genius?.getRecentPrices?.(force).then(r => { if (!dead && r && r.at) setRecentPrices(r); }).catch(() => {});
+    load(false);
+    const t = setInterval(() => load(false), 5 * 60000);
+    const onFetch = () => load(true);
+    window.addEventListener('genius-recent-refresh', onFetch);
+    return () => { dead = true; clearInterval(t); window.removeEventListener('genius-recent-refresh', onFetch); };
   }, []);
+  const items = useMemo(() => {
+    const rp = recentPrices?.prices;
+    if (!rp) return rawItems;
+    return rawItems.map(it => {
+      if (it.untradeable) return it;
+      const r = rp[it.id];
+      const latest = r ? { buy: r.latestBuy ?? null, buyTime: r.latestBuyTime ?? null, sell: r.latestSell ?? null, sellTime: r.latestSellTime ?? null } : null;
+      if (!r || r.buy == null || r.sell == null) return { ...it, liveAvg: null, liveLatest: latest };
+      return { ...it,
+        liveBuy: r.buy, liveSell: r.sell, liveBuyTime: r.buyTime, liveSellTime: r.sellTime,
+        liveAvg: { buyUnits: r.buyUnits, sellUnits: r.sellUnits, from: r.from, at: recentPrices.at },
+        liveLatest: latest };
+    });
+  }, [rawItems, recentPrices]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
   const [officialTop100, setOfficialTop100] = useState({byWindow:{}});
@@ -17009,6 +17043,7 @@ function App() {
       window.genius.getData().then(data => {
         console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
         if (data.items)   setItems(data.items);
+        window.dispatchEvent(new Event('genius-recent-refresh'));
         setRemovedItems(data.removedItems || []);
         if (data.news)    setNews(data.news);
         if (data.indexes) setIndexes(data.indexes);
@@ -17446,7 +17481,7 @@ function App() {
             style:{width:5, cursor:'col-resize', flexShrink:0, background:'transparent'},
             title:'Drag to resize',
           }),
-          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect,
+          h(DetailPanel,{item:(selected && items.find(x => x.id === selected.id)) || selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect,
             onSaveAlert:upsertAlert, onSaveReminder:upsertReminder, toast}),
         ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)}),

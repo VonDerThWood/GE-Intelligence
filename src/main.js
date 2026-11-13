@@ -793,6 +793,7 @@ ipcMain.handle('get-item-daily-range', async (_, itemId, days) => liveHourly ? l
 ipcMain.handle('get-live-hourly-status', async () => liveHourly ? liveHourly.status() : null);
 ipcMain.handle('sync-live-hourly', async () => liveHourly && !isTestMode ? liveHourly.sync() : { saved: 0 });
 ipcMain.handle('get-item-live-history', async (_, itemId, days) => api.getItemLiveHistory(itemId, days));
+ipcMain.handle('get-recent-prices', async (_, force) => api.getRecentPrices(force));
 ipcMain.handle('get-live-falling', async (_, ids) => api.getLiveFalling(ids));
 ipcMain.handle('get-item-live-timeseries', async (_, itemId, lookback) => api.getItemLiveTimeseries(itemId, lookback));
 ipcMain.handle('get-launches', async () => api.getLaunches());
