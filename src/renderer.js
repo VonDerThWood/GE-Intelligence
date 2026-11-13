@@ -16533,7 +16533,9 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const alreadySold = geSoldLog()[logKey] || 0;
   const newSold = Math.max(0, filled - alreadySold);
   const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
-  const requireItem = () => { if (!known) { toast('Pick an item name GEnius knows', 'error'); return false; } if (!(filled > 0)) { toast('Nothing filled yet', 'error'); return false; } return true; };
+  // allowEmpty: a planner goal can start at 0 bought (Ben, 2026-11-13: capture a
+  // big bid right after placing it); a Portfolio position can't.
+  const requireItem = (allowEmpty = false) => { if (!known) { toast('Pick an item name GEnius knows', 'error'); return false; } if (!allowEmpty && !(filled > 0)) { toast('Nothing filled yet', 'error'); return false; } return true; };
 
   const saveToGoal = async () => {
     if (!requireItem()) return;
@@ -16545,10 +16547,10 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
     finish(known.name + ' planner updated');
   };
   const newGoal = async () => {
-    if (!requireItem()) return;
+    if (!requireItem(true)) return;
     const id = Date.now().toString();
     await window.genius.saveBuyGoal({id, item_name:known.name, item_id:known.id, target:num('quantity') || filled, max_price:num('price')});
-    await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
+    if (filled > 0) await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
     finish(known.name + ' added to the Buy Planner');
   };
   const newPosition = async () => {
