@@ -118,7 +118,33 @@ function createLiveHistory({ dataDir, platform = 'desktop' }) {
     return out;
   }
 
-  return { sync, getItem };
+  // "Still falling" at live prices, for many items in one pass (Ben, 2026-11-12):
+  // ids whose lowest daily average instant-sell over the last `days` days came
+  // within the last `recentDays`. Needs 30+ days of data for an item. Reads each
+  // month file once, however many ids.
+  async function getFalling(ids, days = 180, recentDays = 14) {
+    const want = new Set(ids.map(String));
+    const cutoff = dayStr(Date.now() - days * DAY_MS), recentCut = dayStr(Date.now() - recentDays * DAY_MS);
+    const months = (await storage.listJSONFiles(dir)).filter(f => /^\d{4}-\d{2}\.json$/.test(f)).map(f => f.slice(0, 7)).filter(m => m >= cutoff.slice(0, 7)).sort();
+    const low = {}; // id -> {price, date, n}
+    for (const m of months) {
+      const doc = await storage.readJSON(monthFile(m), { days: {} });
+      for (const date of Object.keys(doc.days).sort()) {
+        if (date < cutoff) continue;
+        const row = doc.days[date];
+        for (const id of want) {
+          const r = row[id];
+          if (!r || !(r[2] > 0)) continue;
+          const cur = low[id] || (low[id] = { price: Infinity, date: '', n: 0 });
+          cur.n++;
+          if (r[2] <= cur.price) { cur.price = r[2]; cur.date = date; }
+        }
+      }
+    }
+    return Object.keys(low).filter(id => low[id].n >= 30 && low[id].date >= recentCut);
+  }
+
+  return { sync, getItem, getFalling };
 }
 
 module.exports = { createLiveHistory };

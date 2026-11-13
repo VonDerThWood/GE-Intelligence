@@ -383,6 +383,7 @@ async function buildGenius() {
     syncNow: (opts) => runSync(opts),
     syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
     getItemLiveHistory:     (id, days) => a.getItemLiveHistory(id, days),
+    getLiveFalling:         (ids) => a.getLiveFalling(ids),
     // Hourly archive is desktop-only (live-hourly.js uses fs/zlib).
     getItemLiveHourly:      async () => [],
     getItemDailyRange:      async () => [],

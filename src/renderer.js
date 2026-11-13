@@ -2932,8 +2932,19 @@ async function _riskOne(item) {
     const d = Math.floor(ts / 86400000), prev = byDay.get(d);
     if (!prev || ts > prev.ts) byDay.set(d, {ts, price: pt.price});
   }
-  const r = positionRisk(null, item, [...byDay.values()].sort((a, b) => a.ts - b.ts), yearAgo);
-  return r ? ['RISK_LOW', 'RISK_MEDIUM', 'RISK_HIGH'].indexOf(r.signal) : null;
+  const days = [...byDay.values()].sort((a, b) => a.ts - b.ts);
+  const r = positionRisk(null, item, days, yearAgo);
+  // "Still falling" (Ben, 2026-11-12): made a new 180-day low in the last 14
+  // days. The long-hold research found buying a drop only worked once it had
+  // STOPPED falling; Low risk alone doesn't say whether it still is.
+  let falling = false;
+  const recent = days.filter(x => x.ts >= Date.now() - 180 * 86400000);
+  if (recent.length >= 30) {
+    let low = Infinity, lowTs = 0;
+    for (const x of recent) if (x.price <= low) { low = x.price; lowTs = x.ts; }
+    falling = lowTs >= Date.now() - 14 * 86400000;
+  }
+  return { level: r ? ['RISK_LOW', 'RISK_MEDIUM', 'RISK_HIGH'].indexOf(r.signal) : null, falling };
 }
 function _riskPump() {
   while (_riskRunning < 4 && _riskQueue.length) {
@@ -2941,8 +2952,8 @@ function _riskPump() {
     const hit = _riskLevelCache.get(item.id);
     if (hit && Date.now() - hit.at < RISK_TTL) continue;
     _riskRunning++;
-    _riskOne(item).catch(() => null).then(level => {
-      _riskLevelCache.set(item.id, {at: Date.now(), level});
+    _riskOne(item).catch(() => null).then(res => {
+      _riskLevelCache.set(item.id, {at: Date.now(), level: res ? res.level : null, falling: !!(res && res.falling)});
       _riskRunning--;
       if (_riskLevelCache.size % 20 === 0 || !_riskQueue.length) _riskListeners.forEach(f => f());
       _riskPump();
@@ -2963,10 +2974,33 @@ function useRiskLevels(items) {
     _riskPump();
     return () => _riskListeners.delete(f);
   }, [items]);
-  const levels = new Map();
+  // Live-price "still falling" (Ben, 2026-11-12): the guide history is smoothed and
+  // lags, so an item sliding at live prices (Eternal magic shortbow Mk. 5 during
+  // the Nov DXP) read as not falling. Ask the live archive too, in one batch.
+  useEffect(() => {
+    const now = Date.now();
+    const need = items.map(it => it.id).filter(id => !((_liveFallingChecked.get(id) || 0) > now - 30 * 60000));
+    if (!need.length || !window.genius?.getLiveFalling) return;
+    need.forEach(id => _liveFallingChecked.set(id, now));
+    window.genius.getLiveFalling(need).then(list => {
+      const hit = new Set((list || []).map(String));
+      for (const id of need) { if (hit.has(String(id))) _liveFalling.add(id); else _liveFalling.delete(id); }
+      _riskListeners.forEach(f => f());
+    }).catch(() => need.forEach(id => _liveFallingChecked.delete(id)));
+  }, [items]);
+  const levels = new Map(), falling = new Set();
   let pending = 0;
-  for (const it of items) { const hit = _riskLevelCache.get(it.id); if (hit) levels.set(it.id, hit.level); else pending++; }
-  return {levels, pending};
+  for (const it of items) {
+    const hit = _riskLevelCache.get(it.id);
+    if (hit) { levels.set(it.id, hit.level); if (hit.falling) falling.add(it.id); } else pending++;
+    if (_liveFalling.has(it.id)) falling.add(it.id);
+  }
+  return {levels, falling, pending};
+}
+const _liveFalling = new Set(), _liveFallingChecked = new Map(); // id -> last checked
+function FallingTag() {
+  return h('span', {title:'Made a new 6-month low in the last 14 days, so it is still falling. GEnius research found that buying a drop only paid off once the price had stopped falling.',
+    style:{fontSize:10, color:'#e08030', border:'1px dashed #e08030', borderRadius:3, padding:'0 5px', whiteSpace:'nowrap', marginLeft:4}}, '↓ Still falling');
 }
 const RISK_NAMES = ['Low', 'Medium', 'High'];
 const RISK_COLORS = () => [T.green, T.gold, T.red];
@@ -3009,6 +3043,7 @@ function GoodRightNow({items, onSelect, onNavigate}) {
     },
       h('div', {style:{flex:'1 1 160px', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
       risk.levels.has(it.id) && h(RiskTag, {level: risk.levels.get(it.id)}),
+      risk.falling.has(it.id) && h(FallingTag),
       h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}}, g(it.liveBuy))),
       h('div', {style:{minWidth:150, textAlign:'right', whiteSpace:'nowrap'}},
         h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
@@ -14134,7 +14169,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 key:it.id, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it),
               },
                 h('td', null, it.name),
-                h('td', null, it.riskLevel == null && risk.pending ? h('span', {style:{fontSize:10, color:T.textDim}}, '…') : h(RiskTag, {level: it.riskLevel})),
+                h('td', null, it.riskLevel == null && risk.pending ? h('span', {style:{fontSize:10, color:T.textDim}}, '…') : h(RiskTag, {level: it.riskLevel}),
+                  risk.falling.has(it.id) && h('div', {style:{marginTop:3}}, h(FallingTag))),
                 h('td', {style:{color:'#e08030'}}, fmt.gp(it.liveSell)+'gp'),
                 h('td', {style:{color:T.green}}, fmt.gp(it.liveBuy)+'gp'),
                 h('td', null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
@@ -16517,6 +16553,7 @@ const PAGE_GUIDES = {
     'Items you can buy and resell for a profit right now: buy with an offer at the "Buy" price, sell at the "Sell" price. Profit is after the 2% GE tax.',
     'Sorted by realistic profit, which takes into account how much of the item actually trades in a day. Use the Min Profit buttons to hide small flips.',
     'The Low, Medium and High risk pills split the flips by how wild each item has been over the past year (same as the ITEM RISK badge). Low and Medium are the calmer picks.',
+    '"↓ Still falling" means the item made a new 6-month low in the last 2 weeks. Even a Low risk item can be sliding right now, so its margin may vanish before your offer fills.',
     'Prices move fast: click an item and check its "What to offer" box before you put in an offer. The Flagged pill lists items that only look profitable.',
   ]},
   opportunities: { title: 'Opportunities', points: [
