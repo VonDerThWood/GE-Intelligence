@@ -48,8 +48,10 @@ function parseOffer(text, itemNames = []) {
   }
 
   // "bought 12,397 so far for 71,282,750 coins", "sold 8,173 so far and received
-  // 24,429,097 coins". The sold figure is after GE tax.
-  const fills = text && String(text).match(/\b(bought|sold)\s+([\d,]+)\s+so\s+far\s+(?:for|and\s+received)\s+([\d,]+)\s+coins/i);
+  // 24,429,097 coins". The sold figure is after GE tax. A FINISHED offer drops the
+  // "so far": "You sold 50,000 and received 318,451,000 coins" (Ben, 2026-11-13:
+  // his completed Orgone sale read as 0 sold).
+  const fills = text && String(text).match(/\b(bought|sold)\s+([\d,]+)\s+(?:so\s+far\s+)?(?:for|and\s+received)\s+([\d,]+)\s+coins/i);
   if (fills) {
     out.filled = toNum(fills[2]);
     out.coins = toNum(fills[3]);

@@ -14050,6 +14050,7 @@ function flipMaxPriceAgeMs(avgVolume) {
 // cases (Imphide 869x, Raw cod 12.2x) without choking on a real spike.
 const FLIP_MAX_BUY_SELL_RATIO = 5;
 const FLIP_MAX_SIDE_RANGE = 1.5; // highest/lowest recent price on one side (Ben, 2026-11-12)
+const FLIP_OVERPAY_RATIO = 1.5; // buy vs sell AND vs guide (Ben, 2026-11-13: Elder seed)
 // Volume-anomaly check (Ben, 2026-07-31): a coordinated wash trade can
 // make liveBuy and liveSell agree with each other perfectly (same person
 // controls both sides), which sails straight past every check above —
@@ -14130,6 +14131,13 @@ function computeFlipStats(it) {
       const r = wild(av.buyLo, av.buyHi) ? `bought at ${fmt.gp(av.buyLo)}-${fmt.gp(av.buyHi)}` : `sold at ${fmt.gp(av.sellLo)}-${fmt.gp(av.sellHi)}`;
       return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Prices all over the place: ${r} in the recent trades, so there's no steady price to flip at.` };
     }
+  }
+  // A few buyers overpaying (Ben, 2026-11-13: Elder seed showed "buy 6,910, sell
+  // 18,000" because one buyer kept paying 18k while sellers took ~6.9k and the
+  // guide was 6.25k). Each side was steady on its own, so the range check above
+  // passed. Buy far above BOTH the sell side and the guide isn't a sell price.
+  if (it.liveSell > 0 && gePrice > 0 && it.liveBuy / it.liveSell > FLIP_OVERPAY_RATIO && it.liveBuy > gePrice * FLIP_OVERPAY_RATIO) {
+    return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Buyers are paying ${(it.liveBuy/it.liveSell).toFixed(1)}x what sellers take and ${(it.liveBuy/gePrice).toFixed(1)}x the GE price: a few buyers overpaying, not a price you could reliably sell at.` };
   }
   if (it.liveSell > 0 && it.liveBuy / it.liveSell > FLIP_MAX_BUY_SELL_RATIO) {
     return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Live buy is ${(it.liveBuy/it.liveSell).toFixed(1)}x live sell — one side is being overpaid in isolation, not a real two-sided market.` };
