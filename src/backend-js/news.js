@@ -265,7 +265,11 @@ async function fetchRs3News(limit = 20, allItems = null) {
                     entry.match(/<description>([\s\S]*?)<\/description>/);
       if (!titleM) continue;
       let title = titleM[1].trim();
-      title = title.replace(/&amp;/g, '&').replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+      title = title.replace(/&amp;/g, '&').replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
+        // Titles can be double-encoded ("&amp;#8217;"), leaving numeric codes like
+        // &#8217; (curly apostrophe) after the line above (Ben, 2026-11-13).
+        .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+        .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
       const link = linkM ? linkM[1].trim() : '';
       let date = dateM ? dateM[1].trim() : '';
       const descRaw = descM ? descM[1] : '';
