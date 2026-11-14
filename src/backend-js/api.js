@@ -3269,6 +3269,14 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     for (const rel of Object.values(doc.releases)) for (const [id, it] of Object.entries(rel.items)) {
       if (!map[id] || rel.date > map[id].date) map[id] = { release: rel.name, date: rel.date, page: rel.page, firstSeen: it.firstSeen, quantity: it.quantity, rarity: it.rarity };
     }
+    // Is the ITEM new, or an old item with a new source? (Ben, 2026-11-13: Elder seed
+    // isn't new, Blood Knights just started dropping it.) Prices from more than a week
+    // before the release mean the item already existed.
+    for (const [id, m] of Object.entries(map)) {
+      let pts = null; try { pts = await getHistoryPoints(id); } catch (e) {}
+      const first = pts && pts.length ? pts[0].timestamp : null;
+      m.newItem = first == null || first > Date.parse(m.date) - 7 * 86400000;
+    }
     newSourceCache = { at: Date.now(), map };
     return map;
   }

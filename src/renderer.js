@@ -2927,8 +2927,8 @@ function TradePriceBox({item, livePrice, gpFmt}) {
   const ns = item.newSource;
   const newSourceLine = ns && h('div', {style:{marginBottom:5, padding:'4px 6px', borderRadius:3, fontSize:10.5, lineHeight:1.45,
       background:'rgba(224,128,48,0.12)', border:'1px solid rgba(224,128,48,0.45)', color:T.text}},
-    h('b', {style:{color:'#e08030'}}, `⚠ New drop from ${ns.release}`),
-    ` (released ${ns.date}${ns.quantity ? '; ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}). A new source often shifts the price, usually down as supply grows. Elder seed fell about 90% in four days after Blood Knights started dropping it.`);
+    h('b', {style:{color:'#e08030'}}, ns.newItem ? `⚠ New item from ${ns.release}` : `⚠ New source: ${ns.release} now drops this`),
+    ` (released ${ns.date}${ns.quantity ? '; ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}). ` + (ns.newItem ? 'New items often swing hard while supply settles.' : 'A new source often pushes the price down as supply grows. Elder seed fell about 90% in four days after Blood Knights started dropping it.'));
   return h('div', {style:box}, head, newSourceLine, normalLine,
     h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ', or pay ', g(hi), ' to get it instantly.'),
     h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ', or take ', g(lo), ' to sell instantly.'),
@@ -3074,8 +3074,8 @@ const _liveFalling = new Set(), _liveFallingChecked = new Map(); // id -> last c
 // "New drop" (Ben, 2026-11-13): a release from the last 60 days drops this item.
 function NewSourceTag({ns}) {
   if (!ns) return null;
-  return h('span', {title:`Drops from ${ns.release} (released ${ns.date})${ns.quantity ? ', ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}. A new source often shifts the price: Elder seed fell about 90% in four days after Blood Knights started dropping it.`,
-    style:{fontSize:9, padding:'1px 5px', borderRadius:3, border:'1px solid rgba(224,128,48,0.6)', color:'#e08030', whiteSpace:'nowrap', letterSpacing:'0.03em'}}, '⚠ New drop');
+  return h('span', {title:`${ns.newItem ? 'New item from' : 'Now also drops from'} ${ns.release} (released ${ns.date})${ns.quantity ? ', ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}. A new source often shifts the price: Elder seed fell about 90% in four days after Blood Knights started dropping it.`,
+    style:{fontSize:9, padding:'1px 5px', borderRadius:3, border:'1px solid rgba(224,128,48,0.6)', color:'#e08030', whiteSpace:'nowrap', letterSpacing:'0.03em'}}, ns.newItem ? '⚠ New item' : '⚠ New source');
 }
 function FallingTag() {
   return h('span', {title:'Made a new 6-month low in the last 14 days, so it is still falling. GEnius research found that buying a drop only paid off once the price had stopped falling.',
