@@ -4497,6 +4497,51 @@ function useStickyTableHeader(wrapRef, theadRef) {
   return state;
 }
 
+// Skill pills for the Gathering and Artisan tabs (Ben, 2026-11-15: "an All tab and then
+// different ones"). The wiki categories that sort items into these tabs aren't kept, so
+// the skill comes from the item's name. First match wins; anything unmatched is Other.
+const SKILL_PILLS = {
+  mining: [
+    ["Divination", /\benergy$|divine charge|memory dowser|grace of the elves/i],
+    ["Firemaking", /pyre logs|incense sticks/i],
+    ["Hunter", /\bfur\b|impling jar|chompa|kebbit|noose|butterfly net|rabbit foot|whirligig|hypnowand|yak-hide|box trap/i],
+    ["Fishing", /fishing|harpoon|\bnet\b|lobster pot|\bcage\b|\bbait\b|karambwan|seaweed/i],
+    ["Woodcutting", /\blogs?\b|hatchet|wood spirit|\bbark\b|machete|white oak/i],
+    ["Mining", /\bores?\b|ore box|stone spirit|pickaxe|\bcoal\b|clay\b|essence$|limestone|sandstone|granite|luminite|drakolith|phasmatite|animica|minerals|meteorite|soapstone|gravel|brimstone|volcanic|cashmere|peat/i],
+  ],
+  artisan: [
+    ["Crafting", /starbloom|lantern|essence of finality|royal frame/i],
+    ["Construction", /plank|\bframe$|nails$|furniture plans|chair|table|bench|\bbed$|bookcase|dresser|clock$|wardrobe|treasure chest|armour case|cape store|toy box|dress box|drawers|shoe box|marble block|gold leaf|magic stone|bolt of cloth|wood box|stone wall|limestone brick/i],
+    ["Runecrafting", /talisman|tiara|runic|passage of the abyss/i],
+    ["Fletching", /\bbows?\b|bow \(|shortbow|longbow|\bshafts?\b|arrowheads|\barrows?\b|\bbolts\b|\bbolts \(|bolt tips|\bdarts?\b|dart tip|\bstock$|\blimbs\b|crossbow|bowstring|feather|blowpipe|brutal|dinarrow|propellant|sagaie|bolas/i],
+    ["Smithing", /\bbars?$|\bbar$|ingot|\bores?$|\bore\b|\bcoal$|luminite|drakolith|phasmatite|animica|stone spirit|alloy|\+ \d|platebody|platelegs|kiteshield|full helm|gauntlets|armoured boots|2h sword|warhammer|longsword|armour trim|essence|armour (lump|slice|shard)/i],
+    ["Crafting", /uncut|diamond|ruby|emerald|sapphire|opal|jade|topaz|dragonstone|onyx|hydrix|moonstone|platinum|\bring\b|necklace|amulet|bracelet|anklet|brace\b|leather|hide|thread|cloth|needle|chisel|mould|\borb\b|urn\b|symbol|emblem|sand$|flax|\bjar$|starbloom|silk|shell|scale|lantern|scrimshaw|crafter|clay|birdhouse|token|title scroll|gem|pearl|circlet|facet/i],
+  ],
+};
+const SKILL_PILL_ORDER = {
+  mining: ['Mining', 'Woodcutting', 'Fishing', 'Hunter', 'Divination', 'Firemaking', 'Other'],
+  artisan: ['Smithing', 'Crafting', 'Fletching', 'Construction', 'Runecrafting', 'Other'],
+};
+const skillOf = (tab, name) => ((SKILL_PILLS[tab] || []).find(([, re]) => re.test(name || '')) || ['Other'])[0];
+function SkillPillTable({tab, items, ...rest}) {
+  const key = 'genius_skill_pill_' + tab;
+  const [pill, setPill] = useState(() => { try { return localStorage.getItem(key) || 'All'; } catch { return 'All'; } });
+  const counts = useMemo(() => {
+    const c = {};
+    for (const it of items) { const s = skillOf(tab, it.name); c[s] = (c[s] || 0) + 1; }
+    return c;
+  }, [items, tab]);
+  const pills = ['All', ...SKILL_PILL_ORDER[tab].filter(s => counts[s])];
+  const active = pills.includes(pill) ? pill : 'All';
+  const shown = useMemo(() => active === 'All' ? items : items.filter(it => skillOf(tab, it.name) === active), [items, active, tab]);
+  const pick = p => { setPill(p); try { localStorage.setItem(key, p); } catch {} };
+  return h('div', null,
+    h('div', {className:'row', style:{gap:6, flexWrap:'wrap', padding:'10px 14px 0'}},
+      pills.map(p => h('button', {key:p, className:'ge-btn' + (active === p ? ' gold' : ''), style:{fontSize:11, padding:'4px 10px'}, onClick:() => pick(p)},
+        p, h('span', {style:{opacity:0.6, marginLeft:5}}, p === 'All' ? items.length : counts[p])))),
+    h(ItemTable, {items:shown, ...rest}));
+}
+
 function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals, showGapPct, showSpread}) {
   // watchlist/onToggleWatch are read unconditionally below (star column
   // renders for every row, no matter the call site) — Opportunities'
@@ -17522,8 +17567,9 @@ function App() {
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,removedItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
           tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems,onNavigate:setTab}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
-          ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','artisan','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
+          ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','food','farming','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
             h(ItemTable,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
+          (tab==='mining'||tab==='artisan')&&h(SkillPillTable,{key:tab,tab,items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
           tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioArea,{
