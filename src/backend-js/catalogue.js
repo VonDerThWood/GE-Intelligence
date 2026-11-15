@@ -618,7 +618,19 @@ function _applyExclusive(cats, nameLower = "", skipLowTierHeuristic = false) {
 }
 
 
+// Archaeology is its own world (Ben, 2026-11-15: "Anything tagged archaeology should not be
+// in any other tab"): materials and artefacts that also match other rules show only under
+// Archaeology. Only Rares can sit beside it (hero items like Guildmaster Tony's
+// mattock = Rares + Archaeology).
 function assignCategories(name) {
+  const cats = _assignCategories(name);
+  if (cats.includes('archaeology') && cats.length > 1) {
+    return cats.includes('rares') ? ['rares', 'archaeology'] : ['archaeology'];
+  }
+  return cats;
+}
+
+function _assignCategories(name) {
   // Assign sidebar categories to an item.
   // Checks manual overrides first, then keyword rules.
   // Exclusive categories (Rares, Codex, Cosmetics) stop further matching

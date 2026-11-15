@@ -8278,13 +8278,16 @@
     "melee"
   ],
   "saradomin's whisper": [
-    "artisan"
+    "boss",
+    "melee"
   ],
   "saradomin's hiss": [
-    "artisan"
+    "boss",
+    "magic"
   ],
   "saradomin's murmur": [
-    "artisan"
+    "boss",
+    "ranged"
   ],
   "armadyl crossbow": [
     "ranged"

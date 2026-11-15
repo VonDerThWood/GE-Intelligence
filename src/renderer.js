@@ -4513,7 +4513,7 @@ const SKILL_PILLS = {
     ["Crafting", /starbloom|lantern|essence of finality|royal frame/i],
     ["Construction", /plank|\bframe$|nails$|furniture plans|chair|table|bench|\bbed$|bookcase|dresser|clock$|wardrobe|treasure chest|armour case|cape store|toy box|dress box|drawers|shoe box|marble block|gold leaf|magic stone|bolt of cloth|wood box|stone wall|limestone brick/i],
     ["Runecrafting", /talisman|tiara|runic|passage of the abyss/i],
-    ["Fletching", /\bbows?\b|bow \(|shortbow|longbow|\bshafts?\b|arrowheads|\barrows?\b|\bbolts\b|\bbolts \(|bolt tips|\bdarts?\b|dart tip|\bstock$|\blimbs\b|crossbow|bowstring|feather|blowpipe|brutal|dinarrow|propellant|sagaie|bolas/i],
+    ["Fletching", /\bbows?\b|bow \(|shortbow|longbow|\bshafts?\b|arrowheads|\barrows?\b|\bbolts\b|\bbolts \(|bolt tips|\bdarts?\b|dart tip|\bstock$|\blimbs\b|crossbow|bowstring|feather|blowpipe|brutal|dinarrow|propellant|sagaie|bolas|apex sinew|ascension shard|resonant anima/i],
     ["Smithing", /\bbars?$|\bbar$|ingot|\bores?$|\bore\b|\bcoal$|luminite|drakolith|phasmatite|animica|stone spirit|alloy|\+ \d|platebody|platelegs|kiteshield|full helm|gauntlets|armoured boots|2h sword|warhammer|longsword|armour trim|essence|armour (lump|slice|shard)/i],
     ["Crafting", /uncut|diamond|ruby|emerald|sapphire|opal|jade|topaz|dragonstone|onyx|hydrix|moonstone|platinum|\bring\b|necklace|amulet|bracelet|anklet|brace\b|leather|hide|thread|cloth|needle|chisel|mould|\borb\b|urn\b|symbol|emblem|sand$|flax|\bjar$|starbloom|silk|shell|scale|lantern|scrimshaw|crafter|clay|birdhouse|token|title scroll|gem|pearl|circlet|facet/i],
   ],
