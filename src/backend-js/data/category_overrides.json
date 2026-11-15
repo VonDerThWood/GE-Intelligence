@@ -14145,13 +14145,13 @@
     "magic"
   ],
   "resonant anima of jas (tradeable)": [
-    "ammo"
+    "artisan"
   ],
   "resonant anima of bik (tradeable)": [
     "artisan"
   ],
   "resonant anima of ful (tradeable)": [
-    "ammo"
+    "artisan"
   ],
   "scripture of jas": [
     "boss"
@@ -19549,5 +19549,8 @@
   ],
   "'emerald' title scroll": [
     "cosmetics"
+  ],
+  "resonant anima of wen (tradeable)": [
+    "artisan"
   ]
 }
