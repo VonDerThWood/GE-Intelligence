@@ -15319,22 +15319,22 @@
     "artisan"
   ],
   "dragonstone circlet token": [
-    "artisan"
+    "cosmetics"
   ],
   "onyx circlet token": [
-    "artisan"
+    "cosmetics"
   ],
   "hydrix circlet token": [
-    "artisan"
+    "cosmetics"
   ],
   "'dragonstone' title scroll": [
-    "artisan"
+    "cosmetics"
   ],
   "'onyx' title scroll": [
-    "artisan"
+    "cosmetics"
   ],
   "'hydrix' title scroll": [
-    "artisan"
+    "cosmetics"
   ],
   "solid gold easter egg": [
     "rares"
@@ -15499,13 +15499,13 @@
     "artisan"
   ],
   "dragonstone gala attire token": [
-    "artisan"
+    "cosmetics"
   ],
   "onyx gala attire token": [
-    "artisan"
+    "cosmetics"
   ],
   "hydrix gala attire token": [
-    "artisan"
+    "cosmetics"
   ],
   "robe top of tumeken's resplendence": [
     "magic"
@@ -19540,5 +19540,11 @@
   ],
   "pink pumpkin": [
     "rares"
+  ],
+  "'diamond' title scroll": [
+    "cosmetics"
+  ],
+  "'emerald' title scroll": [
+    "cosmetics"
   ]
 }
