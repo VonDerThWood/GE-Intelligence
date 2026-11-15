@@ -4511,6 +4511,11 @@ const SKILL_PILLS = {
   ],
   artisan: [
     ["Crafting", /starbloom|lantern|essence of finality|royal frame/i],
+    // Hand-placed by Ben (2026-11-15).
+    ["Construction", /^ancient crystal$/i],
+    ["Crafting", /^batwing$|^clockwork$/i],
+    ["Smithing", /^chitin scraps$|^draconic visage$/i],
+    ["Fletching", /^sinew$/i],
     ["Construction", /plank|\bframe$|nails$|furniture plans|chair|table|bench|\bbed$|bookcase|dresser|clock$|wardrobe|treasure chest|armour case|cape store|toy box|dress box|drawers|shoe box|marble block|gold leaf|magic stone|bolt of cloth|wood box|stone wall|limestone brick/i],
     ["Runecrafting", /talisman|tiara|runic|passage of the abyss/i],
     ["Fletching", /\bbows?\b|bow \(|shortbow|longbow|\bshafts?\b|arrowheads|\barrows?\b|\bbolts\b|\bbolts \(|bolt tips|\bdarts?\b|dart tip|\bstock$|\blimbs\b|crossbow|bowstring|feather|blowpipe|brutal|dinarrow|propellant|sagaie|bolas|apex sinew|ascension shard|resonant anima/i],
