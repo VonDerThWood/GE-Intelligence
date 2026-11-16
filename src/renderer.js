@@ -14592,6 +14592,17 @@ function liveBuyOf(it) {
 function liveSellOf(it) {
   if (!it) return null;
   const ge = it.high ?? it.low ?? null;
+  // A lone dump isn't the market (Ben, 2026-11-15: 21,343 Bomb vials valued at 744
+  // each, -58%, while they traded at ~1,835-2,187). When almost nobody sold
+  // instantly (under 5% of the units bought instantly) and that sell sits more than
+  // 25% under the buy side, the buy side is where things are really trading.
+  const a = it.liveAvg, s = it.liveSides;
+  const sellU = a ? a.sellUnits : s?.uL, buyU = a ? a.buyUnits : s?.uH;
+  if (it.liveSell != null && it.liveBuy != null && sellU != null && buyU > 0
+      && sellU < buyU * 0.05 && it.liveSell < it.liveBuy * 0.75) {
+    const b = _sanityLivePrice(it.liveBuy, ge);
+    if (b != null) return b;
+  }
   return _sanityLivePrice(it.liveSell, ge) ?? ge ?? null;
 }
 // Name -> item index, built once per items array (i.e. once per price fetch).
