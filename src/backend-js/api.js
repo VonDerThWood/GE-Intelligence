@@ -611,11 +611,13 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // just falls back to the normal one-by-one fetch.
   const HISTORY_PACK_URL = 'https://github.com/VonDerThWood/GE-Intelligence/releases/latest/download/history-pack.jsonl.gz';
   async function maybeImportHistoryPack(onProgress) {
-    if (readOnlyHistory || !storage.importHistoryPack || platform !== 'desktop') return;
+    // The phone has its own importer since 2026-11-15 (storage-capacitor.js:
+    // native download, chunked read, DecompressionStream) writing plain files.
+    if (readOnlyHistory || !storage.importHistoryPack) return;
     if (historyPopulatedIds.size >= 500 || historyFetchQueue.length < 500) return;
     if (store.get('historyPackTried', 0) > Date.now() - 6 * 3600000) return; // a failed try isn't repeated every launch
     store.set('historyPackTried', Date.now());
-    store.set('historyCompact', true); // the pack's files are compact
+    if (platform === 'desktop') store.set('historyCompact', true); // desktop writes the pack's compact files; the phone writes plain ones
     const t = Date.now(), total = historyFetchQueue.length;
     let n = 0;
     try {

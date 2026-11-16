@@ -175,8 +175,82 @@ async function createKVStore() {
 // the crash happened before api.js even finished initializing.
 function resolveWritable(filePath) { return filePath; }
 
+// ─── History pack on the phone (Ben, 2026-11-15) ────────────────────────
+// Same pack desktop uses (storage.js importHistoryPack, built by
+// scripts/build-history-pack.js): gzipped lines "<id>\t<packed JSON>", ending
+// "#end\t<count>\t<built ISO date>". The phone can't do it the desktop way:
+// GitHub's downloads send no CORS headers, and CapacitorHttp's patched fetch
+// hands back the whole 60MB body at once (risking the WebView's memory). So:
+// download natively straight to a file, read it back 1MB at a time, gunzip with
+// the WebView's built-in DecompressionStream, and write each item as the phone's
+// normal plain <id>.json. Any failure falls back to the one-by-one fetch.
+const { unpack } = require('./history-format.js');
+const PACK_TMP = 'history-pack.tmp.gz';
+const CHUNK = 1024 * 1024;
+const b64ToBytes = b64 => { const s = atob(b64), out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out; };
+
+async function importHistoryPack(dirPath, url, { skip = new Set(), onItem, timeoutMs = 15 * 60000 } = {}) {
+  if (typeof DecompressionStream === 'undefined') throw new Error('no DecompressionStream in this WebView');
+  await ensureDir(dirPath);
+  try { await Filesystem.deleteFile({ path: PACK_TMP, directory: Directory.Cache }); } catch {}
+  await Filesystem.downloadFile({ url, path: PACK_TMP, directory: Directory.Cache, connectTimeout: 30000, readTimeout: timeoutMs,
+    headers: { 'User-Agent': 'GEnius (github.com/VonDerThWood/GE-Intelligence)' } });
+  const { size } = await Filesystem.stat({ path: PACK_TMP, directory: Directory.Cache });
+  if (!(size > 1000)) throw new Error('history pack: download too small (' + size + ' bytes)');
+
+  // The file, 1MB at a time, as a byte stream.
+  let offset = 0;
+  const bytes = new ReadableStream({
+    async pull(ctl) {
+      if (offset >= size) { ctl.close(); return; }
+      const length = Math.min(CHUNK, size - offset);
+      const { data } = await Filesystem.readFile({ path: PACK_TMP, directory: Directory.Cache, offset, length });
+      offset += length;
+      ctl.enqueue(b64ToBytes(typeof data === 'string' ? data : await data.text()));
+    },
+  });
+  const reader = bytes.pipeThrough(new DecompressionStream('gzip')).pipeThrough(new TextDecoderStream()).getReader();
+
+  let imported = 0, complete = false, builtAt = null, error = null, rest = '';
+  const dir = dirPath.replace(/\\/g, '/');
+  const pending = new Set();
+  const put = async (id, json) => {
+    let points;
+    try { points = unpack(JSON.parse(json)); } catch { return; } // a bad line is skipped; that item gets fetched normally
+    if (!Array.isArray(points) || !points.length || !points.every(p => p && typeof p.timestamp === 'number')) return;
+    await atomicWrite(`${dir}/${id}.json`, JSON.stringify(points));
+    imported++;
+    if (onItem) onItem(id);
+  };
+  try {
+    outer: for (;;) {
+      const { value, done } = await reader.read();
+      if (done) break;
+      rest += value;
+      let nl;
+      while ((nl = rest.indexOf('\n')) >= 0) {
+        const line = rest.slice(0, nl); rest = rest.slice(nl + 1);
+        const tab = line.indexOf('\t');
+        if (tab < 0) continue;
+        const id = line.slice(0, tab);
+        if (id === '#end') { complete = true; builtAt = line.split('\t')[2] || null; break outer; }
+        if (!/^\d+$/.test(id) || skip.has(id)) continue;
+        // A few writes in flight at once: each is a bridge call to native.
+        const p = put(id, line.slice(tab + 1)).catch(() => {}).finally(() => pending.delete(p));
+        pending.add(p);
+        if (pending.size >= 8) await Promise.race(pending);
+      }
+    }
+  } catch (e) { error = e.message; } // a cut-short file keeps everything before the break
+  await Promise.all(pending);
+  try { reader.cancel(); } catch {}
+  try { await Filesystem.deleteFile({ path: PACK_TMP, directory: Directory.Cache }); } catch {}
+  return { imported, complete, builtAt, error };
+}
+
 module.exports = {
   atomicWrite, readJSON, writeJSON, ensureDir, pathExists,
   listJSONFiles, loadDirBatched, writeDirItem, readDirItem,
   migrateLegacyHistoryFile, createKVStore, setDataDirPrefix, resolveWritable,
+  importHistoryPack,
 };
