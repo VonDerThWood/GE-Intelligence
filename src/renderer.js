@@ -2942,7 +2942,9 @@ function TradePriceBox({item, livePrice, gpFmt}) {
              `selling at ${f(hi)}gp leaves ${f(net)}gp after tax, ${margin === 0 ? 'the same as' : 'less than'} the ${f(lo)}gp you'd pay.`]
           : [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Small or risky flip: '),
              'buy at ', g(lo), ', sell at ', g(hi), ' = +' + f(Math.round(margin)) + 'gp each after 2% tax',
-             item.limit ? ` (+${f(Math.round(stats.profitForLimit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
+             // profitForLimit isn't computed for items that don't qualify (too little
+             // trading), which showed "+NaNgp per 2 buy limit" (Ben, 2026-11-16).
+             item.limit ? ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
              '. The Flips tab leaves it out: ', stats.disqualifyReason]
     )
   );
