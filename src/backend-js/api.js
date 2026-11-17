@@ -228,6 +228,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // no such ceiling — each is at most a few hundred KB — and a save only
   // ever touches the items that actually changed (dirtyHistoryIds), not the
   // entire dataset.
+  // Desktop always can (Node zlib); the phone when its WebView has CompressionStream.
+  const canCompactHistory = () => platform === 'desktop' || !!(storage.canCompact && storage.canCompact());
   async function loadHistory() {
     const loadStart = Date.now();
     await storage.ensureDir(historyDir);
@@ -239,8 +241,9 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       await storage.migrateLegacyHistoryFile(historyFile, historyDir);
       existingFiles = await storage.listJSONFiles(historyDir); // migration writes files directly; re-list to pick them up
       // A brand-new desktop install starts in the compact format, so there's
-      // nothing to convert later (v3.0.0). The phone has no gzip yet.
-      if (existingFiles.length === 0 && platform === 'desktop' && !readOnlyHistory) {
+      // nothing to convert later (v3.0.0). The phone does too when its WebView
+      // has CompressionStream (storage-capacitor canCompact, Ben 2026-11-16).
+      if (existingFiles.length === 0 && canCompactHistory() && !readOnlyHistory) {
         store.set('historyCompact', true);
         store.set('historyCompactDone', Date.now());
       }
@@ -617,7 +620,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (historyPopulatedIds.size >= 500 || historyFetchQueue.length < 500) return;
     if (store.get('historyPackTried', 0) > Date.now() - 6 * 3600000) return; // a failed try isn't repeated every launch
     store.set('historyPackTried', Date.now());
-    if (platform === 'desktop') store.set('historyCompact', true); // desktop writes the pack's compact files; the phone writes plain ones
+    if (canCompactHistory()) store.set('historyCompact', true); // the importer writes the pack's compact files
     const t = Date.now(), total = historyFetchQueue.length;
     let n = 0;
     try {
@@ -879,7 +882,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   let compactRunning = false;
   async function compactHistory(onProgress) {
     if (readOnlyHistory) return { error: 'read-only (test mode)' };
-    if (platform !== 'desktop' || !storage.compactDirItems) return { error: 'not available on this platform yet' };
+    if (!storage.compactDirItems || !canCompactHistory()) return { error: 'not available on this platform yet' };
     if (compactRunning) return { error: 'already running' };
     compactRunning = true;
     try {

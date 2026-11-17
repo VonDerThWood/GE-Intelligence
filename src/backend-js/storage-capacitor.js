@@ -18,6 +18,7 @@
 
 const { Filesystem, Directory, Encoding } = require('@capacitor/filesystem');
 const { Preferences } = require('@capacitor/preferences');
+const { pack, unpack } = require('./history-format.js');
 
 // All app data lives under Directory.Data (app-private, survives updates,
 // removed on uninstall — the mobile equivalent of Electron's userData dir).
@@ -71,13 +72,94 @@ async function ensureDir(dirPath) {
   }
 }
 
+// A compressed per-item history file (<id>.json.gz, v3.0.0) is listed under its
+// plain name, so callers see one entry per item whichever format it's in (same
+// as storage.js on desktop).
 async function listJSONFiles(dirPath) {
   try {
     const { files } = await Filesystem.readdir({ path: relativize(dirPath), directory: ROOT });
-    return files.map(f => (typeof f === 'string' ? f : f.name)).filter(f => f.endsWith('.json'));
+    const names = new Set();
+    for (const f0 of files) {
+      const f = typeof f0 === 'string' ? f0 : f0.name;
+      if (f.endsWith('.json')) names.add(f);
+      else if (f.endsWith('.json.gz')) names.add(f.slice(0, -3));
+    }
+    return [...names];
   } catch {
     return [];
   }
+}
+
+// ─── Compact per-item history on the phone (v3.0.0, Ben 2026-11-16) ─────────
+// Same files as desktop (storage.js): <id>.json.gz = gzip(JSON of
+// history-format pack()). Node's zlib isn't here, so the WebView's built-in
+// CompressionStream / DecompressionStream do the gzip. Files go through the
+// Filesystem plugin as base64 (no encoding = binary).
+const hasGzip = () => typeof CompressionStream !== 'undefined' && typeof DecompressionStream !== 'undefined';
+const bytesToB64 = bytes => { let s = ''; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); };
+async function gzipText(text) {
+  const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+async function gunzipToText(bytes) {
+  const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'));
+  return new Response(stream).text();
+}
+const itemPath = (dirPath, id, ext) => relativize(dirPath.replace(/\\/g, '/') + `/${id}${ext}`);
+async function readGzItem(dirPath, id) {
+  const { data } = await Filesystem.readFile({ path: itemPath(dirPath, id, '.json.gz'), directory: ROOT });
+  return unpack(JSON.parse(await gunzipToText(b64ToBytes(typeof data === 'string' ? data : await data.text()))));
+}
+async function writeGzItem(dirPath, id, packedJson) {
+  await Filesystem.writeFile({ path: itemPath(dirPath, id, '.json.gz'), data: bytesToB64(await gzipText(packedJson)), directory: ROOT, recursive: true });
+}
+const rmItem = async (dirPath, id, ext) => { try { await Filesystem.deleteFile({ path: itemPath(dirPath, id, ext), directory: ROOT }); } catch {} };
+// Either format; the compressed file wins when both exist (as on desktop).
+async function readItemFile(dirPath, id) {
+  if (hasGzip()) {
+    try { return await readGzItem(dirPath, id); } catch {}
+  }
+  const { data } = await Filesystem.readFile({ path: itemPath(dirPath, id, '.json'), directory: ROOT, encoding: Encoding.UTF8 });
+  return unpack(JSON.parse(data));
+}
+
+// Converts every plain <id>.json in a directory to <id>.json.gz, one file at a
+// time: write the compact file, read it back, check it matches EXACTLY, and
+// only then delete the plain one. Safe to stop and resume. Same contract as
+// storage.js compactDirItems.
+async function compactDirItems(dirPath, { onProgress, shouldStop } = {}) {
+  if (!hasGzip()) throw new Error('no CompressionStream in this WebView');
+  let names = [];
+  try {
+    const { files } = await Filesystem.readdir({ path: relativize(dirPath), directory: ROOT });
+    names = files.map(f => (typeof f === 'string' ? f : f.name));
+  } catch {}
+  const olds = names.filter(f => /^\d+\.json$/.test(f));
+  let done = 0; const failed = [];
+  for (const f of olds) {
+    if (shouldStop && shouldStop()) break;
+    const id = f.slice(0, -5);
+    try {
+      let raw;
+      try { raw = (await Filesystem.readFile({ path: itemPath(dirPath, id, '.json'), directory: ROOT, encoding: Encoding.UTF8 })).data; }
+      catch { done++; continue; } // a save already converted it
+      const points = unpack(JSON.parse(raw));
+      await writeGzItem(dirPath, id, JSON.stringify(pack(points)));
+      const back = await readGzItem(dirPath, id);
+      if (JSON.stringify(back) !== JSON.stringify(points)) {
+        // A real mismatch, or a newer save landed meanwhile (that save removes
+        // the plain file). Only undo ours when the plain one is still there.
+        if (await pathExists(dirPath.replace(/\\/g, '/') + `/${id}.json`)) { await rmItem(dirPath, id, '.json.gz'); failed.push(id); }
+        done++; continue;
+      }
+      await rmItem(dirPath, id, '.json');
+    } catch (e) { failed.push(id); }
+    done++;
+    if (onProgress && done % 100 === 0) onProgress(done, olds.length);
+    if (done % 25 === 0) await new Promise(r => setTimeout(r, 0)); // keep the app responsive
+  }
+  if (onProgress) onProgress(done, olds.length);
+  return { converted: done - failed.length, failed, total: olds.length };
 }
 
 async function loadDirBatched(dirPath, { batchSize = 50 } = {}) {
@@ -93,6 +175,7 @@ async function loadDirBatched(dirPath, { batchSize = 50 } = {}) {
     await Promise.all(batch.map(async f => {
       const id = f.slice(0, -5);
       try {
+        if (/^\d+$/.test(id)) { out[id] = await readItemFile(dirPath, id); return; } // either history format
         const path = relativize(dirPath) + '/' + f;
         const { data } = await Filesystem.readFile({ path, directory: ROOT, encoding: Encoding.UTF8 });
         out[id] = JSON.parse(data);
@@ -107,15 +190,24 @@ async function loadDirBatched(dirPath, { batchSize = 50 } = {}) {
 // Item files are always <numeric id>.json — refuse anything else so an id
 // can never become a path (e.g. '../x') no matter which caller passed it.
 const isItemFileId = id => /^\d+$/.test(String(id));
-async function writeDirItem(dirPath, id, data) {
+// compact: write the compressed format (and remove the plain file); otherwise
+// the plain format (and remove any compressed copy, which would win on read and
+// be stale). Same contract as storage.js.
+async function writeDirItem(dirPath, id, data, { compact = false } = {}) {
   if (!isItemFileId(id)) return;
   await ensureDir(dirPath);
-  await atomicWrite(dirPath.replace(/\\/g, '/') + `/${id}.json`, JSON.stringify(data));
+  if (compact && hasGzip()) {
+    await writeGzItem(dirPath, id, JSON.stringify(pack(data)));
+    await rmItem(dirPath, id, '.json');
+  } else {
+    await atomicWrite(dirPath.replace(/\\/g, '/') + `/${id}.json`, JSON.stringify(data));
+    await rmItem(dirPath, id, '.json.gz');
+  }
 }
 
 async function readDirItem(dirPath, id) {
   if (!isItemFileId(id)) return null;
-  return readJSON(dirPath.replace(/\\/g, '/') + `/${id}.json`, null);
+  try { return await readItemFile(dirPath, id); } catch { return null; }
 }
 
 async function pathExists(filePath) {
@@ -184,7 +276,6 @@ function resolveWritable(filePath) { return filePath; }
 // download natively straight to a file, read it back 1MB at a time, gunzip with
 // the WebView's built-in DecompressionStream, and write each item as the phone's
 // normal plain <id>.json. Any failure falls back to the one-by-one fetch.
-const { unpack } = require('./history-format.js');
 const PACK_TMP = 'history-pack.tmp.gz';
 const CHUNK = 1024 * 1024;
 const b64ToBytes = b64 => { const s = atob(b64), out = new Uint8Array(s.length); for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i); return out; };
@@ -218,7 +309,9 @@ async function importHistoryPack(dirPath, url, { skip = new Set(), onItem, timeo
     let points;
     try { points = unpack(JSON.parse(json)); } catch { return; } // a bad line is skipped; that item gets fetched normally
     if (!Array.isArray(points) || !points.length || !points.every(p => p && typeof p.timestamp === 'number')) return;
-    await atomicWrite(`${dir}/${id}.json`, JSON.stringify(points));
+    // The pack line already IS the compact format: gzip it as is (v3.0.0).
+    if (hasGzip()) await writeGzItem(dirPath, id, json);
+    else await atomicWrite(`${dir}/${id}.json`, JSON.stringify(points));
     imported++;
     if (onItem) onItem(id);
   };
@@ -252,5 +345,5 @@ module.exports = {
   atomicWrite, readJSON, writeJSON, ensureDir, pathExists,
   listJSONFiles, loadDirBatched, writeDirItem, readDirItem,
   migrateLegacyHistoryFile, createKVStore, setDataDirPrefix, resolveWritable,
-  importHistoryPack,
+  importHistoryPack, compactDirItems, canCompact: hasGzip,
 };

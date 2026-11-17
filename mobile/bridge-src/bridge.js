@@ -50,6 +50,17 @@ async function ensureApi() {
       store = await storage.createKVStore(DATA_DIR + '/config.json');
       api = await createGeniusApi({ dataDir: DATA_DIR, store, platform: 'mobile' });
       api.loadHistory(); // background, same as desktop — window/UI doesn't wait on it
+      // v3.0.0 (Ben, 2026-11-16): convert price history to the compact format
+      // once, in the background, like desktop's main.js. Much slower than on a
+      // PC (each file crosses the native bridge), so it waits 30s after load and
+      // just resumes next launch if the app is closed or put away mid-way
+      // (only finished items are swapped; the page freezes while off screen).
+      if (!store.get('historyCompactDone', 0)) {
+        api.historyLoadedPromise.then(() => new Promise(r => setTimeout(r, 30000)))
+          .then(() => api.compactHistory())
+          .then(r => { if (r && r.error) console.log('[history] Compact format not run:', r.error); })
+          .catch(api.noteError('history compression'));
+      }
       return api;
     })();
   }
