@@ -2946,7 +2946,18 @@ function TradePriceBox({item, livePrice, gpFmt}) {
              // trading), which showed "+NaNgp per 2 buy limit" (Ben, 2026-11-16).
              item.limit ? ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
              '. The Flips tab leaves it out: ', stats.disqualifyReason]
-    )
+    ),
+    // How long it would really take (Ben, 2026-11-17: "possible but very slow").
+    (() => {
+      const fl = margin > 0 && item.limit ? flipFill(item, item.limit, margin) : null;
+      if (!fl || fl.hours == null) return null;
+      const r = item.liveRate;
+      return h('div', {style:{marginTop:4, fontSize:10.5, color:T.textDim, lineHeight:1.45}},
+        h('span', {style:{color:fillColor(fl.hours), fontWeight:600}}, 'Speed: '),
+        `a full buy limit takes about ${fmtHours(fl.buyHours)} to buy and ${fmtHours(fl.sellHours)} to sell`,
+        ` (about ${Math.round(r.sellPerHour).toLocaleString()} sold and ${Math.round(r.buyPerHour).toLocaleString()} bought instantly per hour, last 24h; assumes your offers get ~${Math.round(FLIP_MARKET_SHARE * 100)}% of that).`,
+        fl.hours > 24 * 7 ? ' Possible, but very slow.' : fl.hours > 24 ? ' Possible, but slow.' : '');
+    })()
   );
 }
 
@@ -14105,6 +14116,39 @@ const FLIP_VOLUME_ANOMALY_RATIO_MIN = 10;
 // FlipsTab's second pill surfaces so these stay visible instead of
 // silently vanishing), vs the mundane exclusions (no margin, no buy
 // limit, too little volume) that aren't interesting to look at.
+// ── Fill time (Ben, 2026-11-17; idea from a cloud session) ────────────────────
+// "Possible but very slow": daily volume says an item trades, not that YOUR
+// offers fill. A buy offer fills from instant-SELLERS and a sell offer from
+// instant-BUYERS, and the two sides can differ 100x. recent-prices.js gives each
+// item a typical units/hour per side over the last 24 hours; assume your offers
+// get FLIP_MARKET_SHARE of each side (a guess: tune it against real fills).
+// fillHours = time to buy a full limit, then sell it. profit4h = what one 4-hour
+// buy-limit window can really make.
+const FLIP_MARKET_SHARE = 0.2;
+function flipFill(it, limit, margin) {
+  const r = it.liveRate;
+  if (!r || !(limit > 0)) return { hours: null, buyHours: null, sellHours: null, profit4h: null };
+  const inRate = FLIP_MARKET_SHARE * (r.sellPerHour || 0);  // your buy offer fills from instant-sellers
+  const outRate = FLIP_MARKET_SHARE * (r.buyPerHour || 0);  // your sell offer fills from instant-buyers
+  const buyHours = inRate > 0 ? limit / inRate : Infinity;
+  const sellHours = outRate > 0 ? limit / outRate : Infinity;
+  const per4h = Math.min(limit, inRate * 4, outRate * 4);
+  return { hours: buyHours + sellHours, buyHours, sellHours, profit4h: margin * per4h };
+}
+function fmtHours(h) {
+  if (h == null) return '—';
+  if (!isFinite(h) || h > 24 * 30) return '> a month';
+  if (h < 1) return '~' + Math.max(5, Math.round(h * 60 / 5) * 5) + 'm';
+  if (h < 36) return '~' + Math.round(h) + 'h';
+  const d = h / 24;
+  return '~' + (d < 10 ? d.toFixed(1).replace(/\.0$/, '') : Math.round(d)) + ' days';
+}
+const fillColor = h => h == null ? T.textDim : h <= 4 ? T.green : h <= 24 ? T.gold : h <= 24 * 7 ? '#e08030' : T.red;
+function fillTitle(it) {
+  if (it.fillHours == null) return 'Not enough hourly trading data yet (loads in the background).';
+  return 'A full buy limit (' + (it.limit || 0).toLocaleString() + ') at ~' + Math.round(FLIP_MARKET_SHARE * 100) + '% of the market: about ' + fmtHours(it.buyHours) + ' to buy (fills from people selling instantly, ~' + Math.round(it.liveRate.sellPerHour).toLocaleString() + '/hour) and ' + fmtHours(it.sellHours) + ' to sell (people buying instantly, ~' + Math.round(it.liveRate.buyPerHour).toLocaleString() + '/hour), typical over the last 24 hours. ' + (it.fillHours > 24 ? 'Possible, but slow.' : '');
+}
+
 function computeFlipStats(it) {
   if (it.untradeable || it.liveBuy == null || it.liveSell == null) {
     return { qualifies: false, disqualifyReason: 'No live buy/sell data available for this item.' };
@@ -14133,7 +14177,8 @@ function computeFlipStats(it) {
   // ~6m) as an alch item (Ben, 2026-11-12: "it's like ~2m above that").
   const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_ALCH_ANCHOR_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
   const ceiling = alchIsAnchor ? Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT : Infinity;
-  const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit };
+  const fill = flipFill(it, limit, margin);
+  const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit, fillHours: fill.hours, buyHours: fill.buyHours, sellHours: fill.sellHours, profit4h: fill.profit4h };
 
   if (it.liveSell < FLIP_MIN_SELL_PRICE) return { ...base, qualifies:false, disqualifyReason:`Sell price is under the ${fmt.gp(FLIP_MIN_SELL_PRICE)}gp floor Flips uses to avoid junk items dominating by percentage.` };
   if (margin <= 0) return { ...base, qualifies:false, disqualifyReason:'No positive margin right now — instabuy (after tax) doesn\'t beat instasell.' };
@@ -14242,7 +14287,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a,b) => {
-      const av = a[sort.key] ?? 0, bv = b[sort.key] ?? 0;
+      const miss = sort.key === 'fillHours' ? Infinity : 0; // no fill data = slowest, not fastest
+      const av = a[sort.key] ?? miss, bv = b[sort.key] ?? miss;
       if (typeof av === 'string' || typeof bv === 'string') {
         return String(av).localeCompare(String(bv)) * sort.dir;
       }
@@ -14333,6 +14379,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('th', {onClick:()=>tog('roiPct'), style:{cursor:'pointer'}}, 'ROI%'+arrow('roiPct')),
                 h('th', {onClick:()=>tog('limit'), style:{cursor:'pointer'}}, 'Buy Limit'+arrow('limit')),
                 h('th', {onClick:()=>tog('realisticProfit'), style:{cursor:'pointer'}, title:'Margin/item × min(buy limit, avg daily volume) — what a limit\'s worth of trading realistically nets given how liquid this item actually is'}, 'Realistic Profit'+arrow('realisticProfit')),
+                h('th', {onClick:()=>tog('fillHours'), style:{cursor:'pointer'}, title:'How long a full buy limit takes to BUY and then SELL, from each side\'s typical hourly trading over the last 24 hours, if your offers get ~' + Math.round(FLIP_MARKET_SHARE*100) + '% of it. Green: within a 4-hour limit window. Red: over a week, possible but very slow.'}, 'Fill time'+arrow('fillHours')),
+                h('th', {onClick:()=>tog('profit4h'), style:{cursor:'pointer'}, title:'What one 4-hour buy-limit window can really make: margin × the smaller of the limit and what each side trades in 4 hours at your share.'}, 'Profit / 4h'+arrow('profit4h')),
                 h('th', {onClick:()=>tog('profitForLimit'), style:{cursor:'pointer'}, title:'Margin/item × buy limit — the theoretical ceiling if the ENTIRE limit both buys and sells, regardless of how thin the market actually is'}, 'Max Profit (limit)'+arrow('profitForLimit')),
                 h('th', {style:{width:30}}, null),
               )),
@@ -14350,6 +14398,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('td', {style:{color: it.roiPct>=5 ? T.green : T.textDim}}, it.roiPct.toFixed(2)+'%'),
                 h('td', {style:{color:T.textDim}}, it.limit.toLocaleString()),
                 h('td', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(it.realisticProfit)+'gp'),
+                h('td', {style:{color:fillColor(it.fillHours), whiteSpace:'nowrap'}, title:fillTitle(it)}, fmtHours(it.fillHours)),
+                h('td', {style:{color:T.gold}}, it.profit4h == null ? '—' : fmt.gp(Math.round(it.profit4h))+'gp'),
                 h('td', {style:{color:T.textDim}}, fmt.gp(it.profitForLimit)+'gp'),
                 h('td', {onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center'}},
                   h('button',{className:'star-btn'},
@@ -16968,8 +17018,9 @@ function App() {
       if (it.untradeable) return it;
       const r = rp[it.id];
       const latest = r ? { buy: r.latestBuy ?? null, buyTime: r.latestBuyTime ?? null, sell: r.latestSell ?? null, sellTime: r.latestSellTime ?? null } : null;
-      if (!r || r.buy == null || r.sell == null) return { ...it, liveAvg: null, liveLatest: latest };
-      return { ...it,
+      const liveRate = r && r.buyPerHour != null ? { buyPerHour: r.buyPerHour, sellPerHour: r.sellPerHour, hours: r.volHours } : null;
+      if (!r || r.buy == null || r.sell == null) return { ...it, liveAvg: null, liveLatest: latest, liveRate };
+      return { ...it, liveRate,
         liveBuy: r.buy, liveSell: r.sell, liveBuyTime: r.buyTime, liveSellTime: r.sellTime,
         liveAvg: { buyUnits: r.buyUnits, sellUnits: r.sellUnits, from: r.from, at: recentPrices.at,
           buyLo: r.buyLo, buyHi: r.buyHi, sellLo: r.sellLo, sellHi: r.sellHi },

@@ -22,6 +22,7 @@ const MAX_HOURS = 6;
 const FIVE_MIN_HOURS = 2;   // 5-minute blocks this far back, hourly before
 const REFRESH_MS = 4.5 * 60000;
 const GAP_MS = 250;
+const VOL_HOURS = 24;       // hourly volume window (fill-time estimate)
 
 // Weighted median of block prices, plus the lowest and highest block price.
 // Blocks of a busy item hold hundreds of trades each, so their spread is small;
@@ -56,7 +57,50 @@ function createRecentPrices() {
     await new Promise(r => setTimeout(r, GAP_MS));
   }
 
+  // ── Hourly volume per side (Ben, 2026-11-17, idea from a cloud session) ──
+  // Daily volume says an item trades, not that YOUR offer will fill: a buy
+  // offer fills from instant-SELLERS, a sell offer from instant-BUYERS, and the
+  // two can differ 100x (Bomb vial, one hour on Nov 16: 14,041 vs 101). So keep
+  // the last 24 complete hours (each fetched once) and give every item a
+  // typical units-per-hour on each side. The busiest hour is dropped first so
+  // one dump can't make a thin item look busy.
+  const hours = new Map(); // ts -> Map id -> [buyUnits, sellUnits]
+  async function loadHours() {
+    const lastH = Math.floor(Date.now() / 3600000) * 3600 - 3600; // newest complete hour
+    for (let t = lastH; t > lastH - VOL_HOURS * 3600; t -= 3600) {
+      if (hours.has(t)) continue;
+      try {
+        const j = await getJson(`${BASE}1h?timestamp=${t}`);
+        const m = new Map();
+        for (const [id, v] of Object.entries(j.data || {})) m.set(id, [v.highPriceVolume || 0, v.lowPriceVolume || 0]);
+        if (m.size) hours.set(t, m);
+        await new Promise(r => setTimeout(r, GAP_MS));
+      } catch (e) { /* missing hour: skip */ }
+    }
+    for (const t of hours.keys()) if (t <= lastH - VOL_HOURS * 3600) hours.delete(t);
+  }
+  // Typical units per hour on each side: drop the busiest hour, average the rest
+  // (quiet hours count as 0).
+  function perHour(id) {
+    const n = hours.size;
+    if (n < 6) return null;
+    const b = [], s = [];
+    for (const m of hours.values()) { const v = m.get(id); b.push(v ? v[0] : 0); s.push(v ? v[1] : 0); }
+    // Thin items (trades in under 6 of the hours) keep every hour: dropping their
+    // busiest one would drop most of their trades (Double Escape codex read 0).
+    const typical = arr => {
+      const total = arr.reduce((a, x) => a + x, 0);
+      if (arr.filter(x => x > 0).length < 6) return total / arr.length;
+      return (total - Math.max(...arr)) / (arr.length - 1);
+    };
+    return { buy: typical(b), sell: typical(s), hours: n };
+  }
+
+  // The first load is ~24 requests (~20s), so it runs in the background and never
+  // holds up prices; until it's done items just have no per-hour volume yet.
+  let hoursLoading = null;
   async function refreshOnce() {
+    if (!hoursLoading) hoursLoading = loadHours().catch(() => {}).finally(() => { hoursLoading = null; });
     const nowS = Math.floor(Date.now() / 1000);
     const last5 = Math.floor(nowS / 300) * 300 - 300;          // newest complete 5-minute block
     const split = Math.floor((last5 - FIVE_MIN_HOURS * 3600) / 3600) * 3600 + 3600; // 5m from here on
@@ -100,6 +144,10 @@ function createRecentPrices() {
       const o = out[id] || (out[id] = { buy: null, sell: null });
       o.latestBuy = l.high ?? null; o.latestBuyTime = l.highTime ? l.highTime * 1000 : null;
       o.latestSell = l.low ?? null; o.latestSellTime = l.lowTime ? l.lowTime * 1000 : null;
+      // buyPerHour = instant-BUY units/hour (what fills a SELL offer);
+      // sellPerHour = instant-SELL units/hour (what fills a BUY offer).
+      const ph = perHour(id);
+      if (ph) { o.buyPerHour = ph.buy; o.sellPerHour = ph.sell; o.volHours = ph.hours; }
     }
     result = out; at = Date.now();
     console.log(`[recent-prices] ${Object.values(out).filter(o => o.buy).length} items averaged from ${blocks.size} blocks`);
