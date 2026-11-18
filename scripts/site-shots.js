@@ -95,6 +95,8 @@ function fakeData(items) {
       // Every visible row needs its risk worked out: a "—" or "…" in the Risk column
       // made the Nov 12 shot look like items had no rating (Ben caught it).
       if (name === 'flips') await until(`[...document.querySelectorAll('.pt-flips tbody tr')].slice(0, 14).every(tr => { const t = tr.children[1]?.textContent.trim(); return t && t !== '—' && t !== '…'; })`, 180000);
+      // Fill time comes from hourly volume that loads in the background (2026-11-18).
+      if (name === 'flips') await until(`(() => { const t = document.querySelector('.pt-flips'); const c = [...t.querySelectorAll('thead th')].findIndex(th => /Fill time/.test(th.textContent)); return c >= 0 && [...t.querySelectorAll('tbody tr')].slice(0, 10).filter(tr => /\\d/.test(tr.children[c]?.textContent || '')).length >= 8; })()`, 180000);
       if (name === 'flips') await until(`!document.body.innerText.includes('Still working out risk') && [...document.querySelectorAll('button')].some(b => /^Low risk \\([1-9]/.test(b.textContent))`, 120000), await wait(1500);
       await js(`(document.querySelector('.content').scrollTop = 0, true)`);
       await wait(600);
