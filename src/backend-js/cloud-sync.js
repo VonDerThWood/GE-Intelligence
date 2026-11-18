@@ -94,8 +94,17 @@ function createFolderTransport(dir) {
 function createDriveTransport({ getToken, store, fetchImpl = (...a) => fetch(...a) }) {
   const api = async (url, opts = {}) => {
     const token = await getToken();
-    const res = await fetchImpl(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
-    if (!res.ok) throw new Error(`Google Drive: ${res.status} ${(await res.text().catch(() => '')).slice(0, 200)}`);
+    const go = () => fetchImpl(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
+    let res = await go();
+    // Google's servers have brief hiccups (502/503/429; Ben, 2026-11-13): wait and retry once.
+    if (res.status >= 500 || res.status === 429) { await new Promise(r => setTimeout(r, 3000)); res = await go(); }
+    if (!res.ok) {
+      // An error page is HTML, not a message: say what happened in one line.
+      const body = (await res.text().catch(() => '')).trim();
+      const why = res.status >= 500 || res.status === 429 ? "Google's server had a temporary error; the next sync will try again"
+        : /^</.test(body) ? 'unexpected response from Google' : body.slice(0, 200);
+      throw new Error(`Google Drive: ${res.status} (${why})`);
+    }
     return res;
   };
   async function findId() {

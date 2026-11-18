@@ -55,8 +55,14 @@ function resolveWritable(filePath) {
   return filePath.slice(0, idx) + 'app.asar.unpacked' + path.sep + filePath.slice(idx + marker.length);
 }
 
+// Each save gets its own temp file (Ben, 2026-11-16 Background problems: two saves of
+// history_summary_cache.json at once shared one .tmp; the first rename moved it and the
+// second failed with ENOENT). Same final rename, so the file is still never half-written.
+let tmpSeq = 0;
+const tmpName = filePath => `${filePath}.${process.pid}.${++tmpSeq}.tmp`;
+
 async function atomicWrite(filePath, data) {
-  const tmp = filePath + '.tmp';
+  const tmp = tmpName(filePath);
   await fs.promises.writeFile(tmp, data, 'utf8');
   // Windows: antivirus/indexer briefly holding the file makes rename fail
   // with EPERM/EBUSY/EACCES. Seen for real (Ben, 2026-10-08): one such
@@ -145,7 +151,7 @@ function readDirItemSync(dirPath, id) {
   } catch { return null; }
 }
 async function atomicWriteBuffer(filePath, buf) {
-  const tmp = filePath + '.tmp';
+  const tmp = tmpName(filePath);
   await fs.promises.writeFile(tmp, buf);
   for (let i = 0; ; i++) {
     try { await fs.promises.rename(tmp, filePath); return; }
