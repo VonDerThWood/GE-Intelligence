@@ -623,8 +623,15 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (canCompactHistory()) store.set('historyCompact', true); // the importer writes the pack's compact files
     const t = Date.now(), total = historyFetchQueue.length;
     let n = 0;
+    // Developer-only override (Ben, 2026-11-17): if data/dev_history_pack.json
+    // holds {"url": "http..."}, download the pack from there instead of GitHub,
+    // e.g. a copy served from the PC over adb reverse to test a fresh phone
+    // install before any release carries a pack. Normal installs never have it.
+    const dev = await storage.readJSON(path.join(dataDir, 'dev_history_pack.json'), null).catch(() => null);
+    const packUrl = dev && /^https?:\/\//.test(dev.url || '') ? dev.url : HISTORY_PACK_URL;
+    if (packUrl !== HISTORY_PACK_URL) console.log(`[history] History pack from dev override: ${packUrl}`);
     try {
-      const r = await storage.importHistoryPack(historyDir, HISTORY_PACK_URL, {
+      const r = await storage.importHistoryPack(historyDir, packUrl, {
         skip: new Set(historyPopulatedIds),
         onItem: id => { historyPopulatedIds.add(id); if (++n % 100 === 0 && onProgress) onProgress(0, total); },
       });
