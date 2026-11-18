@@ -16701,7 +16701,14 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
             offers.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which offer in the planner',
               h('select', {className:'ge-input', value:chosenOffer?.id, onChange:e=>setOfferId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
                 offers.map(o => h('option', {key:o.id, value:o.id}, (o.label || 'Offer')+' ('+o.bought.toLocaleString()+' bought)')))),
-            h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+(offers.length ? (chosenOffer?.bought || 0) : goal.bought).toLocaleString()+' to '+filled.toLocaleString()+' bought.'),
+            // Say what this update ADDS (Ben, 2026-11-17), like the sell side does.
+            (() => {
+              const prevB = offers.length ? (chosenOffer?.bought || 0) : (goal.bought || 0);
+              const prevS = offers.length ? (chosenOffer?.spent || 0) : (goal.spent || 0);
+              const addB = filled - prevB, addS = coins - prevS;
+              return h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+prevB.toLocaleString()+' to '+filled.toLocaleString()+' bought',
+                addB > 0 ? h('span', {style:{color:T.green, fontWeight:600}}, ' (+'+addB.toLocaleString()+(addS > 0 ? ' for '+fmt.gp(addS)+'gp, '+fmt.gp(Math.round(addS / addB))+' each' : '')+')') : null, '.');
+            })(),
             updateLowers && h('div', {style:{fontSize:12, color:'#f0a030', marginBottom:8}}, 'Updating would LOWER the bought count, so this is probably a different offer (another account or a new bid). Add it as another offer instead.'),
             h('div', {style:{display:'flex', gap:6, flexWrap:'wrap'}},
               h('button', {className: updateLowers ? 'ge-btn' : 'ge-btn gold', onClick:saveToGoal}, 'Update planner'),
