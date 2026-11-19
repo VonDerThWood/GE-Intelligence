@@ -2868,6 +2868,287 @@ function BigMacLine({price, bondGP, isLive}) {
   );
 }
 
+// "What price do I buy and sell at?" (Max via Ben, 2026-11-12: "not 100%
+// clear what price to buy and sell at"). Replaces the old "Live Price:
+// Buy X / Sell Y" box, whose "Buy" was the instant-buy price, i.e. what
+// impatient buyers paid, which new users read as "the price to buy at".
+// Says it in plain words: the patient offer, the instant price, and whether
+// flipping pays after tax (same rules as the Flips tab, computeFlipStats).
+function TradePriceBox({item, livePrice, gpFmt}) {
+  // Follows the panel's Rounded/Exact price toggle (Ben, 2026-11-12).
+  const f = gpFmt || fmt.gp;
+  // Same recent-trade averages Flips uses (Ben, 2026-11-12), so the two always
+  // agree; the Live Price line above keeps the single latest trade.
+  const hi = item.liveBuy, lo = item.liveSell;
+  const stats = useMemo(() => computeFlipStats(item), [item]);
+  // Normal price check (Ben, 2026-11-13): a DXP spike nearly set his dip bids
+  // ~60% above Summoning focus's normal price.
+  const [normal, setNormal] = useState(null);
+  useEffect(() => {
+    setNormal(null);
+    if (item.untradeable || !window.genius?.getLiveNormal) return;
+    let dead = false;
+    window.genius.getLiveNormal(item.id).then(n => { if (!dead) setNormal(n || null); }).catch(() => {});
+    return () => { dead = true; };
+  }, [item.id]);
+  const box = {marginTop:8, padding:'8px 10px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11, lineHeight:1.55};
+  const av = item.liveAvg;
+  const head = h('div', null,
+    h('div', {style:{color:T.textDim, fontSize:9, textTransform:'uppercase', letterSpacing:'0.05em'}}, av ? 'What to offer (average of recent trades)' : 'What to offer (live prices)'),
+    av && h('div', {style:{color:T.textDim, fontSize:10, marginBottom:4}},
+      `Average of the last ${av.buyUnits.toLocaleString()} bought and ${av.sellUnits.toLocaleString()} sold (${timeAgo(av.from).replace(/ ago$/, '')} of trading).`),
+    !av && h('div', {style:{marginBottom:4}}));
+  if (hi == null || lo == null) {
+    return h('div', {style:box}, head,
+      h('div', {style:{color:T.textDim}}, livePrice === null && item.liveBuy == null
+        ? 'Loading live prices...'
+        : `No recent live trades for this item. The GE guide price (${f(item.high || item.low || 0)}gp) is the only guide, and it can be well off.`));
+  }
+  const g = n => h('span', {style:{color:T.textBright, fontWeight:600}}, f(Math.round(n)) + 'gp');
+  const net = applyTax(hi), margin = net - lo;
+  // How today compares with the item's normal (90-day median) instant-sell.
+  const vsNormal = normal && normal.sell ? (lo - normal.sell) / normal.sell : null;
+  const monthName = d => d ? new Date(d + 'T12:00:00Z').toLocaleString('en', {month:'short', day:'numeric'}) : '';
+  const normalLine = vsNormal == null ? null : h('div', {style:{
+      marginBottom:5, padding:'4px 6px', borderRadius:3, fontSize:10.5, lineHeight:1.45,
+      background: vsNormal >= 0.15 ? 'rgba(224,128,48,0.12)' : 'transparent',
+      border: vsNormal >= 0.15 ? '1px solid rgba(224,128,48,0.45)' : 'none',
+      color: vsNormal >= 0.15 ? T.text : T.textDim}},
+    vsNormal >= 0.15
+      ? [h('b', {key:'a', style:{color:'#e08030'}}, `${Math.round(vsNormal * 100)}% above its normal price. `),
+         `Normally sells around ${f(Math.round(normal.sell))}gp (90-day median). Spikes usually fall back, so don't set dip bids from today's price.`]
+      : vsNormal <= -0.15
+        ? [h('b', {key:'a', style:{color:T.green}}, `${Math.round(-vsNormal * 100)}% below its normal price. `),
+           `Normally sells around ${f(Math.round(normal.sell))}gp (90-day median).`]
+        : `About its normal price (90-day median sell ${f(Math.round(normal.sell))}gp).`,
+    normal.yearLow ? ` Lowest since ${monthName(normal.since)}: ${f(Math.round(normal.yearLow))}gp (${monthName(normal.yearLowDate)}).` : null,
+    item.newSource && Date.now() - Date.parse(item.newSource.date) < 90 * 86400000
+      ? ` That normal includes prices from before ${item.newSource.release}, so it may not apply any more.` : null);
+  const ns = item.newSource;
+  const newSourceLine = ns && h('div', {style:{marginBottom:5, padding:'4px 6px', borderRadius:3, fontSize:10.5, lineHeight:1.45,
+      background:'rgba(224,128,48,0.12)', border:'1px solid rgba(224,128,48,0.45)', color:T.text}},
+    h('b', {style:{color:'#e08030'}}, ns.newItem ? `⚠ New item from ${ns.release}` : `⚠ New source: ${ns.release} now drops this`),
+    ` (released ${ns.date}${ns.quantity ? '; ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}). ` + (ns.newItem ? 'New items often swing hard while supply settles.' : 'A new source often pushes the price down as supply grows. Elder seed fell about 90% in four days after Blood Knights started dropping it.'));
+  return h('div', {style:box}, head, newSourceLine, normalLine,
+    h('div', null, h('span', {style:{color:T.green}}, '● '), 'To ', h('b', null, 'buy'), ': offer about ', g(lo), ', or pay ', g(hi), ' to get it instantly.'),
+    h('div', null, h('span', {style:{color:'#e08030'}}, '● '), 'To ', h('b', null, 'sell'), ': list at about ', g(hi), ', or take ', g(lo), ' to sell instantly.'),
+    h('div', {style:{marginTop:5, paddingTop:5, borderTop:`1px solid ${T.borderDim}`}},
+      stats.qualifies
+        ? [h('span', {key:'a', style:{color:T.green, fontWeight:'bold'}}, 'Worth flipping: '),
+           'buy at ', g(lo), ', sell at ', g(hi), ' = ', h('span', {key:'b', style:{color:T.green, fontWeight:600}}, '+' + f(Math.round(margin)) + 'gp each'), ' after 2% tax',
+           item.limit ? [' (', h('span', {key:'c', style:{color:T.goldBright}}, '+' + f(Math.round(stats.profitForLimit)) + 'gp'), ` per ${item.limit.toLocaleString()} buy limit)`] : null, '.']
+        : margin <= 0
+          ? [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Not worth flipping right now: '),
+             `selling at ${f(hi)}gp leaves ${f(net)}gp after tax, ${margin === 0 ? 'the same as' : 'less than'} the ${f(lo)}gp you'd pay.`]
+          : [h('span', {key:'a', style:{color:T.textDim, fontWeight:'bold'}}, 'Small or risky flip: '),
+             'buy at ', g(lo), ', sell at ', g(hi), ' = +' + f(Math.round(margin)) + 'gp each after 2% tax',
+             // profitForLimit isn't computed for items that don't qualify (too little
+             // trading), which showed "+NaNgp per 2 buy limit" (Ben, 2026-11-16).
+             item.limit ? ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
+             '. The Flips tab leaves it out: ', stats.disqualifyReason]
+    ),
+    // How long it would really take (Ben, 2026-11-17: "possible but very slow").
+    (() => {
+      const fl = margin > 0 && item.limit ? flipFill(item, item.limit, margin) : null;
+      if (!fl || fl.hours == null) return null;
+      const r = item.liveRate;
+      return h('div', {style:{marginTop:4, fontSize:10.5, color:T.textDim, lineHeight:1.45}},
+        h('span', {style:{color:fillColor(fl.hours), fontWeight:600}}, 'Speed: '),
+        `a full buy limit takes about ${fmtHours(fl.buyHours)} to buy and ${fmtHours(fl.sellHours)} to sell`,
+        ` (about ${Math.round(r.sellPerHour).toLocaleString()} sold and ${Math.round(r.buyPerHour).toLocaleString()} bought instantly per hour, last 24h; assumes your offers get ~${Math.round(FLIP_MARKET_SHARE * 100)}% of that).`,
+        fl.hours > 24 * 7 ? ' Possible, but very slow.' : fl.hours > 24 ? ' Possible, but slow.' : '');
+    })()
+  );
+}
+
+// Where an item drops, from its RS Wiki page (Ben, 2026-11-13). Sources that
+// appeared in the last 60 days are flagged: a new boss with a stacked drop can
+// sink an item (Blood Knights dropped Elder seed x5, ~90% fall in four days).
+function DropSourcesBox({item}) {
+  const [data, setData] = useState(undefined); // undefined loading, null none
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    setData(undefined); setOpen(false);
+    if (!item?.name || !window.genius?.getDropWatch) { setData(null); return; }
+    let dead = false;
+    window.genius.getDropWatch(item.name).then(d => { if (!dead) setData(d || null); }).catch(() => { if (!dead) setData(null); });
+    return () => { dead = true; };
+  }, [item?.name]);
+  if (!data || !data.sources) return null;
+  const list = Object.entries(data.sources).map(([source, s]) => ({source, ...s}));
+  if (!list.length) return null;
+  const recent = s => s.firstSeen && Date.now() - s.firstSeen < 60 * 86400000;
+  const fresh = list.filter(recent);
+  const dateOf = t => new Date(t).toLocaleDateString(undefined, {month:'short', day:'numeric'});
+  return h('div', {style:{marginTop:10, fontSize:11, border:`1px solid ${fresh.length ? 'rgba(224,128,48,0.5)' : T.borderDim}`, borderRadius:4, padding:'6px 8px', background: fresh.length ? 'rgba(224,128,48,0.08)' : 'transparent'}},
+    h('div', {onClick:() => setOpen(v => !v), style:{cursor:'pointer', display:'flex', gap:6, alignItems:'baseline'}},
+      h('span', {style:{color:T.textDim}}, open ? '▾' : '▸'),
+      h('span', {style:{color:T.textDim, textTransform:'uppercase', fontSize:9, letterSpacing:'0.05em'}}, `Where it drops (${list.length})`),
+      fresh.length ? h('span', {style:{color:'#e08030', fontWeight:600}}, `${fresh.length} new source${fresh.length > 1 ? 's' : ''}`) : null),
+    fresh.map(s => h('div', {key:'n' + s.source, style:{marginTop:4, color:T.text}},
+      h('b', {style:{color:'#e08030'}}, 'New: '), `${s.source} (${s.qty && s.qty !== '1' ? 'x' + s.qty + ', ' : ''}${s.rarity || '?'}), first seen ${dateOf(s.firstSeen)}. New sources can sink a price fast.`)),
+    open && h('div', {style:{marginTop:4}},
+      list.map(s => h('div', {key:s.source, style:{display:'flex', gap:8, color: recent(s) ? '#e08030' : T.textDim, padding:'1px 0'}},
+        h('span', {style:{flex:1}}, s.source),
+        h('span', null, s.qty && s.qty !== '1' ? 'x' + s.qty : ''),
+        h('span', {style:{minWidth:80, textAlign:'right'}}, s.rarity || ''))),
+      h('div', {style:{color:T.textDim, fontSize:10, marginTop:4}}, 'From the RS Wiki. GEnius checks items you hold or watch daily and notifies you when a new source appears.')));
+}
+
+// Risk for many items at once (Max via Ben, 2026-11-12: "separate sections for
+// interesting offers and match them with risk"). Same positionRisk as the item
+// panel's ITEM RISK badge, worked out in the background a few items at a time
+// and kept for the session as just the level (0 Low, 1 Medium, 2 High, null =
+// not enough history), so 600 flips don't hold years of prices in memory.
+const _riskLevelCache = new Map(); // id -> {at, level}
+const RISK_TTL = 6 * 3600000;
+let _riskQueue = [], _riskRunning = 0;
+const _riskListeners = new Set();
+async function _riskOne(item) {
+  const yearAgo = Date.now() - 365 * 86400000;
+  const [hist, snaps] = await Promise.all([
+    window.genius?.getItemHistoryLocal(item.id).catch(() => null),
+    window.genius?.getPriceSnapshots(item.id).catch(() => null),
+  ]);
+  const byDay = new Map();
+  for (const pt of [...(hist || []), ...(snaps || [])]) {
+    if (!pt.price) continue;
+    const ts = pt.timestamp > 1e12 ? pt.timestamp : pt.timestamp * 1000;
+    if (ts < yearAgo - 2 * 86400000) continue;
+    const d = Math.floor(ts / 86400000), prev = byDay.get(d);
+    if (!prev || ts > prev.ts) byDay.set(d, {ts, price: pt.price});
+  }
+  const days = [...byDay.values()].sort((a, b) => a.ts - b.ts);
+  const r = positionRisk(null, item, days, yearAgo);
+  // "Still falling" (Ben, 2026-11-12): made a new 180-day low in the last 14
+  // days. The long-hold research found buying a drop only worked once it had
+  // STOPPED falling; Low risk alone doesn't say whether it still is.
+  let falling = false;
+  const recent = days.filter(x => x.ts >= Date.now() - 180 * 86400000);
+  if (recent.length >= 30) {
+    let low = Infinity, lowTs = 0;
+    for (const x of recent) if (x.price <= low) { low = x.price; lowTs = x.ts; }
+    falling = lowTs >= Date.now() - 14 * 86400000;
+  }
+  return { level: r ? ['RISK_LOW', 'RISK_MEDIUM', 'RISK_HIGH'].indexOf(r.signal) : null, falling };
+}
+function _riskPump() {
+  while (_riskRunning < 4 && _riskQueue.length) {
+    const item = _riskQueue.shift();
+    const hit = _riskLevelCache.get(item.id);
+    if (hit && Date.now() - hit.at < RISK_TTL) continue;
+    _riskRunning++;
+    _riskOne(item).catch(() => null).then(res => {
+      _riskLevelCache.set(item.id, {at: Date.now(), level: res ? res.level : null, falling: !!(res && res.falling)});
+      _riskRunning--;
+      if (_riskLevelCache.size % 20 === 0 || !_riskQueue.length) _riskListeners.forEach(f => f());
+      _riskPump();
+    });
+  }
+}
+// Returns {levels: Map id -> 0/1/2/null for the items done so far, pending: count}.
+function useRiskLevels(items) {
+  const [, bump] = useState(0);
+  useEffect(() => {
+    const f = () => bump(n => n + 1);
+    _riskListeners.add(f);
+    const ids = new Set(_riskQueue.map(i => i.id));
+    for (const it of items) {
+      const hit = _riskLevelCache.get(it.id);
+      if ((!hit || Date.now() - hit.at >= RISK_TTL) && !ids.has(it.id)) _riskQueue.push(it);
+    }
+    _riskPump();
+    return () => _riskListeners.delete(f);
+  }, [items]);
+  // Live-price "still falling" (Ben, 2026-11-12): the guide history is smoothed and
+  // lags, so an item sliding at live prices (Eternal magic shortbow Mk. 5 during
+  // the Nov DXP) read as not falling. Ask the live archive too, in one batch.
+  useEffect(() => {
+    const now = Date.now();
+    const need = items.map(it => it.id).filter(id => !((_liveFallingChecked.get(id) || 0) > now - 30 * 60000));
+    if (!need.length || !window.genius?.getLiveFalling) return;
+    need.forEach(id => _liveFallingChecked.set(id, now));
+    window.genius.getLiveFalling(need).then(list => {
+      const hit = new Set((list || []).map(String));
+      for (const id of need) { if (hit.has(String(id))) _liveFalling.add(id); else _liveFalling.delete(id); }
+      _riskListeners.forEach(f => f());
+    }).catch(() => need.forEach(id => _liveFallingChecked.delete(id)));
+  }, [items]);
+  const levels = new Map(), falling = new Set();
+  let pending = 0;
+  for (const it of items) {
+    const hit = _riskLevelCache.get(it.id);
+    if (hit) { levels.set(it.id, hit.level); if (hit.falling) falling.add(it.id); } else pending++;
+    if (_liveFalling.has(it.id)) falling.add(it.id);
+  }
+  return {levels, falling, pending};
+}
+const _liveFalling = new Set(), _liveFallingChecked = new Map(); // id -> last checked
+// "New drop" (Ben, 2026-11-13): a release from the last 60 days drops this item.
+function NewSourceTag({ns}) {
+  if (!ns) return null;
+  return h('span', {title:`${ns.newItem ? 'New item from' : 'Now also drops from'} ${ns.release} (released ${ns.date})${ns.quantity ? ', ' + ns.quantity : ''}${ns.rarity ? ', ' + ns.rarity : ''}. A new source often shifts the price: Elder seed fell about 90% in four days after Blood Knights started dropping it.`,
+    style:{fontSize:9, padding:'1px 5px', borderRadius:3, border:'1px solid rgba(224,128,48,0.6)', color:'#e08030', whiteSpace:'nowrap', letterSpacing:'0.03em'}}, ns.newItem ? '⚠ New item' : '⚠ New source');
+}
+function FallingTag() {
+  return h('span', {title:'Made a new 6-month low in the last 14 days, so it is still falling. GEnius research found that buying a drop only paid off once the price had stopped falling.',
+    style:{fontSize:10, color:'#e08030', border:'1px dashed #e08030', borderRadius:3, padding:'0 5px', whiteSpace:'nowrap', marginLeft:4}}, '↓ Still falling');
+}
+const RISK_NAMES = ['Low', 'Medium', 'High'];
+const RISK_COLORS = () => [T.green, T.gold, T.red];
+function RiskTag({level}) {
+  if (level == null) return h('span', {style:{fontSize:10, color:T.textDim}}, '—');
+  const c = RISK_COLORS()[level];
+  return h('span', {title:'Same as the ITEM RISK badge in the item panel: how much it swings, its biggest drop over the past year, its spread and how much it trades. Not a forecast.',
+    style:{fontSize:10, color:c, border:`1px solid ${c}`, borderRadius:3, padding:'0 5px', whiteSpace:'nowrap'}}, RISK_NAMES[level]);
+}
+
+// "Good right now" (Max's feedback via Ben, 2026-11-12: "to find good items is
+// not the easiest"). The top 5 flips from the Flips tab's own rules
+// (computeFlipStats: live prices, after tax, liquid, sanity-checked), by
+// realistic profit, each with plain buy/sell prices and one click into the item.
+function GoodRightNow({items, onSelect, onNavigate}) {
+  const {top, count} = useMemo(() => {
+    const ok = (items || []).map(it => ({it, s: computeFlipStats(it)})).filter(x => x.s.qualifies);
+    ok.sort((a, b) => (b.s.realisticProfit || 0) - (a.s.realisticProfit || 0));
+    return {top: ok.slice(0, 5), count: ok.length};
+  }, [items]);
+  const topItems = useMemo(() => top.map(x => x.it), [top]);
+  const risk = useRiskLevels(topItems);
+  // Collapsible, remembered (Ben, 2026-11-12).
+  const [open, setOpen] = useState(() => { try { return localStorage.getItem('genius_goodnow_open') !== '0'; } catch { return true; } });
+  const toggle = () => setOpen(v => { try { localStorage.setItem('genius_goodnow_open', v ? '0' : '1'); } catch {} return !v; });
+  if (!top.length) return null;
+  const g = n => fmt.gp(Math.round(n)) + 'gp';
+  return h('div', {style:{margin:'0 0 16px', padding:'10px 12px', background:'rgba(201,168,76,0.06)', border:`1px solid ${T.border}`, borderRadius:6}},
+    h('div', {onClick:toggle, title: open ? 'Collapse' : 'Expand', style:{display:'flex', alignItems:'baseline', gap:8, marginBottom: open ? 6 : 0, flexWrap:'wrap', cursor:'pointer'}},
+      h('span', {style:{fontSize:11, color:T.textDim}}, open ? '▾' : '▸'),
+      h('div', {className:'ge-section-head', style:{marginBottom:0}}, 'Good potential flips right now'),
+      open
+        ? h('div', {style:{fontSize:11, color:T.textDim}}, 'Flips that pay after the 2% tax, using averages of recent trades on each side (at least 5, up to 6 hours back). Buy with an offer at the first price, sell at the second.')
+        : h('div', {style:{fontSize:11, color:T.textDim}}, `${count.toLocaleString()} flips right now. Top: ${top[0].it.name}, +${g(top[0].s.margin)} each.`),
+    ),
+    open && top.map(({it, s}) => h('div', {
+      key: it.id, onClick: () => onSelect && onSelect(it),
+      style:{display:'flex', alignItems:'center', gap:10, padding:'5px 6px', borderRadius:3, cursor:'pointer', fontSize:12, flexWrap:'wrap'},
+      onMouseEnter: e => { e.currentTarget.style.background = T.panel2; }, onMouseLeave: e => { e.currentTarget.style.background = 'transparent'; },
+    },
+      h('div', {style:{flex:'1 1 160px', color:T.textBright, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}, it.name),
+      risk.levels.has(it.id) && h(RiskTag, {level: risk.levels.get(it.id)}),
+      risk.falling.has(it.id) && h(FallingTag),
+      it.newSource && h(NewSourceTag, {ns: it.newSource}),
+      h('div', {style:{color:T.textDim, whiteSpace:'nowrap'}}, 'buy ', h('span', {style:{color:'#e08030'}, title:avgTitle(it, 'sell')}, g(it.liveSell)), ' → sell ', h('span', {style:{color:T.green}, title:avgTitle(it, 'buy')}, g(it.liveBuy))),
+      h('div', {style:{minWidth:150, textAlign:'right', whiteSpace:'nowrap'}},
+        h('span', {style:{color:T.green, fontWeight:600}}, '+' + g(s.margin) + ' each'),
+        h('span', {style:{color:T.textDim, fontSize:11}}, ' · +' + fmt.gp(Math.round(s.realisticProfit)) + ' per buy limit')),
+    )),
+    open && h('div', {style:{marginTop:6, fontSize:11}},
+      h('span', {style:{color:T.gold, cursor:'pointer', textDecoration:'underline'}, onClick: () => onNavigate && onNavigate('flips')}, `See all ${count.toLocaleString()} in Flips →`),
+      h('span', {style:{color:T.textDim}}, '  Prices move fast: check the item\'s "What to offer" box before you buy.'),
+    ),
+  );
+}
+
 // Automated read of the item's live flip margin — same math/thresholds
 // as the Flips tab (computeFlipStats), surfaced here too since "it never
 // hurts to have some extra data" even though FlipCalculator right below
@@ -3147,9 +3428,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   // Drop sources — deliberately NOT auto-fetched like wikiStats above.
   // Ben: this is a click-to-check lookup for unusual items, not something
   // that should fire a wiki request on every item click.
-  const [dropSources, setDropSources] = useState(null); // null = not fetched, {sources:[...]} once loaded
   const [quickAlertPos, setQuickAlertPos] = useState(null); // null = closed, {left,top,...} once open
-  const [dropSourcesLoading, setDropSourcesLoading] = useState(false);
   // "Turns into" — unlike Drop sources above, this IS auto-fetched on open
   // (Ben's ask, 2026-08-02): a much lighter page than a full drop table, and
   // useful often enough (grimy->clean herbs, raw->cooked food, augmenting
@@ -3188,8 +3467,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
     if (!item) return;
     setWikiStats(null);
     setStatsLoading(true);
-    setDropSources(null);
-    setDropSourcesLoading(false);
     setProducts(null);
     setProductSort(null);
     if (!item.untradeable) {
@@ -3443,6 +3720,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       // Live instant-buy/instant-sell prices from the wiki's real-time
       // prices API — fresher and per-price-timestamped, unlike item.high/
       // item.low above which come from the app's 15-min gazbot dump.
+      // Live buy/sell right under the guide price (Ben, 2026-11-12: missed it
+      // after the What to offer box replaced it).
       !item.untradeable && livePrice && (livePrice.high != null || livePrice.low != null) && h('div', {
         style:{marginTop:8, padding:'6px 8px', background:'rgba(0,0,0,0.2)', borderRadius:4, fontSize:11}
       },
@@ -3461,7 +3740,8 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             livePrice.lowTime && h('span', {style:{color:T.textDim, marginLeft:6, fontSize:10}}, timeAgo(livePrice.lowTime))
           ),
         )
-      )
+      ),
+      !item.untradeable && h(TradePriceBox, {item, livePrice, gpFmt})
     ),
     h('div', {className:'detail-body'},
       h('div', {className:'sparkline-wrap', onClick:()=>setChartOpen(true), title:'Click to enlarge'},
@@ -3482,6 +3762,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
       // Chart analysis sits right under the chart (Ben, 2026-10-09: it was
       // easy to miss lower down, half behind the panel's scroll arrows).
       h(ChartAnalysis, {item}),
+      !item.untradeable && h(DropSourcesBox, {item}),
       h(AskItem, {item}),
       item.untradeable
         ? [
@@ -3708,20 +3989,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
         !item.untradeable && h('button',{
           className:'ge-btn',
           style:{fontSize:11, padding:'3px 10px'},
-          disabled: dropSourcesLoading,
-          title:'Fetch where this item drops from, straight from the RS Wiki — not saved, just a quick lookup',
-          onClick:()=>{
-            if (dropSourcesLoading) return;
-            setDropSourcesLoading(true);
-            window.genius?.getDropSources(item.name).then(res => {
-              setDropSources(res || {sources:[]});
-              setDropSourcesLoading(false);
-            }).catch(() => { setDropSources({sources:[]}); setDropSourcesLoading(false); });
-          }
-        }, dropSourcesLoading ? '⏳ Loading…' : '🐲 Drop sources'),
-        !item.untradeable && h('button',{
-          className:'ge-btn',
-          style:{fontSize:11, padding:'3px 10px'},
           title:'Items whose prices have historically moved together with this one (beyond the overall market)',
           onClick:()=>{
             setSimilar('loading');
@@ -3743,26 +4010,6 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             similar.opposite.map(o => h('div', {key:o.id, style:{display:'flex', justifyContent:'space-between', fontSize:11, padding:'2px 0'}},
               h('span', {style:{color:T.gold, cursor:'pointer'}, onClick:() => { const it = (allItems || []).find(i => i.id === o.id); it && onSelectItem && onSelectItem(it); }}, o.name),
               h('span', {style:{color:T.red}, title:`Correlation ${o.corr.toFixed(2)} over ${o.weeks} weeks`}, Math.round(-o.corr * 100) + '% opposite'))))),
-
-      dropSources && h('div', {style:{marginTop:8}},
-        dropSources.sources.length === 0
-          ? h('div', {style:{fontSize:11, color:T.textDim, fontStyle:'italic'}}, 'No monster drop sources listed on the wiki page — probably bought, made, or otherwise not a drop.')
-          : h('table', {style:{width:'100%', borderCollapse:'collapse', fontSize:11}},
-              h('thead', null, h('tr', null,
-                h('th', {style:{textAlign:'left', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px 0', borderBottom:`1px solid ${T.border}`}}, 'Source'),
-                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Qty'),
-                h('th', {style:{textAlign:'right', color:T.textDim, fontWeight:'normal', padding:'2px 0 4px 4px', borderBottom:`1px solid ${T.border}`}}, 'Rarity'),
-              )),
-              h('tbody', null, dropSources.sources.map((s,i) => h('tr', {key:i},
-                h('td', {style:{padding:'3px 4px 3px 0', color:T.text}}, s.source),
-                h('td', {style:{padding:'3px 4px', textAlign:'right', color:T.textDim}}, s.quantity || '—'),
-                h('td', {style:{padding:'3px 0 3px 4px', textAlign:'right', color:T.gold}}, s.rarity || '—'),
-              )))
-            ),
-        dropSources.totalCount > dropSources.sources.length && h('div', {
-          style:{fontSize:10, color:T.textDim, fontStyle:'italic', marginTop:4},
-        }, `+ ${dropSources.totalCount - dropSources.sources.length} more sources — see full list on the wiki`)
-      ),
 
       products && products.products.length > 0 && h('div', {style:{marginTop:12}},
         h('div', {className:'ge-section-head'}, 'Turns Into'),
@@ -4225,10 +4472,11 @@ function PhoneFold({style, children}) {
   const [long, setLong] = useState(false);
   const ref = useRef(null);
   useEffect(() => { const el = ref.current; if (el) setLong(el.scrollHeight > el.clientHeight + 2); });
-  if (!IS_PHONE) return h('div', {style}, children);
+  // Desktop folds too since 2026-11-12 (Max: "just a massive amount of info"):
+  // the page guides now explain each page, so the long explainers start short.
   return h('div', {style, onClick: () => (long || open) && setOpen(o => !o)},
-    h('div', {ref, style: open ? null : {display:'-webkit-box', WebkitLineClamp:3, WebkitBoxOrient:'vertical', overflow:'hidden'}}, children),
-    (long || open) && h('div', {style:{color:T.gold, fontSize:11, marginTop:3, cursor:'pointer'}}, open ? 'Show less ▴' : 'More ▾'));
+    h('div', {ref, style: open ? null : {display:'-webkit-box', WebkitLineClamp: IS_PHONE ? 3 : 2, WebkitBoxOrient:'vertical', overflow:'hidden'}}, children),
+    (long || open) && h('div', {style:{color:T.gold, fontSize:11, marginTop:3, cursor:'pointer'}}, open ? 'Show less ▴' : 'More detail ▾'));
 }
 
 function useStickyTableHeader(wrapRef, theadRef) {
@@ -4260,6 +4508,56 @@ function useStickyTableHeader(wrapRef, theadRef) {
     };
   }, [wrapRef, theadRef]);
   return state;
+}
+
+// Skill pills for the Gathering and Artisan tabs (Ben, 2026-11-15: "an All tab and then
+// different ones"). The wiki categories that sort items into these tabs aren't kept, so
+// the skill comes from the item's name. First match wins; anything unmatched is Other.
+const SKILL_PILLS = {
+  mining: [
+    ["Divination", /\benergy$|divine charge|memory dowser|grace of the elves/i],
+    ["Firemaking", /pyre logs|incense sticks/i],
+    ["Hunter", /\bfur\b|impling jar|chompa|kebbit|noose|butterfly net|rabbit foot|whirligig|hypnowand|yak-hide|box trap/i],
+    ["Fishing", /fishing|harpoon|\bnet\b|lobster pot|\bcage\b|\bbait\b|karambwan|seaweed/i],
+    ["Woodcutting", /\blogs?\b|hatchet|wood spirit|\bbark\b|machete|white oak/i],
+    ["Mining", /\bores?\b|ore box|stone spirit|pickaxe|\bcoal\b|clay\b|essence$|limestone|sandstone|granite|luminite|drakolith|phasmatite|animica|minerals|meteorite|soapstone|gravel|brimstone|volcanic|cashmere|peat/i],
+  ],
+  artisan: [
+    ["Crafting", /starbloom|lantern|essence of finality|royal frame/i],
+    // Hand-placed by Ben (2026-11-15).
+    ["Construction", /^ancient crystal$/i],
+    ["Crafting", /^batwing$|^clockwork$/i],
+    ["Smithing", /^chitin scraps$|^draconic visage$/i],
+    ["Fletching", /^sinew$/i],
+    ["Construction", /plank|\bframe$|nails$|furniture plans|chair|table|bench|\bbed$|bookcase|dresser|clock$|wardrobe|treasure chest|armour case|cape store|toy box|dress box|drawers|shoe box|marble block|gold leaf|magic stone|bolt of cloth|wood box|stone wall|limestone brick/i],
+    ["Runecrafting", /talisman|tiara|runic|passage of the abyss/i],
+    ["Fletching", /\bbows?\b|bow \(|shortbow|longbow|\bshafts?\b|arrowheads|\barrows?\b|\bbolts\b|\bbolts \(|bolt tips|\bdarts?\b|dart tip|\bstock$|\blimbs\b|crossbow|bowstring|feather|blowpipe|brutal|dinarrow|propellant|sagaie|bolas|apex sinew|ascension shard|resonant anima/i],
+    ["Smithing", /\bbars?$|\bbar$|ingot|\bores?$|\bore\b|\bcoal$|luminite|drakolith|phasmatite|animica|stone spirit|alloy|\+ \d|platebody|platelegs|kiteshield|full helm|gauntlets|armoured boots|2h sword|warhammer|longsword|armour trim|essence|armour (lump|slice|shard)/i],
+    ["Crafting", /uncut|diamond|ruby|emerald|sapphire|opal|jade|topaz|dragonstone|onyx|hydrix|moonstone|platinum|\bring\b|necklace|amulet|bracelet|anklet|brace\b|leather|hide|thread|cloth|needle|chisel|mould|\borb\b|urn\b|symbol|emblem|sand$|flax|\bjar$|starbloom|silk|shell|scale|lantern|scrimshaw|crafter|clay|birdhouse|token|title scroll|gem|pearl|circlet|facet/i],
+  ],
+};
+const SKILL_PILL_ORDER = {
+  mining: ['Mining', 'Woodcutting', 'Fishing', 'Hunter', 'Divination', 'Firemaking', 'Other'],
+  artisan: ['Smithing', 'Crafting', 'Fletching', 'Construction', 'Runecrafting', 'Other'],
+};
+const skillOf = (tab, name) => ((SKILL_PILLS[tab] || []).find(([, re]) => re.test(name || '')) || ['Other'])[0];
+function SkillPillTable({tab, items, ...rest}) {
+  const key = 'genius_skill_pill_' + tab;
+  const [pill, setPill] = useState(() => { try { return localStorage.getItem(key) || 'All'; } catch { return 'All'; } });
+  const counts = useMemo(() => {
+    const c = {};
+    for (const it of items) { const s = skillOf(tab, it.name); c[s] = (c[s] || 0) + 1; }
+    return c;
+  }, [items, tab]);
+  const pills = ['All', ...SKILL_PILL_ORDER[tab].filter(s => counts[s])];
+  const active = pills.includes(pill) ? pill : 'All';
+  const shown = useMemo(() => active === 'All' ? items : items.filter(it => skillOf(tab, it.name) === active), [items, active, tab]);
+  const pick = p => { setPill(p); try { localStorage.setItem(key, p); } catch {} };
+  return h('div', null,
+    h('div', {className:'row', style:{gap:6, flexWrap:'wrap', padding:'10px 14px 0'}},
+      pills.map(p => h('button', {key:p, className:'ge-btn' + (active === p ? ' gold' : ''), style:{fontSize:11, padding:'4px 10px'}, onClick:() => pick(p)},
+        p, h('span', {style:{opacity:0.6, marginLeft:5}}, p === 'All' ? items.length : counts[p])))),
+    h(ItemTable, {items:shown, ...rest}));
 }
 
 function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = () => {}, onToggleHide, onAddCompare, description, showSignals, showGapPct, showSpread}) {
@@ -4878,12 +5176,15 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   }, [activeSignal, activeIndexId, activeSector]);
   const tradeableItems = useMemo(() => items.filter(it => !it.untradeable), [items]);
 
-  const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000)
+  // Sane lists (Ben, 2026-11-12): skip items whose live buy and sell are over 3x
+  // apart (e.g. a juju potion at B 89K / S 721) or that trade under 20 a day.
+  const saneMarket = it => (it.avgVolume || 0) >= 20 && !(it.liveBuy > 0 && it.liveSell > 0 && Math.max(it.liveBuy, it.liveSell) / Math.min(it.liveBuy, it.liveSell) > 3);
+  const risers  = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) > 0 && it.high > 1000 && saneMarket(it))
     .sort((a,b) => (b.change_1d||0)-(a.change_1d||0)).slice(0,6), [tradeableItems]);
-  const fallers = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) < 0 && it.high > 1000)
+  const fallers = useMemo(() => [...tradeableItems].filter(it => (it.change_1d||0) < 0 && it.high > 1000 && saneMarket(it))
     .sort((a,b) => (a.change_1d||0)-(b.change_1d||0)).slice(0,6), [tradeableItems]);
   const volume  = useMemo(() => [...tradeableItems]
-    .filter(it => it.signals && (it.signals.includes('FRENZY') || it.signals.includes('HIGH_VOL')))
+    .filter(it => it.signals && (it.signals.includes('FRENZY') || it.signals.includes('HIGH_VOL')) && saneMarket(it))
     .sort((a,b) => {
       const ra = a.volume && a.avgVolume ? a.volume/a.avgVolume : 0;
       const rb = b.volume && b.avgVolume ? b.volume/b.avgVolume : 0;
@@ -4925,7 +5226,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   const {totalInvested, totalCurrent, unrealizedPL, unrealizedPct} = useMemo(() => {
     let inv = 0, cur = 0;
     for (const pos of openPositions) {
-      const it = items.find(i => i.name.toLowerCase() === (pos.item_name||'').toLowerCase());
+      const it = itemByName(items, (pos.item_name||''));
       const price = liveSellOf(it) || 0;
       inv += pos.cost_basis * pos.quantity;
       cur += price * pos.quantity;
@@ -4938,7 +5239,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   // Personal — alerts
   const alertCount = (alerts||[]).length;
   const triggeredAlerts = useMemo(() => (alerts||[]).filter(a => {
-    const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+    const it = itemByName(items, (a.item_name||''));
     if (!it) return false;
     const price = it.high || it.low || 0;
     if (a.condition === 'above') return price >= a.price;
@@ -5117,8 +5418,14 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
   }, [tradeableItems]);
 
   const sectionStyle = {marginBottom:20};
+  // Collapsible sections, remembered (Ben, 2026-11-12: Dashboard was ~4 screens).
+  const [folds, setFolds] = useState(() => { try { return JSON.parse(localStorage.getItem('genius_dash_folds')) || {}; } catch { return {}; } });
+  const isOpen = id => !folds[id];
+  const toggleFold = id => setFolds(f => { const n = {...f, [id]: !f[id]}; try { localStorage.setItem('genius_dash_folds', JSON.stringify(n)); } catch {} return n; });
   const headingStyle = {fontSize:11, fontWeight:'bold', letterSpacing:'0.08em', textTransform:'uppercase',
     color:T.textDim, borderBottom:`1px solid ${T.borderDim}`, paddingBottom:4, marginBottom:10};
+  const FoldHead = (id, label) => h('div', {style:{...headingStyle, cursor:'pointer', userSelect:'none'}, title: isOpen(id) ? 'Collapse' : 'Expand', onClick:() => toggleFold(id)},
+    h('span', {style:{color:T.textDim, marginRight:6}}, isOpen(id) ? '▾' : '▸'), label);
   const cardRowStyle = {display:'flex', flexWrap:'wrap', gap:8};
 
   // Index card
@@ -5426,8 +5733,59 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     h(UpdateRisksBar, {scope:'yours'}),
     h(AlmanacFlagsBar),
+    h(GoodRightNow, {items, onSelect, onNavigate}),
+    // ── Personal command center ──────────────────────────────────
+
+    // Watchlist movers
+    h('div', {style:sectionStyle},
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('watchlist'), title:'Go to Watchlist'},
+        h('span', null, 'Your Watchlist'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
+      watchlistItems.length === 0
+        ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
+            'No items watched yet. Star any item to track it here.')
+        : watchlistMovers.length === 0
+          ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No price movement on watched items today.')
+          : watchlistMovers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
+    ),
+
+    // Portfolio snapshot
+    openPositions.length > 0 && h('div', {style:sectionStyle},
+      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('portfolio'), title:'Go to Portfolio'},
+        h('span', null, 'Portfolio'),
+        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, fmt.gp(totalCurrent)+'gp'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, `Current Value (${openPositions.length} positions)`)),
+        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color: unrealizedPL >= 0 ? T.green : T.red}},
+            (unrealizedPL >= 0 ? '+' : '') + fmt.gp(unrealizedPL) + 'gp'),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
+            `Unrealized P&L (${unrealizedPct >= 0 ? '+' : ''}${unrealizedPct.toFixed(1)}%)`))
+      )
+    ),
+
+    // Alerts status
+    alertCount > 0 && h('div', {style:sectionStyle},
+      h('div', {style:headingStyle}, 'Alerts'),
+      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, alertCount),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Alerts Set')),
+        triggeredAlerts.length > 0 && h('div', {style:{background:T.panel, border:`1px solid ${T.gold}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
+          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.gold}}, triggeredAlerts.length),
+          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Conditions Met'))
+      ),
+      triggeredAlerts.length > 0 && h('div', {style:{marginTop:8}},
+        triggeredAlerts.slice(0,3).map(a =>
+          h('div', {key:a.id, style:{fontSize:12, color:T.gold, padding:'3px 0'}},
+            `⚡ ${a.item_name} — ${['above','live_above'].includes(a.condition) ? 'above' : ['below','live_below'].includes(a.condition) ? 'below' : 'signal'} ${a.price ? fmt.gp(a.price)+'gp' : a.signal||''}`)
+        )
+      )
+    ),
+
     h(ComingUpSection, {onNavigate, onOpen: url => window.genius?.openExternal(url)}),
-    h(TopMoversSection, {items, officialTop100, onSelect, onNavigate}),
 
     // ── News Item Mentions ───────────────────────────────────────
     (() => {
@@ -5511,7 +5869,7 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
     // ── Sector Heat Map ──────────────────────────────────────────
     h('div', {style:{...sectionStyle, position:'relative'}},
       h('div', {style:{display:'flex', alignItems:'center', gap:5}},
-        h('div', {style:headingStyle}, 'Sector Heat Map'),
+        FoldHead('heatmap', 'Sector Heat Map'),
         h('span', {
           onClick: e => {
             e.stopPropagation();
@@ -5563,79 +5921,23 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
           t.l
         )),
       ), document.body),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
+      isOpen('heatmap') && h('div', {style:{display:'flex', flexWrap:'wrap', gap:6}},
         sectorHeat.map(sector => h(SectorCard, {key:sector.label, sector, onClick:()=>setActiveSector(sector)}))
       )
     ),
 
-    // ── Personal command center ──────────────────────────────────
-
-    // Watchlist movers
-    h('div', {style:sectionStyle},
-      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('watchlist'), title:'Go to Watchlist'},
-        h('span', null, 'Your Watchlist'),
-        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
-      watchlistItems.length === 0
-        ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}},
-            'No items watched yet. Star any item to track it here.')
-        : watchlistMovers.length === 0
-          ? h('div', {style:{fontSize:12, color:T.textDim, padding:'8px 0'}}, 'No price movement on watched items today.')
-          : watchlistMovers.map(it => h(MiniRow, {key:it.id, it, showChange:true}))
-    ),
-
-    // Portfolio snapshot
-    openPositions.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:{...headingStyle, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'space-between'}, onClick:()=>onNavigate&&onNavigate('portfolio'), title:'Go to Portfolio'},
-        h('span', null, 'Portfolio'),
-        h('span', {style:{fontSize:11, color:T.gold, fontWeight:'normal'}}, 'View all →')),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, fmt.gp(totalCurrent)+'gp'),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, `Current Value (${openPositions.length} positions)`)),
-        h('div', {onClick:()=>onNavigate&&onNavigate('portfolio'), style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px', cursor:'pointer'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color: unrealizedPL >= 0 ? T.green : T.red}},
-            (unrealizedPL >= 0 ? '+' : '') + fmt.gp(unrealizedPL) + 'gp'),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}},
-            `Unrealized P&L (${unrealizedPct >= 0 ? '+' : ''}${unrealizedPct.toFixed(1)}%)`))
-      )
-    ),
-
-    // Alerts status
-    alertCount > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Alerts'),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.textBright}}, alertCount),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Alerts Set')),
-        triggeredAlerts.length > 0 && h('div', {style:{background:T.panel, border:`1px solid ${T.gold}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:16, fontWeight:'bold', color:T.gold}}, triggeredAlerts.length),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Conditions Met'))
-      ),
-      triggeredAlerts.length > 0 && h('div', {style:{marginTop:8}},
-        triggeredAlerts.slice(0,3).map(a =>
-          h('div', {key:a.id, style:{fontSize:12, color:T.gold, padding:'3px 0'}},
-            `⚡ ${a.item_name} — ${['above','live_above'].includes(a.condition) ? 'above' : ['below','live_below'].includes(a.condition) ? 'below' : 'signal'} ${a.price ? fmt.gp(a.price)+'gp' : a.signal||''}`)
-        )
-      )
-    ),
-
-    h('div', {style:{borderTop:`1px solid ${T.borderDim}`, marginBottom:16}}),
-
     // Market indexes
     indexes.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Market Indexes'),
-      h('div', {style:cardRowStyle},
+      FoldHead('indexes', 'Market Indexes'),
+      isOpen('indexes') && h('div', {style:cardRowStyle},
         indexes.map(idx => h(IndexCard, {key:idx.name, idx}))
       )
     ),
 
     // Stat pills
     h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Market Pulse'),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
-        h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
-          h('div', {style:{fontSize:18, fontWeight:'bold', color:T.textBright}}, tradeableItems.length.toLocaleString()),
-          h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Items Tracked')),
+      FoldHead('pulse', 'Market Pulse'),
+      isOpen('pulse') && h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
         h('div', {style:{background:T.panel, border:`1px solid ${T.border}`, borderRadius:4, padding:'10px 14px', flex:'1 1 120px'}},
           h('div', {style:{fontSize:18, fontWeight:'bold', color:T.green}}, rising.toLocaleString()),
           h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, 'Rising Today')),
@@ -5647,14 +5949,15 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Active signals
     h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Active Signals'),
-      h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
+      FoldHead('signals', 'Active Signals'),
+      isOpen('signals') && h('div', {style:{display:'flex', flexWrap:'wrap', gap:8}},
         Object.entries(signalCounts).map(([sig, cnt]) => h(SignalPill, {key:sig, signal:sig, count:cnt}))
       )
     ),
 
     // Top movers
-    h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', marginBottom:20}},
+    FoldHead('movers', 'Top Gainers & Losers'),
+    isOpen('movers') && h('div', {style:{display:'flex', gap:16, flexWrap:'wrap', marginBottom:20}},
       h('div', {style:{flex:'1 1 200px', minWidth:200}},
         h('div', {style:headingStyle}, 'Top Gainers'),
         risers.length
@@ -5671,14 +5974,14 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Volume anomalies
     volume.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, 'Volume Anomalies'),
-      volume.map(it => h(MiniRow, {key:it.id, it, showChange:false}))
+      FoldHead('volume', 'Volume Anomalies'),
+      isOpen('volume') && volume.map(it => h(MiniRow, {key:it.id, it, showChange:false}))
     ),
 
     // Hall of Shame
     hallOfShame.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, '🏛️ Hall of Shame'),
-      h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
+      FoldHead('shame', '🏛️ Hall of Shame'),
+      isOpen('shame') && h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
         hallOfShame.map((entry, i) =>
           h('div', {
             key:i,
@@ -5711,8 +6014,8 @@ function DashboardTab({items, indexes, selected, onSelect, watchlist, onToggleWa
 
     // Hall of Glory
     hallOfGlory.length > 0 && h('div', {style:sectionStyle},
-      h('div', {style:headingStyle}, '🏆 Hall of Glory'),
-      h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
+      FoldHead('glory', '🏆 Hall of Glory'),
+      isOpen('glory') && h('div', {style:{display:'flex', flexDirection:'column', gap:6}},
         hallOfGlory.map((entry, i) =>
           h('div', {
             key:i,
@@ -5901,6 +6204,7 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
     ? SEASONAL_ITEM_DATA.filter(r => r.event === seasonalEvent && !r.noSignal && !r.archived)
     : [];
   const seasonalTierLabel = r => {
+    if (r.broke2026) return {label:'Broke in 2026', color:'#e08030'};
     if (r.n === 1 || r.confidence == null) return {label:'Speculative', color:T.textDim};
     if (r.roundTrip) return {label:'Round-trip', color:T.green};
     return {label:'Drop-only', color:T.textDim};
@@ -7142,7 +7446,7 @@ function EventDetail({event, items, userShorthands, onSaved, onDeleted, onOpen, 
     h('div', {style:{display:'flex', gap:8, marginBottom:14, maxWidth:420}},
       h('div', {style:{flex:1}}, h(ItemAutocomplete, {items, value:addItem, onChange:setAddItem, placeholder:'Add an affected item...', userShorthands})),
       h('button', {className:'ge-btn', onClick:() => {
-        const it = items.find(i => i.name.toLowerCase() === addItem.toLowerCase());
+        const it = itemByName(items, addItem);
         if (!it) { toast('Pick an item from the list', 'error'); return; }
         if (!draft.items.includes(it.name)) setDraft(d => ({...d, items:[...d.items, it.name]}));
         setAddItem('');
@@ -7491,7 +7795,7 @@ function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toas
             h('div',{
               style:{color: onSelect ? T.gold : T.text, fontSize:12, fontWeight:500, cursor: onSelect ? 'pointer' : 'default', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'},
               onClick: onSelect ? () => {
-                const it = items.find(i => i.name.toLowerCase() === (a.item_name||'').toLowerCase());
+                const it = itemByName(items, (a.item_name||''));
                 if (it) onSelect(it);
               } : undefined,
             }, a.item_name),
@@ -9195,33 +9499,33 @@ const SEASONAL_ITEM_DATA = [
   { event:'christmas', name:'Frozen Overpower cosmetic ability scroll', duringPct:-31, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:51.8, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) 51.8x volume spike, -31% buy trough. All Frozen/Warped ability scrolls follow the same supply-flood crash from Santa\'s Christmas Present. No recovery in 21 days.' },
   { event:'christmas', name:'Primal Pickaxe (Red) Token', duringPct:-51, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:9.6,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) -50% crash during event from Santa\'s Christmas Present 2025. Armour tokens (Red Primal set, Capes of Devotion/Devastation) all show -49 to -57% crashes with no recovery. Sell if you hold.' },
   // ── Halloween (confirmed, n=2) ─────────────────────────────────────────────
-  { event:'halloween', name:'Haunted whetstone',     duringPct:0,   recoveryPct:42,  confidence:1.0, n:2, nTotal:2, volRatio:29.2, roundTrip:true,  buyDayOffset:0,  sellDayOffset:28, strategy:'UNIQUE RISE PATTERN — opposite of most seasonal items. Rises +19% during the late event and +18% post-event (massive 29x volume). Buy at event open (day 0, approximately baseline price). Sell around day 28 for a projected +42% gain. 2/2 years confirmed. The mechanism is likely demand-driven: players farm with it more during Halloween and it gets consumed.' },
+  { event:'halloween', name:'Haunted whetstone', broke2026:true,     duringPct:0,   recoveryPct:42,  confidence:1.0, n:2, nTotal:2, volRatio:29.2, roundTrip:true,  buyDayOffset:0,  sellDayOffset:28, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): Fell instead: -36% during, -23% after (very thin, ~1 trade a day). Older pattern below. UNIQUE RISE PATTERN — opposite of most seasonal items. Rises +19% during the late event and +18% post-event (massive 29x volume). Buy at event open (day 0, approximately baseline price). Sell around day 28 for a projected +42% gain. 2/2 years confirmed. The mechanism is likely demand-driven: players farm with it more during Halloween and it gets consumed.' },
   { event:'halloween', name:'Uncut moonstone',       duringPct:-42, recoveryPct:8,   confidence:1.0, n:2, nTotal:2, volRatio:2.1,  roundTrip:true,  buyDayOffset:21, sellDayOffset:25, strategy:'Clan Goodie Bag supply. Trough around event end (day 21, -42% from baseline). Small but confirmed recovery of +8% in the 3–4 days after event. 2/2 years. Buy near event end, sell shortly after.' },
-  { event:'halloween', name:'Chocolate bar',         duringPct:-26, recoveryPct:11,  confidence:1.0, n:2, nTotal:2, volRatio:7.6,  roundTrip:true,  buyDayOffset:15, sellDayOffset:26, strategy:'Clan Goodie Bag supply. Drops -26% around day 15 (3.3x volume), recovers +11% by day 26. 2/2 years confirmed. Small magnitude but very clean pattern — one of the cleaner round-trips in Halloween research.' },
+  { event:'halloween', name:'Chocolate bar', broke2026:true,         duringPct:-26, recoveryPct:11,  confidence:1.0, n:2, nTotal:2, volRatio:7.6,  roundTrip:true,  buyDayOffset:15, sellDayOffset:26, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): Only -10% at the low, then +31% after the event. The Goodie Bag supply flood didn\'t hit it. Older pattern below. Clan Goodie Bag supply. Drops -26% around day 15 (3.3x volume), recovers +11% by day 26. 2/2 years confirmed. Small magnitude but very clean pattern — one of the cleaner round-trips in Halloween research.' },
   { event:'halloween', name:'Regular ghostly ink',   duringPct:-25, recoveryPct:13,  confidence:1.0, n:2, nTotal:2, volRatio:1.0,  roundTrip:true,  buyDayOffset:19, sellDayOffset:27, strategy:'Clan Goodie Bag supply. Trough around day 19 (-25%), recovery +13% by day 27. 2/2 years confirmed. Low volume ratio (1x baseline) means fills can be slow — allow extra time.' },
-  { event:'halloween', name:'Crypt scythe token',    duringPct:-63, recoveryPct:150, confidence:1.0, n:2, nTotal:2, volRatio:14.2, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. Crashes -63% from baseline at trough (day 19), then bounces +150% in the post-event window — nearly full recovery to baseline. 2/2 years. Buy near event end, sell ~day 32. Massive percentage return on a cheap-during-event item, but verify buy limit.' },
-  { event:'halloween', name:'Crypt shieldbow token', duringPct:-41, recoveryPct:77,  confidence:1.0, n:2, nTotal:2, volRatio:19.3, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. Drops -41% at trough, recovers +77% from floor post-event. 2/2 years. Same timing as Crypt scythe. Buy near event end, sell ~day 32.' },
+  { event:'halloween', name:'Crypt scythe token', broke2026:true,    duringPct:-63, recoveryPct:150, confidence:1.0, n:2, nTotal:2, volRatio:14.2, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): Never dipped; +39% after the event. Probably no longer in the Goodie Bag. Older pattern below. Clan Goodie Bag legacy token. Crashes -63% from baseline at trough (day 19), then bounces +150% in the post-event window — nearly full recovery to baseline. 2/2 years. Buy near event end, sell ~day 32. Massive percentage return on a cheap-during-event item, but verify buy limit.' },
+  { event:'halloween', name:'Crypt shieldbow token', broke2026:true, duringPct:-41, recoveryPct:77,  confidence:1.0, n:2, nTotal:2, volRatio:19.3, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): Only -10%, then +142% after. No crash. Older pattern below. Clan Goodie Bag legacy token. Drops -41% at trough, recovers +77% from floor post-event. 2/2 years. Same timing as Crypt scythe. Buy near event end, sell ~day 32.' },
   { event:'halloween', name:'Crypt staff token',     duringPct:-25, recoveryPct:53,  confidence:1.0, n:2, nTotal:2, volRatio:19.8, roundTrip:true,  buyDayOffset:19, sellDayOffset:32, strategy:'Clan Goodie Bag legacy token. -25% trough, +53% post-event recovery. 2/2 years. Smaller crash than the other Crypt tokens but still a solid round-trip.' },
-  { event:'halloween', name:'Boolap Bag Mask token', duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:31.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag cosmetic token. -61% from baseline at trough, -83% at the post-event floor. 2/2 years. Item crashes and STAYS down well past the 21-day post window — no recovery. Holder sell only: exit before or very early in the event. Do not buy the dip.' },
-  { event:'halloween', name:'Spooky Hare Mask token',duringPct:-62, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:35.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same crash pattern as Boolap Bag Mask token. -62% trough, -85% post-event floor. 35x volume spike. 2/2 years. Exit before event starts.' },
-  { event:'halloween', name:'Spooky Ghost Mask token',duringPct:-61,recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:25.6, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same crash pattern. -61% trough, -84% post-event floor. 25x volume. 2/2 years. Exit before event starts.' },
+  { event:'halloween', name:'Boolap Bag Mask token', duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:31.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'2026: crashed again (-59% at the low, 4x volume) but then fully recovered (+2% vs before the event), so "no recovery" didn\'t hold this year. Clan Goodie Bag cosmetic token. -61% from baseline at trough, -83% at the post-event floor. 2/2 years. Item crashes and STAYS down well past the 21-day post window — no recovery. Holder sell only: exit before or very early in the event. Do not buy the dip.' },
+  { event:'halloween', name:'Spooky Hare Mask token',duringPct:-62, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:35.4, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'2026: crashed again (-71% on day 2, 4x volume) but ended +47% above its pre-event price, so "no recovery" didn\'t hold this year. Same crash pattern as Boolap Bag Mask token. -62% trough, -85% post-event floor. 35x volume spike. 2/2 years. Exit before event starts.' },
+  { event:'halloween', name:'Spooky Ghost Mask token',duringPct:-61,recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:25.6, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'2026 confirmed it: -74% at the low (day 13), still -54% after. Same crash pattern. -61% trough, -84% post-event floor. 25x volume. 2/2 years. Exit before event starts.' },
   { event:'halloween', name:'Soul Witch token',      duringPct:-61, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:19.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings cosmetic. -61% from baseline at trough, -83% post-event floor. 2/2 years. Drops further than the Spooky Mask series and has no recovery signal. Sell if you hold any before the event.' },
-  { event:'halloween', name:'Soul Surge cosmetic ability scroll', duringPct:-92, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:22.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag ability scroll. One of the most extreme crashes in all seasonal research: -92% from baseline at trough (item loses nearly all its value). 22x volume. No recovery within 21 days post-event. Confirmed 2/2 years. Sell all holdings before event starts.' },
-  { event:'halloween', name:'Soul Dive cosmetic ability scroll',  duringPct:-90, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:20.9, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag ability scroll. -90% from baseline at trough, -94% at post-event floor. Nearly as extreme as Soul Surge. 21x volume. No recovery. Confirmed 2/2 years. Sell all holdings before event starts.' },
+  { event:'halloween', name:'Soul Surge cosmetic ability scroll', broke2026:true, duringPct:-92, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:22.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): Only -2.5%, then +34%. Probably removed from the Goodie Bag. Older pattern below. Clan Goodie Bag ability scroll. One of the most extreme crashes in all seasonal research: -92% from baseline at trough (item loses nearly all its value). 22x volume. No recovery within 21 days post-event. Confirmed 2/2 years. Sell all holdings before event starts.' },
+  { event:'halloween', name:'Soul Dive cosmetic ability scroll', broke2026:true,  duringPct:-90, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:20.9, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): Didn\'t dip at all (0%), then +44%. Probably removed from the Goodie Bag. Older pattern below. Clan Goodie Bag ability scroll. -90% from baseline at trough, -94% at post-event floor. Nearly as extreme as Soul Surge. 21x volume. No recovery. Confirmed 2/2 years. Sell all holdings before event starts.' },
   { event:'halloween', name:'Ensouled pumpkin mask', duringPct:-24, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:8.6,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Clan Goodie Bag supply. ~24% crash at trough, continues falling post-event (no recovery). 8.6x baseline volume. 2/2 years. Holder sell signal.' },
   { event:'halloween', name:'Soul dye',              duringPct:-58, recoveryPct:null, confidence:null, n:1, nTotal:2, volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings (2025 only — n=1 effective). Massive -58% crash on huge volume when the Forgotten Belongings mechanic ran. 2024 showed 0% movement because Forgotten Belongings didn\'t run that year. Treat as directionally illustrative but unconfirmed until 2026 gives a second data point.' },
   // ── Halloween bones (n=2) ──────────────────────────────────────────────────
   { event:'halloween', name:'Bones',                 duringPct:-17, recoveryPct:13,  confidence:1.0, n:2, nTotal:2, volRatio:1.6,  roundTrip:true,  buyDayOffset:19, sellDayOffset:33, strategy:'Halloween loot tables add small amounts of common bones to the market. Trough ~-17% from baseline around day 19, then +13% post-event recovery by day 33. 2/2 years confirmed. Low value item — the percentage move is real but absolute GP is trivial unless traded in large quantities.' },
   { event:'halloween', name:'Dagannoth bones',       duringPct:-16, recoveryPct:6,   confidence:1.0, n:2, nTotal:2, volRatio:2.2,  roundTrip:true,  buyDayOffset:19, sellDayOffset:33, strategy:'Medium/Large Forgotten Belongings supply. -16% trough around day 19, +6% post-event recovery. 2/2 years confirmed. Small magnitude round-trip — useful for bulk prayer training buyers who want to time their purchase.' },
-  { event:'halloween', name:'Baby dragon bones',     duringPct:-13, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:5.7,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Halloween loot supply (-13% early event, 5.7x volume). Unlike other bones, price CONTINUES to fall post-event rather than recovering. Drop-only — either use for prayer training during the event, or sell before it ends.' },
+  { event:'halloween', name:'Baby dragon bones', broke2026:true,     duringPct:-13, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:5.7,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'⚠ BROKE IN 2026 (2 of 3 Halloweens now): No dip: +29% during the event, +8% after. Older pattern below. Halloween loot supply (-13% early event, 5.7x volume). Unlike other bones, price CONTINUES to fall post-event rather than recovering. Drop-only — either use for prayer training during the event, or sell before it ends.' },
   // ── Halloween ashes (n=2) ──────────────────────────────────────────────────
   { event:'halloween', name:'Impious ashes',         duringPct:-27, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:3.0,  roundTrip:false, buyDayOffset:12, sellDayOffset:null, strategy:'Halloween loot flood drives ashes into the market (-27% trough at day 12, 3x volume). Post-event price stays flat — no recovery. Drop-only: ideal for players who want cheap Dungeoneering/prayer ashes during or just after the event. Not a resell play. (Compare: Christmas Impious ashes ARE a round-trip — different supply dynamic.)' },
   { event:'halloween', name:'Accursed ashes',        duringPct:-44, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:1.3,  roundTrip:false, buyDayOffset:22, sellDayOffset:null, strategy:'Strong drop signal: -44% from baseline at trough (day 22). No post-event recovery — price stays depressed or falls further. Drop-only. Best prayer training buy window of all the Halloween ashes. 2/2 years confirmed.' },
   { event:'halloween', name:'Infernal ashes',        duringPct:-26, recoveryPct:4,   confidence:1.0, n:2, nTotal:2, volRatio:1.0,  roundTrip:false, buyDayOffset:21, sellDayOffset:null, strategy:'Drops -26% at trough around day 21 with a very small post-event tick (+4%). The recovery is too small to call this a proper round-trip — treat as drop-only for prayer training purposes. 2/2 years confirm the drop.' },
   // ── Halloween (speculative, n=1) ───────────────────────────────────────────
   { event:'halloween', name:"Soul dyed hallowe'en mask", duringPct:0, recoveryPct:9,   confidence:null, n:1, nTotal:1, volRatio:null, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1, introduced Halloween 2025) Debuted mid-event on day 15 at ~1B gp with no pre-event baseline — the item did not exist before. Rose +4.4% through late event, +8.7% post-event, and continued appreciating to ~1.52B gp by June 2026. No crash pattern observed. Added for forward tracking: Halloween 2026 will show whether new supply causes a dip or the item holds value. Cannot draw trade conclusions from one partial event.' },
-  { event:'halloween', name:'Red pumpkin',           duringPct:-17, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:12.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -17% late event, -37% post-event. 12.7x volume. Crash with no recovery. Single year of data.' },
-  { event:'halloween', name:'Purple pumpkin',        duringPct:-17, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:14.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Same pattern as Red pumpkin. -17% late event, -30% post-event. Single year of data.' },
+  { event:'halloween', name:'Red pumpkin',           duringPct:-50, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:12.7, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Death\'s Forgotten Belongings. Confirmed 2/2 years (2025, 2026), and 2026 crashed much harder: -50% at the low on 4-6x volume, still -45% two weeks after. 2025 was -17% late event, -37% after. Crash with no recovery: sell before the event if you hold.' },
+  { event:'halloween', name:'Purple pumpkin',        duringPct:-59, recoveryPct:null, confidence:1.0, n:2, nTotal:2, volRatio:14.0, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'Same as Red pumpkin, confirmed 2/2 years. 2026: -59% at the low, still -60% after. 2025 was -17% late event, -30% after. Crash with no recovery: sell before the event if you hold.' },
   { event:'halloween', name:'Witch\'s Outfit token', duringPct:-32, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:7.5,  roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -32% late event, -39% post-event. Single year of data — cannot confirm.' },
   { event:'halloween', name:'Lucille token',         duringPct:-19, recoveryPct:null, confidence:null, n:1, nTotal:1, volRatio:12.5, roundTrip:false, buyDayOffset:null, sellDayOffset:null, strategy:'(SPECULATIVE — n=1) Death\'s Forgotten Belongings 2025 only. -19% late event, -32% post-event. Single year of data.' },
   // ── Summer ───────────────────────────────────────────────────────────────
@@ -9258,10 +9562,11 @@ const SEASONAL_EVENTS = [
     name: 'Harvest Hollow',
     emoji: '🎃',
     typicalWindow: 'Mid-October → Early November',
-    nextExpected: 'October 2026',
+    nextExpected: 'October 2027',
     n: 2,
     confidence: 'medium',
     unconfirmed2026: false,
+    gradeNote: 'Graded against Halloween 2026 (Oct 12 - Nov 1): 12 of 20 confident calls held, 7 broke (marked "Broke in 2026"). The event ran 3 weeks instead of 4, and the lows came much earlier (day 4-9 for moonstone, ashes and Dagannoth bones), so the day-19 to day-21 buy dates below are too late for a 3-week event: watch prices from the first week instead. The main loot still crashed on real volume (mask tokens, pumpkins, bones, ashes, moonstone).',
   },
   {
     id: 'summer',
@@ -9363,7 +9668,7 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
   // Tier filter
   const isArchived    = r => !!r.research.archived;
   const isNoSignal    = r => !!r.research.noSignal;
-  const isSpeculative = r => !r.research.noSignal && !r.research.archived && (r.research.n === 1 || r.research.confidence == null);
+  const isSpeculative = r => !r.research.noSignal && !r.research.archived && (r.research.n === 1 || r.research.confidence == null || !!r.research.broke2026);
   const isConfirmed   = r => !r.research.noSignal && !r.research.archived && !isSpeculative(r);
   // Negligible: round-trip profit/limit < 1M, or drop-only savings/limit < 1M — requires live price to classify.
   // Items with no live price are not classified as negligible (can't compute).
@@ -9426,6 +9731,15 @@ function SeasonalEventsTab({items: allItems, onSelect}) {
       }},
         h('div', {style: {fontWeight: 'bold', color: T.red, marginBottom: 4}}, '⚠ 2026 — Sandy Clues Removed'),
         'Jagex removed Sandy Clues, the reward mechanic that used to flood the Grand Exchange with heraldic Fortunate-component gear during the summer Beach Event. That supply glut was the entire source of the price signals below, so the historical dips are not expected to recur in 2026. These items are archived for reference only — do not trade them on the old pattern. If a replacement summer mechanic emerges, its item set will need fresh research.',
+      ),
+
+      // Latest grading note (Halloween 2026, Ben 2026-11-17)
+      event.gradeNote && h('div', {style: {
+        background: 'rgba(224,128,48,0.08)', border: '1px solid rgba(224,128,48,0.45)',
+        borderRadius: 6, padding: '10px 14px', marginBottom: 14, fontSize: 12, lineHeight: 1.5,
+      }},
+        h('div', {style: {fontWeight: 'bold', color: '#e08030', marginBottom: 4}}, '⚠ Checked against 2026'),
+        event.gradeNote,
       ),
 
       // Overview card
@@ -11954,7 +12268,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     (async () => {
       const out = {};
       for (const p of losers) {
-        const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
+        const it = itemByName(items, (p.item_name || ''));
         if (!it) continue;
         const be = breakEvenPrice(p.cost_basis);
         const [hist, snaps] = await Promise.all([
@@ -11988,7 +12302,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     (async () => {
       const out = {}, daily = {};
       for (const p of openPos) {
-        const it = items.find(i => i.name.toLowerCase() === (p.item_name || '').toLowerCase());
+        const it = itemByName(items, (p.item_name || ''));
         if (!it || it.untradeable) continue;
         const allDays = await loadDailyPrices(it.id);
         daily[p.id] = allDays;
@@ -12057,7 +12371,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   const breakEvenOf = breakEvenPrice;
   const riskBadgeFor = list => {
     const first = list[0];
-    const it = !first.removedItem && items.find(i => i.name.toLowerCase() === (first.item_name || '').toLowerCase());
+    const it = !first.removedItem && itemByName(items, (first.item_name || ''));
     const days = dailyById[first.id];
     if (!it || !days) return null;
     const qty = list.reduce((sum, p) => sum + p.quantity, 0);
@@ -12552,7 +12866,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         )
       ),
       allocView === 'item' && allocations.map(({name,val,pct}) => {
-        const allocItem = onSelect && items && items.find(i => i.name.toLowerCase() === name.toLowerCase());
+        const allocItem = onSelect && items && itemByName(items, name);
         return h('div',{key:name,style:{marginBottom:8}},
           h('div',{style:{display:'flex',justifyContent:'space-between',fontSize:11,marginBottom:2}},
             h('span',{
@@ -12970,7 +13284,10 @@ function HistoryPopup({state, onDismiss}) {
   // initial300Done is persisted across restarts too, so an interruption
   // during the first 300 correctly resumes still showing "first 300"
   // messaging instead of jumping straight to "background" framing.
-  const { stored, total, initial300Done, fullyComplete } = state;
+  // The history pack can bring in thousands of items before the flag flips,
+  // which showed "(7339/300)" (Ben, 2026-11-18): past 300 counts as done.
+  const { stored, total, fullyComplete } = state;
+  const initial300Done = state.initial300Done || stored >= 300;
   const pct = total > 0 ? Math.round((stored / total) * 100) : 0;
 
   return h('div', {style:{
@@ -13711,6 +14028,7 @@ const FLIP_SANITY_HIGH = 2;   // only used for the alch-anchor detection
 // daily volume and gets caught there, while a genuine rush has real
 // volume behind the higher price and correctly passes.
 const FLIP_ALCH_CEILING_MULT = 1.3;
+const FLIP_ALCH_ANCHOR_LOW = 0.8; // alch must be at least 80% of the guide price to count as what sets it
 // Alch only functions as a real economic anchor once the item's actually
 // worth enough to bother — nobody alchs a 270gp item in practice, the
 // nature rune cost and the clicks aren't worth it, so treating alch
@@ -13770,6 +14088,8 @@ function flipMaxPriceAgeMs(avgVolume) {
 // threshold is only ~1.4x — so this only catches the genuinely extreme
 // cases (Imphide 869x, Raw cod 12.2x) without choking on a real spike.
 const FLIP_MAX_BUY_SELL_RATIO = 5;
+const FLIP_MAX_SIDE_RANGE = 1.5; // highest/lowest recent price on one side (Ben, 2026-11-12)
+const FLIP_OVERPAY_RATIO = 1.5; // buy vs sell AND vs guide (Ben, 2026-11-13: Elder seed)
 // Volume-anomaly check (Ben, 2026-07-31): a coordinated wash trade can
 // make liveBuy and liveSell agree with each other perfectly (same person
 // controls both sides), which sails straight past every check above —
@@ -13799,9 +14119,47 @@ const FLIP_VOLUME_ANOMALY_RATIO_MIN = 10;
 // FlipsTab's second pill surfaces so these stay visible instead of
 // silently vanishing), vs the mundane exclusions (no margin, no buy
 // limit, too little volume) that aren't interesting to look at.
+// ── Fill time (Ben, 2026-11-17; idea from a cloud session) ────────────────────
+// "Possible but very slow": daily volume says an item trades, not that YOUR
+// offers fill. A buy offer fills from instant-SELLERS and a sell offer from
+// instant-BUYERS, and the two sides can differ 100x. recent-prices.js gives each
+// item a typical units/hour per side over the last 24 hours; assume your offers
+// get FLIP_MARKET_SHARE of each side (a guess: tune it against real fills).
+// fillHours = time to buy a full limit, then sell it. profit4h = what one 4-hour
+// buy-limit window can really make.
+const FLIP_MARKET_SHARE = 0.2;
+function flipFill(it, limit, margin) {
+  const r = it.liveRate;
+  if (!r || !(limit > 0)) return { hours: null, buyHours: null, sellHours: null, profit4h: null };
+  const inRate = FLIP_MARKET_SHARE * (r.sellPerHour || 0);  // your buy offer fills from instant-sellers
+  const outRate = FLIP_MARKET_SHARE * (r.buyPerHour || 0);  // your sell offer fills from instant-buyers
+  const buyHours = inRate > 0 ? limit / inRate : Infinity;
+  const sellHours = outRate > 0 ? limit / outRate : Infinity;
+  const per4h = Math.min(limit, inRate * 4, outRate * 4);
+  return { hours: buyHours + sellHours, buyHours, sellHours, profit4h: margin * per4h };
+}
+function fmtHours(h) {
+  if (h == null) return '—';
+  if (!isFinite(h) || h > 24 * 30) return '> a month';
+  if (h < 1) return '~' + Math.max(5, Math.round(h * 60 / 5) * 5) + 'm';
+  if (h < 36) return '~' + Math.round(h) + 'h';
+  const d = h / 24;
+  return '~' + (d < 10 ? d.toFixed(1).replace(/\.0$/, '') : Math.round(d)) + ' days';
+}
+const fillColor = h => h == null ? T.textDim : h <= 4 ? T.green : h <= 24 ? T.gold : h <= 24 * 7 ? '#e08030' : T.red;
+function fillTitle(it) {
+  if (it.fillHours == null) return 'Not enough hourly trading data yet (loads in the background).';
+  return 'A full buy limit (' + (it.limit || 0).toLocaleString() + ') at ~' + Math.round(FLIP_MARKET_SHARE * 100) + '% of the market: about ' + fmtHours(it.buyHours) + ' to buy (fills from people selling instantly, ~' + Math.round(it.liveRate.sellPerHour).toLocaleString() + '/hour) and ' + fmtHours(it.sellHours) + ' to sell (people buying instantly, ~' + Math.round(it.liveRate.buyPerHour).toLocaleString() + '/hour), typical over the last 24 hours. ' + (it.fillHours > 24 ? 'Possible, but slow.' : '');
+}
+
 function computeFlipStats(it) {
   if (it.untradeable || it.liveBuy == null || it.liveSell == null) {
     return { qualifies: false, disqualifyReason: 'No live buy/sell data available for this item.' };
+  }
+  // Recent-trade averages loaded but this item had under 5 traded on a side
+  // in the last ~6 hours (Ben, 2026-11-12: at least 5 per side).
+  if (it.liveAvg === null) {
+    return { qualifies: false, disqualifyReason: 'Fewer than 5 bought or sold in the last 6 hours: too little trading to trust a price.' };
   }
   const margin = applyTax(it.liveBuy) - it.liveSell;
   const roiPct = it.liveSell > 0 ? (margin / it.liveSell) * 100 : 0;
@@ -13817,9 +14175,13 @@ function computeFlipStats(it) {
   // given real market liquidity, not a theoretical ceiling.
   const realisticProfit = margin * Math.min(limit, it.avgVolume || 0);
   const gePrice = it.high || it.low || 0;
-  const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_SANITY_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
+  // Alching only sets an item's price when the price sits near the alch value.
+  // Was 0.5x-2x of guide, which counted Apex hide chaps + 5 (alch 1.78m, trades
+  // ~6m) as an alch item (Ben, 2026-11-12: "it's like ~2m above that").
+  const alchIsAnchor = it.alch && gePrice >= FLIP_ALCH_MIN_GE_PRICE && it.alch >= gePrice*FLIP_ALCH_ANCHOR_LOW && it.alch <= gePrice*FLIP_SANITY_HIGH;
   const ceiling = alchIsAnchor ? Math.max(gePrice, it.alch)*FLIP_ALCH_CEILING_MULT : Infinity;
-  const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit };
+  const fill = flipFill(it, limit, margin);
+  const base = { margin, roiPct, profitForLimit, realisticProfit, gePrice, ceiling, limit, fillHours: fill.hours, buyHours: fill.buyHours, sellHours: fill.sellHours, profit4h: fill.profit4h };
 
   if (it.liveSell < FLIP_MIN_SELL_PRICE) return { ...base, qualifies:false, disqualifyReason:`Sell price is under the ${fmt.gp(FLIP_MIN_SELL_PRICE)}gp floor Flips uses to avoid junk items dominating by percentage.` };
   if (margin <= 0) return { ...base, qualifies:false, disqualifyReason:'No positive margin right now — instabuy (after tax) doesn\'t beat instasell.' };
@@ -13827,7 +14189,29 @@ function computeFlipStats(it) {
   if (profitForLimit < FLIP_MIN_PROFIT_FOR_LIMIT) return { ...base, qualifies:false, disqualifyReason:`Profit for a full buy limit (${fmt.gp(profitForLimit)}gp) is under Flips' ${fmt.gp(FLIP_MIN_PROFIT_FOR_LIMIT)}gp floor — too small a margin to be worth the buy-limit slot.` };
   if ((it.volume||0) < FLIP_MIN_VOLUME) return { ...base, qualifies:false, disqualifyReason:`Daily volume (${(it.volume||0).toLocaleString()}) is below Flips' liquidity floor of ${FLIP_MIN_VOLUME} — too thin to trust a single live print.` };
   if (!(gePrice > 0 && it.liveSell >= gePrice*FLIP_SANITY_LOW)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live sell price is far under this item\'s established GE price — likely a one-off fluke/glitch dump rather than a real, repeatable margin.' };
-  if (it.liveBuy > ceiling) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
+  // Only when the buy side is high ON ITS OWN: if the live sell is above the
+  // ceiling too, the whole market moved up (real demand), not a mistake fill.
+  // Ben, 2026-11-12: Apex hide chaps + 5 (alch 1.78m, guide 3.14m) trading
+  // 5.94m-8.17m on 5x its usual volume was wrongly flagged; nobody alches it.
+  if (it.liveBuy > ceiling && !(it.liveSell > ceiling)) return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:'Live buy price is well above what this item is actually worth to alch — likely a one-off mistake fill, not a real price level.' };
+  // Prices all over the place (Ben, 2026-11-12: Ring of Fortune, bought at
+  // 2.8m-10m and sold at 960k-3.2m in 5 hours on a 1m item). A real market's
+  // recent prices on one side sit close together.
+  const av = it.liveAvg;
+  if (av) {
+    const wild = (lo, hi) => lo > 0 && hi / lo > FLIP_MAX_SIDE_RANGE;
+    if (wild(av.buyLo, av.buyHi) || wild(av.sellLo, av.sellHi)) {
+      const r = wild(av.buyLo, av.buyHi) ? `bought at ${fmt.gp(av.buyLo)}-${fmt.gp(av.buyHi)}` : `sold at ${fmt.gp(av.sellLo)}-${fmt.gp(av.sellHi)}`;
+      return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Prices all over the place: ${r} in the recent trades, so there's no steady price to flip at.` };
+    }
+  }
+  // A few buyers overpaying (Ben, 2026-11-13: Elder seed showed "buy 6,910, sell
+  // 18,000" because one buyer kept paying 18k while sellers took ~6.9k and the
+  // guide was 6.25k). Each side was steady on its own, so the range check above
+  // passed. Buy far above BOTH the sell side and the guide isn't a sell price.
+  if (it.liveSell > 0 && gePrice > 0 && it.liveBuy / it.liveSell > FLIP_OVERPAY_RATIO && it.liveBuy > gePrice * FLIP_OVERPAY_RATIO) {
+    return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Buyers are paying ${(it.liveBuy/it.liveSell).toFixed(1)}x what sellers take and ${(it.liveBuy/gePrice).toFixed(1)}x the GE price: a few buyers overpaying, not a price you could reliably sell at.` };
+  }
   if (it.liveSell > 0 && it.liveBuy / it.liveSell > FLIP_MAX_BUY_SELL_RATIO) {
     return { ...base, qualifies:false, disqualifyCategory:'spread', disqualifyReason:`Live buy is ${(it.liveBuy/it.liveSell).toFixed(1)}x live sell — one side is being overpaid in isolation, not a real two-sided market.` };
   }
@@ -13857,8 +14241,25 @@ const FLIP_PROFIT_FILTERS = [
   {label:'5M+',    value:5000000},
   {label:'10M+',   value:10000000},
 ];
+// Flips prices are averages of recent trades (Ben, 2026-11-12). When the very
+// latest trade on that side is 3%+ away from the average, say so: the price is
+// moving right now.
+function avgTitle(it, side) {
+  const a = it.liveAvg;
+  if (!a) return undefined;
+  return side === 'sell'
+    ? 'Average of the last ' + a.sellUnits.toLocaleString() + ' sold instantly, over ' + (timeAgo(a.from) || '').replace(/ ago$/, '') + '.'
+    : 'Average of the last ' + a.buyUnits.toLocaleString() + ' bought instantly, over ' + (timeAgo(a.from) || '').replace(/ ago$/, '') + '.';
+}
+function LatestDiff({avg, latest}) {
+  if (!avg || !latest) return null;
+  const d = (latest - avg) / avg;
+  if (Math.abs(d) < 0.03) return null;
+  return h('div', {style:{fontSize:10, color:T.textDim, marginTop:2}, title:'The single most recent trade on this side, vs the average shown above.'},
+    'Latest: ' + fmt.gp(latest) + (d > 0 ? ' ↑' : ' ↓'));
+}
 function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggleHide, description}) {
-  const [pillTab, setPillTab] = useState('flips'); // 'flips' | 'flagged'
+  const [pillTab, setPillTab] = useState('flips'); // 'flips' (all) | 'r0' | 'r1' | 'r2' (risk level) | 'flagged'
   const [sort, setSort] = useState({key:'realisticProfit', dir:-1});
   const [page, setPage] = useState(0);
   // Defaults to 1M+ (Ben: "That would cut it down from over 900 results
@@ -13878,11 +14279,19 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
   // volume) — those aren't interesting to look at, just noise.
   const flagged = useMemo(() => allStats.filter(it => !it.qualifies && it.disqualifyCategory === 'spread'), [allStats]);
 
-  const filtered = useMemo(() => flips.filter(it => it.profitForLimit >= minProfit), [flips, minProfit]);
+  // Risk pills (Max via Ben, 2026-11-12): same ITEM RISK as the item panel, worked out in the background.
+  const risk = useRiskLevels(flips);
+  const riskCount = [0, 1, 2].map(l => flips.filter(it => risk.levels.get(it.id) === l).length);
+  const riskTab = /^r[012]$/.test(pillTab) ? Number(pillTab[1]) : null;
+  const filtered = useMemo(() => flips
+    .map(it => ({...it, riskLevel: risk.levels.has(it.id) ? risk.levels.get(it.id) : null}))
+    .filter(it => it.profitForLimit >= minProfit && (riskTab == null || it.riskLevel === riskTab)),
+    [flips, minProfit, riskTab, risk.levels.size, risk.pending]);
 
   const sorted = useMemo(() => {
     return [...filtered].sort((a,b) => {
-      const av = a[sort.key] ?? 0, bv = b[sort.key] ?? 0;
+      const miss = sort.key === 'fillHours' ? Infinity : 0; // no fill data = slowest, not fastest
+      const av = a[sort.key] ?? miss, bv = b[sort.key] ?? miss;
       if (typeof av === 'string' || typeof bv === 'string') {
         return String(av).localeCompare(String(bv)) * sort.dir;
       }
@@ -13901,7 +14310,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
     description && h('div',{style:{padding:'8px 14px', borderBottom:`1px solid ${T.border}`, fontSize:12, color:T.textDim, fontStyle:'italic', lineHeight:1.5}}, description),
     h('div', {style:{padding:'14px'}},
       h('div', {style:{display:'flex', gap:4, marginBottom:12}},
-        ['flips','flagged'].map(v => h('button', {
+        ['flips','r0','r1','r2','flagged'].map(v => h('button', {
           key:v, onClick:()=>setPillTab(v),
           style:{
             padding:'4px 12px', fontSize:11, cursor:'pointer', borderRadius:3,
@@ -13909,8 +14318,11 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
             border: `1px solid ${pillTab===v ? T.gold : T.border}`,
             color: pillTab===v ? T.goldBright : T.textDim,
           }
-        }, v==='flips' ? `Flips (${flips.length.toLocaleString()})` : `Flagged (${flagged.length.toLocaleString()})`))
+        }, v==='flips' ? `All flips (${flips.length.toLocaleString()})` : v==='flagged' ? `Flagged (${flagged.length.toLocaleString()})` : `${RISK_NAMES[v[1]]} risk (${riskCount[v[1]].toLocaleString()})`))
       ),
+      riskTab != null && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}},
+        'Risk is the same as the ITEM RISK badge in the item panel: how much the item swings, its biggest drop over the past year, its spread and how much it trades. It describes behaviour, not where the price goes next.',
+        risk.pending ? ` Still working out risk for ${risk.pending.toLocaleString()} items, so these counts will grow for a moment.` : ''),
       pillTab === 'flagged' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `Items that look like a huge margin on paper but got excluded from Flips for a spread-sanity reason — a stale isolated print, one side badly overpaid relative to the other, or a price well past what the item is actually worth. Kept visible here instead of silently vanishing, since knowing WHY something's excluded beats it just not being there.`
       ),
@@ -13936,10 +14348,12 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
               )
             )
       ),
-      pillTab === 'flips' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      pillTab !== 'flagged' && h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
         `${flips.length.toLocaleString()} items with a live buy/sell spread worth flipping (${sorted.length.toLocaleString()} shown at the current profit filter). Margin = instabuy minus 2% GE tax, minus instasell — the real spread available right now, not just today's price change. Excludes low-volume items (near-zero-volume items let a single fluke print swing the numbers wildly), sell prices dumped too far under the item's GE price, prices that are stale relative to how often this specific item normally trades (6-48 hours depending on its typical volume — a single old instant-buy print nobody's matched since, not something you could actually get filled at now), one side badly overpaid relative to the other, a huge volume spike on an item that barely trades at all normally (a wash-trade signature), and — for items where alching is basically the whole economic purpose — buy prices well above what alching that item is actually worth. A genuine high-volume demand spike is allowed through even far above GE price.`
       ),
-      pillTab === 'flips' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
+      pillTab !== 'flagged' && h('div', {style:{fontSize:11, color:T.textDim, marginBottom:8}},
+        'Buy and Sell are averages of recent trades on each side: at least 5 bought and 5 sold, going back up to 6 hours. Hover a price to see how many. "Latest" shows when the newest trade is 3% or more away from the average.'),
+      pillTab !== 'flagged' && h('div', {style:{display:'flex', gap:6, alignItems:'center', marginBottom:12, flexWrap:'wrap'}},
         h('span', {style:{fontSize:10, color:T.textDim, marginRight:2}}, 'Min Profit (buy limit):'),
         FLIP_PROFIT_FILTERS.map(opt => h('button', {
           key:opt.value,
@@ -13952,7 +14366,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
           }
         }, opt.label))
       ),
-      pillTab === 'flips' && (sorted.length === 0
+      pillTab !== 'flagged' && (sorted.length === 0
         ? h('div', {className:'empty'}, h('div', {className:'icon'}, '◎'), h('p', null,
             flips.length === 0 ? 'No live flip data available yet — give the app a moment to fetch it.' : 'No items meet this profit filter — try lowering it.'
           ))
@@ -13960,6 +14374,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
             h('table', {className:'ge-table pt-flips'},
               h('thead', null, h('tr', null,
                 h('th', {onClick:()=>tog('name'), style:{cursor:'pointer'}}, 'Item'+arrow('name')),
+                h('th', {onClick:()=>tog('riskLevel'), style:{cursor:'pointer'}, title:'Same as the ITEM RISK badge in the item panel. Not a forecast.'}, 'Risk'+arrow('riskLevel')),
                 h('th', {onClick:()=>tog('liveSell'), style:{cursor:'pointer'}}, 'Buy'+arrow('liveSell')),
                 h('th', {onClick:()=>tog('liveBuy'), style:{cursor:'pointer'}}, 'Sell'+arrow('liveBuy')),
                 h('th', {onClick:()=>tog('volume'), style:{cursor:'pointer'}, title:'How liquid this market actually is — a big margin on near-zero volume isn\'t very useful.'}, 'Volume'+arrow('volume')),
@@ -13967,6 +14382,8 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 h('th', {onClick:()=>tog('roiPct'), style:{cursor:'pointer'}}, 'ROI%'+arrow('roiPct')),
                 h('th', {onClick:()=>tog('limit'), style:{cursor:'pointer'}}, 'Buy Limit'+arrow('limit')),
                 h('th', {onClick:()=>tog('realisticProfit'), style:{cursor:'pointer'}, title:'Margin/item × min(buy limit, avg daily volume) — what a limit\'s worth of trading realistically nets given how liquid this item actually is'}, 'Realistic Profit'+arrow('realisticProfit')),
+                h('th', {onClick:()=>tog('fillHours'), style:{cursor:'pointer'}, title:'How long a full buy limit takes to BUY and then SELL, from each side\'s typical hourly trading over the last 24 hours, if your offers get ~' + Math.round(FLIP_MARKET_SHARE*100) + '% of it. Green: within a 4-hour limit window. Red: over a week, possible but very slow.'}, 'Fill time'+arrow('fillHours')),
+                h('th', {onClick:()=>tog('profit4h'), style:{cursor:'pointer'}, title:'What one 4-hour buy-limit window can really make: margin × the smaller of the limit and what each side trades in 4 hours at your share.'}, 'Profit / 4h'+arrow('profit4h')),
                 h('th', {onClick:()=>tog('profitForLimit'), style:{cursor:'pointer'}, title:'Margin/item × buy limit — the theoretical ceiling if the ENTIRE limit both buys and sells, regardless of how thin the market actually is'}, 'Max Profit (limit)'+arrow('profitForLimit')),
                 h('th', {style:{width:30}}, null),
               )),
@@ -13974,13 +14391,18 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
                 key:it.id, className:selected?.id===it.id?'selected':'', onClick:()=>onSelect&&onSelect(it),
               },
                 h('td', null, it.name),
-                h('td', {style:{color:'#e08030'}}, fmt.gp(it.liveSell)+'gp'),
-                h('td', {style:{color:T.green}}, fmt.gp(it.liveBuy)+'gp'),
+                h('td', null, it.riskLevel == null && risk.pending ? h('span', {style:{fontSize:10, color:T.textDim}}, '…') : h(RiskTag, {level: it.riskLevel}),
+                  risk.falling.has(it.id) && h('div', {style:{marginTop:3}}, h(FallingTag)),
+                  it.newSource && h('div', {style:{marginTop:3}}, h(NewSourceTag, {ns: it.newSource}))),
+                h('td', {style:{color:'#e08030'}, title:avgTitle(it, 'sell')}, fmt.gp(it.liveSell)+'gp', h(LatestDiff, {avg:it.liveSell, latest:it.liveLatest?.sell})),
+                h('td', {style:{color:T.green}, title:avgTitle(it, 'buy')}, fmt.gp(it.liveBuy)+'gp', h(LatestDiff, {avg:it.liveBuy, latest:it.liveLatest?.buy})),
                 h('td', null, h(VolDisplay,{volume:it.volume, avgVolume:it.avgVolume})),
                 h('td', {style:{color:T.gold}}, fmt.gp(it.margin)+'gp'),
                 h('td', {style:{color: it.roiPct>=5 ? T.green : T.textDim}}, it.roiPct.toFixed(2)+'%'),
                 h('td', {style:{color:T.textDim}}, it.limit.toLocaleString()),
                 h('td', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(it.realisticProfit)+'gp'),
+                h('td', {style:{color:fillColor(it.fillHours), whiteSpace:'nowrap'}, title:fillTitle(it)}, fmtHours(it.fillHours)),
+                h('td', {style:{color:T.gold}}, it.profit4h == null ? '—' : fmt.gp(Math.round(it.profit4h))+'gp'),
                 h('td', {style:{color:T.textDim}}, fmt.gp(it.profitForLimit)+'gp'),
                 h('td', {onClick:e=>{e.stopPropagation(); onToggleWatch(it.id);}, style:{textAlign:'center'}},
                   h('button',{className:'star-btn'},
@@ -13990,12 +14412,12 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
               )))
             )
           )),
-      pillTab === 'flips' && sorted.length > FLIP_PAGE_SIZE && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:10, fontSize:11}},
+      pillTab !== 'flagged' && sorted.length > FLIP_PAGE_SIZE && h('div', {style:{display:'flex', alignItems:'center', gap:10, marginTop:10, fontSize:11}},
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:11}, disabled:pageClamped===0, onClick:()=>setPage(p=>Math.max(0,p-1))}, '← Prev'),
         h('span', {style:{color:T.textDim}}, `Page ${pageClamped+1} of ${totalPages} (${sorted.length.toLocaleString()} total)`),
         h('button', {className:'ge-btn', style:{padding:'3px 10px', fontSize:11}, disabled:pageClamped>=totalPages-1, onClick:()=>setPage(p=>Math.min(totalPages-1,p+1))}, 'Next →'),
       ),
-      pillTab === 'flips' && h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
+      pillTab !== 'flagged' && h('div', {style:{fontSize:10, color:T.goldBright, border:`1px solid ${T.borderDim}`, borderRadius:4, padding:'6px 8px', marginTop:14}},
         '⚠ Live buy/sell reflects the most recent real trades, not a live order book — by the time you place an offer, the spread may already have moved or closed. Buy limits reset per 4 hours; volume figures are daily totals, not what\'s available to trade this instant.'
       ),
     )
@@ -14202,7 +14624,7 @@ const HUMIDIFY_RUNES = [{name:'Astral rune', qty:1}];
 
 function findItemPrice(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   return it ? (it.high ?? it.low ?? null) : null;
 }
 // Ben (2026-08-11): Money Makers margins need to reflect what you'd
@@ -14236,30 +14658,56 @@ function liveBuyOf(it) {
 function liveSellOf(it) {
   if (!it) return null;
   const ge = it.high ?? it.low ?? null;
+  // A lone dump isn't the market (Ben, 2026-11-15: 21,343 Bomb vials valued at 744
+  // each, -58%, while they traded at ~1,835-2,187). When almost nobody sold
+  // instantly (under 5% of the units bought instantly) and that sell sits more than
+  // 25% under the buy side, the buy side is where things are really trading.
+  const a = it.liveAvg, s = it.liveSides;
+  const sellU = a ? a.sellUnits : s?.uL, buyU = a ? a.buyUnits : s?.uH;
+  if (it.liveSell != null && it.liveBuy != null && sellU != null && buyU > 0
+      && sellU < buyU * 0.05 && it.liveSell < it.liveBuy * 0.75) {
+    const b = _sanityLivePrice(it.liveBuy, ge);
+    if (b != null) return b;
+  }
   return _sanityLivePrice(it.liveSell, ge) ?? ge ?? null;
+}
+// Name -> item index, built once per items array (i.e. once per price fetch).
+// The find* helpers below used to scan all ~7,500 items for every lookup, and
+// the Money Makers calculators do thousands of lookups per render: opening
+// Archaeology lagged badly (Ben, 2026-11-12).
+const _itemNameIndex = new WeakMap();
+function itemByName(items, name) {
+  if (!name || !items) return null;
+  let idx = _itemNameIndex.get(items);
+  if (!idx) {
+    idx = new Map();
+    for (const i of items) { const k = i.name && i.name.toLowerCase(); if (k && !idx.has(k)) idx.set(k, i); } // first match wins, like .find()
+    _itemNameIndex.set(items, idx);
+  }
+  return idx.get(name.toLowerCase()) || null;
 }
 function findItemBuyPrice(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   if (!it) return null;
   const gePrice = it.high ?? it.low ?? null;
   return _sanityLivePrice(it.liveBuy, gePrice) ?? gePrice ?? null;
 }
 function findItemSellPrice(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   if (!it) return null;
   const gePrice = it.high ?? it.low ?? null;
   return _sanityLivePrice(it.liveSell, gePrice) ?? gePrice ?? null;
 }
 function findItemLimit(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   return it ? (it.limit || null) : null;
 }
 function findItemVolume(items, name) {
   if (!name) return null;
-  const it = items.find(i => i.name.toLowerCase() === name.toLowerCase());
+  const it = itemByName(items, name);
   return it ? (it.volume ?? null) : null;
 }
 
@@ -14807,7 +15255,7 @@ function flattenSmithingMats(name, mult = 1, depth = 0) {
 }
 // One row per product of `bar`, at live prices (buy materials, sell the product, 2% tax).
 function smithingProductRows(bar, items, priceMode = 'live') {
-  const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+  const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
   const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
   const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
   const byName = {};
@@ -14848,7 +15296,7 @@ function ArchaeologyCalc({items}) {
   const [level, setLevel] = useState('');
   const [sort, setSort] = useState({key:'profit', dir:-1});
   const data = useMemo(() => {
-    const guideOf = n => { const g = items.find(i => i.name.toLowerCase() === n.toLowerCase()); return g ? (g.high ?? g.low ?? null) : null; };
+    const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
     const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
     const chronote = priceMode === 'ge' ? guideOf('Chronotes') : findItemSellPrice(items, 'Chronotes');
     // A material with no GE price counts as 0 and is named on the row, so nothing gets hidden.
@@ -15342,7 +15790,7 @@ function MoneyMakersTab({items, onSelect, description}) {
 
   const onSelectItem = (itemName) => {
     if (!onSelect) return;
-    const it = items.find(i => i.name.toLowerCase() === itemName.toLowerCase());
+    const it = itemByName(items, itemName);
     if (it) onSelect(it);
   };
 
@@ -16164,7 +16612,11 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const known = (items || []).find(i => i.name.toLowerCase() === nameLow);
   // The offer these totals most likely belong to: the fullest that isn't past them.
   const offers = goal?.offers || [];
-  const guessOffer = offers.filter(o => o.bought <= filled).sort((a, b) => b.bought - a.bought)[0] || offers[0];
+  // Offers are labelled "<quantity> @ <price>" when the reader adds them, so the
+  // same offer is found again next time; otherwise the fullest not past these totals.
+  const offerLabel = `${num('quantity').toLocaleString()} @ ${num('price').toLocaleString()}`;
+  const guessOffer = offers.find(o => o.label === offerLabel)
+    || offers.filter(o => o.bought <= filled).sort((a, b) => b.bought - a.bought)[0] || offers[0];
   const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
   const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
   const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
@@ -16174,7 +16626,9 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const alreadySold = geSoldLog()[logKey] || 0;
   const newSold = Math.max(0, filled - alreadySold);
   const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
-  const requireItem = () => { if (!known) { toast('Pick an item name GEnius knows', 'error'); return false; } if (!(filled > 0)) { toast('Nothing filled yet', 'error'); return false; } return true; };
+  // allowEmpty: a planner goal can start at 0 bought (Ben, 2026-11-13: capture a
+  // big bid right after placing it); a Portfolio position can't.
+  const requireItem = (allowEmpty = false) => { if (!known) { toast('Pick an item name GEnius knows', 'error'); return false; } if (!allowEmpty && !(filled > 0)) { toast('Nothing filled yet', 'error'); return false; } return true; };
 
   const saveToGoal = async () => {
     if (!requireItem()) return;
@@ -16185,11 +16639,23 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
     if (!r?.success) { toast(r?.error || 'Could not save', 'error'); return; }
     finish(known.name + ' planner updated');
   };
+  // A second offer for the same item (another account, or a new bid) goes in
+  // beside the first instead of overwriting it (Ben, 2026-11-13: his main's new
+  // Primal extract offer tried to set the planner from 30,000 bought to 0).
+  const updateLowers = goal && filled < (offers.length ? (chosenOffer?.bought || 0) : (goal.bought || 0));
+  const addOffer = async () => {
+    if (!requireItem(true)) return;
+    const base = offers.length ? offers : [{id:'o' + goal.id, label:'First offer', bought:goal.bought || 0, spent:goal.spent || 0}];
+    const next = [...base, {id:Date.now().toString(), label:offerLabel, bought:filled, spent:coins}];
+    const r = await window.genius.updateBuyGoalTotals({id:goal.id, offers:next});
+    if (!r?.success) { toast(r?.error || 'Could not save', 'error'); return; }
+    finish('Added as another offer to the ' + known.name + ' planner');
+  };
   const newGoal = async () => {
-    if (!requireItem()) return;
+    if (!requireItem(true)) return;
     const id = Date.now().toString();
     await window.genius.saveBuyGoal({id, item_name:known.name, item_id:known.id, target:num('quantity') || filled, max_price:num('price')});
-    await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
+    if (filled > 0) await window.genius.updateBuyGoalTotals({id, bought:filled, spent:coins});
     finish(known.name + ' added to the Buy Planner');
   };
   const newPosition = async () => {
@@ -16231,15 +16697,25 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
         field('Offer quantity', 'quantity', true), field('Offer price', 'price', true),
         field(f.side === 'buy' ? 'Bought so far' : 'Sold so far', 'filled', true), field(f.side === 'buy' ? 'Coins spent so far' : 'Coins received so far', 'coins', true)),
       !known && f.name && h('div', {style:{color:'#f0a030', fontSize:12, marginBottom:8}}, 'GEnius doesn\'t know that item name.'),
-      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+fmt.gp(Math.round(avg))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
+      filled > 0 && h('div', {style:{fontSize:12, color:T.text, marginBottom:12}}, 'Average '+(localStorage.getItem('genius_detail_full_price')==='1'?Math.round(avg).toLocaleString():fmt.gp(Math.round(avg)))+' each'+(f.side === 'sell' ? ' after GE tax.' : '.')),
 
       f.side === 'buy' && (goal
         ? h('div', null,
             offers.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which offer in the planner',
               h('select', {className:'ge-input', value:chosenOffer?.id, onChange:e=>setOfferId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
                 offers.map(o => h('option', {key:o.id, value:o.id}, (o.label || 'Offer')+' ('+o.bought.toLocaleString()+' bought)')))),
-            h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+(offers.length ? (chosenOffer?.bought || 0) : goal.bought).toLocaleString()+' to '+filled.toLocaleString()+' bought.'),
-            h('button', {className:'ge-btn gold', onClick:saveToGoal}, 'Update planner'))
+            // Say what this update ADDS (Ben, 2026-11-17), like the sell side does.
+            (() => {
+              const prevB = offers.length ? (chosenOffer?.bought || 0) : (goal.bought || 0);
+              const prevS = offers.length ? (chosenOffer?.spent || 0) : (goal.spent || 0);
+              const addB = filled - prevB, addS = coins - prevS;
+              return h('div', {style:{fontSize:12, color:T.text, marginBottom:10}}, 'Updates '+goal.item_name+' from '+prevB.toLocaleString()+' to '+filled.toLocaleString()+' bought',
+                addB > 0 ? h('span', {style:{color:T.green, fontWeight:600}}, ' (+'+addB.toLocaleString()+(addS > 0 ? ' for '+fmt.gp(addS)+'gp, '+fmt.gp(Math.round(addS / addB))+' each' : '')+')') : null, '.');
+            })(),
+            updateLowers && h('div', {style:{fontSize:12, color:'#f0a030', marginBottom:8}}, 'Updating would LOWER the bought count, so this is probably a different offer (another account or a new bid). Add it as another offer instead.'),
+            h('div', {style:{display:'flex', gap:6, flexWrap:'wrap'}},
+              h('button', {className: updateLowers ? 'ge-btn' : 'ge-btn gold', onClick:saveToGoal}, 'Update planner'),
+              h('button', {className: updateLowers ? 'ge-btn gold' : 'ge-btn', onClick:addOffer}, 'Add as another offer')))
         : h('div', {style:{display:'flex', gap:6}},
             h('button', {className:'ge-btn gold', onClick:newGoal}, 'New planner goal'),
             h('button', {className:'ge-btn', onClick:newPosition}, 'Add to Portfolio'))),
@@ -16317,6 +16793,133 @@ const TAB_DESCRIPTIONS = {
   seasonal_intel: 'Seasonal Events — Christmas, Halloween, Summer, and Easter market patterns from historical research.',
 };
 
+/* ─── Page guides (Max's feedback via Ben, 2026-11-12) ────────── */
+// "It's a bit of a maze... perhaps a tutorial per page?" A short card the
+// first time each page is opened: what it's for, how to read it, what to try
+// first. Ben: a "?" at the top of every page replays it, and the card says so.
+// Plain words, no feature lists: the welcome tour already covers discovery.
+const ITEM_TAB_GUIDE = {
+  title: 'Item category pages',
+  points: [
+    'Every tradeable item in this category, with its price and how it moved today. Click a column header to sort.',
+    'Click any item to open its panel on the right. The "What to offer" box there tells you what to offer to buy or sell, and whether flipping it pays after tax.',
+    'Star an item to put it on your Watchlist.',
+  ],
+};
+const PAGE_GUIDES = {
+  dashboard: { title: 'Dashboard', points: [
+    'A quick look at the whole market today: what is rising, what is falling, and your own positions and alerts at a glance.',
+    'Click any item name to open its panel with prices, history and what to offer.',
+    'Click a section\'s heading (▾) to fold it away. GEnius remembers what you folded.',
+    'New here? Try Flips next for items you can buy and sell for a profit right now.',
+  ]},
+  flips: { title: 'Flips', points: [
+    'Items you can buy and resell for a profit right now: buy with an offer at the "Buy" price, sell at the "Sell" price. Profit is after the 2% GE tax.',
+    'Sorted by realistic profit, which takes into account how much of the item actually trades in a day. Use the Min Profit buttons to hide small flips.',
+    'The Low, Medium and High risk pills split the flips by how wild each item has been over the past year (same as the ITEM RISK badge). Low and Medium are the calmer picks.',
+    '"↓ Still falling" means the item made a new 6-month low in the last 2 weeks. Even a Low risk item can be sliding right now, so its margin may vanish before your offer fills.',
+    'Prices move fast: click an item and check its "What to offer" box before you put in an offer. The Flagged pill lists items that only look profitable.',
+  ]},
+  opportunities: { title: 'Opportunities', points: [
+    'Items doing something unusual today, like a price jump, heavy buying or selling, or a big volume spike. Each one gets a 0-100 score.',
+    'Unusual is not the same as good: read the signal badges and the item panel before buying. Some of these are traps.',
+    'Track record shows how past high-scoring items actually did afterwards.',
+  ]},
+  top_movers: { title: 'Top Movers', points: [
+    'The biggest price rises and falls, with the signals behind them (SURGE, DUMP, FRENZY and so on).',
+    'A big move with little volume is often one odd trade, not a real trend. Check the volume column.',
+  ]},
+  market: { title: 'Market', points: [
+    'The whole Grand Exchange by sector: which areas are heating up or cooling down today.',
+    'Click a sector or an item to dig in.',
+  ]},
+  watchlist: { title: 'Watchlist', points: [
+    'The items you have starred, all in one place with today\'s prices.',
+    'Star items from any table or item panel. To be told when a price hits a level, set an alert from the item panel.',
+  ]},
+  portfolio: { title: 'Portfolio', points: [
+    'Log what you actually bought: item, quantity and price. GEnius tracks its value at live prices and your profit after tax.',
+    'When you sell, record it on the position to keep a history of closed trades and tax paid. The Buy Planner pill helps you stock up on items with a buy limit.',
+  ]},
+  money_makers: { title: 'Money Makers', points: [
+    'Skilling methods ranked by profit at today\'s prices: what it costs to make something and what it sells for, after tax.',
+    'Pick a skill to see its methods. Rows with a chevron (▸) open to show the full breakdown.',
+  ]},
+  dxp_intel: { title: 'GEnius Almanac', points: [
+    'How prices have behaved around recurring events, from GEnius\'s own research. Four pills, one per kind of event. The bar at the top flags anything worth knowing right now.',
+    '📅 DXP Weekend: how items moved around past Double XP weekends, tested on old events before anything is recommended. Click 📋 for a plan in plain English, with real dates once a DXP is announced. Sell-first plans only make sense if you already own the item.',
+    '🗓️ Seasonal Events: Christmas, Halloween, Summer and Easter price patterns from past years.',
+    '📜 Game Updates: how past updates moved the prices of the items they touched, to see what a similar update might do.',
+    '🚀 Launches: every new item by update, from launch through its lowest price to today, at live prices.',
+    'All of it is history, not a guarantee.',
+  ]},
+  alerts: { title: 'Notifications', points: [
+    'Inbox keeps every notification GEnius has sent you. Upcoming Changes warns when a game update could hit items you hold or watch.',
+    'My Alerts is where you set your own: a price above or below a level, a % move, or "stops falling" after a drop.',
+  ]},
+  news: { title: 'News', points: [
+    'RuneScape news and game updates, with the items each one might affect.',
+    'Double XP announcements here also feed the Almanac\'s dates.',
+  ]},
+  compare: { title: 'Compare', points: [
+    'Put items side by side to compare prices, history and stats.',
+    'Add items from their panel or the search box here.',
+  ]},
+  alch: { title: 'Alch', points: [
+    'Items where buying and casting High Alchemy makes a profit after the nature rune.',
+    'Profit uses live prices. Mind the buy limit: it caps how many you can alch per 4 hours.',
+  ]},
+  monster_lookup: { title: 'Monster Lookup', points: [
+    'Type a monster\'s name to see its drop table priced at today\'s values, and roughly what a kill is worth.',
+  ]},
+  expensive: { title: 'High Value', points: [
+    'Every item over your price threshold (change it in Settings). Big items trade rarely, so check how recently it last traded before trusting a price.',
+  ]},
+  settings: { title: 'Settings', points: [
+    'Fetching, notifications, sync between devices, backups and how things look.',
+    'Replay the first-run welcome tour from here. Page guides like this one come back with the ? at the top of any page.',
+  ]},
+};
+const pageGuideFor = tab => PAGE_GUIDES[tab] || (NAV.some(n => n.id === tab) && !['about'].includes(tab) ? ITEM_TAB_GUIDE : null);
+const PG_SEEN = 'pageGuidesSeen', PG_OFF = 'pageGuidesOff';
+const pgRead = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) ?? d; } catch { return d; } };
+const pgWrite = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
+
+function PageGuide({tab}) {
+  const guide = pageGuideFor(tab);
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    if (!guide) { setOpen(false); return; }
+    const seen = pgRead(PG_SEEN, {});
+    setOpen(!seen[tab] && !pgRead(PG_OFF, false));
+  }, [tab]);
+  if (!guide) return null;
+  const close = () => { pgWrite(PG_SEEN, {...pgRead(PG_SEEN, {}), [tab]: Date.now()}); setOpen(false); };
+  return h(React.Fragment, null,
+    // The "?" sits at the top right, on the same row as the page's quip.
+    h('button', {
+      className:'page-guide-btn', title:'How this page works', 'aria-label':'How this page works',
+      onClick:() => setOpen(o => !o),
+      style:{position:'absolute', top:6, right:14, zIndex:5, width:22, height:22, borderRadius:'50%', padding:0,
+        border:`1px solid ${open ? T.gold : T.border}`, background: open ? 'rgba(201,168,76,0.2)' : T.panel,
+        color: open ? T.goldBright : T.textDim, fontSize:12, fontWeight:'bold', cursor:'pointer', lineHeight:'20px'},
+    }, '?'),
+    open && h('div', {style:{margin:'36px 14px 10px', padding:'12px 14px', background:'rgba(201,168,76,0.08)',
+        border:`1px solid ${T.gold}`, borderRadius:6, fontSize:12, color:T.text, lineHeight:1.55}},
+      h('div', {style:{fontWeight:'bold', color:T.goldBright, marginBottom:6}}, 'How this page works: ' + guide.title),
+      h('ul', {style:{margin:'0 0 8px', paddingLeft:18}}, guide.points.map((p, i) => h('li', {key:i, style:{marginBottom:3}}, p))),
+      h('div', {style:{display:'flex', alignItems:'center', gap:10, flexWrap:'wrap'}},
+        h('button', {className:'ge-btn gold', onClick:close}, 'Got it'),
+        h('span', {style:{fontSize:11, color:T.textDim}}, 'You can see this again anytime with the ? at the top right of the page.'),
+        !pgRead(PG_OFF, false) && h('button', {
+          onClick:() => { pgWrite(PG_OFF, true); close(); },
+          style:{marginLeft:'auto', background:'none', border:'none', color:T.textDim, fontSize:10, cursor:'pointer', textDecoration:'underline'},
+        }, 'Don\'t show these automatically'),
+      ),
+    ),
+  );
+}
+
 /* ─── Nav config ─────────────────────────────────────────────── */
 const NAV = [
   {id:'dashboard',      label:'Dashboard',        icon:'◈'},
@@ -16384,10 +16987,56 @@ function App() {
   // only applies under ~700px; on desktop .sidebar ignores this entirely
   // and stays permanently visible regardless of this state).
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [items, setItems] = useState([]);
+  const [rawItems, setItems] = useState([]);
   // Items Jagex removed from the GE (run.js removedItems): kept out of
   // `items` so market scans skip them; Watchlist/Portfolio show them labelled.
   const [removedItems, setRemovedItems] = useState([]);
+  // One set of live prices everywhere (Ben, 2026-11-12): every item's buy and
+  // sell are averages of recent trading on each side (recent-prices.js),
+  // refreshed for ALL items together every 5 minutes, so the panel, Flips and
+  // the Dashboard always agree and nothing changes just because you clicked.
+  // Items with fewer than 5 traded on a side get liveAvg null (not a flip).
+  const [recentPrices, setRecentPrices] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    const load = force => window.genius?.getRecentPrices?.(force).then(r => { if (!dead && r && r.at) setRecentPrices(r); }).catch(() => {});
+    load(false);
+    const t = setInterval(() => load(false), 5 * 60000);
+    const onFetch = () => load(true);
+    window.addEventListener('genius-recent-refresh', onFetch);
+    return () => { dead = true; clearInterval(t); window.removeEventListener('genius-recent-refresh', onFetch); };
+  }, []);
+  // Items a release from the last 60 days drops (Ben, 2026-11-13): flagged
+  // everywhere, since a new source usually shifts the price. Refreshed with
+  // the live prices; the backend re-reads those drop tables each time.
+  const [newSource, setNewSource] = useState(null);
+  useEffect(() => {
+    let dead = false;
+    const load = () => window.genius?.getNewSourceDrops?.().then(m => { if (!dead && m) setNewSource(m); }).catch(() => {});
+    load();
+    const t = setInterval(load, 15 * 60000);
+    window.addEventListener('genius-recent-refresh', load);
+    return () => { dead = true; clearInterval(t); window.removeEventListener('genius-recent-refresh', load); };
+  }, []);
+  const items = useMemo(() => {
+    const rp = recentPrices?.prices;
+    const ns = newSource || {};
+    if (!rp && !newSource) return rawItems;
+    return rawItems.map(it0 => {
+      const it = ns[it0.id] ? { ...it0, newSource: ns[it0.id] } : it0;
+      if (!rp) return it;
+      if (it.untradeable) return it;
+      const r = rp[it.id];
+      const latest = r ? { buy: r.latestBuy ?? null, buyTime: r.latestBuyTime ?? null, sell: r.latestSell ?? null, sellTime: r.latestSellTime ?? null } : null;
+      const liveRate = r && r.buyPerHour != null ? { buyPerHour: r.buyPerHour, sellPerHour: r.sellPerHour, hours: r.volHours } : null;
+      if (!r || r.buy == null || r.sell == null) return { ...it, liveAvg: null, liveLatest: latest, liveRate };
+      return { ...it, liveRate,
+        liveBuy: r.buy, liveSell: r.sell, liveBuyTime: r.buyTime, liveSellTime: r.sellTime,
+        liveAvg: { buyUnits: r.buyUnits, sellUnits: r.sellUnits, from: r.from, at: recentPrices.at,
+          buyLo: r.buyLo, buyHi: r.buyHi, sellLo: r.sellLo, sellHi: r.sellHi },
+        liveLatest: latest };
+    });
+  }, [rawItems, recentPrices, newSource]);
   const [news, setNews] = useState([]);
   const [indexes, setIndexes] = useState([]);
   const [officialTop100, setOfficialTop100] = useState({byWindow:{}});
@@ -16624,6 +17273,7 @@ function App() {
       window.genius.getData().then(data => {
         console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
         if (data.items)   setItems(data.items);
+        window.dispatchEvent(new Event('genius-recent-refresh'));
         setRemovedItems(data.removedItems || []);
         if (data.news)    setNews(data.news);
         if (data.indexes) setIndexes(data.indexes);
@@ -16858,7 +17508,7 @@ function App() {
         tabs: () => NAV.filter(n => n.id).map(n => n.id),
         goto: async id => { setTab(id); await wait(500); return testStateRef.current.tab; },
         openItem: async name => {
-          const it = testStateRef.current.items.find(i => i.name.toLowerCase() === String(name).toLowerCase());
+          const it = itemByName(testStateRef.current.items, String(name));
           if (!it) return false;
           setSelected(it); await wait(500); return true;
         },
@@ -17000,14 +17650,16 @@ function App() {
           h('button',{className:'scroll-jump-btn',title:'Scroll to top',onClick:()=>scrollContentTo(0)},'▲'),
           h('button',{className:'scroll-jump-btn',title:'Scroll to bottom',onClick:()=>scrollContentTo(contentRef.current?.scrollHeight||0)},'▼')
         ),
-        h('div',{className:'content',style:{flex:1},ref:contentRef},
+        h('div',{className:'content',style:{flex:1,position:'relative'},ref:contentRef},
+          h(PageGuide,{tab}),
           tab==='dashboard'&&h(DashboardTab,{items:visibleItems,indexes,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.dashboard,alerts,portfolio,onNavigate:setTab,news,overpricedThreshold:settings.overpricedThreshold||30,officialTop100}),
           tab==='compare' &&h(CompareTab,{compareList,onRemove:it=>it._add?addToCompare(it):setCompareList(prev=>prev.filter(c=>c.id!==it.id)),onClear:()=>setCompareList([]),allItems:visibleItems,description:TAB_DESCRIPTIONS.compare,userShorthands}),
           tab==='watchlist'&&h(WatchlistTab,{items:visibleItems,removedItems,watchlist,selected,onSelect:handleSelect,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.watchlist,devMode:settings.devMode}),
           tab==='invention'&&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.invention,splitLabel:'Components',showMachines:true,allItems:visibleItems,onNavigate:setTab}),
           tab==='herblore' &&h(SplitTab,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS.herblore, splitLabel:'Combination Potions'}),
-          ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','artisan','food','farming','mining','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
+          ['melee','magic','ranged','necromancy','hybrid','ammo','pocket','food','farming','prayer','archaeology','runes','summoning','boss','treasure_trails','rares','codex','cosmetics','low_tier','materials','supplies'].includes(tab)&&
             h(ItemTable,{items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
+          (tab==='mining'||tab==='artisan')&&h(SkillPillTable,{key:tab,tab,items:catItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,onAddCompare:addToCompare,description:TAB_DESCRIPTIONS[tab]||''}),
           tab==='alch'    &&h(AlchTab,    {items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,description:TAB_DESCRIPTIONS.alch}),
           tab==='expensive'&&h(ExpensiveTab,{items:visibleItems,selected,onSelect:handleSelect,watchlist,onToggleWatch:toggleWatch,threshold:settings.expensiveThreshold||500000000,description:TAB_DESCRIPTIONS.expensive}),
           tab==='portfolio'&&h(PortfolioArea,{
@@ -17060,7 +17712,7 @@ function App() {
             style:{width:5, cursor:'col-resize', flexShrink:0, background:'transparent'},
             title:'Drag to resize',
           }),
-          h(DetailPanel,{item:selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect,
+          h(DetailPanel,{item:(selected && items.find(x => x.id === selected.id)) || selected,watchlist,onToggleWatch:toggleWatch,onToggleHide:toggleHide,hiddenItems,onClose:()=>setSelected(null),onCategoryChange:()=>{},notes,onSaveNote:(id,text)=>{window.genius?.saveNote(id,text);setNotes(n=>({...n,[id]:text}));},allItems:items,dateFormat:settings.dateFormat,onAddToPortfolio:pos=>setQuickAddPos(pos),panelWidth:detailPanelWidth,populatedHistoryIds,devMode:settings.devMode,onSelectItem:handleSelect,
             onSaveAlert:upsertAlert, onSaveReminder:upsertReminder, toast}),
         ),
       h(HistoryPopup,{state:historyPopup, onDismiss:()=>setHistoryPopup(null)}),

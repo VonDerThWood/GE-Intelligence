@@ -20,6 +20,24 @@ public class MainActivity extends BridgeActivity {
         registerPlugin(GeniusMonitorPlugin.class);
         super.onCreate(savedInstanceState);
         createQuietChannel();
+        hideSystemBars();
+    }
+
+    // Full screen (Ben, 2026-11-18): the status and navigation bars sat on top
+    // of pop-ups (the welcome tour title, the history progress line). Hide both;
+    // a swipe from the edge shows them briefly, then they hide again.
+    private void hideSystemBars() {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(getWindow(), false);
+        androidx.core.view.WindowInsetsControllerCompat c =
+            androidx.core.view.WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView());
+        c.setSystemBarsBehavior(androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE);
+        c.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars());
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (hasFocus) hideSystemBars(); // returning from another app or a dialog brings the bars back
     }
 
     private void createQuietChannel() {

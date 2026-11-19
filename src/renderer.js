@@ -13284,7 +13284,10 @@ function HistoryPopup({state, onDismiss}) {
   // initial300Done is persisted across restarts too, so an interruption
   // during the first 300 correctly resumes still showing "first 300"
   // messaging instead of jumping straight to "background" framing.
-  const { stored, total, initial300Done, fullyComplete } = state;
+  // The history pack can bring in thousands of items before the flag flips,
+  // which showed "(7339/300)" (Ben, 2026-11-18): past 300 counts as done.
+  const { stored, total, fullyComplete } = state;
+  const initial300Done = state.initial300Done || stored >= 300;
   const pct = total > 0 ? Math.round((stored / total) * 100) : 0;
 
   return h('div', {style:{

@@ -1674,11 +1674,61 @@
     }
   });
 
+  // src/backend-js/history-format.js
+  var require_history_format = __commonJS({
+    "src/backend-js/history-format.js"(exports, module) {
+      var FIELDS = ["timestamp", "price", "volume"];
+      var KEY = { timestamp: "t", price: "p", volume: "v" };
+      function packable(points) {
+        if (!Array.isArray(points)) return false;
+        for (const pt of points) {
+          if (!pt || typeof pt !== "object") return false;
+          const ks = Object.keys(pt);
+          if (ks.length !== 3) return false;
+          for (const k of FIELDS) if (!Number.isSafeInteger(pt[k])) return false;
+        }
+        return true;
+      }
+      function pack(points) {
+        if (!packable(points)) return { f: 0, raw: points };
+        const out = { f: 1, n: points.length };
+        for (const k of FIELDS) {
+          const col = new Array(points.length);
+          let prev = 0;
+          for (let i = 0; i < points.length; i++) {
+            const v = points[i][k];
+            col[i] = v - prev;
+            prev = v;
+          }
+          out[KEY[k]] = col;
+        }
+        return out;
+      }
+      function unpack(obj) {
+        if (Array.isArray(obj)) return obj;
+        if (!obj || typeof obj !== "object") return null;
+        if (obj.f === 0) return obj.raw;
+        if (obj.f !== 1) throw new Error("Unknown history format " + obj.f);
+        const n = obj.n, points = new Array(n);
+        const sums = { t: 0, p: 0, v: 0 };
+        for (let i = 0; i < n; i++) {
+          sums.t += obj.t[i];
+          sums.p += obj.p[i];
+          sums.v += obj.v[i];
+          points[i] = { timestamp: sums.t, price: sums.p, volume: sums.v };
+        }
+        return points;
+      }
+      module.exports = { pack, unpack };
+    }
+  });
+
   // src/backend-js/storage-capacitor.js
   var require_storage_capacitor = __commonJS({
     "src/backend-js/storage-capacitor.js"(exports, module) {
       var { Filesystem: Filesystem2, Directory: Directory2, Encoding: Encoding2 } = require_plugin_cjs();
       var { Preferences } = require_plugin_cjs2();
+      var { pack, unpack } = require_history_format();
       var ROOT = Directory2.Data;
       var dataDirPrefix = "";
       function setDataDirPrefix(prefix) {
@@ -1716,10 +1766,98 @@
       async function listJSONFiles(dirPath) {
         try {
           const { files } = await Filesystem2.readdir({ path: relativize(dirPath), directory: ROOT });
-          return files.map((f) => typeof f === "string" ? f : f.name).filter((f) => f.endsWith(".json"));
+          const names = /* @__PURE__ */ new Set();
+          for (const f0 of files) {
+            const f = typeof f0 === "string" ? f0 : f0.name;
+            if (f.endsWith(".json")) names.add(f);
+            else if (f.endsWith(".json.gz")) names.add(f.slice(0, -3));
+          }
+          return [...names];
         } catch {
           return [];
         }
+      }
+      var hasGzip = () => typeof CompressionStream !== "undefined" && typeof DecompressionStream !== "undefined";
+      var bytesToB64 = (bytes) => {
+        let s = "";
+        for (let i = 0; i < bytes.length; i += 32768) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 32768));
+        return btoa(s);
+      };
+      async function gzipText(text) {
+        const stream = new Blob([text]).stream().pipeThrough(new CompressionStream("gzip"));
+        return new Uint8Array(await new Response(stream).arrayBuffer());
+      }
+      async function gunzipToText(bytes) {
+        const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream("gzip"));
+        return new Response(stream).text();
+      }
+      var itemPath = (dirPath, id, ext) => relativize(dirPath.replace(/\\/g, "/") + `/${id}${ext}`);
+      async function readGzItem(dirPath, id) {
+        const { data } = await Filesystem2.readFile({ path: itemPath(dirPath, id, ".json.gz"), directory: ROOT });
+        return unpack(JSON.parse(await gunzipToText(b64ToBytes(typeof data === "string" ? data : await data.text()))));
+      }
+      async function writeGzItem(dirPath, id, packedJson) {
+        await Filesystem2.writeFile({ path: itemPath(dirPath, id, ".json.gz"), data: bytesToB64(await gzipText(packedJson)), directory: ROOT, recursive: true });
+      }
+      var rmItem = async (dirPath, id, ext) => {
+        try {
+          await Filesystem2.deleteFile({ path: itemPath(dirPath, id, ext), directory: ROOT });
+        } catch {
+        }
+      };
+      async function readItemFile(dirPath, id) {
+        if (hasGzip()) {
+          try {
+            return await readGzItem(dirPath, id);
+          } catch {
+          }
+        }
+        const { data } = await Filesystem2.readFile({ path: itemPath(dirPath, id, ".json"), directory: ROOT, encoding: Encoding2.UTF8 });
+        return unpack(JSON.parse(data));
+      }
+      async function compactDirItems(dirPath, { onProgress, shouldStop } = {}) {
+        if (!hasGzip()) throw new Error("no CompressionStream in this WebView");
+        let names = [];
+        try {
+          const { files } = await Filesystem2.readdir({ path: relativize(dirPath), directory: ROOT });
+          names = files.map((f) => typeof f === "string" ? f : f.name);
+        } catch {
+        }
+        const olds = names.filter((f) => /^\d+\.json$/.test(f));
+        let done = 0;
+        const failed = [];
+        for (const f of olds) {
+          if (shouldStop && shouldStop()) break;
+          const id = f.slice(0, -5);
+          try {
+            let raw;
+            try {
+              raw = (await Filesystem2.readFile({ path: itemPath(dirPath, id, ".json"), directory: ROOT, encoding: Encoding2.UTF8 })).data;
+            } catch {
+              done++;
+              continue;
+            }
+            const points = unpack(JSON.parse(raw));
+            await writeGzItem(dirPath, id, JSON.stringify(pack(points)));
+            const back = await readGzItem(dirPath, id);
+            if (JSON.stringify(back) !== JSON.stringify(points)) {
+              if (await pathExists(dirPath.replace(/\\/g, "/") + `/${id}.json`)) {
+                await rmItem(dirPath, id, ".json.gz");
+                failed.push(id);
+              }
+              done++;
+              continue;
+            }
+            await rmItem(dirPath, id, ".json");
+          } catch (e) {
+            failed.push(id);
+          }
+          done++;
+          if (onProgress && done % 100 === 0) onProgress(done, olds.length);
+          if (done % 25 === 0) await new Promise((r) => setTimeout(r, 0));
+        }
+        if (onProgress) onProgress(done, olds.length);
+        return { converted: done - failed.length, failed, total: olds.length };
       }
       async function loadDirBatched(dirPath, { batchSize = 50 } = {}) {
         await ensureDir(dirPath);
@@ -1730,6 +1868,10 @@
           await Promise.all(batch.map(async (f) => {
             const id = f.slice(0, -5);
             try {
+              if (/^\d+$/.test(id)) {
+                out[id] = await readItemFile(dirPath, id);
+                return;
+              }
               const path = relativize(dirPath) + "/" + f;
               const { data } = await Filesystem2.readFile({ path, directory: ROOT, encoding: Encoding2.UTF8 });
               out[id] = JSON.parse(data);
@@ -1741,14 +1883,24 @@
         return out;
       }
       var isItemFileId = (id) => /^\d+$/.test(String(id));
-      async function writeDirItem(dirPath, id, data) {
+      async function writeDirItem(dirPath, id, data, { compact = false } = {}) {
         if (!isItemFileId(id)) return;
         await ensureDir(dirPath);
-        await atomicWrite(dirPath.replace(/\\/g, "/") + `/${id}.json`, JSON.stringify(data));
+        if (compact && hasGzip()) {
+          await writeGzItem(dirPath, id, JSON.stringify(pack(data)));
+          await rmItem(dirPath, id, ".json");
+        } else {
+          await atomicWrite(dirPath.replace(/\\/g, "/") + `/${id}.json`, JSON.stringify(data));
+          await rmItem(dirPath, id, ".json.gz");
+        }
       }
       async function readDirItem(dirPath, id) {
         if (!isItemFileId(id)) return null;
-        return readJSON(dirPath.replace(/\\/g, "/") + `/${id}.json`, null);
+        try {
+          return await readItemFile(dirPath, id);
+        } catch {
+          return null;
+        }
       }
       async function pathExists(filePath) {
         try {
@@ -1785,6 +1937,98 @@
       function resolveWritable(filePath) {
         return filePath;
       }
+      var PACK_TMP = "history-pack.tmp.gz";
+      var CHUNK = 1024 * 1024;
+      var b64ToBytes = (b64) => {
+        const s = atob(b64), out = new Uint8Array(s.length);
+        for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i);
+        return out;
+      };
+      async function importHistoryPack(dirPath, url, { skip = /* @__PURE__ */ new Set(), onItem, timeoutMs = 15 * 6e4 } = {}) {
+        if (typeof DecompressionStream === "undefined") throw new Error("no DecompressionStream in this WebView");
+        await ensureDir(dirPath);
+        try {
+          await Filesystem2.deleteFile({ path: PACK_TMP, directory: Directory2.Cache });
+        } catch {
+        }
+        await Filesystem2.downloadFile({
+          url,
+          path: PACK_TMP,
+          directory: Directory2.Cache,
+          connectTimeout: 3e4,
+          readTimeout: timeoutMs,
+          headers: { "User-Agent": "GEnius (github.com/VonDerThWood/GE-Intelligence)" }
+        });
+        const { size } = await Filesystem2.stat({ path: PACK_TMP, directory: Directory2.Cache });
+        if (!(size > 1e3)) throw new Error("history pack: download too small (" + size + " bytes)");
+        let offset = 0;
+        const bytes = new ReadableStream({
+          async pull(ctl) {
+            if (offset >= size) {
+              ctl.close();
+              return;
+            }
+            const length = Math.min(CHUNK, size - offset);
+            const { data } = await Filesystem2.readFile({ path: PACK_TMP, directory: Directory2.Cache, offset, length });
+            offset += length;
+            ctl.enqueue(b64ToBytes(typeof data === "string" ? data : await data.text()));
+          }
+        });
+        const reader = bytes.pipeThrough(new DecompressionStream("gzip")).pipeThrough(new TextDecoderStream()).getReader();
+        let imported = 0, complete = false, builtAt = null, error = null, rest = "";
+        const dir = dirPath.replace(/\\/g, "/");
+        const pending = /* @__PURE__ */ new Set();
+        const put = async (id, json) => {
+          let points;
+          try {
+            points = unpack(JSON.parse(json));
+          } catch {
+            return;
+          }
+          if (!Array.isArray(points) || !points.length || !points.every((p) => p && typeof p.timestamp === "number")) return;
+          if (hasGzip()) await writeGzItem(dirPath, id, json);
+          else await atomicWrite(`${dir}/${id}.json`, JSON.stringify(points));
+          imported++;
+          if (onItem) onItem(id);
+        };
+        try {
+          outer: for (; ; ) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            rest += value;
+            let nl;
+            while ((nl = rest.indexOf("\n")) >= 0) {
+              const line = rest.slice(0, nl);
+              rest = rest.slice(nl + 1);
+              const tab = line.indexOf("	");
+              if (tab < 0) continue;
+              const id = line.slice(0, tab);
+              if (id === "#end") {
+                complete = true;
+                builtAt = line.split("	")[2] || null;
+                break outer;
+              }
+              if (!/^\d+$/.test(id) || skip.has(id)) continue;
+              const p = put(id, line.slice(tab + 1)).catch(() => {
+              }).finally(() => pending.delete(p));
+              pending.add(p);
+              if (pending.size >= 8) await Promise.race(pending);
+            }
+          }
+        } catch (e) {
+          error = e.message;
+        }
+        await Promise.all(pending);
+        try {
+          reader.cancel();
+        } catch {
+        }
+        try {
+          await Filesystem2.deleteFile({ path: PACK_TMP, directory: Directory2.Cache });
+        } catch {
+        }
+        return { imported, complete, builtAt, error };
+      }
       module.exports = {
         atomicWrite,
         readJSON,
@@ -1798,7 +2042,10 @@
         migrateLegacyHistoryFile,
         createKVStore,
         setDataDirPrefix,
-        resolveWritable
+        resolveWritable,
+        importHistoryPack,
+        compactDirItems,
+        canCompact: hasGzip
       };
     }
   });
@@ -10086,13 +10333,16 @@
           "melee"
         ],
         "saradomin's whisper": [
-          "artisan"
+          "boss",
+          "melee"
         ],
         "saradomin's hiss": [
-          "artisan"
+          "boss",
+          "magic"
         ],
         "saradomin's murmur": [
-          "artisan"
+          "boss",
+          "ranged"
         ],
         "armadyl crossbow": [
           "ranged"
@@ -15950,13 +16200,13 @@
           "magic"
         ],
         "resonant anima of jas (tradeable)": [
-          "ammo"
+          "artisan"
         ],
         "resonant anima of bik (tradeable)": [
           "artisan"
         ],
         "resonant anima of ful (tradeable)": [
-          "ammo"
+          "artisan"
         ],
         "scripture of jas": [
           "boss"
@@ -17127,22 +17377,22 @@
           "artisan"
         ],
         "dragonstone circlet token": [
-          "artisan"
+          "cosmetics"
         ],
         "onyx circlet token": [
-          "artisan"
+          "cosmetics"
         ],
         "hydrix circlet token": [
-          "artisan"
+          "cosmetics"
         ],
         "'dragonstone' title scroll": [
-          "artisan"
+          "cosmetics"
         ],
         "'onyx' title scroll": [
-          "artisan"
+          "cosmetics"
         ],
         "'hydrix' title scroll": [
-          "artisan"
+          "cosmetics"
         ],
         "solid gold easter egg": [
           "rares"
@@ -17307,13 +17557,13 @@
           "artisan"
         ],
         "dragonstone gala attire token": [
-          "artisan"
+          "cosmetics"
         ],
         "onyx gala attire token": [
-          "artisan"
+          "cosmetics"
         ],
         "hydrix gala attire token": [
-          "artisan"
+          "cosmetics"
         ],
         "robe top of tumeken's resplendence": [
           "magic"
@@ -18910,7 +19160,7 @@
           "melee"
         ],
         "wyrm scalp": [
-          "artisan"
+          "ranged"
         ],
         "tectonic essence": [
           "artisan"
@@ -19025,7 +19275,7 @@
           "boss"
         ],
         "wyrm heart": [
-          "artisan"
+          "magic"
         ],
         "steadfast scale": [
           "artisan"
@@ -19052,7 +19302,7 @@
           "rares"
         ],
         "wyrm spike": [
-          "artisan"
+          "melee"
         ],
         "blood necklace shard": [
           "artisan"
@@ -21348,6 +21598,15 @@
         ],
         "pink pumpkin": [
           "rares"
+        ],
+        "'diamond' title scroll": [
+          "cosmetics"
+        ],
+        "'emerald' title scroll": [
+          "cosmetics"
+        ],
+        "resonant anima of wen (tradeable)": [
+          "artisan"
         ]
       };
     }
@@ -22343,6 +22602,13 @@
         return [...cats];
       }
       function assignCategories(name) {
+        const cats = _assignCategories(name);
+        if (cats.includes("archaeology") && cats.length > 1) {
+          return cats.includes("rares") ? ["rares", "archaeology"] : ["archaeology"];
+        }
+        return cats;
+      }
+      function _assignCategories(name) {
         const nameLower = name.toLowerCase().trim();
         if (nameLower in OVERRIDES) {
           const ov = OVERRIDES[nameLower];
@@ -22537,9 +22803,304 @@
           }
           return out;
         }
-        return { sync, getItem };
+        async function getFalling(ids, days = 180, recentDays = 14) {
+          const want = new Set(ids.map(String));
+          const cutoff = dayStr(Date.now() - days * DAY_MS), recentCut = dayStr(Date.now() - recentDays * DAY_MS);
+          const months = (await storage2.listJSONFiles(dir)).filter((f) => /^\d{4}-\d{2}\.json$/.test(f)).map((f) => f.slice(0, 7)).filter((m) => m >= cutoff.slice(0, 7)).sort();
+          const low = {};
+          for (const m of months) {
+            const doc = await storage2.readJSON(monthFile(m), { days: {} });
+            for (const date of Object.keys(doc.days).sort()) {
+              if (date < cutoff) continue;
+              const row = doc.days[date];
+              for (const id of want) {
+                const r = row[id];
+                if (!r || !(r[2] > 0)) continue;
+                const cur = low[id] || (low[id] = { price: Infinity, date: "", n: 0 });
+                cur.n++;
+                if (r[2] <= cur.price) {
+                  cur.price = r[2];
+                  cur.date = date;
+                }
+              }
+            }
+          }
+          return Object.keys(low).filter((id) => low[id].n >= 30 && low[id].date >= recentCut);
+        }
+        async function getNormal(id, days = 90) {
+          id = String(id);
+          const cutoff = dayStr(Date.now() - days * DAY_MS), yearCut = dayStr(Date.now() - 365 * DAY_MS);
+          const months = (await storage2.listJSONFiles(dir)).filter((f) => /^\d{4}-\d{2}\.json$/.test(f)).map((f) => f.slice(0, 7)).filter((m) => m >= yearCut.slice(0, 7)).sort();
+          const buys = [], sells = [];
+          let low = null, lowDate = null, since = null;
+          for (const m of months) {
+            const doc = await storage2.readJSON(monthFile(m), { days: {} });
+            for (const date of Object.keys(doc.days)) {
+              const r = doc.days[date][id];
+              if (!r || date < yearCut) continue;
+              if (!since || date < since) since = date;
+              if (r[2] > 0 && (low == null || r[2] < low)) {
+                low = r[2];
+                lowDate = date;
+              }
+              if (date < cutoff) continue;
+              if (r[0] > 0) buys.push(r[0]);
+              if (r[2] > 0) sells.push(r[2]);
+            }
+          }
+          const med = (a) => {
+            if (!a.length) return null;
+            const s = a.sort((x, y) => x - y);
+            return s[Math.floor(s.length / 2)];
+          };
+          if (sells.length < 20) return null;
+          return { buy: med(buys), sell: med(sells), days: sells.length, yearLow: low, yearLowDate: lowDate, since };
+        }
+        return { sync, getItem, getFalling, getNormal };
       }
       module.exports = { createLiveHistory };
+    }
+  });
+
+  // src/backend-js/recent-prices.js
+  var require_recent_prices = __commonJS({
+    "src/backend-js/recent-prices.js"(exports, module) {
+      var BASE = "https://prices.runescape.wiki/api/v2/rs/";
+      var HEADERS = { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" };
+      var MIN_UNITS = 5;
+      var TARGET_UNITS = 20;
+      var MAX_HOURS = 6;
+      var FIVE_MIN_HOURS = 2;
+      var REFRESH_MS = 4.5 * 6e4;
+      var GAP_MS = 250;
+      var VOL_HOURS = 24;
+      function side(pts) {
+        const sorted = pts.slice().sort((a, b) => a[0] - b[0]);
+        const total = sorted.reduce((t, p) => t + p[1], 0);
+        let acc = 0, mid = sorted[0][0];
+        for (const [price, n] of sorted) {
+          acc += n;
+          if (acc * 2 >= total) {
+            mid = price;
+            break;
+          }
+        }
+        return { mid: Math.max(1, Math.round(mid)), lo: Math.round(sorted[0][0]), hi: Math.round(sorted[sorted.length - 1][0]) };
+      }
+      function createRecentPrices() {
+        const blocks = /* @__PURE__ */ new Map();
+        let latest = {}, result = null, at = 0, running = null;
+        async function getJson(url) {
+          const res = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(15e3) });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          return res.json();
+        }
+        async function loadBlock(kind, ts) {
+          const key = `${kind}:${ts}`;
+          if (blocks.has(key)) return;
+          const j = await getJson(`${BASE}${kind}?timestamp=${ts}`);
+          const data = /* @__PURE__ */ new Map();
+          for (const [id, v] of Object.entries(j.data || {})) {
+            data.set(id, [v.avgHighPrice || 0, v.highPriceVolume || 0, v.avgLowPrice || 0, v.lowPriceVolume || 0]);
+          }
+          if (!data.size) return;
+          blocks.set(key, { start: ts * 1e3, end: (ts + (kind === "5m" ? 300 : 3600)) * 1e3, data });
+          await new Promise((r) => setTimeout(r, GAP_MS));
+        }
+        const hours = /* @__PURE__ */ new Map();
+        async function loadHours() {
+          const lastH = Math.floor(Date.now() / 36e5) * 3600 - 3600;
+          for (let t = lastH; t > lastH - VOL_HOURS * 3600; t -= 3600) {
+            if (hours.has(t)) continue;
+            try {
+              const j = await getJson(`${BASE}1h?timestamp=${t}`);
+              const m = /* @__PURE__ */ new Map();
+              for (const [id, v] of Object.entries(j.data || {})) m.set(id, [v.highPriceVolume || 0, v.lowPriceVolume || 0]);
+              if (m.size) hours.set(t, m);
+              await new Promise((r) => setTimeout(r, GAP_MS));
+            } catch (e) {
+            }
+          }
+          for (const t of hours.keys()) if (t <= lastH - VOL_HOURS * 3600) hours.delete(t);
+        }
+        function perHour(id) {
+          const n = hours.size;
+          if (n < 6) return null;
+          const b = [], s = [];
+          for (const m of hours.values()) {
+            const v = m.get(id);
+            b.push(v ? v[0] : 0);
+            s.push(v ? v[1] : 0);
+          }
+          const typical = (arr) => {
+            const total = arr.reduce((a, x) => a + x, 0);
+            if (arr.filter((x) => x > 0).length < 6) return total / arr.length;
+            return (total - Math.max(...arr)) / (arr.length - 1);
+          };
+          return { buy: typical(b), sell: typical(s), hours: n };
+        }
+        let hoursLoading = null;
+        async function refreshOnce() {
+          if (!hoursLoading) hoursLoading = loadHours().catch(() => {
+          }).finally(() => {
+            hoursLoading = null;
+          });
+          const nowS = Math.floor(Date.now() / 1e3);
+          const last5 = Math.floor(nowS / 300) * 300 - 300;
+          const split = Math.floor((last5 - FIVE_MIN_HOURS * 3600) / 3600) * 3600 + 3600;
+          const oldest = split - (MAX_HOURS - FIVE_MIN_HOURS) * 3600;
+          const want = [];
+          for (let t = last5; t >= split; t -= 300) want.push(["5m", t]);
+          for (let t = split - 3600; t >= oldest; t -= 3600) want.push(["1h", t]);
+          for (const [k, t] of want) {
+            try {
+              await loadBlock(k, t);
+            } catch (e) {
+            }
+          }
+          for (const [key, b] of blocks) if (b.end <= oldest * 1e3 || key.startsWith("5m:") && b.start < split * 1e3) blocks.delete(key);
+          try {
+            latest = (await getJson(BASE + "latest")).data || latest;
+          } catch (e) {
+          }
+          const ordered = [...blocks.values()].sort((a, b) => b.start - a.start);
+          const ids = /* @__PURE__ */ new Set();
+          for (const b of ordered) for (const id of b.data.keys()) ids.add(id);
+          const out = {};
+          for (const id of ids) {
+            let bN = 0, sN = 0, from = null, buyTime = null, sellTime = null;
+            const bPts = [], sPts = [];
+            for (const b of ordered) {
+              const v = b.data.get(id);
+              if (v) {
+                if (v[1] && v[0]) {
+                  bPts.push([v[0], v[1]]);
+                  bN += v[1];
+                  if (!buyTime) buyTime = b.end;
+                }
+                if (v[3] && v[2]) {
+                  sPts.push([v[2], v[3]]);
+                  sN += v[3];
+                  if (!sellTime) sellTime = b.end;
+                }
+              }
+              from = b.start;
+              if (bN >= TARGET_UNITS && sN >= TARGET_UNITS) break;
+            }
+            if (bN < MIN_UNITS || sN < MIN_UNITS) continue;
+            const bs = side(bPts), ss = side(sPts);
+            out[id] = {
+              buy: bs.mid,
+              buyUnits: bN,
+              buyTime,
+              buyLo: bs.lo,
+              buyHi: bs.hi,
+              sell: ss.mid,
+              sellUnits: sN,
+              sellTime,
+              sellLo: ss.lo,
+              sellHi: ss.hi,
+              from
+            };
+          }
+          for (const [id, l] of Object.entries(latest)) {
+            const o = out[id] || (out[id] = { buy: null, sell: null });
+            o.latestBuy = l.high ?? null;
+            o.latestBuyTime = l.highTime ? l.highTime * 1e3 : null;
+            o.latestSell = l.low ?? null;
+            o.latestSellTime = l.lowTime ? l.lowTime * 1e3 : null;
+            const ph = perHour(id);
+            if (ph) {
+              o.buyPerHour = ph.buy;
+              o.sellPerHour = ph.sell;
+              o.volHours = ph.hours;
+            }
+          }
+          result = out;
+          at = Date.now();
+          console.log(`[recent-prices] ${Object.values(out).filter((o) => o.buy).length} items averaged from ${blocks.size} blocks`);
+        }
+        async function get(force = false) {
+          if (force || !result || Date.now() - at > REFRESH_MS) {
+            if (!running) running = refreshOnce().catch((e) => console.log(`[recent-prices] refresh failed: ${e.message}`)).finally(() => {
+              running = null;
+            });
+            await running;
+          }
+          return { at, minUnits: MIN_UNITS, prices: result || {} };
+        }
+        return { get };
+      }
+      module.exports = { createRecentPrices };
+    }
+  });
+
+  // src/backend-js/drop-sources.js
+  var require_drop_sources = __commonJS({
+    "src/backend-js/drop-sources.js"(exports, module) {
+      var WIKI = "https://runescape.wiki/api.php";
+      var HEADERS = { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" };
+      var decode = (s) => s.replace(/<[^>]+>/g, "").replace(/&#160;|&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&#91;/g, "[").replace(/&#93;/g, "]").replace(/&#x231b;/g, "").replace(/\[[^\]]*\]/g, "").replace(/\s+/g, " ").trim();
+      async function getJson(params) {
+        const res = await fetch(WIKI + "?" + new URLSearchParams({ format: "json", redirects: "1", ...params }), { headers: HEADERS, signal: AbortSignal.timeout(15e3) });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      }
+      async function fetchSources(name) {
+        const s = await getJson({ action: "parse", prop: "sections", page: name });
+        if (s.error) return null;
+        const sec = (s.parse?.sections || []).find((x) => /^drop sources$/i.test(decode(x.line)));
+        if (!sec) return [];
+        const t = await getJson({ action: "parse", prop: "text", page: name, section: sec.index });
+        const html = t.parse?.text?.["*"] || "";
+        const firstTable = (html.match(/<table[\s\S]*?<\/table>/) || [""])[0];
+        const out = [];
+        for (const m of firstTable.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/g)) {
+          const cells = [...m[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)].map((c) => decode(c[1]));
+          if (cells.length < 4 || !cells[0]) continue;
+          out.push({ source: cells[0], qty: cells[2], rarity: cells[3] });
+        }
+        return out;
+      }
+      function createDropSources({ storage: storage2, path, dataDir }) {
+        const file = path.join(dataDir, "drop_sources.json");
+        const DAY = 864e5;
+        async function check(names, max = 15) {
+          const doc = await storage2.readJSON(file, { items: {} });
+          const due = [...new Set(names)].filter((n) => !doc.items[n] || Date.now() - (doc.items[n].checkedAt || 0) > DAY).sort((a, b) => (doc.items[a]?.checkedAt || 0) - (doc.items[b]?.checkedAt || 0)).slice(0, max);
+          const found = [];
+          for (const name of due) {
+            let list;
+            try {
+              list = await fetchSources(name);
+            } catch (e) {
+              continue;
+            }
+            if (list == null) continue;
+            const prev = doc.items[name];
+            const sources = {};
+            for (const s of list) {
+              const had = prev?.sources?.[s.source];
+              sources[s.source] = { qty: s.qty, rarity: s.rarity, firstSeen: had ? had.firstSeen : prev ? Date.now() : 0 };
+              if (prev && !had) found.push({ item: name, ...s });
+            }
+            doc.items[name] = { checkedAt: Date.now(), sources };
+            await new Promise((r) => setTimeout(r, 400));
+          }
+          if (due.length) await storage2.writeJSON(file, doc);
+          return found;
+        }
+        async function get(name) {
+          const doc = await storage2.readJSON(file, { items: {} });
+          if (!doc.items[name]) {
+            await check([name], 1);
+            return (await storage2.readJSON(file, { items: {} })).items[name] || null;
+          }
+          return doc.items[name];
+        }
+        return { check, get };
+      }
+      module.exports = { createDropSources, fetchSources };
     }
   });
 
@@ -23123,7 +23684,7 @@
         const starts = events.map((e) => toMs(e[1])).slice(-9);
         const gaps = starts.slice(1).map((s, i) => s - starts[i]);
         if (!gaps.length) return null;
-        const gap = median(gaps);
+        const gap = starts[starts.length - 1] >= toMs("2026-01-01") ? 182 * DAY : median(gaps);
         let next = starts[starts.length - 1] + gap;
         while (next <= today) next += gap;
         return next;
@@ -24999,6 +25560,8 @@
       var storage2 = require_storage_capacitor();
       var catalogue = require_catalogue();
       var { createLiveHistory } = require_live_history();
+      var { createRecentPrices } = require_recent_prices();
+      var { createDropSources } = require_drop_sources();
       var { createSync } = require_sync();
       var { findRisks, buildNotifications: buildUpdateRiskNotifications, isForwardPost } = require_update_risks();
       var { computeSignals, buildDigest, uniqueEvents } = require_almanac_signals();
@@ -25106,6 +25669,7 @@
             noteError("save item_stats")(e);
           }
         }
+        const canCompactHistory = () => platform === "desktop" || !!(storage2.canCompact && storage2.canCompact());
         async function loadHistory() {
           const loadStart = Date.now();
           await storage2.ensureDir(historyDir);
@@ -25113,6 +25677,10 @@
           if (existingFiles.length === 0) {
             await storage2.migrateLegacyHistoryFile(historyFile, historyDir);
             existingFiles = await storage2.listJSONFiles(historyDir);
+            if (existingFiles.length === 0 && canCompactHistory() && !readOnlyHistory) {
+              store2.set("historyCompact", true);
+              store2.set("historyCompactDone", Date.now());
+            }
           }
           historyPopulatedIds = new Set(existingFiles.map((f) => f.slice(0, -5)));
           console.log(`[history] Found ${historyPopulatedIds.size} items on disk in ${Date.now() - loadStart}ms (loaded lazily, not held in memory).`);
@@ -25131,6 +25699,8 @@
           return data;
         }
         const liveHistory = createLiveHistory({ dataDir, platform });
+        const recentPrices = createRecentPrices();
+        const dropSources = createDropSources({ storage: storage2, path, dataDir });
         const historySummaryFile = path.join(dataDir, "history_summary_cache.json");
         let historySummary = null;
         const median = (arr) => {
@@ -25320,10 +25890,37 @@
           historyFetchStop = false;
           try {
             while (historyRefreshActive) await pause(250);
+            await maybeImportHistoryPack(onProgress);
             await runHistoryQueueInner(onProgress);
           } finally {
             historyFetchActive = false;
           }
+        }
+        const HISTORY_PACK_URL = "https://github.com/VonDerThWood/GE-Intelligence/releases/latest/download/history-pack.jsonl.gz";
+        async function maybeImportHistoryPack(onProgress) {
+          if (readOnlyHistory || !storage2.importHistoryPack) return;
+          if (historyPopulatedIds.size >= 500 || historyFetchQueue.length < 500) return;
+          if (store2.get("historyPackTried", 0) > Date.now() - 6 * 36e5) return;
+          store2.set("historyPackTried", Date.now());
+          if (canCompactHistory()) store2.set("historyCompact", true);
+          const t = Date.now(), total = historyFetchQueue.length;
+          let n = 0;
+          const dev = await storage2.readJSON(path.join(dataDir, "dev_history_pack.json"), null).catch(() => null);
+          const packUrl = dev && /^https?:\/\//.test(dev.url || "") ? dev.url : HISTORY_PACK_URL;
+          if (packUrl !== HISTORY_PACK_URL) console.log(`[history] History pack from dev override: ${packUrl}`);
+          try {
+            const r = await storage2.importHistoryPack(historyDir, packUrl, {
+              skip: new Set(historyPopulatedIds),
+              onItem: (id) => {
+                historyPopulatedIds.add(id);
+                if (++n % 100 === 0 && onProgress) onProgress(0, total);
+              }
+            });
+            console.log(`[history] History pack: ${r.imported} items in ${((Date.now() - t) / 1e3).toFixed(0)}s` + (r.complete ? `, built ${r.builtAt}` : ", download cut short (the rest fetch normally)"));
+          } catch (e) {
+            console.log(`[history] History pack not used (${e.message}); fetching one by one. ${n} items came in first.`);
+          }
+          if (onProgress) onProgress(0, total);
         }
         async function runHistoryQueueInner(onProgress) {
           let done = 0;
@@ -25494,15 +26091,24 @@
         let compactRunning = false;
         async function compactHistory(onProgress) {
           if (readOnlyHistory) return { error: "read-only (test mode)" };
-          if (platform !== "desktop" || !storage2.compactDirItems) return { error: "not available on this platform yet" };
+          if (!storage2.compactDirItems || !canCompactHistory()) return { error: "not available on this platform yet" };
           if (compactRunning) return { error: "already running" };
           compactRunning = true;
           try {
             await historyLoadedPromise;
-            await saveHistory();
-            store2.set("historyCompact", true);
-            const r = await storage2.compactDirItems(historyDir, { onProgress });
-            return { success: !r.failed.length, ...r };
+            while (historyFetchActive || historyRefreshActive) await pause(500);
+            historyRefreshActive = true;
+            try {
+              await saveHistory();
+              store2.set("historyCompact", true);
+              const t = Date.now();
+              const r = await storage2.compactDirItems(historyDir, { onProgress });
+              console.log(`[history] Compact format: converted ${r.converted}/${r.total} in ${((Date.now() - t) / 1e3).toFixed(0)}s` + (r.failed.length ? `, ${r.failed.length} left as before` : ""));
+              if (!r.failed.length) store2.set("historyCompactDone", Date.now());
+              return { success: !r.failed.length, ...r };
+            } finally {
+              historyRefreshActive = false;
+            }
           } finally {
             compactRunning = false;
           }
@@ -26376,6 +26982,22 @@
         }
         async function setUpdateRiskSettings(s) {
           store2.set("updateRiskSettings", s);
+        }
+        async function getDropSourceNotifications() {
+          if (store2.get("dropSourceAlerts", true) === false) return [];
+          const portfolio = await readPortfolio();
+          const names = (portfolio.positions || []).filter((p) => p.status === "open" && p.item_name).map((p) => p.item_name);
+          const watched = new Set([...store2.get("watchlist", []), ...store2.get("dxpWatchlist", [])].map(String));
+          if (watched.size) {
+            const latest = await storage2.readJSON(path.join(dataDir, "latest.json"), {});
+            for (const it of latest.items || []) if (watched.has(String(it.id))) names.push(it.name);
+          }
+          if (!names.length) return [];
+          const found = await dropSources.check(names);
+          return found.map((f) => ({
+            title: `New drop source: ${f.item}`,
+            body: `${f.source} now drops it (${f.qty && f.qty !== "1" ? "x" + f.qty + ", " : ""}${f.rarity || "rate unknown"}). A new source can sink the price fast: Elder seed fell about 90% in four days after Blood Knights started dropping it.`
+          }));
         }
         async function getUpdateRiskNotifications() {
           const settings = getUpdateRiskSettings();
@@ -27700,6 +28322,83 @@
           const releases = out.filter((r) => r.newItems.length || (r.watch || []).length).sort((a, b) => b.date.localeCompare(a.date));
           launchesCache = { at: Date.now(), releases };
           return releases;
+        }
+        const newSourceFile = path.join(dataDir, "new_source_drops.json");
+        const NEW_SOURCE_DAYS = 60;
+        let newSourceCache = null, newSourceRunning = null;
+        async function refreshNewSourceDrops() {
+          const doc = await storage2.readJSON(newSourceFile, { releases: {} });
+          const since = localDateStr(new Date(Date.now() - NEW_SOURCE_DAYS * 864e5));
+          const recent = (await getLaunches()).filter((r) => r.date >= since && r.date <= localDateStr());
+          const byName = Object.fromEntries(((await getData()).items || []).map((i) => [i.name.toLowerCase(), i]));
+          for (const r of recent) {
+            const key = `${r.date} ${r.name}`;
+            const entry = doc.releases[key] || (doc.releases[key] = { name: r.name, date: r.date, page: null, items: {} });
+            try {
+              if (!entry.page) {
+                const res = await fetch(
+                  `https://runescape.wiki/api.php?action=opensearch&format=json&limit=1&search=${encodeURIComponent(r.name)}`,
+                  { headers: { "User-Agent": "GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)" }, signal: AbortSignal.timeout(8e3) }
+                );
+                entry.page = (await res.json())?.[1]?.[0] || null;
+                if (!entry.page) continue;
+              }
+              monsterHtmlCache.delete(entry.page);
+              for (const k of [...monsterDropsCache.keys()]) if (k.startsWith(entry.page + "::")) monsterDropsCache.delete(k);
+              const drops = await getMonsterDrops(entry.page);
+              for (const d of drops?.drops || []) {
+                const it = byName[String(d.item || "").toLowerCase()];
+                if (!it || entry.items[it.id]) continue;
+                entry.items[it.id] = { name: it.name, firstSeen: Date.now(), quantity: d.quantity || null, rarity: d.rarity || null };
+              }
+            } catch (e) {
+              console.log(`[new-source] ${r.name}: ${e.message}`);
+            }
+          }
+          for (const k of Object.keys(doc.releases)) if (doc.releases[k].date < since) delete doc.releases[k];
+          await storage2.writeJSON(newSourceFile, doc);
+          return doc;
+        }
+        async function getNewSourceDrops(force = false) {
+          if (!force && newSourceCache && Date.now() - newSourceCache.at < 30 * 6e4) return newSourceCache.map;
+          if (!newSourceRunning) newSourceRunning = refreshNewSourceDrops().finally(() => {
+            newSourceRunning = null;
+          });
+          const doc = await newSourceRunning;
+          const map = {};
+          for (const rel of Object.values(doc.releases)) for (const [id, it] of Object.entries(rel.items)) {
+            if (!map[id] || rel.date > map[id].date) map[id] = { release: rel.name, date: rel.date, page: rel.page, firstSeen: it.firstSeen, quantity: it.quantity, rarity: it.rarity };
+          }
+          for (const [id, m] of Object.entries(map)) {
+            let pts = null;
+            try {
+              pts = await getHistoryPoints(id);
+            } catch (e) {
+            }
+            const first = pts && pts.length ? pts[0].timestamp : null;
+            m.newItem = first == null || first > Date.parse(m.date) - 7 * 864e5;
+          }
+          newSourceCache = { at: Date.now(), map };
+          return map;
+        }
+        async function getNewSourceNotifications() {
+          if (store2.get("dropSourceAlerts", true) === false) return [];
+          await getNewSourceDrops(true);
+          const doc = await storage2.readJSON(newSourceFile, { releases: {} });
+          const portfolio = await readPortfolio();
+          const held = new Set((portfolio.positions || []).filter((p) => p.status === "open" && p.item_name).map((p) => p.item_name.toLowerCase()));
+          const watched = new Set([...store2.get("watchlist", []), ...store2.get("dxpWatchlist", [])].map(String));
+          const out = [];
+          for (const rel of Object.values(doc.releases)) for (const [id, it] of Object.entries(rel.items)) {
+            if (it.notified || !(held.has(it.name.toLowerCase()) || watched.has(String(id)))) continue;
+            it.notified = Date.now();
+            out.push({
+              title: `${it.name} drops from ${rel.name}`,
+              body: `New since ${rel.date}${it.quantity ? `: ${it.quantity}` : ""}${it.rarity ? ` (${it.rarity})` : ""}. ${held.has(it.name.toLowerCase()) ? "You hold it. " : ""}A new source often shifts the price; Elder seed fell about 90% in four days after Blood Knights.`
+            });
+          }
+          if (out.length) await storage2.writeJSON(newSourceFile, doc);
+          return out;
         }
         async function getNewItemsSummary() {
           const parsed = await storage2.readJSON(dataFile, null);
@@ -29502,6 +30201,13 @@
           setUpdateRiskSettings,
           syncLiveHistory: () => liveHistory.sync(),
           getItemLiveHistory: (id, days) => liveHistory.getItem(id, days),
+          getLiveNormal: (id) => liveHistory.getNormal(id),
+          getNewSourceDrops: (force) => getNewSourceDrops(!!force),
+          getNewSourceNotifications: toInbox("mine", "new_source", getNewSourceNotifications),
+          getDropWatch: (name) => dropSources.get(String(name || "")),
+          getDropSourceNotifications: toInbox("mine", "drop_sources", getDropSourceNotifications),
+          getRecentPrices: (force) => recentPrices.get(!!force),
+          getLiveFalling: (ids) => liveHistory.getFalling(Array.isArray(ids) ? ids.slice(0, 5e3) : []),
           getLaunches,
           // monster lookup
           searchMonsters,
@@ -30407,7 +31113,7 @@
             const descM = entry.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) || entry.match(/<description>([\s\S]*?)<\/description>/);
             if (!titleM) continue;
             let title = titleM[1].trim();
-            title = title.replace(/&amp;/g, "&").replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+            title = title.replace(/&amp;/g, "&").replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
             const link = linkM ? linkM[1].trim() : "";
             let date = dateM ? dateM[1].trim() : "";
             const descRaw = descM ? descM[1] : "";
@@ -31882,6 +32588,11 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         store = await storage.createKVStore(DATA_DIR + "/config.json");
         api = await createGeniusApi({ dataDir: DATA_DIR, store, platform: "mobile" });
         api.loadHistory();
+        if (!store.get("historyCompactDone", 0)) {
+          api.historyLoadedPromise.then(() => new Promise((r) => setTimeout(r, 3e4))).then(() => api.compactHistory()).then((r) => {
+            if (r && r.error) console.log("[history] Compact format not run:", r.error);
+          }).catch(api.noteError("history compression"));
+        }
         return api;
       })();
     }
@@ -32060,6 +32771,16 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     for (const r of await a.getDueReminders()) await fireNotification(r.title, r.body);
     for (const g of await a.getBuyGoalNotifications()) await fireNotification(g.title, g.body);
     for (const d of await a.getDxpNewsNotifications()) await fireNotification(d.title, d.body);
+    try {
+      for (const d of await a.getDropSourceNotifications()) await fireNotification(d.title, d.body);
+    } catch (e) {
+      console.error("[GEnius] Drop source check failed:", e.message);
+    }
+    try {
+      for (const d of await a.getNewSourceNotifications()) await fireNotification(d.title, d.body);
+    } catch (e) {
+      console.error("[GEnius] New-source check failed:", e.message);
+    }
     const triggered = await a.getTriggeredAlerts();
     if (store.get("notifications", true)) for (const al of triggered) await fireNotification(al.title, al.body);
   }
@@ -32188,6 +32909,11 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       syncNow: (opts) => runSync(opts),
       syncUnpair: async () => (await ensureApi()).sync.unpairClient(),
       getItemLiveHistory: (id, days) => a.getItemLiveHistory(id, days),
+      getLiveNormal: (id) => a.getLiveNormal(id),
+      getNewSourceDrops: (force) => a.getNewSourceDrops(force),
+      getDropWatch: (name) => a.getDropWatch(name),
+      getRecentPrices: (force) => a.getRecentPrices(force),
+      getLiveFalling: (ids) => a.getLiveFalling(ids),
       // Hourly archive is desktop-only (live-hourly.js uses fs/zlib).
       getItemLiveHourly: async () => [],
       getItemDailyRange: async () => [],
