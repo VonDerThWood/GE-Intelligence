@@ -8259,6 +8259,7 @@ function UpcomingCalendar({onOpen, focusDate}) {
   const todayIso = calIso(new Date());
   const [month, setMonth] = useState(() => { const d = focusDate ? new Date(focusDate + 'T12:00:00') : new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
   const [selDay, setSelDay] = useState(focusDate || todayIso);
+  const dayListRef = React.useRef(null);
   useEffect(() => { if (focusDate) { const d = new Date(focusDate + 'T12:00:00'); setMonth(new Date(d.getFullYear(), d.getMonth(), 1)); setSelDay(focusDate); setModeSaved('month'); } }, [focusDate]);
   const [reminders, setReminders] = useState([]);
   const loadReminders = () => window.genius?.getReminders?.().then(r => setReminders(r || [])).catch(() => {});
@@ -8300,6 +8301,7 @@ function UpcomingCalendar({onOpen, focusDate}) {
   const first = new Date(month);
   const gridStart = new Date(first); gridStart.setDate(1 - first.getDay());
   const cells = Array.from({length: 42}, (_, i) => { const d = new Date(gridStart); d.setDate(gridStart.getDate() + i); return d; });
+  const showDay = iso => { setSelDay(iso); setTimeout(() => dayListRef.current && dayListRef.current.scrollIntoView({behavior:'smooth', block:'start'}), 50); };
   const monthLabel = month.toLocaleDateString(undefined, {month:'long', year:'numeric'});
   const shiftMonth = n => setMonth(m => new Date(m.getFullYear(), m.getMonth() + n, 1));
   // The selected day lists EVERYTHING on it, hidden categories included
@@ -8322,19 +8324,23 @@ function UpcomingCalendar({onOpen, focusDate}) {
         const evs = onDay(iso);
         const inMonth = d.getMonth() === month.getMonth();
         const cls = 'cal-cell' + (inMonth ? '' : ' cal-out') + (iso === todayIso ? ' cal-today' : '') + (iso === selDay ? ' cal-sel' : '') + (iso < todayIso ? ' cal-past' : '');
-        return h('div', {key:iso, className:cls, onClick:() => setSelDay(iso)},
+        // Clicking a day (or "+N more") selects it AND scrolls to its full list
+        // below the grid; a chip opens its news post (Ben, 2026-11-18: neither
+        // seemed to do anything, the list was off screen).
+        return h('div', {key:iso, className:cls, onClick:() => showDay(iso)},
           h('div', {className:'cal-num'}, d.getDate()),
           h('div', {className:'cal-chips'},
             evs.slice(0, 3).map((e, i) => {
               const c = catOf(e);
               const cont = e.start < iso; // continuing a multi-day event
-              return h('div', {key:i, className:'cal-chip', title:`${c.label}: ${e.label}`,
-                style:{borderLeft:`3px solid ${c.color}`, opacity: cont ? 0.6 : 1}},
+              return h('div', {key:i, className:'cal-chip', title:`${c.label}: ${e.label}` + (e.postUrl ? ' (click to open the post)' : ''),
+                style:{borderLeft:`3px solid ${c.color}`, opacity: cont ? 0.6 : 1, cursor:'pointer'},
+                onClick: ev => { if (e.postUrl && onOpen) { ev.stopPropagation(); setSelDay(iso); onOpen(e.postUrl); } }},
                 h('span', {className:'cal-chip-icon'}, c.icon), h('span', {className:'cal-chip-text'}, cont ? '↳ ' + e.label : e.label));
             }),
-            evs.length > 3 && h('div', {className:'cal-more'}, `+${evs.length - 3} more`)));
+            evs.length > 3 && h('div', {className:'cal-more', style:{cursor:'pointer'}, title:'Show everything on this day'}, `+${evs.length - 3} more`)));
       })),
-    h('div', {style:{marginTop:12}},
+    h('div', {style:{marginTop:12}, ref:dayListRef},
       h('div', {className:'ge-section-head', style:{fontSize:12}},
         new Date(selDay + 'T12:00:00').toLocaleDateString(undefined, {weekday:'long', month:'long', day:'numeric'})),
       dayEvents.length

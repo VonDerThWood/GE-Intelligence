@@ -1756,7 +1756,9 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const M = '(' + MONTHS.join('|') + '|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)';
     // A day number must not run into more digits: "November 2024" is not
     // November 20.
-    const D = '(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?';
+    // Nor be the hour of a time: "21 November - 19:00" is not Nov 21 to Dec 19
+    // (Ben, 2026-11-18: stream schedules spread over all of December).
+    const D = '(\\d{1,2})(?!\\d|\\s*[:.]\\d)(?:st|nd|rd|th)?';
     const monthIdx = m => MONTHS.findIndex(x => x.startsWith(m.slice(0, 3)));
     const mk = (mon, day) => {
       const mi = monthIdx(mon);
@@ -1889,6 +1891,15 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         if (page) recordCancellations(cal, pst, page.lines);
       }
       cal.cancelScanV1 = Date.now();
+      await storage.writeJSON(calendarFile, cal);
+    }
+    // Once (2026-11-18): posts whose times were read as date ranges (labels
+    // like "00 / World: 88 - Vorago") are dropped and read again below.
+    if (!cal.timeRangeFixV1) {
+      const bad = new Set(cal.entries.filter(e => e.end && /^\d{2}\b/.test(e.label)).map(e => e.postUrl));
+      cal.entries = cal.entries.filter(e => !bad.has(e.postUrl));
+      for (const u of bad) delete cal.processed[u];
+      cal.timeRangeFixV1 = Date.now();
       await storage.writeJSON(calendarFile, cal);
     }
     const cutoff = localDateStr(new Date(Date.now() - 60 * 86400000));
@@ -2082,7 +2093,9 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const GENERIC = /^(community|future updates|game updates|dev blogs?|behind the scenes|your feedback|events|support|technical|website|shop|news|update|updates)$/i;
     const PAGE_TITLE = /RuneScape\s*-\s*RuneScape|^News\s*-\s/i; // a page title picked up as a label
     const goodLabel = l => l && !PAGE_TITLE.test(l) && l.length <= 70 && !/^[\d:.,]/.test(l) && /^[A-Z"']/.test(l) && !GENERIC.test(l.trim())
-      && !/\b(is|are|the|a|an|to|of|and|on|by|in|for|until|from|will|be|at|with)$/i.test(l.trim());   // a cut-off sentence
+      && !/\b(is|are|the|a|an|to|of|and|on|by|in|for|until|from|will|be|at|with)$/i.test(l.trim())   // a cut-off sentence
+      // ...or the start of one: "But of course" became a Dec 2 release (Ben, 2026-11-18)
+      && !/^(but|and|so|or|also|however|of course|then|now|still|yet|as|if|when|while|although|though|plus|this|that|it|we|you|they)\b/i.test(l.trim());
     const out = upcoming.filter(e => e.kind === 'list' && goodLabel(e.label));
     const groups = new Map();
     for (const e of upcoming.filter(e => !(e.kind === 'list' && goodLabel(e.label)))) {
