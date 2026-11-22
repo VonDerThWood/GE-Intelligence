@@ -26730,7 +26730,7 @@
           const post = /* @__PURE__ */ new Date(postDateStr + "T12:00:00");
           if (isNaN(post)) return [];
           const M = "(" + MONTHS.join("|") + "|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)";
-          const D = "(\\d{1,2})(?!\\d)(?:st|nd|rd|th)?";
+          const D = "(\\d{1,2})(?!\\d|\\s*[:.]\\d)(?:st|nd|rd|th)?";
           const monthIdx = (m) => MONTHS.findIndex((x) => x.startsWith(m.slice(0, 3)));
           const mk = (mon, day) => {
             const mi = monthIdx(mon);
@@ -26839,6 +26839,13 @@
               if (page) recordCancellations(cal, pst, page.lines);
             }
             cal.cancelScanV1 = Date.now();
+            await storage2.writeJSON(calendarFile, cal);
+          }
+          if (!cal.timeRangeFixV1) {
+            const bad = new Set(cal.entries.filter((e) => e.end && /^\d{2}\b/.test(e.label)).map((e) => e.postUrl));
+            cal.entries = cal.entries.filter((e) => !bad.has(e.postUrl));
+            for (const u of bad) delete cal.processed[u];
+            cal.timeRangeFixV1 = Date.now();
             await storage2.writeJSON(calendarFile, cal);
           }
           const cutoff = localDateStr(new Date(Date.now() - 60 * 864e5));
@@ -27020,7 +27027,7 @@
           const upcoming = cal.entries.map(fixCalendarCategory).filter((e) => (e.end || e.start) >= today && !isCancelled(e));
           const GENERIC = /^(community|future updates|game updates|dev blogs?|behind the scenes|your feedback|events|support|technical|website|shop|news|update|updates)$/i;
           const PAGE_TITLE = /RuneScape\s*-\s*RuneScape|^News\s*-\s/i;
-          const goodLabel = (l) => l && !PAGE_TITLE.test(l) && l.length <= 70 && !/^[\d:.,]/.test(l) && /^[A-Z"']/.test(l) && !GENERIC.test(l.trim()) && !/\b(is|are|the|a|an|to|of|and|on|by|in|for|until|from|will|be|at|with)$/i.test(l.trim());
+          const goodLabel = (l) => l && !PAGE_TITLE.test(l) && l.length <= 70 && !/^[\d:.,]/.test(l) && /^[A-Z"']/.test(l) && !GENERIC.test(l.trim()) && !/\b(is|are|the|a|an|to|of|and|on|by|in|for|until|from|will|be|at|with)$/i.test(l.trim()) && !/^(but|and|so|or|also|however|of course|then|now|still|yet|as|if|when|while|although|though|plus|this|that|it|we|you|they)\b/i.test(l.trim());
           const out = upcoming.filter((e) => e.kind === "list" && goodLabel(e.label));
           const groups = /* @__PURE__ */ new Map();
           for (const e of upcoming.filter((e2) => !(e2.kind === "list" && goodLabel(e2.label)))) {
@@ -32944,7 +32951,9 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       getSettings: () => ({
         discordWebhook: store.get("discordWebhook", ""),
         fetchInterval: store.get("fetchInterval", 15),
-        theme: store.get("theme", "dark"),
+        // Phones default to black (OLED screens; Ben, 2026-11-20). The GE-inspired theme
+        // stays in Settings. Desktop keeps its own default in main.js.
+        theme: store.get("theme", "black"),
         notifications: store.get("notifications", true),
         expensiveThreshold: store.get("expensiveThreshold", 5e8),
         navOrder: store.get("navOrder", []),

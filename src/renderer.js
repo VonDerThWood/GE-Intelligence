@@ -382,6 +382,11 @@ select.ge-input option { background: ${T.panel}; }
     padding-bottom: env(safe-area-inset-bottom);
   }
   .panel-resize-handle { display: none; }
+  /* The pinned table-header clone is portaled to <body>, outside the stacking
+     context the full-screen detail panel lives in, so the panel's z-index
+     can't cover it: hide it while the panel is open (Ben, 2026-11-21). */
+  body:has(.detail-panel) .ge-sticky-header-clone,
+  body:has(.sidebar.open) .ge-sticky-header-clone { display: none; } /* and while the menu drawer is open (Ben, 2026-11-21) */
   /* Tables: auto layout at phone width (useTableColumns drops the desktop
      colgroup widths and keeps only each table's phoneCols). */
   .ge-table { table-layout: auto !important; width: 100% !important; font-size: 12px; }
@@ -802,7 +807,7 @@ function _forwardFill(series) {
 }
 
 function LiveTimeseriesChart({data}) {
-  const w = 640, ht = 180, volHt = 40, PAD_L = 56, PAD_R = 8, gap = 6;
+  const w = 640, ht = 180, volHt = 40, PAD_R = 8, gap = 6;
   const [hoverIdx, setHoverIdx] = useState(null);
   const svgRef = useRef(null);
   const pts = data.filter(p => p.instabuy != null || p.instasell != null);
@@ -812,6 +817,8 @@ function LiveTimeseriesChart({data}) {
   const sells = _forwardFill(pts.map(p => p.instasell));
   const allVals = [...buys, ...sells].filter(v => v != null);
   const mn = Math.min(...allVals), mx = Math.max(...allVals), rng = (mx - mn) || 1;
+  // Label strip sized to the longest label, so exact prices fit (2026-11-21).
+  const PAD_L = Math.max(56, Math.max(fmt.gp(mx).length, fmt.gp(mn).length) * 6 * AXIS_FS / 9 + 8);
   const chartW = w - PAD_L - PAD_R;
   const xAt = i => PAD_L + (i/(pts.length-1)) * chartW;
   const yAt = v => ht - ((v - mn)/rng) * (ht - 14) - 7;
@@ -863,8 +870,8 @@ function LiveTimeseriesChart({data}) {
       // Price lines
       h('path', {d:lineFor(buys),  fill:'none', stroke:T.green,  strokeWidth:1.5}),
       h('path', {d:lineFor(sells), fill:'none', stroke:'#e08030', strokeWidth:1.5}),
-      h('text', {x:PAD_L-4, y:10, fontSize:9, fill:T.textDim, textAnchor:'end'}, fmt.gp(mx)),
-      h('text', {x:PAD_L-4, y:ht-2, fontSize:9, fill:T.textDim, textAnchor:'end'}, fmt.gp(mn)),
+      h('text', {x:PAD_L-4, y:AXIS_FS+1, fontSize:AXIS_FS, fill:T.textDim, textAnchor:'end'}, fmt.gp(mx)),
+      h('text', {x:PAD_L-4, y:ht-2, fontSize:AXIS_FS, fill:T.textDim, textAnchor:'end'}, fmt.gp(mn)),
       // Volume bars — buy volume up (green), sell volume down (orange), mirroring the wiki's own layout
       ...pts.map((p, i) => {
         const x = xAt(i) - barW/2;
@@ -1402,7 +1409,11 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
   const statPrices = points.map(p => p.price ?? p.high ?? p.low ?? 0);
   const statMinP = statPrices.length ? Math.min(...statPrices) : minP;
   const statMaxP = statPrices.length ? Math.max(...statPrices) : maxP;
-  const YLAB = 52; // width reserved for Y-axis labels on left
+  // Width reserved for Y-axis labels on left: wide enough for the longest label, so
+  // exact prices ("9,460,635,448gp") aren't cut off like rounded ones never were
+  // (tester's report via Ben, 2026-11-21). ~6 SVG units per 9px character.
+  const yLabChars = Math.max(fmt.gp(maxP).length, fmt.gp(minP).length, fmt.gp(maxV).length) + 2;
+  const YLAB = Math.max(52, Math.ceil(yLabChars * 6 * AXIS_FS / 9) + 6);
   const W = 620, PH = 160, VH = 60, PAD = 8;
   const CW = W - YLAB; // chart width after Y-axis
 
@@ -1695,7 +1706,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
             })(),
             // Y-axis labels on left
             gridLevels.map((g, i) =>
-              h('text', {key:i, x:YLAB-4, y:g.y+3, fontSize:9, fill:T.textDim, textAnchor:'end'},
+              h('text', {key:i, x:YLAB-4, y:g.y+AXIS_FS/3, fontSize:AXIS_FS, fill:T.textDim, textAnchor:'end'},
                 fmt.gp(g.val)+'gp'
               )
             ),
@@ -1724,7 +1735,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
                 const al = analysis.alch, isFloor = al.kind === 'floor';
                 const label = `${isFloor ? 'alch floor' : 'alch value'} ${Math.round(al.floor).toLocaleString()}`;
                 const y = py(al.floor);
-                const txt = (yy, extra) => h('text', {x:W - PAD - 2, y:yy, fontSize:9, fill:'#b388ff', textAnchor:'end', stroke:T.panel, strokeWidth:3, paintOrder:'stroke'}, label + extra);
+                const txt = (yy, extra) => h('text', {x:W - PAD - 2, y:yy, fontSize:AXIS_FS, fill:'#b388ff', textAnchor:'end', stroke:T.panel, strokeWidth:3, paintOrder:'stroke'}, label + extra);
                 const tip = `${isFloor ? 'Alch floor' : 'Alch value line'}: ${Math.round(al.floor).toLocaleString()}gp
 
 `
@@ -1745,7 +1756,7 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
                 const col = l.kind === 'support' ? T.green : T.red;
                 out.push(h('g', {key:'lv' + i, pointerEvents:'none'},
                   h('line', {x1:YLAB, x2:W - PAD, y1:y, y2:y, stroke:col, strokeWidth:1, strokeDasharray:'5,4', opacity:0.8}),
-                  h('text', {x:YLAB + 4, y:y - 3, fontSize:9, fill:col, textAnchor:'start', stroke:T.panel, strokeWidth:3, paintOrder:'stroke'}, `${l.kind} ${Math.round(l.price).toLocaleString()} · held ${l.held}/${l.touches}`)));
+                  h('text', {x:YLAB + 4, y:y - 3, fontSize:AXIS_FS, fill:col, textAnchor:'start', stroke:T.panel, strokeWidth:3, paintOrder:'stroke'}, `${l.kind} ${Math.round(l.price).toLocaleString()} · held ${l.held}/${l.touches}`)));
               });
               return out;
             })(),
@@ -1786,8 +1797,8 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
             onMouseLeave: () => setHoverIdx(null),
           },
             h('line', {x1:YLAB, x2:YLAB, y1:0, y2:VH, stroke:'rgba(255,255,255,0.1)', strokeWidth:1}),
-            maxV > 0 && h('text', {x:YLAB-4, y:8, fontSize:8, fill:T.textDim, textAnchor:'end'}, fmt.gp(maxV)),
-            maxV > 0 && h('text', {x:YLAB-4, y:VH-2, fontSize:8, fill:T.textDim, textAnchor:'end'}, '0'),
+            maxV > 0 && h('text', {x:YLAB-4, y:AXIS_FS-1, fontSize:AXIS_FS-1, fill:T.textDim, textAnchor:'end'}, fmt.gp(maxV)),
+            maxV > 0 && h('text', {x:YLAB-4, y:VH-2, fontSize:AXIS_FS-1, fill:T.textDim, textAnchor:'end'}, '0'),
             item.avgVolume && h('line', {
               x1:YLAB, x2:W-PAD, y1:vy(item.avgVolume), y2:vy(item.avgVolume),
               stroke:`${T.gold}55`, strokeWidth:1, strokeDasharray:'3,3',
@@ -2203,7 +2214,9 @@ function GESearchBar({items, onSelect, userShorthands}) {
     if (!showDrop) { setDropPos(null); return; }
     const update = () => {
       const r = searchWrapRef.current?.getBoundingClientRect();
-      if (r) setDropPos({top:r.bottom+4, left:r.left, width:r.width});
+      // Phones: the search box is narrow, so the list spans the screen instead of
+      // cutting names and prices off (tester report, 2026-11-21).
+      if (r) setDropPos(IS_PHONE ? {top:r.bottom+4, left:8, width:window.innerWidth-16} : {top:r.bottom+4, left:r.left, width:r.width});
     };
     update();
     window.addEventListener('resize', update);
@@ -4121,6 +4134,9 @@ function phoneHideCols() {
 // and lay out automatically instead of using the desktop column widths —
 // the rest of each row is one tap away in the item panel.
 const IS_PHONE = typeof window !== 'undefined' && !!window.matchMedia?.('(max-width: 700px)').matches;
+// Chart label size in SVG units. Charts are drawn ~620 wide and shrunk to fit a phone,
+// so 9 ended up ~6px on screen; 14 lands around 9-10px (tester report, 2026-11-21).
+const AXIS_FS = IS_PHONE ? 14 : 9;
 
 function useTableColumns(storageKey, defaultWidths, visibleCols, phoneCols) {
   const defaultOrder = Object.keys(defaultWidths);
@@ -10568,7 +10584,7 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
         h('span',null,'Show item icons next to names in tables')
       ),
     ),
-    h('div',{style:{marginBottom:20}},
+    !(IS_PHONE || window.genius?.syncRole === 'phone') && h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'UI Scale'),
       h('div',{style:{display:'flex', alignItems:'center', gap:10}},
         h('input',{
@@ -10672,10 +10688,10 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       h('span',null,'Use emojis instead of colored dots for unread notifications')
     ),
     h('div',{style:{marginBottom:20}},
-      h('div',{className:'ge-section-head'},'Desktop Notifications'),
+      h('div',{className:'ge-section-head'}, window.genius?.syncRole === 'phone' ? 'Push Notifications' : 'Desktop Notifications'),
       h('label',{className:'row',style:{gap:8,cursor:'pointer'}},
         h('input',{type:'checkbox',checked:!!s.notifications,onChange:setChk('notifications')}),
-        h('span',null,'Desktop notifications for price alerts')
+        h('span',null, window.genius?.syncRole === 'phone' ? 'Push notifications for price alerts' : 'Desktop notifications for price alerts')
       ),
       h('button',{
         className:'ge-btn',
@@ -12039,10 +12055,12 @@ function NetWorthChart() {
   }, []);
   const toggle = () => setOpen(v => { try { localStorage.setItem('genius_networth_open', v ? '0' : '1'); } catch {} return !v; });
   if (!rows) return null;
-  const w = 640, ht = 150, L = 60, R = 10;
+  const w = 640, ht = 150, R = 10;
   const last = rows[rows.length - 1];
   const vals = rows.flatMap(r => [r.value, r.cost]);
   const mn = Math.min(...vals), mx = Math.max(...vals), rng = (mx - mn) || 1;
+  // Label strip sized to the longest label, so exact numbers fit (2026-11-21).
+  const L = Math.max(60, Math.max(fmt.gp(mx).length, fmt.gp(mn).length) * 6.6 * (AXIS_FS + 1) / 10 + 10);
   const x = i => L + (rows.length < 2 ? 0 : i / (rows.length - 1)) * (w - L - R);
   const y = v => ht - 10 - ((v - mn) / rng) * (ht - 24);
   const line = k => rows.map((r, i) => (i ? 'L' : 'M') + x(i).toFixed(1) + ',' + y(r[k]).toFixed(1)).join(' ');
@@ -12061,7 +12079,7 @@ function NetWorthChart() {
           h('svg', {viewBox:`0 0 ${w} ${ht}`, style:{width:'100%', maxWidth:w, height:'auto', display:'block'},
             onMouseLeave:()=>setHover(null),
             onMouseMove:e => { const b = e.currentTarget.getBoundingClientRect(); const px = (e.clientX - b.left) / b.width * w; setHover(Math.max(0, Math.min(rows.length - 1, Math.round((px - L) / (w - L - R) * (rows.length - 1))))); }},
-            [mx, (mx + mn) / 2, mn].map((v, i) => h('text', {key:i, x:L - 6, y:y(v) + 3, textAnchor:'end', fontSize:10, fill:T.textDim}, fmt.gp(v))),
+            [mx, (mx + mn) / 2, mn].map((v, i) => h('text', {key:i, x:L - 6, y:y(v) + 3, textAnchor:'end', fontSize:AXIS_FS + 1, fill:T.textDim}, fmt.gp(v))),
             h('path', {d:line('cost'), fill:'none', stroke:T.textDim, strokeWidth:1.2, strokeDasharray:'4 3'}),
             h('path', {d:line('value'), fill:'none', stroke:T.gold, strokeWidth:2}),
             hv && h('line', {x1:x(hover), x2:x(hover), y1:4, y2:ht - 6, stroke:T.border})),
@@ -12394,7 +12412,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
                 pos.removedItem && h(RemovedFromGeTag, {item: pos.removedItem}),
                 !child && riskBadgeFor([pos])),
               h('td',null, h('div',{style:{whiteSpace:'nowrap'}},pos.quantity.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'@ '+fmt.gp(pos.cost_basis)+'gp')),
-              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(pos.currentPrice)+'gp ea')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(pos.currentValue)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},(IS_PHONE ? pos.quantity.toLocaleString()+' × ' : '')+fmt.gp(pos.currentPrice)+'gp ea')),
               h('td',{className:pos.netPL>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(pos.netPL>=0?'+':'')+fmt.gp(pos.netPL)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(pos.plPct))),
               breakEvenCell(pos),
               sinceBoughtCell(pos),
@@ -12800,7 +12818,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
               h('td',{style:{color:T.gold}}, h('span',{style:{display:'inline-block', width:14}}, open ? '▾' : '▸'), name,
                 h('span',{style:{marginLeft:6, fontSize:10, color:T.textDim, whiteSpace:'nowrap'}}, list.length+' positions'), riskBadgeFor(list)),
               h('td',null, h('div',{style:{whiteSpace:'nowrap'}},qty.toLocaleString()), h('div',{style:{fontSize:10, color:T.textDim, whiteSpace:'nowrap'}},'avg @ '+fmt.gp(Math.round(avg))+'gp')),
-              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(value)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},fmt.gp(price)+'gp ea')),
+              h('td',null, h('div',{style:{whiteSpace:'nowrap'}},fmt.gp(value)+'gp'), h('div',{style:{fontSize:10, color:T.gold, whiteSpace:'nowrap'}},(IS_PHONE ? qty.toLocaleString()+' × ' : '')+fmt.gp(price)+'gp ea')),
               h('td',{className:net>=0?'pct-up':'pct-down'}, h('div',{style:{whiteSpace:'nowrap'}},(net>=0?'+':'')+fmt.gp(net)+'gp'), h('div',{style:{fontSize:10, whiteSpace:'nowrap'}},fmt.pct(cost > 0 ? (value - cost) / cost * 100 : 0))),
               net >= 0 || !(price > 0)
                 ? h('td',{style:{color:T.textDim}}, net >= 0 ? '✓' : '—')
@@ -14716,6 +14734,17 @@ function findItemVolume(items, name) {
   const it = itemByName(items, name);
   return it ? (it.volume ?? null) : null;
 }
+// How many times you can make a recipe from one 4-hour buy limit of every input:
+// each input's limit divided by how many of it one make uses, smallest wins. The
+// output's limit doesn't count: buy limits only cap buying, and you sell the output.
+// (Tester report via Ben, 2026-11-21: Divine charge showed 22.5M per limit using
+// its own 1,000 limit; 25,000 Incandescent energy / 225 per charge = 111 makes, ~2.5M.)
+function makesPerLimit(items, inputs) {
+  const caps = inputs.filter(i => i.name && i.qty > 0)
+    .map(i => { const l = findItemLimit(items, i.name); return l == null ? null : Math.floor(l / i.qty); })
+    .filter(c => c != null);
+  return caps.length ? Math.min(...caps) : null;
+}
 
 // Plain 1:1-ish conversion calc (Herbs, Divination, Construction) — no
 // buff modeling here since none of these have sourced numbers the way
@@ -14732,10 +14761,7 @@ function computeConversionStats(inputs, output, items) {
   if (outPrice == null) missing.push(output.name);
   const revenue = outPrice != null ? applyTax(outPrice) * output.qty : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
-  const limits = inputs.map(inp => findItemLimit(items, inp.name)).filter(l => l != null);
-  const outLimit = findItemLimit(items, output.name);
-  if (outLimit != null) limits.push(outLimit);
-  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const bindingLimit = makesPerLimit(items, inputs);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inVolumes = inputs.map(inp => findItemVolume(items, inp.name)).filter(v => v != null);
   const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
@@ -14801,8 +14827,9 @@ function computePotionStats(r, items, buffs) {
       : effectiveQty * applyTax(price3);
   }
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
-  const limits = [r.primary, r.secondary, `${r.name} (3)`].map(n => findItemLimit(items, n)).filter(l => l != null);
-  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const bindingLimit = makesPerLimit(items, [
+    {name:r.primary, qty:1}, {name:r.secondary, qty:1 - secondarySavePct/100},
+    ...(isPremadePrimary ? [] : [{name:'Vial of water', qty:1}])]);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inVolumes = [r.primary, r.secondary].map(n => findItemVolume(items, n)).filter(v => v != null);
   const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
@@ -14887,7 +14914,7 @@ function computeDecantingStats(name, items) {
   const cost = buyForm.buyPricePerDose * sellForm.doses + (sellForm.doses === 6 ? emptyFlaskPrice : 0);
   const revenue = applyTax(sellForm.sellPrice);
   const margin = buyForm === sellForm ? null : revenue - cost;
-  const bindingLimit = Math.min(buyForm.limit || Infinity, sellForm.limit || Infinity);
+  const bindingLimit = buyForm.limit ? Math.floor(buyForm.limit * buyForm.doses / sellForm.doses) : Infinity;
   const profitPerLimit = (margin != null && isFinite(bindingLimit)) ? margin * bindingLimit : null;
 
   return {
@@ -14923,7 +14950,7 @@ function MoneyMakerTable({rows, onSelect, itemsByName}) {
         h('th', {onClick:()=>tog('revenue'), style:{cursor:'pointer'}}, 'Output Value'+arrow('revenue')),
         h('th', {onClick:()=>tog('outputVolume'), style:{cursor:'pointer'}, title:'Daily trading volume of the output item — thin volume means you may not be able to sell your full batch at this price'}, 'Output Vol'+arrow('outputVolume')),
         h('th', {onClick:()=>tog('margin'), style:{cursor:'pointer'}}, 'Margin'+arrow('margin')),
-        h('th', {onClick:()=>tog('bindingLimit'), style:{cursor:'pointer'}, title:'The lowest buy limit among all items involved — what actually caps how much of this you can do per 4 hours'}, 'Buy Limit'+arrow('bindingLimit')),
+        h('th', {onClick:()=>tog('bindingLimit'), style:{cursor:'pointer'}, title:'How many you can make from one 4-hour buy limit of every input (each limit divided by how many one make uses). Profit/limit is margin × this.'}, 'Makes / limit'+arrow('bindingLimit')),
         h('th', {onClick:()=>tog('profitPerLimit'), style:{cursor:'pointer'}, title:'Margin × Buy Limit — total profit if you do this to the max, once, per 4-hour limit reset'}, 'Profit/Limit'+arrow('profitPerLimit')),
       )),
       h('tbody', null, sorted.map((r,i) => h('tr', {
@@ -15059,8 +15086,7 @@ function computeFletchingRecipeStats(recipe, items, buffs) {
   const outQty = recipe.output.qty * multiplier;
   const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
-  const limits = [...recipe.inputs.map(i=>i.name), recipe.output.name].map(n => findItemLimit(items, n)).filter(l => l != null);
-  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const bindingLimit = makesPerLimit(items, recipe.inputs);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inVolumes = recipe.inputs.map(i => findItemVolume(items, i.name)).filter(v => v != null);
   const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
@@ -15156,7 +15182,7 @@ function computeUrnStats(recipe, items, buffs) {
   const outQty = 1 + dupeChance;
   const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
   const margin = (cost != null && revenue != null) ? revenue - cost : null;
-  const bindingLimit = findItemLimit(items, recipe.output);
+  const bindingLimit = makesPerLimit(items, [{name:recipe.clay, qty:effectiveClayQty}, ...(recipe.gem ? [{name:recipe.gem, qty:1}] : [])]);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inVolumes = [recipe.clay, recipe.gem].filter(Boolean).map(n => findItemVolume(items, n)).filter(v => v != null);
   const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
@@ -15186,7 +15212,7 @@ function computeDragonhideStats(recipe, items, buffs) {
   const cost = leatherPrice != null ? leatherPrice * effectiveQty : null;
   const revenue = outPrice != null ? applyTax(outPrice) : null;
   const margin = (cost != null && revenue != null) ? revenue - cost : null;
-  const bindingLimit = findItemLimit(items, recipe.output);
+  const bindingLimit = makesPerLimit(items, [{name:recipe.leather, qty:effectiveQty}]);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inputVolume = findItemVolume(items, recipe.leather);
   const outputVolume = findItemVolume(items, recipe.output);
@@ -15535,8 +15561,7 @@ function computeSmithingBarStats(recipe, items, varrockOn) {
   const outQty = baseQty * multiplier;
   const revenue = outPrice != null ? applyTax(outPrice) * outQty : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
-  const limits = [...recipe.inputs.map(i=>i.name), recipe.name].map(n => findItemLimit(items, n)).filter(l => l != null);
-  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const bindingLimit = makesPerLimit(items, recipe.inputs);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inVolumes = recipe.inputs.map(i => findItemVolume(items, i.name)).filter(v => v != null);
   const inputVolume = inVolumes.length ? Math.min(...inVolumes) : null;
@@ -15583,8 +15608,7 @@ function computeSummoningScrollStats(recipe, items, scrollsPerPouch = SUMMONING_
   const cost = pouchPrice;
   const revenue = scrollPrice != null ? applyTax(scrollPrice) * scrollsPerPouch : null;
   const margin = (revenue != null && missing.length === 0) ? revenue - cost : null;
-  const limits = [recipe.pouch, recipe.scroll].map(n => findItemLimit(items, n)).filter(l => l != null);
-  const bindingLimit = limits.length ? Math.min(...limits) : null;
+  const bindingLimit = makesPerLimit(items, [{name:recipe.pouch, qty:1}]);
   const profitPerLimit = (margin != null && bindingLimit != null) ? margin * bindingLimit : null;
   const inputVolume = findItemVolume(items, recipe.pouch);
   const outputVolume = findItemVolume(items, recipe.scroll);
@@ -17164,7 +17188,10 @@ function App() {
     window.addEventListener('mouseup', onUp);
   };
 
-  const uiScale = (settings.uiScale || 100) / 100;
+  // Phones always run at 100% (tester report, 2026-11-21): the scale is a CSS transform, which
+  // at 150% squashed the layout to a 274px-wide screen (search box unusable) and breaks
+  // everything position:fixed. Android's own Display size / Font size do this job properly.
+  const uiScale = (IS_PHONE || window.genius?.syncRole === 'phone') ? 1 : (settings.uiScale || 100) / 100;
   const [scaleDims, setScaleDims] = useState({w: window.innerWidth, h: window.innerHeight});
   useEffect(() => {
     const onResize = () => setScaleDims({w: window.innerWidth, h: window.innerHeight});
@@ -17548,6 +17575,44 @@ function App() {
     }, 80);
   };
 
+  // Pull down to refresh on phones (Ben, 2026-11-21): drag down from the top of a
+  // page and let go past PULL_AT px to run the same fetch as the header button.
+  const PULL_AT = 70;
+  const [pull, setPull] = useState(0);
+  const fetchRef = useRef(null);
+  fetchRef.current = fetching ? null : handleFetch;
+  useEffect(() => {
+    if (!IS_PHONE) return;
+    let startY = null, dist = 0;
+    const scroller = e => e.target.closest && e.target.closest('.content');
+    const onStart = e => {
+      const sc = scroller(e);
+      // Only from the top of the page, and not from inside pop-ups or the item panel.
+      startY = sc && sc.scrollTop <= 0 && !e.target.closest('.detail-panel, .chart-modal, .modal-overlay') ? e.touches[0].clientY : null;
+      dist = 0;
+    };
+    const onMove = e => {
+      if (startY == null) return;
+      dist = Math.max(0, e.touches[0].clientY - startY);
+      if (scroller(e)?.scrollTop > 0) { startY = null; dist = 0; }
+      setPull(Math.min(dist, PULL_AT * 1.5));
+    };
+    const onEnd = () => {
+      if (startY != null && dist >= PULL_AT && fetchRef.current) fetchRef.current();
+      startY = null; dist = 0; setPull(0);
+    };
+    document.addEventListener('touchstart', onStart, {passive: true});
+    document.addEventListener('touchmove', onMove, {passive: true});
+    document.addEventListener('touchend', onEnd);
+    document.addEventListener('touchcancel', onEnd);
+    return () => {
+      document.removeEventListener('touchstart', onStart);
+      document.removeEventListener('touchmove', onMove);
+      document.removeEventListener('touchend', onEnd);
+      document.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
   const logicalW = scaleDims.w / uiScale, logicalH = scaleDims.h / uiScale;
   return h('div',{id:'scale-root', style:{
     width: logicalW, height: logicalH,
@@ -17556,6 +17621,14 @@ function App() {
   h('div',{className:'app', style:{width: logicalW, height: logicalH}},
     h('style',null,buildCSS()),
     theme==='black'&&h('style',null,buildBlackCss()),
+    pull > 8 && h('div', {style:{
+      position:'fixed', left:0, right:0, top:'calc(env(safe-area-inset-top) + 56px)', zIndex:120,
+      display:'flex', justifyContent:'center', pointerEvents:'none',
+      transform:`translateY(${Math.round(pull / 2)}px)`, opacity: Math.min(1, pull / PULL_AT),
+    }},
+      h('div', {style:{background:T.panel2, border:`1px solid ${pull >= PULL_AT ? T.gold : T.border}`, borderRadius:14,
+        padding:'4px 12px', fontSize:11, color: pull >= PULL_AT ? T.goldBright : T.textDim, boxShadow:'0 2px 10px rgba(0,0,0,0.6)'}},
+        pull >= PULL_AT ? '↻ Release to refresh' : '↓ Pull to refresh')),
 
     updateInfo && h('div', {style:{
       position:'fixed', bottom:16, right:16, zIndex:10000,
