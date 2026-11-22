@@ -35,8 +35,19 @@ android {
     buildTypes {
         release {
             if (ksFile.exists()) signingConfig signingConfigs.release
-            minifyEnabled false
+            // R8 on (2026-11-22): Play flagged 'DEX optimization: Obfuscation 1%'. Keep rules
+            // for Capacitor, the background runner's JS engine and our own classes are in
+            // proguard-rules.pro.
+            minifyEnabled true
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+        }
+        // Same as release (R8 on) but signed with the debug key, so it installs over a phone's
+        // debug build without wiping data. Not debuggable: that would switch R8's obfuscation off.
+        // Build: gradlew assembleR8test. For testing R8 only; never upload it.
+        r8test {
+            initWith release
+            signingConfig signingConfigs.debug
+            matchingFallbacks = ['release']
         }
     }
 }

@@ -14,6 +14,13 @@
         android:usesCleartextTraffic="true"
         android:theme="@style/AppTheme">
         <meta-data android:name="com.google.mlkit.vision.DEPENDENCIES" android:value="barcode_ui" />
+        <!-- ML Kit's invisible QR-scanner launcher locks itself to portrait; Play flags that for
+             large screens (Android 16 ignores it there anyway). Unlock it (2026-11-22). -->
+        <activity
+            android:name="com.google.mlkit.vision.codescanner.internal.GmsBarcodeScanningDelegateActivity"
+            android:exported="false"
+            android:screenOrientation="unspecified"
+            tools:replace="android:screenOrientation" />
         <activity
             android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density"
             android:name=".MainActivity"
