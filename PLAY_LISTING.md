@@ -1,5 +1,11 @@
 # Play Store listing (GEnius)
 
+## App name (max 30)
+
+GEnius: RS3 Grand Exchange Hub
+
+(Ben, 2026-11-21. The launcher icon on phones still says "GEnius".)
+
 ## Short description (max 80)
 
 Grand Exchange prices, alerts, flips and portfolio tracking for RS3 players.

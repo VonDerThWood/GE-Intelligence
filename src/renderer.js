@@ -4122,6 +4122,7 @@ const PHONE_HIDE_COLS = {
   'pt-score':     [3, 5, 6],              // keep Item, Score, Change
   'pt-realized':  [2, 3],                 // keep Item, Realized P&L, % of total
   'pt-closed':    [2, 3, 5, 6],           // keep Item, Avg return, Total P&L
+  'pt-watchlist': [3],                    // keep Item, Price, Today, ★
 };
 function phoneHideCols() {
   return Object.entries(PHONE_HIDE_COLS).map(([cls, cols]) =>
@@ -6213,7 +6214,25 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
   const activeToggle = view === 'dxp' ? toggleDxpWatch : onToggleWatch;
   // Watched items Jagex removed from the GE stay listed (last price, labelled)
   // instead of silently vanishing.
-  const watched      = [...items, ...(removedItems || [])].filter(it => activeList.map(String).includes(String(it.id)));
+  const watchedRaw   = [...items, ...(removedItems || [])].filter(it => activeList.map(String).includes(String(it.id)));
+  // Sorting (Ben, 2026-11-21). 'added' keeps the order items were starred in.
+  const [sortBy, setSortBy] = useState(() => { try { return localStorage.getItem('genius_watch_sort') || 'added'; } catch { return 'added'; } });
+  const chooseSort = v => { setSortBy(v); try { localStorage.setItem('genius_watch_sort', v); } catch {} };
+  // Cards or a compact list (Ben, 2026-11-21).
+  const [layout, setLayout] = useState(() => { try { return localStorage.getItem('genius_watch_layout') || 'cards'; } catch { return 'cards'; } });
+  const chooseLayout = v => { setLayout(v); try { localStorage.setItem('genius_watch_layout', v); } catch {} };
+  const priceOf = it => it.high || it.low || 0;
+  const chg = it => it.change_1d ?? 0;
+  const watched = sortBy === 'added'
+    ? activeList.map(id => watchedRaw.find(it => String(it.id) === String(id))).filter(Boolean)
+    : [...watchedRaw].sort({
+        name:      (a, b) => a.name.localeCompare(b.name),
+        nameZA:    (a, b) => b.name.localeCompare(a.name),
+        priceHigh: (a, b) => priceOf(b) - priceOf(a),
+        priceLow:  (a, b) => priceOf(a) - priceOf(b),
+        risers:    (a, b) => chg(b) - chg(a),
+        fallers:   (a, b) => chg(a) - chg(b),
+      }[sortBy] || (() => 0));
 
   // ── Seasonal view helpers ────────────────────────────────────────────────
   const seasonalRows = view === 'seasonal'
@@ -6247,6 +6266,16 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
         title:'Three separate lists. Normal drives the digest notification. DXP drives Almanac buy/sell alerts. Seasonal shows all researched items for the chosen event with live prices — not a pinned list, just a live price monitor for the full seasonal dataset.',
         style:{cursor:'help', fontSize:11, color:T.textDim, border:`1px solid ${T.textDim}`, borderRadius:'50%', width:16, height:16, display:'inline-flex', alignItems:'center', justifyContent:'center'},
       }, '?'),
+      view !== 'seasonal' && watched.length > 0 && h('div', {style:{marginLeft:'auto', display:'flex', gap:4}},
+        [['cards','▦ Cards'], ['list','☰ List']].map(([v, l]) => h('button', {key:v, onClick:() => chooseLayout(v),
+          style:{padding:'3px 9px', fontSize:11, borderRadius:4, cursor:'pointer',
+            border:`1px solid ${layout===v ? T.gold : T.borderDim}`, background: layout===v ? 'rgba(201,168,76,0.15)' : 'transparent',
+            color: layout===v ? T.goldBright : T.textDim}}, l))),
+      view !== 'seasonal' && watched.length > 1 && h('label', {style:{display:'flex', alignItems:'center', gap:6, fontSize:11, color:T.textDim}},
+        'Sort',
+        h('select', {className:'ge-input', value:sortBy, onChange:e => chooseSort(e.target.value), style:{fontSize:11, padding:'2px 6px'}},
+          [['added','Order added'], ['name','Name A-Z'], ['nameZA','Name Z-A'], ['priceHigh','Price, high to low'], ['priceLow','Price, low to high'],
+           ['risers','Biggest risers'], ['fallers','Biggest fallers']].map(([v, l]) => h('option', {key:v, value:v}, l)))),
     ),
 
     // ── Seasonal sub-event pills ────────────────────────────────────────────
@@ -6337,6 +6366,27 @@ function WatchlistTab({items, removedItems, watchlist, selected, onSelect, onTog
                   )
             )
           )
+        : layout === 'list'
+        ? h('table', {className:'ge-table pt-watchlist'},
+            // Tap a header to sort; tap again to flip (Ben, 2026-11-21). Same setting as the Sort dropdown.
+            h('thead', null, h('tr', null,
+              h('th', {onClick:() => chooseSort(sortBy === 'name' ? 'nameZA' : 'name')},
+                'Item' + (sortBy === 'name' ? ' ↑' : sortBy === 'nameZA' ? ' ↓' : '')),
+              h('th', {onClick:() => chooseSort(sortBy === 'priceHigh' ? 'priceLow' : 'priceHigh')},
+                'Price' + (sortBy === 'priceHigh' ? ' ↓' : sortBy === 'priceLow' ? ' ↑' : '')),
+              h('th', {style:{cursor:'default'}}, 'Live buy / sell'),
+              h('th', {onClick:() => chooseSort(sortBy === 'risers' ? 'fallers' : 'risers')},
+                'Today' + (sortBy === 'risers' ? ' ↓' : sortBy === 'fallers' ? ' ↑' : '')),
+              h('th', {style:{cursor:'default'}}, ''))),
+            h('tbody', null, watched.map(it => h('tr', {key:it.id, onClick:() => onSelect(it), style: it.removedFromGe ? {opacity:0.6} : undefined},
+              h('td', {style:{color:T.gold}}, it.name,
+                updateRisks.some(r => r.itemName.toLowerCase() === it.name.toLowerCase()) && h('span', {title:'An upcoming update may affect this item. See the list above.', style:{marginLeft:5}}, '⚠️'),
+                it.removedFromGe && h(RemovedFromGeTag, {item: it})),
+              h('td', {style:{whiteSpace:'nowrap'}}, fmt.gp(it.high||it.low)+'gp'),
+              h('td', {style:{whiteSpace:'nowrap', fontSize:11}}, it.removedFromGe ? '—'
+                : h('span', null, h('span', {style:{color:T.green}}, it.liveBuy ? fmt.gp(it.liveBuy) : '—'), ' / ', h('span', {style:{color:'#e08030'}}, it.liveSell ? fmt.gp(it.liveSell) : '—'))),
+              h('td', {className:pctClass(it.change_1d), style:{whiteSpace:'nowrap'}}, it.removedFromGe ? '—' : showPct(it.change_1d)),
+              h('td', null, h('button', {className:'star-btn', title:'Remove from this watchlist', onClick: e => { e.stopPropagation(); activeToggle(it.id); }}, h('span', {className:'star-on'}, '★')))))))
         : h('div', {className:'offer-grid'},
             watched.map(it =>
               h('div', {key:it.id, className:'offer-slot', onClick:()=>onSelect(it), style: it.removedFromGe ? {opacity:0.6} : undefined},
