@@ -24048,7 +24048,7 @@
         }
         try {
           const res = await fetch(WIKI_DXP_URL, {
-            headers: { "User-Agent": "GEnius-app/1.8 (RS3 GE tracker; contact: letterslive@gmail.com)" },
+            headers: { "User-Agent": "GEnius-app/1.8 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)" },
             signal: AbortSignal.timeout(8e3)
           });
           if (!res.ok) throw new Error(`HTTP ${res.status}`);
@@ -25890,8 +25890,9 @@
           historyFetchStop = false;
           try {
             while (historyRefreshActive) await pause(250);
-            await maybeImportHistoryPack(onProgress);
+            const pack = await maybeImportHistoryPack(onProgress);
             await runHistoryQueueInner(onProgress);
+            if (pack && pack.imported) await catchUpAfterPack(onProgress);
           } finally {
             historyFetchActive = false;
           }
@@ -25908,11 +25909,14 @@
           const dev = await storage2.readJSON(path.join(dataDir, "dev_history_pack.json"), null).catch(() => null);
           const packUrl = dev && /^https?:\/\//.test(dev.url || "") ? dev.url : HISTORY_PACK_URL;
           if (packUrl !== HISTORY_PACK_URL) console.log(`[history] History pack from dev override: ${packUrl}`);
+          const imported = [];
+          let r = null;
           try {
-            const r = await storage2.importHistoryPack(historyDir, packUrl, {
+            r = await storage2.importHistoryPack(historyDir, packUrl, {
               skip: new Set(historyPopulatedIds),
               onItem: (id) => {
                 historyPopulatedIds.add(id);
+                imported.push(String(id));
                 if (++n % 100 === 0 && onProgress) onProgress(0, total);
               }
             });
@@ -25920,7 +25924,49 @@
           } catch (e) {
             console.log(`[history] History pack not used (${e.message}); fetching one by one. ${n} items came in first.`);
           }
+          const builtMs = r && Date.parse(r.builtAt) || Date.now() - 3 * 864e5;
+          for (const id of imported) if (!historyLatestTs[id]) historyLatestTs[id] = builtMs;
           if (onProgress) onProgress(0, total);
+          return { imported: imported.length };
+        }
+        async function catchUpAfterPack(onProgress) {
+          await historyLoadedPromise;
+          const now = Date.now();
+          const vol = (id) => {
+            const s = snapshotData[id];
+            return s && s.length ? s[s.length - 1].v || 0 : 0;
+          };
+          const ids = [...historyPopulatedIds].filter((id) => /^\d+$/.test(id) && (historyLatestTs[id] || 0) < now - HISTORY_REFRESH_STALE_MS).sort((a, b) => vol(b) - vol(a));
+          const total = ids.length;
+          if (!total) return;
+          const t = Date.now();
+          let done = 0, updated = 0;
+          console.log(`[history] Catching up ${total} items since the history pack`);
+          async function worker() {
+            while (ids.length && !historyFetchStop) {
+              const id = ids.shift();
+              const incremental = (historyLatestTs[id] || 0) > now - HISTORY_INCREMENTAL_MAX_MS;
+              if (await (incremental ? fetchRecentHistory(id) : fetchHistoryForItemOnce(id, 12e3))) {
+                const pts = historyData[id];
+                if (pts && pts.length) {
+                  const last = pts.reduce((m, p) => Math.max(m, p.timestamp || 0), 0);
+                  historyLatestTs[id] = last > 1e12 ? last : last * 1e3;
+                }
+                itemHistoryCache.delete(Number(id));
+                itemHistoryCache.delete(id);
+                updated++;
+              }
+              historyRefreshAttempt[id] = Date.now();
+              evictHistory(id);
+              done++;
+              if (onProgress) onProgress(done, total);
+              if (done % 100 === 0) await saveHistory();
+              await pause(250);
+            }
+          }
+          await Promise.all(Array.from({ length: 4 }, worker));
+          await saveHistory();
+          console.log(`[history] Caught up ${updated}/${total} items in ${((Date.now() - t) / 1e3).toFixed(0)}s`);
         }
         async function runHistoryQueueInner(onProgress) {
           let done = 0;
@@ -30872,7 +30918,7 @@
   // src/backend-js/news.js
   var require_news = __commonJS({
     "src/backend-js/news.js"(exports, module) {
-      var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)" };
+      var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)" };
       var UPDATE_RULES = [
         // Each rule: [keywords_any, update_label, affected_categories]
         [
@@ -31226,7 +31272,7 @@ Total: ${news.length} articles`);
       var _DIR = "fake-dirname";
       var _DEV_FALLBACK_CACHE_PATH = storage2.resolveWritable(path.join(_DIR, "..", "..", "data", "untradeable.json"));
       var CACHE_TTL = 86400 * 1e3;
-      var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)" };
+      var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)" };
       var _COMP_URL = "https://runescape.wiki/w/RS:Material_prices";
       var _COMP_ROW_RE = new RegExp(
         '<tr\\s+id="[^"]+">.*?<td[^>]*>.*?<a href="/w/[^"]*" title="([^"]+)">[^<]+</a>\\s*\\n\\s*</td>\\s*\\n<td[^>]*>([^<\\n]+)\\n</td>\\s*\\n<td[^>]*><span class="coins[^"]*">([0-9,]+)</span></td>',
@@ -31412,7 +31458,7 @@ ${comps.length} components, ${potions.length} potions \u2014 ${items.length} tot
       var _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, "..", "..", "data", "market_watch.json");
       var CACHE_TTL = 3600 * 1e3;
       var _URL = "https://runescape.wiki/w/RuneScape:Grand_Exchange_Market_Watch";
-      var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)" };
+      var _HEADERS = { "User-Agent": "GEnius-app/1.2 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)" };
       var _INDEX_NAMES = [
         "Common Trade Index",
         "Rune Index",
@@ -31522,7 +31568,7 @@ ${data.length} indexes:
       var _DIR = "fake-dirname";
       var _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, "..", "..", "data", "top100.json");
       var CACHE_TTL = 3600 * 1e3;
-      var _HEADERS = { "User-Agent": "GEnius-app/2.5 (RS3 GE tracker; contact: letterslive@gmail.com)" };
+      var _HEADERS = { "User-Agent": "GEnius-app/2.5 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)" };
       var _URL = (list, scale) => `https://secure.runescape.com/m=itemdb_rs/top100?list=${list}&scale=${scale}`;
       var SCALES = { 7: 0, 30: 1, 90: 2, 180: 3 };
       function _parseRows(html) {
@@ -31613,7 +31659,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       var BATCH_DELAY_MS = 350;
       var RESOLVE_PER_RUN = 500;
       var FALLBACK_PER_RUN = 60;
-      var _HEADERS = { "User-Agent": "GEnius-app/2.6 (RS3 GE tracker; contact: letterslive@gmail.com)" };
+      var _HEADERS = { "User-Agent": "GEnius-app/2.6 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)" };
       var _API = "https://runescape.wiki/api.php";
       async function _fetchDetailBatch(names) {
         const url = `${_API}?action=query&format=json&prop=pageimages&piprop=thumbnail&pithumbsize=300&redirects=1&titles=${encodeURIComponent(names.join("|"))}`;

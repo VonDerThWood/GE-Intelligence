@@ -33,7 +33,7 @@ const _DIR = __dirname;
 const _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'top100.json');
 const CACHE_TTL = 3600 * 1000; // 1 hour — this list itself only moves slowly, no need to hit it every 15-min fetch cycle
 
-const _HEADERS = { 'User-Agent': 'GEnius-app/2.5 (RS3 GE tracker; contact: letterslive@gmail.com)' };
+const _HEADERS = { 'User-Agent': 'GEnius-app/2.5 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)' };
 const _URL = (list, scale) => `https://secure.runescape.com/m=itemdb_rs/top100?list=${list}&scale=${scale}`;
 // Jagex's own "Time Period" selector on this page — 0:7 days, 1:1 month,
 // 2:3 months, 3:6 months. Confirmed by reading the actual dropdown link

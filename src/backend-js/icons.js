@@ -41,7 +41,7 @@ const BATCH_DELAY_MS = 350; // polite pacing between requests
 const RESOLVE_PER_RUN = 500; // ~10 batches/run — backfills 7,400 items over ~15 fetch cycles, non-blocking
 const FALLBACK_PER_RUN = 60; // search fallback is 1 request/name (no batching) — capped separately, much slower per-item
 
-const _HEADERS = { 'User-Agent': 'GEnius-app/2.6 (RS3 GE tracker; contact: letterslive@gmail.com)' };
+const _HEADERS = { 'User-Agent': 'GEnius-app/2.6 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)' };
 const _API = 'https://runescape.wiki/api.php';
 
 // Resolves the canonical page title + big detail render for a batch of

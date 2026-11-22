@@ -104,7 +104,7 @@ async function _fetchWikiDxpEvents(dataDir) {
 
   try {
     const res = await fetch(WIKI_DXP_URL, {
-      headers: { 'User-Agent': 'GEnius-app/1.8 (RS3 GE tracker; contact: letterslive@gmail.com)' },
+      headers: { 'User-Agent': 'GEnius-app/1.8 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)' },
       signal: AbortSignal.timeout(8000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);

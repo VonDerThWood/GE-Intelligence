@@ -31,7 +31,7 @@ const _DEV_FALLBACK_CACHE_PATH = path.join(_DIR, '..', '..', 'data', 'market_wat
 const CACHE_TTL = 3600 * 1000; // 1 hour, in ms (Python version uses seconds)
 
 const _URL = 'https://runescape.wiki/w/RuneScape:Grand_Exchange_Market_Watch';
-const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)' };
+const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)' };
 
 const _INDEX_NAMES = [
   'Common Trade Index',

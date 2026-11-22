@@ -9,7 +9,7 @@
  * original too — ported as-is, not "fixed," since this is a faithful port.
  */
 
-const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)' };
+const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)' };
 
 // ─── Update type → affected categories ──────────────────────────────────────
 

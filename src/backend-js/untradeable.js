@@ -30,7 +30,7 @@ const _DIR = __dirname;
 const _DEV_FALLBACK_CACHE_PATH = storage.resolveWritable(path.join(_DIR, '..', '..', 'data', 'untradeable.json'));
 const CACHE_TTL = 86400 * 1000; // 24 hours, in ms
 
-const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: letterslive@gmail.com)' };
+const _HEADERS = { 'User-Agent': 'GEnius-app/1.2 (RS3 GE tracker; contact: github.com/VonDerThWood/GE-Intelligence)' };
 
 // ── Components ──────────────────────────────────────────────────────────────
 

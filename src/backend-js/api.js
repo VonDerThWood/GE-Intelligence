@@ -598,8 +598,9 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // The background refresh gives way at its next item; wait so the two never
       // write the same history at once.
       while (historyRefreshActive) await pause(250);
-      await maybeImportHistoryPack(onProgress);
+      const pack = await maybeImportHistoryPack(onProgress);
       await runHistoryQueueInner(onProgress);
+      if (pack && pack.imported) await catchUpAfterPack(onProgress);
     } finally {
       // Always cleared: an error used to leave this stuck on, and every later
       // backfill and background refresh then said "busy" for the whole session.
@@ -630,16 +631,71 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const dev = await storage.readJSON(path.join(dataDir, 'dev_history_pack.json'), null).catch(() => null);
     const packUrl = dev && /^https?:\/\//.test(dev.url || '') ? dev.url : HISTORY_PACK_URL;
     if (packUrl !== HISTORY_PACK_URL) console.log(`[history] History pack from dev override: ${packUrl}`);
+    const imported = [];
+    let r = null;
     try {
-      const r = await storage.importHistoryPack(historyDir, packUrl, {
+      r = await storage.importHistoryPack(historyDir, packUrl, {
         skip: new Set(historyPopulatedIds),
-        onItem: id => { historyPopulatedIds.add(id); if (++n % 100 === 0 && onProgress) onProgress(0, total); },
+        onItem: id => { historyPopulatedIds.add(id); imported.push(String(id)); if (++n % 100 === 0 && onProgress) onProgress(0, total); },
       });
       console.log(`[history] History pack: ${r.imported} items in ${((Date.now() - t) / 1000).toFixed(0)}s` + (r.complete ? `, built ${r.builtAt}` : ', download cut short (the rest fetch normally)'));
     } catch (e) {
       console.log(`[history] History pack not used (${e.message}); fetching one by one. ${n} items came in first.`);
     }
+    // Pack items have no "latest point" date until their file is next read, so the
+    // rolling refresh would think they're years behind and re-download each one in
+    // full (~200 KB) instead of topping up the days since the pack (~6 KB). Mark
+    // them with the pack's build date (2026-11-22). Without a date, assume 3 days ago.
+    const builtMs = (r && Date.parse(r.builtAt)) || Date.now() - 3 * 86400000;
+    for (const id of imported) if (!historyLatestTs[id]) historyLatestTs[id] = builtMs;
     if (onProgress) onProgress(0, total);
+    return { imported: imported.length };
+  }
+
+  // After a pack import (Ben, 2026-11-22): keep the "downloading history" bar
+  // going and top up every item from the pack's date to today in one go, busiest
+  // items first (today's GE volume), instead of 50 or 500 per price fetch over
+  // hours or days. Each top-up is WeirdGloop's small last-90-days file merged
+  // onto the item. Paced like the backfill: a few at a time, with a short pause.
+  async function catchUpAfterPack(onProgress) {
+    await historyLoadedPromise;
+    const now = Date.now();
+    const vol = id => { const s = snapshotData[id]; return s && s.length ? (s[s.length - 1].v || 0) : 0; };
+    const ids = [...historyPopulatedIds]
+      .filter(id => /^\d+$/.test(id) && (historyLatestTs[id] || 0) < now - HISTORY_REFRESH_STALE_MS)
+      .sort((a, b) => vol(b) - vol(a));
+    const total = ids.length;
+    if (!total) return;
+    const t = Date.now();
+    let done = 0, updated = 0;
+    console.log(`[history] Catching up ${total} items since the history pack`);
+    async function worker() {
+      while (ids.length && !historyFetchStop) {
+        const id = ids.shift();
+        const incremental = (historyLatestTs[id] || 0) > now - HISTORY_INCREMENTAL_MAX_MS;
+        if (await (incremental ? fetchRecentHistory(id) : fetchHistoryForItemOnce(id, 12000))) {
+          const pts = historyData[id];
+          if (pts && pts.length) {
+            const last = pts.reduce((m, p) => Math.max(m, p.timestamp || 0), 0);
+            historyLatestTs[id] = last > 1e12 ? last : last * 1000;
+          }
+          itemHistoryCache.delete(Number(id));
+          itemHistoryCache.delete(id);
+          updated++;
+        }
+        historyRefreshAttempt[id] = Date.now();
+        // Free it now (kept if unsaved; saveHistory frees those), so 7,000+ items
+        // with nothing new don't pile up in memory on a phone.
+        evictHistory(id);
+        done++;
+        if (onProgress) onProgress(done, total);
+        if (done % 100 === 0) await saveHistory();
+        await pause(250);
+      }
+    }
+    await Promise.all(Array.from({ length: 4 }, worker));
+    await saveHistory();
+    console.log(`[history] Caught up ${updated}/${total} items in ${((Date.now() - t) / 1000).toFixed(0)}s`);
   }
 
   async function runHistoryQueueInner(onProgress) {
