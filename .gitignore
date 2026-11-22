@@ -17,3 +17,7 @@ tree.txt
 CLAUDE.md
 GEnius.md
 google-oauth.json
+
+# Play upload bundles (built locally, 28MB+)
+store-listing/*.aab
+store-listing/raw/

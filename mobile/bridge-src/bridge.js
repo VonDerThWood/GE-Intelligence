@@ -434,7 +434,9 @@ async function buildGenius() {
     getSettings: () => ({
       discordWebhook:     store.get('discordWebhook', ''),
       fetchInterval:      store.get('fetchInterval', 15),
-      theme:              store.get('theme', 'dark'),
+      // Phones default to black (OLED screens; Ben, 2026-11-20). The GE-inspired theme
+      // stays in Settings. Desktop keeps its own default in main.js.
+      theme:              store.get('theme', 'black'),
       notifications:      store.get('notifications', true),
       expensiveThreshold: store.get('expensiveThreshold', 500000000),
       navOrder:           store.get('navOrder', []),

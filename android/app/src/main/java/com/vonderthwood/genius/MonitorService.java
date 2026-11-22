@@ -72,13 +72,16 @@ public class MonitorService extends Service {
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP | Intent.FLAG_ACTIVITY_CLEAR_TOP);
         PendingIntent pi = PendingIntent.getActivity(this, 0, open, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
 
-        Notification n = new Notification.Builder(this, CHANNEL_ID)
+        Notification.Builder nb = new Notification.Builder(this, CHANNEL_ID)
             .setSmallIcon(getApplicationInfo().icon)
             .setContentTitle("GEnius is monitoring prices")
             .setContentText("Checking prices and alerts on your fetch schedule")
             .setContentIntent(pi)
-            .setOngoing(true)
-            .build();
+            .setOngoing(true);
+        // Android 12+ holds foreground-service notifications back ~10s by default; show it
+        // the moment Live monitoring is switched on (2026-11-20, for Play's FGS review).
+        if (Build.VERSION.SDK_INT >= 31) nb.setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE);
+        Notification n = nb.build();
 
         if (Build.VERSION.SDK_INT >= 34) {
             startForeground(NOTIFICATION_ID, n, ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE);

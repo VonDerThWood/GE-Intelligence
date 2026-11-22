@@ -1,5 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <!-- ML Kit's QR scanner (PC pairing) locks its helper activity to portrait, which makes
+         Play treat portrait as required and hides GEnius from Chromebooks, landscape tablets
+         and XR (Play pre-review check, 2026-11-20). Portrait is optional for this app. -->
+    <uses-feature android:name="android.hardware.screen.portrait" android:required="false" />
     <application
         android:allowBackup="true"
         android:icon="@mipmap/ic_launcher"
