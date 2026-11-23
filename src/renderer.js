@@ -7840,7 +7840,10 @@ const ALERT_GROUPS = [
   {key:'armed',     label:'Armed',        color:'#c9a84c', test:a => !a.active && !!a.firedAt},
   {key:'neverFired',label:'Never fired',  color:'rgba(255,255,255,0.15)', test:a => !a.active && !a.firedAt},
 ];
-function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toast}) {
+function renderGroupedAlerts({alerts, items, removedItems, onSelect, startEdit, onDelete, toast}) {
+  // An alert on an item Jagex removed from the GE can never fire (the backend skips
+  // items it can't price), so say why instead of leaving it looking live (2026-11-23).
+  const removedOf = a => !itemByName(items, a.item_name || '') && (removedItems || []).find(r => r.name.toLowerCase() === (a.item_name || '').toLowerCase());
   return ALERT_GROUPS.map(group => {
     const rows = alerts.filter(group.test);
     if (!rows.length) return null;
@@ -7864,8 +7867,9 @@ function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toas
                 const it = itemByName(items, (a.item_name||''));
                 if (it) onSelect(it);
               } : undefined,
-            }, a.item_name),
+            }, a.item_name, removedOf(a) && h('span',{style:{marginLeft:6}}, h(RemovedFromGeTag, {item: removedOf(a)}))),
             h('div',{style:{fontSize:11, color:T.textDim, marginTop:1}},
+              removedOf(a) ? 'Can\'t fire any more: the item is no longer on the GE. ' : null,
               alertSummary(a),
               a.firedAt && ` — ${group.key==='active' ? 'fired' : 'last fired'} ${new Date(a.firedAt).toLocaleDateString()}`
             )
@@ -7879,7 +7883,7 @@ function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toas
   });
 }
 
-function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands, onSelect}) {
+function AlertsTab({items, removedItems, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands, onSelect}) {
   const BLANK = {item_name:'', condition:'above', price:'', pct:'', signal_type:'SURGE'};
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
@@ -8005,7 +8009,7 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
                 'Alerts can optionally ping a Discord webhook when they trigger.'
               )
             )
-          : renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toast})
+          : renderGroupedAlerts({alerts, items, removedItems, onSelect, startEdit, onDelete, toast})
       )
     ),
     h('div',{style:{marginTop:24, paddingTop:18, borderTop:`1px solid ${T.border}`}},
@@ -11184,7 +11188,9 @@ const natureRunePrice = useMemo(() => {
     h('div', {style:{padding:'8px 12px', fontSize:11, color:T.textDim, borderBottom:`1px solid ${T.border}`, display:'flex', gap:16}},
       h('span', null, `${alchItems.length} item${alchItems.length!==1?'s':''} worth alching`),
       natureRunePrice ? h('span', null, `Nature rune: ${fmt.gp(natureRunePrice)}gp`) : null,
-      divineChargePrice ? h('span', null, `Divine charge: ${fmt.gp(divineChargePrice)}gp (${fmt.gp(chargePerItem)}gp/item)`) : null
+      divineChargePrice ? h('span', null, `Divine charge: ${fmt.gp(divineChargePrice)}gp (${fmt.gp(chargePerItem)}gp/item)`) : null,
+      h('span', {title:'Since the 23 Nov 2026 rebalance: one Alchemiser per player; mk. II alchs 15 items an hour (360 a day), holds 3,000, and a Divine charge covers 375 alchs.'},
+        'Alchemiser mk. II: 1 per player, 15 alchs/hour (360/day)')
     ),
     h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef},
     cols.handles(),
@@ -17885,7 +17891,7 @@ function App() {
           tab==='news'    &&h(NewsTab,    {onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect,toast,onNavigate:setTab}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsArea, {
-            items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
+            items,removedItems,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
             onSave: upsertAlert,
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id)),
             reminders,
