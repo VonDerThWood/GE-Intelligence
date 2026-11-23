@@ -7037,7 +7037,7 @@ const APP_NEWS = [
   {
     version: 'v3.0.0',
     items: [
-      "GEnius goes mobile, Money Makers learns to farm, and Jagex took our portables. Ayo...",
+      "GEnius goes mobile, Money Makers learns to farm, and Jagex took our portables. This is the big one.",
       "GEnius on Android: the same app and data as desktop, in closed testing on Google Play. Price alerts, digests, DXP news and reminders keep working with the app closed; Live monitoring (Settings → Background checking) checks every fetch interval.",
       "Phone ↔ PC sync over your home Wi-Fi: scan a QR code once. No accounts, no servers. Built for phones too: pull to refresh, bigger chart numbers, full-width search, quantities in your Portfolio.",
       "First start in about a minute instead of 45: new installs download all price history in one file, then catch everything up to today. History is stored compressed (about 76MB instead of 1.5GB).",
