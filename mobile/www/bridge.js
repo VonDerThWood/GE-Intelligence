@@ -31822,6 +31822,38 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         await storage2.ensureDir(d);
         return d;
       }
+      var GE_MTX_REMOVAL = Date.parse("2026-11-23T11:00:00Z");
+      var GE_REMOVED_IDS = {
+        31042: GE_MTX_REMOVAL,
+        // Portable range
+        31043: GE_MTX_REMOVAL,
+        // Portable sawmill
+        31044: GE_MTX_REMOVAL,
+        // Portable well
+        35226: GE_MTX_REMOVAL,
+        // Portable crafter
+        35227: GE_MTX_REMOVAL,
+        // Portable fletcher
+        35228: GE_MTX_REMOVAL,
+        // Portable brazier
+        50443: GE_MTX_REMOVAL,
+        // Portable workbench
+        30915: GE_MTX_REMOVAL,
+        // Silverhawk feathers
+        // Found by the scheduled check (research/task_results/alchemiser-rebalance-numbers-nov-2026-2026-11-23.md):
+        // last live trades stop 11:05-11:32 UTC.
+        54792: GE_MTX_REMOVAL,
+        // Slayer Wildcard
+        52861: GE_MTX_REMOVAL,
+        // Oil of enchantment
+        54797: GE_MTX_REMOVAL,
+        // Artisanal gears
+        54798: GE_MTX_REMOVAL,
+        // Fletching cleaner (Inactive)
+        54801: GE_MTX_REMOVAL
+        // Crafting cleaner (Inactive)
+      };
+      for (let id = 56786; id <= 56861; id += 5) GE_REMOVED_IDS[id] = GE_MTX_REMOVAL;
       var JUNK_PATTERNS = ["%UPDATE_DETECTED%", "%JAGEX_TIMESTAMP%", "%"];
       var _DIGITS_RE = /^\d+$/;
       function _toSec(ts) {
@@ -32463,6 +32495,16 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         }
         let missingItems = existing.missingItems || {};
         let removedItems = existing.removedItems || [];
+        const knownGone = items.filter((it) => GE_REMOVED_IDS[it.id]);
+        if (knownGone.length) {
+          items = items.filter((it) => !GE_REMOVED_IDS[it.id]);
+          for (const it of knownGone) {
+            if (!removedItems.some((r) => r.id === it.id)) {
+              removedItems.push({ ...it, removedFromGe: true, removedAt: GE_REMOVED_IDS[it.id] });
+              console.log(`[run] ${it.name}: removed from the GE (patch notes)`);
+            }
+          }
+        }
         const prevTradeable = (existing.items || []).filter((it) => !it.untradeable && it.id);
         if ((args.mode === "full" || args.mode === "prices") && !usedFallbackItems && items.filter((it) => !it.untradeable).length >= prevTradeable.length * 0.9) {
           const now = Date.now();
@@ -32521,7 +32563,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "2.9.1",
+        version: "3.0.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",

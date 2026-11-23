@@ -7035,6 +7035,21 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v3.0.0',
+    items: [
+      "GEnius goes mobile, Money Makers learns to farm, and Jagex took our portables. Ayo...",
+      "GEnius on Android: the same app and data as desktop, in closed testing on Google Play. Price alerts, digests, DXP news and reminders keep working with the app closed; Live monitoring (Settings → Background checking) checks every fetch interval.",
+      "Phone ↔ PC sync over your home Wi-Fi: scan a QR code once. No accounts, no servers. Built for phones too: pull to refresh, bigger chart numbers, full-width search, quantities in your Portfolio.",
+      "First start in about a minute instead of 45: new installs download all price history in one file, then catch everything up to today. History is stored compressed (about 76MB instead of 1.5GB).",
+      "Late-Game Rebalance: Alchemiser math updated (375 alchs per divine charge, one machine, 15 an hour). Portables, Silverhawk feathers, Slayer wildcards and other MTX items say Removed from GE instead of showing frozen prices. Springs use the new recipe.",
+      "Money Makers → Farming (new): herbs, flowers and allotments with the RuneScape Wiki's own yield formula: compost, tools, outfits, juju, Plant Power, Scroll of life, Starbloom and its Battlestaff, and disease risk or paid protection.",
+      "Money Makers: Dungeoneering scroll toggles (Dexterity, Efficiency, Restoration, Cleansing) with the reworked Brooch of the Gods +5%. Archaeology collections, artefacts and materials, with a By auto disassembler column. Smithing from scratch. Profit per limit fixed (Divine charges showed 22.5M; really ~2.5M).",
+      "Flips that fill: Fill time and Profit / 4h from each side's recent trading, prices from recent trades, risk pills, ↓ Still falling tags, and a Good potential flips box on the Dashboard.",
+      "Portfolio: sort by clicking a column, a Net worth over time chart and spreadsheet export. Watchlist: sort it, and switch between Cards and List. Item panel: What to offer, in plain words.",
+      "Smaller things: Google Drive sync on desktop, Ctrl+K quick search, warnings when a new boss starts dropping something you hold, Stops falling alerts, trillions shown as T, and fixes from two bug audits.",
+    ]
+  },
+  {
     version: 'v2.9.0',
     items: [
       "The Almanac gets a reality check, Notifications finally remembers things, and Jagex is about to touch your stuff. Ayo...",
@@ -7064,8 +7079,8 @@ const APP_NEWS = [
       'Portfolio → Buy Planner helps you buy up an item across multiple 4-hour limits, including goals spread across several accounts. Keeping track of your true average cost across accounts is a major pain; this does it for you.',
       'Portfolio: added Break-even and Since bought columns, a High alch sell option, and multi-input Convert.',
       'Closed Positions are now grouped by item, so they\'re easier to follow when you\'ve bought, sold, and bought the same item again. Your money has a history, and now it\'s easier to read.',
-      'Items Jagex removes from the GE, including Silverhawk feathers, portables and Slayer wildcards, stay on your Watchlist and in your Portfolio. They\'re labelled "Removed from GE" instead of disappearing like they owe you money.',
-      'Invention → Items now includes a Make it yourself calculator for Springs and Enchanted notepaper, priced using the cheapest live disassembly source.',
+      'Items Jagex removes from the GE, including springs, Silverhawk feathers, and portables, stay on your Watchlist and in your Portfolio. They\'re labelled "Removed from GE" instead of disappearing like they owe you money.',
+      'Invention → Items now includes a Make it yourself calculator for Tight springs and Enchanted notepaper, priced using the cheapest live disassembly source.',
       'Opportunities → Track record grades every high-scoring item based on what its price actually did 1, 7, and 30 days later. A high score is a lead, not a prophecy.',
       'New SPIKE / SLUMP signals based on live prices. Brand-new items no longer get volume badges on day one: having a price and having meaningful trading volume are two different things.',
       'Food now shows heal amounts and cost per life point. The Market tab can hide items below a price you set. Less scrolling past pocket change.',

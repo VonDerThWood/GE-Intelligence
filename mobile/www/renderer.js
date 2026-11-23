@@ -528,7 +528,7 @@ function SignalBadge({signal, label, details, style: extraStyle}) {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 const fmt = {
-  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (FULL_NUMBERS) return (a >= 1000 ? Math.round(n) : n).toLocaleString(); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
+  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (FULL_NUMBERS) return (a >= 1000 ? Math.round(n) : n).toLocaleString(); if (a >= 1e12) return (n/1e12).toFixed(2)+'T'; if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
   pct: n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
   num: n => n ? n.toLocaleString() : '—',
 };
@@ -6775,13 +6775,13 @@ const TENSILE_SOURCES = [
 ];
 const INVENTION_CRAFTS = [
   {
-    id: 'spring', name: 'Tight springs', geItem: 'Spring', level: 43, perCraft: 20,
+    id: 'spring', name: 'Springs', geItem: 'Spring', level: 43, perCraft: 50, // 2026-11-23 rebalance: 60 tensile + 1 subtle = 50 (was 120 + 1 = 20 tight springs)
     // Wiki estimate of disassembly time to gather one batch's components.
-    minutesPerCraft: 6.88,
+    minutesPerCraft: 3.44, // wiki's 6.88 for 120 tensile, halved for the new 60-tensile recipe (estimate)
     use: 'Charge the Spring cleaner (1 spring = 1 charge).',
     unlock: 'Spring cleaner and Tight springs discovery.',
     inputs: [
-      { component: 'Tensile parts', qty: 120, liveSources: TENSILE_SOURCES },
+      { component: 'Tensile parts', qty: 60, liveSources: TENSILE_SOURCES },
       { component: 'Subtle components', qty: 1 },
     ],
   },
@@ -7034,6 +7034,21 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 }
 
 const APP_NEWS = [
+  {
+    version: 'v3.0.0',
+    items: [
+      "GEnius goes mobile, Money Makers learns to farm, and Jagex took our portables. Ayo...",
+      "GEnius on Android: the same app and data as desktop, in closed testing on Google Play. Price alerts, digests, DXP news and reminders keep working with the app closed; Live monitoring (Settings → Background checking) checks every fetch interval.",
+      "Phone ↔ PC sync over your home Wi-Fi: scan a QR code once. No accounts, no servers. Built for phones too: pull to refresh, bigger chart numbers, full-width search, quantities in your Portfolio.",
+      "First start in about a minute instead of 45: new installs download all price history in one file, then catch everything up to today. History is stored compressed (about 76MB instead of 1.5GB).",
+      "Late-Game Rebalance: Alchemiser math updated (375 alchs per divine charge, one machine, 15 an hour). Portables, Silverhawk feathers, Slayer wildcards and other MTX items say Removed from GE instead of showing frozen prices. Springs use the new recipe.",
+      "Money Makers → Farming (new): herbs, flowers and allotments with the RuneScape Wiki's own yield formula: compost, tools, outfits, juju, Plant Power, Scroll of life, Starbloom and its Battlestaff, and disease risk or paid protection.",
+      "Money Makers: Dungeoneering scroll toggles (Dexterity, Efficiency, Restoration, Cleansing) with the reworked Brooch of the Gods +5%. Archaeology collections, artefacts and materials, with a By auto disassembler column. Smithing from scratch. Profit per limit fixed (Divine charges showed 22.5M; really ~2.5M).",
+      "Flips that fill: Fill time and Profit / 4h from each side's recent trading, prices from recent trades, risk pills, ↓ Still falling tags, and a Good potential flips box on the Dashboard.",
+      "Portfolio: sort by clicking a column, a Net worth over time chart and spreadsheet export. Watchlist: sort it, and switch between Cards and List. Item panel: What to offer, in plain words.",
+      "Smaller things: Google Drive sync on desktop, Ctrl+K quick search, warnings when a new boss starts dropping something you hold, Stops falling alerts, trillions shown as T, and fixes from two bug audits.",
+    ]
+  },
   {
     version: 'v2.9.0',
     items: [
@@ -7840,7 +7855,10 @@ const ALERT_GROUPS = [
   {key:'armed',     label:'Armed',        color:'#c9a84c', test:a => !a.active && !!a.firedAt},
   {key:'neverFired',label:'Never fired',  color:'rgba(255,255,255,0.15)', test:a => !a.active && !a.firedAt},
 ];
-function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toast}) {
+function renderGroupedAlerts({alerts, items, removedItems, onSelect, startEdit, onDelete, toast}) {
+  // An alert on an item Jagex removed from the GE can never fire (the backend skips
+  // items it can't price), so say why instead of leaving it looking live (2026-11-23).
+  const removedOf = a => !itemByName(items, a.item_name || '') && (removedItems || []).find(r => r.name.toLowerCase() === (a.item_name || '').toLowerCase());
   return ALERT_GROUPS.map(group => {
     const rows = alerts.filter(group.test);
     if (!rows.length) return null;
@@ -7864,8 +7882,9 @@ function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toas
                 const it = itemByName(items, (a.item_name||''));
                 if (it) onSelect(it);
               } : undefined,
-            }, a.item_name),
+            }, a.item_name, removedOf(a) && h('span',{style:{marginLeft:6}}, h(RemovedFromGeTag, {item: removedOf(a)}))),
             h('div',{style:{fontSize:11, color:T.textDim, marginTop:1}},
+              removedOf(a) ? 'Can\'t fire any more: the item is no longer on the GE. ' : null,
               alertSummary(a),
               a.firedAt && ` — ${group.key==='active' ? 'fired' : 'last fired'} ${new Date(a.firedAt).toLocaleDateString()}`
             )
@@ -7879,7 +7898,7 @@ function renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toas
   });
 }
 
-function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands, onSelect}) {
+function AlertsTab({items, removedItems, alerts, onSave, onDelete, toast, description, reminders, onSaveReminder, onDeleteReminder, userShorthands, onSelect}) {
   const BLANK = {item_name:'', condition:'above', price:'', pct:'', signal_type:'SURGE'};
   const [form, setForm] = useState(BLANK);
   const [editId, setEditId] = useState(null);
@@ -8005,7 +8024,7 @@ function AlertsTab({items, alerts, onSave, onDelete, toast, description, reminde
                 'Alerts can optionally ping a Discord webhook when they trigger.'
               )
             )
-          : renderGroupedAlerts({alerts, items, onSelect, startEdit, onDelete, toast})
+          : renderGroupedAlerts({alerts, items, removedItems, onSelect, startEdit, onDelete, toast})
       )
     ),
     h('div',{style:{marginTop:24, paddingTop:18, borderTop:`1px solid ${T.border}`}},
@@ -11115,6 +11134,10 @@ function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, thre
 
 /* ─── Alch tab ────────────────────────────────────────────────── */
 const ALCH_DEFAULT_COL_WIDTHS = {name:280, high:110, limit:90, afterTax:110, alch:110, alchProfit:140, alchemiserProfit:170, star:30};
+// Items an Alchemiser mk. II alchs per Divine charge (1 divine charge = 3,000 machine charge).
+// Late-game rebalance, 2026-11-23: 120 charge per hour at 15 items/hour = 8 per item -> 375.
+// Was 150 charge at 25 items/hour = 6 per item -> 500. One Alchemiser per player now.
+const ALCHEMISER_ITEMS_PER_DIVINE_CHARGE = 375;
 
 function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, description}) {
   const [sort, setSort] = useState({key:'alchProfit', dir:-1});
@@ -11130,7 +11153,7 @@ const natureRunePrice = useMemo(() => {
     return liveBuyOf(dc) || 0;
   }, [items]);
 
-  const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
+  const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / ALCHEMISER_ITEMS_PER_DIVINE_CHARGE) : 0;
 
   const alchItems = useMemo(() => {
     return items
@@ -11180,7 +11203,9 @@ const natureRunePrice = useMemo(() => {
     h('div', {style:{padding:'8px 12px', fontSize:11, color:T.textDim, borderBottom:`1px solid ${T.border}`, display:'flex', gap:16}},
       h('span', null, `${alchItems.length} item${alchItems.length!==1?'s':''} worth alching`),
       natureRunePrice ? h('span', null, `Nature rune: ${fmt.gp(natureRunePrice)}gp`) : null,
-      divineChargePrice ? h('span', null, `Divine charge: ${fmt.gp(divineChargePrice)}gp (${fmt.gp(chargePerItem)}gp/item)`) : null
+      divineChargePrice ? h('span', null, `Divine charge: ${fmt.gp(divineChargePrice)}gp (${fmt.gp(chargePerItem)}gp/item)`) : null,
+      h('span', {title:'Since the 23 Nov 2026 rebalance: one Alchemiser per player; mk. II alchs 15 items an hour (360 a day), holds 3,000, and a Divine charge covers 375 alchs.'},
+        'Alchemiser mk. II: 1 per player, 15 alchs/hour (360/day)')
     ),
     h('div', {className:'ge-table-wrap', style:{position:'relative'}, ref:cols.tableWrapRef},
     cols.handles(),
@@ -12370,6 +12395,8 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   const openKey = openPos.map(p => p.id + ':' + (p.date_opened || p.created_at)).join('|');
   const [sinceBought, setSinceBought] = useState({});
   const [expandedItems, setExpandedItems] = useState(() => new Set());
+  // Column sort for open positions (Ben, 2026-11-22). {key, dir}; saved per install.
+  const [posSort, setPosSort] = useState(() => { try { return JSON.parse(localStorage.getItem('genius_pos_sort')) || {key:'added', dir:1}; } catch { return {key:'added', dir:1}; } });
   const [dailyById, setDailyById] = useState({});
   useEffect(() => {
     let stale = false;
@@ -12435,8 +12462,31 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
 
   // Same-item positions group under one row with a chevron (Ben, 2026-11-04). The
   // risk badge sits on the combined stack, since they'd all sell into one market.
-  const posGroups = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
+  const posGroupsAdded = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
   const heldSinceOf = p => dayStartMs(p.date_opened || p.created_at) || null;
+  // Sort keys work on the whole same-item group (its totals), so a stack sorts as one row.
+  const sum = (list, f) => list.reduce((s, p) => s + (f(p) || 0), 0);
+  const POS_SORT = {
+    name:  l => (l[0].item_name || '').toLowerCase(),
+    qty:   l => sum(l, p => p.quantity),
+    cost:  l => sum(l, p => p.costValue),
+    value: l => sum(l, p => p.currentValue),
+    net:   l => sum(l, p => p.netPL),
+    pct:   l => { const c = sum(l, p => p.costValue); return c > 0 ? sum(l, p => p.netPL) / c : 0; },
+    held:  l => -Math.min(...l.map(p => heldSinceOf(p) || Date.now())),
+  };
+  const posGroups = posSort.key === 'added' || !POS_SORT[posSort.key] ? posGroupsAdded
+    : posGroupsAdded.map((l, i) => [l, POS_SORT[posSort.key](l), i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2]) * posSort.dir).map(x => x[0]);
+  // Text columns start A-Z; number columns start biggest first. Third tap goes back to the order you added them.
+  const chooseSort = key => setPosSort(s => {
+    const first = key === 'name' ? 1 : -1;
+    const n = s.key !== key ? {key, dir:first} : s.dir === first ? {key, dir:-first} : {key:'added', dir:1};
+    try { localStorage.setItem('genius_pos_sort', JSON.stringify(n)); } catch {}
+    return n;
+  });
+  const sortTh = (key, label, title) =>
+    h('th', {title: (title ? title + '\n\n' : '') + 'Click to sort', onClick:() => chooseSort(key), style:{cursor:'pointer', userSelect:'none'}},
+      label, posSort.key === key ? (posSort.dir > 0 ? ' ↑' : ' ↓') : '');
   const heldText = ts => {
     if (!ts || !isFinite(ts)) return '—';
     const days = Math.floor((Date.now() - ts) / 86400000);
@@ -12846,12 +12896,12 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         )
       : h('table',{className:'ge-table pt-portfolio'},
           h('thead',null, h('tr',null,
-            h('th',null,'Item'), h('th',{title:'Quantity, and what you paid per item'},'Qty @ cost'),
-            h('th',{title:(priceMode === 'live' ? 'Live sell' : 'GE (listed)') + ' price per item, and the whole position\'s value'}, priceMode === 'live' ? 'Price / value (Live)' : 'Price / value (GE)'),
-            h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'},'Net P&L'),
+            sortTh('name','Item'), sortTh('qty','Qty @ cost','Quantity, and what you paid per item'),
+            sortTh('value', priceMode === 'live' ? 'Price / value (Live)' : 'Price / value (GE)', (priceMode === 'live' ? 'Live sell' : 'GE (listed)') + ' price per item, and the whole position\'s value'),
+            sortTh('net','Net P&L','Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'),
             h('th',{title:'The sell price that breaks even after GE tax, how far away it is, and when the item last traded that high'},'Break-even'),
             h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
-            h('th',{title:'How long you\'ve held it, and your target price'},'Held / target'), h('th',null,'')
+            sortTh('held','Held / target','How long you\'ve held it, and your target price'), h('th',null,'')
           )),
           h('tbody',null, posGroups.flatMap(list => {
             if (list.length === 1) return [positionRow(list[0], false)];
@@ -14511,6 +14561,7 @@ const MONEY_MAKER_SKILLS = [
   {key:'construction', label:'Construction'},
   {key:'crafting',     label:'Crafting'},
   {key:'divination',   label:'Divination'},
+  {key:'farming',      label:'Farming'},
   {key:'fletching',    label:'Fletching'},
   {key:'herblore',     label:'Herblore'},
   {key:'magic',        label:'Magic'},
@@ -14835,13 +14886,16 @@ function computeConversionStats(inputs, output, items) {
 // (matches the wiki module's own approach for combining these) rather than
 // compounding multiplicatively — the difference is negligible at these
 // magnitudes and additive is what the source data itself implies.
+// Portable well / fletcher / crafter and their Brooch of the Gods bonuses were removed
+// with the portables on 2026-11-23 (MTX removal), so their toggles are gone here too.
 const HERBLORE_BUFFS = {
-  portableWell:    {label:"Portable well",            pct:5,    kind:'dupe'},
-  brooch:          {label:"Brooch of the Gods",        pct:5,    kind:'dupe', requires:'portableWell'},
   modifiedMask:    {label:"Modified botanist's mask",  pct:5,    kind:'dupe'},
   botanistsAmulet: {label:"Botanist's amulet",         pct:5,    kind:'dose'},
   factoryOutfit:   {label:"Factory outfit",            pct:12.5, kind:'dose'},
   scrollCleansing: {label:"Scroll of cleansing",       pct:10,   kind:'cost'},
+  // Brooch of the Gods rework (2026-11-23 patch notes): +5% chance to trigger
+  // Dungeoneering scrolls, so Scroll of cleansing goes 10% -> 15%.
+  broochScrolls:   {label:"Brooch of the Gods",        pct:5,    kind:'cost', requires:'scrollCleansing'},
 };
 
 function computePotionStats(r, items, buffs) {
@@ -14851,7 +14905,7 @@ function computePotionStats(r, items, buffs) {
   const doseUpgradeChance = Object.entries(HERBLORE_BUFFS)
     .filter(([k,b]) => b.kind==='dose' && buffs[k])
     .reduce((s,[,b]) => s + b.pct/100, 0);
-  const secondarySavePct = buffs.scrollCleansing ? HERBLORE_BUFFS.scrollCleansing.pct : 0;
+  const secondarySavePct = buffs.scrollCleansing ? HERBLORE_BUFFS.scrollCleansing.pct + (buffs.broochScrolls ? HERBLORE_BUFFS.broochScrolls.pct : 0) : 0;
 
   const isPremadePrimary = /\(\d\)$/.test(r.primary);
   const missing = [];
@@ -15022,10 +15076,8 @@ function MoneyMakerTable({rows, onSelect, itemsByName}) {
 function HerbloreBuffCheckboxes({buffs, setBuffs}) {
   const toggle = key => setBuffs(b => {
     const next = {...b, [key]: !b[key]};
-    // Brooch "needs portable" (per the wiki source data) — uncheck it if
-    // Portable well gets turned off so the state can't silently claim a
-    // bonus that isn't actually active in-game.
-    if (key === 'portableWell' && !next.portableWell) next.brooch = false;
+    // The Brooch only boosts the scroll, so it unchecks with it.
+    if (key === 'scrollCleansing' && !next.scrollCleansing) next.broochScrolls = false;
     return next;
   });
   return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
@@ -15039,7 +15091,7 @@ function HerbloreBuffCheckboxes({buffs, setBuffs}) {
   );
 }
 
-const HERBLORE_BUFF_DEFAULTS = {portableWell:false, brooch:false, modifiedMask:false, botanistsAmulet:false, factoryOutfit:false, scrollCleansing:false};
+const HERBLORE_BUFF_DEFAULTS = {modifiedMask:false, botanistsAmulet:false, factoryOutfit:false, scrollCleansing:false, broochScrolls:false};
 
 // Fletching buffs (Ben, 2026-08-11+2026-08-12) — all four manifest as a
 // bonus to OUTPUT quantity for the same purchased input (whether that's
@@ -15058,12 +15110,10 @@ const HERBLORE_BUFF_DEFAULTS = {portableWell:false, brooch:false, modifiedMask:f
 // 1.1111 x 1.0075 x 1.01) works out to +25.63% — within rounding of Ben's
 // real 25.97% example, not force-fit to match it exactly.
 const FLETCHING_BUFFS = {
-  portableFletcher: {label:"Portable fletcher",        pct:11.11},
-  brooch:            {label:"Brooch of the Gods",        pct:11.11, requires:'portableFletcher'},
   fletchingCape:     {label:"Fletching cape perk",       pct:0.75},
   workroomTier2:     {label:"Ranger's Workroom (tier 2)",pct:1},
 };
-const FLETCHING_BUFF_DEFAULTS = {portableFletcher:false, brooch:false, fletchingCape:false, workroomTier2:false};
+const FLETCHING_BUFF_DEFAULTS = {fletchingCape:false, workroomTier2:false};
 
 // Five Fletching moneymakers Ben confirmed are worth modeling (2026-08-12),
 // each sourced directly from its own wiki Creation table:
@@ -15170,12 +15220,20 @@ const CRAFTING_RECIPES = [
 // deliberately excluded — Ben called it negligible and not worth
 // modeling.
 const CRAFTING_BUFFS = {
-  portableCrafter:   {label:'Portable crafter',           pct:10, kind:'save', appliesTo:['clay','leather']},
-  brooch:            {label:'Brooch of the Gods',         pct:10, kind:'save', appliesTo:['clay','leather'], requires:'portableCrafter'},
   artisansBandana:   {label:"Modified artisan's bandana", pct:5,  kind:'save', appliesTo:['leather']},
   artificersMeasure: {label:"Artificer's measure",        pct:5,  kind:'dupe', appliesTo:['urn']},
+  // Scroll of dexterity (wiki, 2026-11-23): saves a material on items needing 3+ of it;
+  // the chance depends on the leather (DEXTERITY_BY_LEATHER). Brooch of the Gods
+  // (2026-11-23 rework) adds 5% to every Dungeoneering scroll's chance.
+  scrollDexterity:   {label:'Scroll of dexterity',        pct:10, pctLabel:'5-25% by leather', kind:'dexterity', appliesTo:['leather']},
+  broochDexterity:   {label:'Brooch of the Gods',         pct:5,  pctLabel:'+5%', kind:'dexterity', appliesTo:['leather'], requires:'scrollDexterity'},
 };
-const CRAFTING_BUFF_DEFAULTS = {portableCrafter:false, brooch:false, artisansBandana:false, artificersMeasure:false};
+const DEXTERITY_BY_LEATHER = {'Green dragon leather':25, 'Blue dragon leather':20, 'Red dragon leather':15, 'Black dragon leather':10, 'Royal dragon leather':5};
+function dexterityChance(buffs, leather) {
+  if (!buffs.scrollDexterity || DEXTERITY_BY_LEATHER[leather] == null) return 0;
+  return (DEXTERITY_BY_LEATHER[leather] + (buffs.broochDexterity ? 5 : 0)) / 100;
+}
+const CRAFTING_BUFF_DEFAULTS = {artisansBandana:false, artificersMeasure:false, scrollDexterity:false, broochDexterity:false};
 
 function craftingBuffChance(buffs, kind, material) {
   return Object.entries(CRAFTING_BUFFS)
@@ -15252,7 +15310,7 @@ const DRAGONHIDE_RECIPES = [
 ];
 
 function computeDragonhideStats(recipe, items, buffs) {
-  const saveChance = craftingBuffChance(buffs, 'save', 'leather');
+  const saveChance = craftingBuffChance(buffs, 'save', 'leather') + dexterityChance(buffs, recipe.leather);
   const leatherPrice = findItemBuyPrice(items, recipe.leather);
   const outPrice = findItemSellPrice(items, recipe.output);
   const missing = [];
@@ -15336,7 +15394,9 @@ function flattenSmithingMats(name, mult = 1, depth = 0) {
   return out;
 }
 // One row per product of `bar`, at live prices (buy materials, sell the product, 2% tax).
-function smithingProductRows(bar, items, priceMode = 'live') {
+// refundPct: Scroll of efficiency (2%, or 7% with the Brooch of the Gods since 2026-11-23):
+// each bar used has that chance of going back to the metal bank, so bars cost (1 - pct).
+function smithingProductRows(bar, items, priceMode = 'live', refundPct = 0) {
   const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
   const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
   const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
@@ -15349,7 +15409,7 @@ function smithingProductRows(bar, items, priceMode = 'live') {
     const missing = [];
     for (const [mat, q] of Object.entries(flat)) {
       const p = buyOf(mat);
-      if (p == null) missing.push(mat); else cost += p * q;
+      if (p == null) missing.push(mat); else cost += p * q * (/ bar$/i.test(mat) ? 1 - refundPct / 100 : 1);
     }
     const sell = sellOf(name);
     if (sell == null) missing.push(name);
@@ -15362,6 +15422,154 @@ function smithingProductRows(bar, items, priceMode = 'live') {
     return { name, qty, bars, cost, revenue, profit, perBar: profit != null ? profit / bars : null,
       volume: it ? (it.volume ?? null) : null, others: Object.keys(flat).filter(k => k !== bar), missing, liveOdd };
   }).filter(r => r.bars > 0);
+}
+
+// Farming (Ben, 2026-11-23): herbs, flowers and allotments from the wiki's own yield
+// calculator data. Research + sources: research/farming/reference.md (private repo).
+// BEGIN FARMING_DATA (generated by scripts/build-farming-data.js)
+const FARMING_DATA = [{"seed":"Potato seed","crop":"Raw potato","level":1,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[101,180],"fixed":null,"pay":["Compost",2],"extra":null,"mins":40,"ptype":"allotment"},{"seed":"Marigold seed","crop":"Marigolds","level":2,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":null,"mins":20,"ptype":"farmer_flower"},{"seed":"Onion seed","crop":"Onion","level":5,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[105,180],"fixed":null,"pay":["Potatoes (10)",1],"extra":null,"mins":40,"ptype":"allotment"},{"seed":"Cabbage seed","crop":"Cabbage","level":7,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[107,180],"fixed":null,"pay":["Onions (10)",1],"extra":null,"mins":40,"ptype":"allotment"},{"seed":"Guam seed","crop":"Grimy guam","level":9,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[25,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Rosemary seed","crop":"Rosemary","level":11,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":null,"mins":20,"ptype":"farmer_flower"},{"seed":"Tomato seed","crop":"Tomato","level":12,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[112,180],"fixed":null,"pay":["Cabbages (10)",2],"extra":null,"mins":40,"ptype":"allotment"},{"seed":"Marrentill seed","crop":"Grimy marrentill","level":14,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[28,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Tarromin seed","crop":"Grimy tarromin","level":19,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[31,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Sweetcorn seed","crop":"Sweetcorn","level":20,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[88,180],"fixed":null,"pay":["Jute fibre",10],"extra":null,"mins":60,"ptype":"allotment"},{"seed":"Nasturtium seed","crop":"Nasturtiums","level":24,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":null,"mins":20,"ptype":"farmer_flower"},{"seed":"Woad seed","crop":"Woad leaf","level":25,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":null,"mins":20,"ptype":"flower"},{"seed":"Limpwurt seed","crop":"Limpwurt root","level":26,"group":"flower","wild":true,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":null,"mins":20,"ptype":"limpwurt"},{"seed":"Harralander seed","crop":"Grimy harralander","level":26,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[36,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Gout tuber","crop":"Goutweed","level":29,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[39,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Strawberry seed","crop":"Strawberry","level":31,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[103,180],"fixed":null,"pay":["Apples (5)",1],"extra":null,"mins":60,"ptype":"allotment"},{"seed":"Ranarr seed","crop":"Grimy ranarr","level":32,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[39,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Snape grass seed","crop":"Snape grass","level":34,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[126,180],"fixed":null,"pay":["Dwellberries",15],"extra":null,"mins":200,"ptype":"allotment"},{"seed":"Spirit weed seed","crop":"Grimy spirit weed","level":36,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[43,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Toadflax seed","crop":"Grimy toadflax","level":38,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[43,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Irit seed","crop":"Grimy irit","level":44,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[46,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Wergali seed","crop":"Grimy wergali","level":46,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[48,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Watermelon seed","crop":"Watermelon","level":47,"group":"allotment","wild":false,"vine":false,"seeds":3,"lives":3,"lh":[126,180],"fixed":null,"pay":["Curry leaf",10],"extra":null,"mins":80,"ptype":"allotment"},{"seed":"Avantoe seed","crop":"Grimy avantoe","level":50,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[50,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"White lily seed","crop":"Ashes","level":52,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":1,"pay":null,"extra":null,"mins":160,"ptype":"flower"},{"seed":"Red blossom seed","crop":"Red vine blossom","level":54,"group":"flower","wild":false,"vine":true,"seeds":1,"lives":null,"lh":null,"fixed":1,"pay":null,"extra":null,"mins":20,"ptype":"vine_flower"},{"seed":"Green blossom seed","crop":"Green vine blossom","level":54,"group":"flower","wild":false,"vine":true,"seeds":1,"lives":null,"lh":null,"fixed":1,"pay":null,"extra":null,"mins":20,"ptype":"vine_flower"},{"seed":"Blue blossom seed","crop":"Blue vine blossom","level":54,"group":"flower","wild":false,"vine":true,"seeds":1,"lives":null,"lh":null,"fixed":1,"pay":null,"extra":null,"mins":20,"ptype":"vine_flower"},{"seed":"Kwuarm seed","crop":"Grimy kwuarm","level":56,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[54,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Bloodweed seed","crop":"Grimy bloodweed","level":57,"group":"herb","wild":true,"vine":false,"seeds":1,"lives":3,"lh":[57,88],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Erzille seed","crop":"Grimy erzille","level":58,"group":"herb","wild":false,"vine":true,"seeds":1,"lives":3,"lh":[52,80],"fixed":null,"pay":["Green vine blossom",3],"extra":null,"mins":80,"ptype":"vine_herb"},{"seed":"Snapdragon seed","crop":"Grimy snapdragon","level":62,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[57,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Argway seed","crop":"Grimy argway","level":65,"group":"herb","wild":false,"vine":true,"seeds":1,"lives":3,"lh":[58,80],"fixed":null,"pay":["Red vine blossom",4],"extra":null,"mins":80,"ptype":"vine_herb"},{"seed":"Cadantine seed","crop":"Grimy cadantine","level":67,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[60,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Ugune seed","crop":"Grimy ugune","level":70,"group":"herb","wild":false,"vine":true,"seeds":1,"lives":3,"lh":[56,80],"fixed":null,"pay":["Blue vine blossom",3],"extra":null,"mins":80,"ptype":"vine_herb"},{"seed":"Lantadyme seed","crop":"Grimy lantadyme","level":73,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[64,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Shengo seed","crop":"Grimy shengo","level":76,"group":"herb","wild":false,"vine":true,"seeds":1,"lives":3,"lh":[59,80],"fixed":null,"pay":["Lergberries",5],"extra":null,"mins":80,"ptype":"vine_herb"},{"seed":"Arbuck seed","crop":"Grimy arbuck","level":77,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[60,88],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Dwarf weed seed","crop":"Grimy dwarf weed","level":79,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[67,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Samaden seed","crop":"Grimy samaden","level":80,"group":"herb","wild":false,"vine":true,"seeds":1,"lives":3,"lh":[62,80],"fixed":null,"pay":["Kalferberries",5],"extra":null,"mins":80,"ptype":"vine_herb"},{"seed":"Torstol seed","crop":"Grimy torstol","level":85,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[71,80],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Butterfly flower seed","crop":"Ruby harvest jar","level":88,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":null,"mins":20,"ptype":"flower"},{"seed":"Fellstalk seed","crop":"Grimy fellstalk","level":91,"group":"herb","wild":false,"vine":false,"seeds":1,"lives":3,"lh":[15,90],"fixed":null,"pay":null,"extra":null,"mins":80,"ptype":"herb"},{"seed":"Starbloom flower seed","crop":"Starbloom flower","level":100,"group":"flower","wild":false,"vine":false,"seeds":1,"lives":null,"lh":null,"fixed":3,"pay":null,"extra":[["Battlestaff",1]],"mins":20,"ptype":"farmer_flower"}];
+// END FARMING_DATA
+// Harvest lives on a herb patch by seeds planted (Plant Power) and compost tier
+// (0 none, 1 compost, 2 super, 3 ultra): wiki Herb patch table.
+const PLANT_POWER_LIVES = {1:3, 2:5, 4:8, 7:12, 10:15};
+// Tool boosts to the crop's low/high success values (wiki Module:SkillUtils/HarvestBuffs):
+// only the listed combinations exist; the amulet of nature only helps allotments.
+const FARM_TOOLS = [
+  {key:'none', label:'None', mod:0}, {key:'sec', label:'Magic secateurs', mod:0.10},
+  {key:'ring', label:'Ring of whispers', mod:0.03}, {key:'secring', label:'Secateurs + ring', mod:0.13},
+  {key:'all', label:'Secateurs + ring + amulet of nature', mod:0.18, allotmentMod:0.18, otherMod:0.13},
+];
+const COMPOST_ITEMS = ['', 'Compost', 'Supercompost', 'Ultracompost'];
+// Chance a crop gets diseased (wiki: supercompost 14%, ultracompost 7%); the wiki gives no
+// figure for plain compost or none.
+const DISEASE_BY_COMPOST = [null, null, 0.14, 0.07];
+function farmChance(low, high, level, mod) {
+  const L = Math.min(level, 99), lo = Math.floor(low * (1 + mod)), hi = Math.floor(high * (1 + mod));
+  return (Math.floor(lo * (99 - L) / 98) + Math.floor(hi * (L - 1) / 98) + 1) / 256;
+}
+// Expected harvest from a lives-based crop (wiki Module:Farming harvest chart): each harvest
+// keeps its life with chance c; a farmer outfit gives an extra save on every loss but the last.
+function farmLivesYield(low, high, level, lives, mod, outfitSave) {
+  const c = farmChance(low, high, level, mod);
+  if (c >= 1) return lives;
+  return (lives - 1) / ((1 - c) * (1 - outfitSave)) + 1 / (1 - c);
+}
+function farmingRows(items, o) {
+  const buy = n => findItemBuyPrice(items, n), sell = n => findItemSellPrice(items, n);
+  const tool = FARM_TOOLS.find(t => t.key === o.tool) || FARM_TOOLS[0];
+  const compostP = o.compost ? buy(COMPOST_ITEMS[o.compost]) : 0;
+  const disease = DISEASE_BY_COMPOST[o.compost];
+  return FARMING_DATA.filter(s => s.group === o.group).map(s => {
+    const missing = [];
+    const seedP = buy(s.seed), cropP = sell(s.crop);
+    if (seedP == null) missing.push(s.seed);
+    if (cropP == null) missing.push(s.crop);
+    const nSeeds = s.group === 'herb' ? o.plantPower : s.seeds;
+    // Base expected crop.
+    let yld;
+    if (s.lives != null) {
+      const lives = (s.group === 'herb' ? PLANT_POWER_LIVES[o.plantPower] : s.lives) + o.compost;
+      const mod = tool.key === 'all' ? (s.group === 'allotment' ? tool.allotmentMod : tool.otherMod) : tool.mod;
+      yld = s.lh ? farmLivesYield(s.lh[0], s.lh[1], o.level, lives, mod, o.outfit) : lives;
+    } else yld = s.fixed || 1;
+    // Harvest buffs that multiply the crop (category A, added together).
+    let a = 0;
+    if (o.juju && s.group === 'herb') a += 1/3;
+    if (o.bh2 && (s.group === 'herb' || s.group === 'allotment')) a += 0.07;
+    if (o.boon) a += 0.02;
+    if (o.dwarven) a += 1;
+    if (s.ptype === 'farmer_flower') a += o.flowerHarvester;
+    if (o.practiced && s.ptype === 'limpwurt') a += 1;
+    yld *= 1 + a;
+    if (o.zolarea && s.seed === 'Starbloom flower seed') yld *= 1.25;
+    // Costs for one planting (flowers don't take compost here: their yield is fixed).
+    const usesCompost = s.group !== 'flower' && o.compost > 0;
+    let cost = (seedP || 0) * nSeeds + (usesCompost ? (compostP || 0) : 0);
+    for (const [n, q] of s.extra || []) { const p = buy(n); if (p == null) missing.push(n); else cost += p * q; }
+    // Scroll of life: chance of a seed back (not flowers); Brooch of the Gods adds 5%.
+    if (o.scrollLife && s.group !== 'flower') cost -= (seedP || 0) * (o.brooch ? 0.15 : 0.10);
+    let protect = 0;
+    if (o.disease === 'protect' && s.pay) {
+      const p = buy(s.pay[0]);
+      if (p == null) missing.push(s.pay[0]); else protect = p * s.pay[1];
+    }
+    const revenue = cropP != null ? applyTax(cropP) * yld : null;
+    // At risk: a diseased crop that dies is lost (seeds, compost and all).
+    const risk = o.disease === 'risk' && s.group !== 'flower' ? disease : 0;
+    const expRevenue = revenue != null && risk != null ? revenue * (1 - risk) : revenue;
+    const profit = !missing.length && expRevenue != null ? expRevenue - cost - protect : null;
+    const it = itemByName(items, s.crop);
+    return { ...s, nSeeds, yld, seedP, cropP, cost, protect, revenue: expRevenue, profit, risk,
+      volume: it ? (it.volume ?? null) : null, missing };
+  });
+}
+
+function FarmingCalc({items, onSelect}) {
+  const load = () => { try { return JSON.parse(localStorage.getItem('genius_farming_setup')) || {}; } catch { return {}; } };
+  const [o, setO] = useState(() => ({group:'herb', level:99, plantPower:1, compost:3, tool:'secring', outfit:0,
+    juju:false, bh2:false, boon:false, dwarven:false, flowerHarvester:0, zolarea:false, scrollLife:false, brooch:false,
+    disease:'risk', ...load()}));
+  const set = (k, v) => setO(s => { const n = {...s, [k]: v}; if (k === 'scrollLife' && !v) n.brooch = false; try { localStorage.setItem('genius_farming_setup', JSON.stringify(n)); } catch {} return n; });
+  const [sort, setSort] = useState({key:'profit', dir:-1});
+  const rows = useMemo(() => farmingRows(items, o).sort((a, b) => ((a[sort.key] ?? -Infinity) > (b[sort.key] ?? -Infinity) ? 1 : (a[sort.key] ?? -Infinity) < (b[sort.key] ?? -Infinity) ? -1 : 0) * sort.dir), [items, o, sort]);
+  const priced = rows.filter(r => r.profit != null), unpriced = rows.length - priced.length;
+  const pill = (on, label, fn) => h('button', {onClick:fn, style:{padding:'3px 10px', fontSize:10, cursor:'pointer', borderRadius:3,
+    background: on ? 'rgba(201,168,76,0.2)' : 'transparent', border:`1px solid ${on ? T.gold : T.border}`, color: on ? T.goldBright : T.textDim}}, label);
+  const check = (k, label, extra, title) => h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer'}, title},
+    h('input', {type:'checkbox', checked:!!o[k], onChange:()=>set(k, !o[k])}), h('span', {style:{color:T.textDim}}, label, extra ? h('span', {style:{color:T.gold}}, ' ' + extra) : null));
+  const select = (k, opts, label) => h('label', {style:{display:'flex', alignItems:'center', gap:5, color:T.textDim}}, label,
+    h('select', {className:'ge-input', value:o[k], onChange:e => set(k, isNaN(+e.target.value) || e.target.value === '' ? e.target.value : +e.target.value), style:{fontSize:11, padding:'2px 6px'}},
+      opts.map(([v, t]) => h('option', {key:v, value:v}, t))));
+  const th = (key, label, title) => h('th', {onClick:()=>setSort(s => ({key, dir: s.key===key ? -s.dir : (key==='seed' ? 1 : -1)})), style:{cursor:'pointer'}, title}, label + (sort.key===key ? (sort.dir>0?' ▲':' ▼') : ''));
+  const gp = v => (v>=0?'+':'') + fmt.gp(Math.round(v)) + 'gp';
+  const g = o.group, disease = DISEASE_BY_COMPOST[o.compost];
+  return h('div', null,
+    h('div', {style:{display:'flex', gap:4, flexWrap:'wrap', marginBottom:10}},
+      pill(g==='herb', 'Herbs', ()=>set('group','herb')), pill(g==='flower', 'Flowers', ()=>set('group','flower')), pill(g==='allotment', 'Allotments', ()=>set('group','allotment'))),
+    h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
+      'Profit for one planting: seeds, compost and anything else it uses at the live buy price, the expected crop at the live sell price after 2% tax. Expected crop uses the RuneScape Wiki\'s own yield formula. ',
+      g === 'herb' ? 'At level 99 almost every herb averages the same number per patch, so it comes down to seed price vs herb price. ' : '',
+      o.disease === 'risk' ? (g === 'flower' ? '' : disease != null ? `At risk: ${Math.round(disease*100)}% of crops die to disease with this compost (wiki), so the expected crop is cut by that much. ` : 'At risk: the wiki gives no disease chance for this compost, so it isn\'t counted. ')
+        : g === 'allotment' ? 'Protected: the gardener\'s payment is added to the cost. ' : g === 'herb' ? 'Protected: herbs are protected by things you own (Pharm Ecology relic, herb protector, Trollheim or Wilderness patch), so nothing extra is charged. ' : ''),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:12, marginBottom:8, fontSize:11, alignItems:'center'}},
+      select('level', [[99,'99+'],[90,'90'],[80,'80'],[70,'70'],[60,'60'],[50,'50']], 'Farming'),
+      g === 'herb' && select('plantPower', [[1,'1 (none)'],[2,'2 (tier 1)'],[4,'4 (tier 2)'],[7,'7 (tier 3)'],[10,'10 (tier 4)']], 'Seeds per patch (Plant Power)'),
+      g !== 'flower' && select('compost', [[0,'None'],[1,'Compost'],[2,'Supercompost'],[3,'Ultracompost']], 'Compost'),
+      g !== 'flower' && select('tool', FARM_TOOLS.map(t => [t.key, t.label]), 'Tools'),
+      g !== 'flower' && select('outfit', [[0,'None'],[0.05,'Crop farmer'],[0.10,'Master farmer']], 'Outfit'),
+      g !== 'flower' && select('disease', [['risk','At risk'],['protect','Protected']], 'Disease'),
+      g === 'flower' && select('flowerHarvester', [[0,'None'],[1,'Competent (35)'],[2,'Expert (55)'],[3,'Master (65)']], 'Flower harvester')),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:10, fontSize:11}},
+      g === 'herb' && check('juju', 'Juju farming potion', '(+33%)'),
+      g !== 'flower' && check('bh2', 'Bountiful Harvest 2', '(+7%)'),
+      check('boon', 'Boon of Crondis', '(+2%)'),
+      check('dwarven', 'Dwarven harvester', '(+100%)'),
+      g === 'flower' && check('zolarea', 'Zolarea patch (starbloom)', '(+25%)'),
+      g === 'flower' && check('practiced', 'Practiced Farmer rank (limpwurt)', '(+100%)'),
+      g !== 'flower' && check('scrollLife', 'Scroll of life', '(10% seed back)'),
+      g !== 'flower' && h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor: o.scrollLife ? 'pointer' : 'not-allowed', opacity: o.scrollLife ? 1 : 0.4}, title:'+5% on the Scroll of life (Brooch of the Gods, 23 Nov 2026 rework)'},
+        h('input', {type:'checkbox', checked:!!o.brooch, disabled:!o.scrollLife, onChange:()=>set('brooch', !o.brooch)}),
+        h('span', {style:{color:T.textDim}}, 'Brooch of the Gods', h('span', {style:{color:T.gold}}, ' (+5%)')))),
+    priced.length === 0 ? h('div', {className:'empty'}, h('p', null, 'Nothing priced here yet.')) :
+    h('div', {className:'ge-table-wrap'},
+      h('table', {className:'ge-table pt-farm'},
+        h('thead', null, h('tr', null,
+          th('seed', 'Seed'), th('level', 'Lvl'), th('cost', 'Cost', 'Seeds, compost and other inputs at the live buy price, less any Scroll of life refund'),
+          th('protect', 'Protection', 'Gardener payment at the live buy price (Protected mode)'),
+          th('yld', 'Expected crop'), th('revenue', 'Sells for', 'Expected crop at the live sell price after 2% tax (less disease losses in At risk mode)'),
+          th('profit', 'Profit / patch'), th('volume', 'Crop traded/day'))),
+        h('tbody', null, priced.map(r => h('tr', {key:r.seed},
+          h('td', null,
+            h('span', {className:'clickable', style:{cursor:'pointer'}, onClick:()=>onSelect && onSelect(r.crop)}, r.seed),
+            h('div', {style:{fontSize:10, color:T.textDim}}, `${r.nSeeds} × ${fmt.gp(Math.round(r.seedP || 0))}gp → ${r.crop}${r.extra ? ' · + ' + r.extra.map(([n, q]) => q + ' ' + n).join(', ') : ''}${r.wild ? ' · Wilderness' : ''}`)),
+          h('td', null, r.level),
+          h('td', {style:{color:'#e08030'}}, fmt.gp(Math.round(r.cost)) + 'gp'),
+          h('td', {style:{color:T.textDim}}, r.protect ? fmt.gp(Math.round(r.protect)) + 'gp' : '—'),
+          h('td', null, (Math.round(r.yld * 10) / 10) + ' × ' + fmt.gp(Math.round(r.cropP)) + 'gp'),
+          h('td', {style:{color:T.green}}, fmt.gp(Math.round(r.revenue)) + 'gp'),
+          h('td', {style:{color: r.profit>0 ? T.gold : T.red, fontWeight:'bold'}}, gp(r.profit)),
+          h('td', {style:{color:T.textDim}}, r.volume != null ? r.volume.toLocaleString() : '—')))))),
+    unpriced ? h('div', {style:{fontSize:10, color:T.textDim, marginTop:8}}, `${unpriced} more seeds have no live price for the seed, the crop or something they use, and aren't shown.`) : null);
 }
 
 // Artefacts and collections (Ben, 2026-11-09), from the wiki.
@@ -15377,15 +15585,20 @@ function ArchaeologyCalc({items}) {
   const [priceMode, setPriceMode] = useState('live');
   const [level, setLevel] = useState('');
   const [sort, setSort] = useState({key:'profit', dir:-1});
+  // Scroll of restoration: 2% chance to save the archaeological materials (7% with the
+  // Brooch of the Gods since the 2026-11-23 rework), so materials cost (1 - pct).
+  const [restScroll, setRestScroll] = useState(false);
+  const [restBrooch, setRestBrooch] = useState(false);
+  const saveMat = restScroll ? (restBrooch ? 0.07 : 0.02) : 0;
   const data = useMemo(() => {
     const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
     const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
     const chronote = priceMode === 'ge' ? guideOf('Chronotes') : findItemSellPrice(items, 'Chronotes');
     // A material with no GE price counts as 0 and is named on the row, so nothing gets hidden.
     const unpriced = {};
-    const costOf = a => { let c = 0; for (const [m, q] of a.m) { const p = buyOf(m); if (p == null) unpriced[m] = true; else c += p * q; } return c; };
+    const costOf = a => { let c = 0; for (const [m, q] of a.m) { const p = buyOf(m); if (p == null) unpriced[m] = true; else c += p * q * (1 - saveMat); } return c; };
     const noPrice = a => a.m.map(x => x[0]).filter(m => unpriced[m]);
-    const matsOf = a => { const local = (ARCHAEOLOGY_DATA.hotspots || {})[a.h] || []; return a.m.map(([name, qty]) => { const price = buyOf(name); return { name, qty, price, total: price == null ? null : price * qty, local: local.includes(name) }; }); };
+    const matsOf = a => { const local = (ARCHAEOLOGY_DATA.hotspots || {})[a.h] || []; return a.m.map(([name, qty]) => { const price = buyOf(name); return { name, qty, price, total: price == null ? null : price * qty * (1 - saveMat), local: local.includes(name) }; }); };
     const value = n => chronote == null ? null : applyTax(chronote) * n;
     // Disassembly (Ben, 2026-11-09), using the wiki's Restoration profit module: ancient
     // components are valued by making material crates and selling them (crate price after
@@ -15417,6 +15630,8 @@ function ArchaeologyCalc({items}) {
     // components already taken off.
     const byLower = {};
     for (const it of items) byLower[it.name.toLowerCase()] = it;
+    const divine = buyOf('Divine charge');
+    const autoDaCharge = divine == null ? null : divine / 3000 * 230 / 60;
     const materials = Object.entries(ARCHAEOLOGY_DATA.materials || {}).map(([name, m]) => {
       const total = m.c.reduce((s, x) => s + x[2], 0);
       let value = 0;
@@ -15426,9 +15641,13 @@ function ArchaeologyCalc({items}) {
       }
       const sell = sellOf(name), buy = buyOf(name);
       const net = sell == null ? null : applyTax(sell);
+      const profit = value == null || buy == null ? null : value - buy;
       return { name, level: m.lvl, value, sell: net, buy,
         keepProfit: value == null || net == null ? null : value - net,
-        profit: value == null || buy == null ? null : value - buy,
+        profit,
+        // Same, run through an Auto disassembler mk. II (Ben, 2026-11-23): 230 machine
+        // charge for 60 items an hour = 3.83 charge per item; 1 divine charge = 3,000.
+        machineProfit: profit == null || autoDaCharge == null ? null : profit - autoDaCharge,
         volume: byLower[name.toLowerCase()]?.volume ?? null,
         parts: m.c.map(([k, n, ch]) => `${Math.round((m.always && total ? ch / total : ch) * 100)}% ${k}`).join(', '),
         // Everything it disassembles into, for the chevron (Ben, 2026-11-10).
@@ -15454,7 +15673,7 @@ function ArchaeologyCalc({items}) {
       collections.push({ name:c.n, by:c.by, level, unpriced:[...missingMats], parts, bonus:c.b, listed, pieces:c.a.length, list:c.a.join(', '), reward:c.r, cost, chronotes:chrono, profit: value(chrono) - cost });
     }
     return { artefacts, collections, materials, crateParts, skipped, chronote };
-  }, [items, priceMode]);
+  }, [items, priceMode, saveMat]);
   const lv = parseInt(level, 10);
   const src = view === 'collections' ? data.collections : view === 'materials' ? data.materials : data.artefacts;
   const rows = src.filter(r => !lv || view === 'materials' || r.level <= lv).sort((a, b) => {
@@ -15484,7 +15703,14 @@ function ArchaeologyCalc({items}) {
       pill(priceMode==='ge', 'GE guide prices', ()=>setPriceMode('ge')),
       h('span', {style:{width:10}}),
       h('label', {style:{fontSize:11, color:T.textDim}}, 'My level ',
-        h('input', {className:'ge-input', type:'number', min:1, max:120, value:level, placeholder:'any', onChange:e=>setLevel(e.target.value), style:{width:60}}))),
+        h('input', {className:'ge-input', type:'number', min:1, max:120, value:level, placeholder:'any', onChange:e=>setLevel(e.target.value), style:{width:60}})),
+      h('span', {style:{width:10}}),
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11}, title:'2% chance to save the archaeological materials when restoring (other ingredients are still used)'},
+        h('input', {type:'checkbox', checked:restScroll, onChange:()=>{ setRestScroll(v=>!v); if (restScroll) setRestBrooch(false); }}),
+        h('span', {style:{color:T.textDim}}, 'Scroll of restoration', h('span', {style:{color:T.gold}}, ' (2%)'))),
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor: restScroll ? 'pointer' : 'not-allowed', opacity: restScroll ? 1 : 0.4, fontSize:11}, title:'+5% on the Scroll of restoration, so 7% (Brooch of the Gods, 23 Nov 2026 rework)'},
+        h('input', {type:'checkbox', checked:restBrooch, disabled:!restScroll, onChange:()=>setRestBrooch(v=>!v)}),
+        h('span', {style:{color:T.textDim}}, 'Brooch of the Gods', h('span', {style:{color:T.gold}}, ' (+5%)')))),
     h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
       (view === 'materials' ? '' : `Restoration materials are counted at the ${priceMode==='ge'?'GE guide':'live buy'} price, even ones you dug up yourself, since you could sell them instead. Chronotes are valued at ${data.chronote != null ? fmt.gp(Math.round(data.chronote))+'gp' : 'their price'} each, after 2% tax. `) +
       (view==='materials' ? `Disassembling single materials for ancient components, sold as material crates after tax. Crate costs are taken off: a small crate takes 25 padded parts and 1 protective component, a large one 100 and 2 (padded parts ${fmt.gp(Math.round(data.crateParts.padded))}gp each, protective components ${fmt.gp(Math.round(data.crateParts.protective))}gp each), and the better of the two is used. "vs selling" is for materials you already have; "Buy to disassemble" is buying them just for this. Daily trading is for the material; the crates are the real limit (large historic crates trade only a few hundred a day).` :
@@ -15493,7 +15719,9 @@ function ArchaeologyCalc({items}) {
       h('thead', null, h('tr', null, th('name','Material'), th('level','Item level', 'The material’s disassembly level on the wiki, not a requirement'),
         th('value','Components', 'Expected ancient components from one, sold as crates after tax, minus padded parts and protective components'),
         th('sell','Sells for', 'Live sell price after 2% tax'), th('keepProfit','vs selling', 'Disassembling one you already have, instead of selling it'),
-        th('buy','Buy price'), th('profit','Buy to disassemble', 'Buying one at the live price just to disassemble it'), th('volume','Traded/day'))),
+        th('buy','Buy price'), th('profit','Buy to disassemble', 'Buying one at the live price just to disassemble it'),
+        th('machineProfit','By auto disassembler', 'Buy to disassemble, run through an Auto disassembler mk. II: less its machine charge (230 charge per 60 items = 3.83 per item, at the live Divine charge price; 1 divine charge = 3,000 charge). The machine does 1,440 a day.'),
+        th('volume','Traded/day'))),
       h('tbody', null, rows.map(r => h(React.Fragment, {key:r.name}, h('tr', {onClick:()=>toggle('m:'+r.name), style:{cursor:'pointer'}},
         h('td', null, (open['m:'+r.name] ? '▾ ' : '▸ ') + r.name, h('div', {style:{fontSize:10, color:T.textDim}}, r.parts)),
         h('td', null, r.level), h('td', null, fmt.gp(Math.round(r.value))+'gp'),
@@ -15501,8 +15729,9 @@ function ArchaeologyCalc({items}) {
         h('td', {style: r.keepProfit == null ? {} : col(r.keepProfit)}, gp(r.keepProfit)),
         h('td', null, r.buy == null ? '—' : fmt.gp(Math.round(r.buy))+'gp'),
         h('td', {style: r.profit == null ? {} : col(r.profit)}, gp(r.profit)),
+        h('td', {style: r.machineProfit == null ? {} : col(r.machineProfit)}, gp(r.machineProfit)),
         h('td', {style:{color:T.textDim}}, r.volume != null ? r.volume.toLocaleString() : '—')),
-        open['m:'+r.name] && h('tr', null, h('td', {colSpan:8, style:{padding:'6px 10px 10px 22px', fontSize:11}},
+        open['m:'+r.name] && h('tr', null, h('td', {colSpan:9, style:{padding:'6px 10px 10px 22px', fontSize:11}},
           h('div', {style:{color:T.textDim, marginBottom:3}}, r.special.reduce((t, x) => t + x.chance, 0) > 0.99 ? 'Special: always one of these' : 'Special: a chance of one of these'),
           r.special.map(x => h('div', {key:x.name, style:{display:'flex', gap:10}},
             h('span', {style:{minWidth:200}}, `${x.qty} × ${x.name}`), h('span', {style:{minWidth:50}}, Math.round(x.chance*100)+'%'),
@@ -15542,7 +15771,10 @@ function SmithingFromScratch({items, onSelect}) {
   const [busyOnly, setBusyOnly] = useState(true);
   const [sort, setSort] = useState({key:'perBar', dir:-1});
   const [priceMode, setPriceMode] = useState('live');
-  const all = useMemo(() => smithingProductRows(bar, items, priceMode), [bar, items, priceMode]);
+  const [effScroll, setEffScroll] = useState(false);
+  const [effBrooch, setEffBrooch] = useState(false);
+  const refundPct = effScroll ? (effBrooch ? 7 : 2) : 0;
+  const all = useMemo(() => smithingProductRows(bar, items, priceMode, refundPct), [bar, items, priceMode, refundPct]);
   const rows = useMemo(() => {
     const r = all.filter(x => x.profit != null && (!busyOnly || (x.volume || 0) >= 100));
     return r.sort((a, b) => ((a[sort.key] ?? -Infinity) > (b[sort.key] ?? -Infinity) ? 1 : (a[sort.key] ?? -Infinity) < (b[sort.key] ?? -Infinity) ? -1 : 0) * sort.dir);
@@ -15570,6 +15802,13 @@ function SmithingFromScratch({items, onSelect}) {
     h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:10}},
       h('input', {type:'checkbox', checked:busyOnly, onChange:()=>setBusyOnly(v=>!v)}),
       h('span', {style:{color:T.textDim}}, `Only items trading 100+ a day${hidden ? ` (${hidden} hidden)` : ''}`)),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:10, fontSize:11}},
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer'}, title:'Each bar used has a 2% chance of going back to your metal bank'},
+        h('input', {type:'checkbox', checked:effScroll, onChange:()=>{ setEffScroll(v=>!v); if (effScroll) setEffBrooch(false); }}),
+        h('span', {style:{color:T.textDim}}, 'Scroll of efficiency', h('span', {style:{color:T.gold}}, ' (2%)'))),
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor: effScroll ? 'pointer' : 'not-allowed', opacity: effScroll ? 1 : 0.4}, title:'+5% on the Scroll of efficiency, so 7% per bar (Brooch of the Gods, 23 Nov 2026 rework)'},
+        h('input', {type:'checkbox', checked:effBrooch, disabled:!effScroll, onChange:()=>setEffBrooch(v=>!v)}),
+        h('span', {style:{color:T.textDim}}, 'Brooch of the Gods', h('span', {style:{color:T.gold}}, ' (+5%)')))),
     rows.length === 0 ? h('div', {className:'empty'}, h('p', null, 'No priced products for this bar yet.')) :
     h('div', {className:'ge-table-wrap'},
       h('table', {className:'ge-table pt-smith'},
@@ -15685,16 +15924,18 @@ function FletchingBuffCheckboxes({buffs, setBuffs}) {
 function CraftingBuffCheckboxes({buffs, setBuffs}) {
   const toggle = key => setBuffs(b => {
     const next = {...b, [key]: !b[key]};
-    if (key === 'portableCrafter' && !next.portableCrafter) next.brooch = false;
+    if (key === 'scrollDexterity' && !next.scrollDexterity) next.broochDexterity = false;
     return next;
   });
   return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
     Object.entries(CRAFTING_BUFFS).map(([key, b]) => h('label', {
       key, style:{display:'flex', alignItems:'center', gap:5, cursor: (b.requires && !buffs[b.requires]) ? 'not-allowed' : 'pointer', opacity: (b.requires && !buffs[b.requires]) ? 0.4 : 1},
-      title: `${b.pct}% chance ${b.kind==='dupe' ? 'to produce an extra urn' : 'to save a material'}${b.requires ? ' (needs '+CRAFTING_BUFFS[b.requires].label+')' : ''}`,
+      title: key === 'scrollDexterity' ? 'Chance to save a leather on dragonhide bodies and shields: green 25%, blue 20%, red 15%, black 10%, royal 5%'
+        : key === 'broochDexterity' ? '+5% on the Scroll of dexterity (Brooch of the Gods, 23 Nov 2026 rework)'
+        : `${b.pct}% chance ${b.kind==='dupe' ? 'to produce an extra urn' : 'to save a material'}${b.requires ? ' (needs '+CRAFTING_BUFFS[b.requires].label+')' : ''}`,
     },
       h('input', {type:'checkbox', checked:!!buffs[key], disabled: b.requires && !buffs[b.requires], onChange:()=>toggle(key)}),
-      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pct}%)`)),
+      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pctLabel || b.pct + '%'})`)),
     ))
   );
 }
@@ -15788,7 +16029,7 @@ function MoneyMakersTab({items, onSelect, description}) {
 
   // Ben (2026-08-12): he doesn't actually sell these — every Onyx/Ascendri
   // bolt he enchants goes straight into an Alchemiser (Invention device,
-  // Divine charge cost / 500 per item, same math the Alch tab already
+  // Divine charge cost / ALCHEMISER_ITEMS_PER_DIVINE_CHARGE per item, same math the Alch tab already
   // uses). Real revenue for him is high alch value, not GE sell price, so
   // this sits alongside the normal sell-based row rather than replacing
   // it — other players who DO sell the enchanted bolts still want that
@@ -15797,7 +16038,7 @@ function MoneyMakersTab({items, onSelect, description}) {
     const natureRunePrice = (items.find(it => it.natureRunePrice) || {}).natureRunePrice || 0;
     const divineChargeItem = items.find(it => it.name && it.name.toLowerCase() === 'divine charge');
     const divineChargePrice = liveBuyOf(divineChargeItem) || 0;
-    const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
+    const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / ALCHEMISER_ITEMS_PER_DIVINE_CHARGE) : 0;
     return ENCHANT_BOLT_RECIPES.map(r => {
       const inputCost = findItemBuyPrice(items, r.input);
       const outItem = items.find(it => it.name.toLowerCase() === r.name.toLowerCase());
@@ -15985,6 +16226,7 @@ function MoneyMakersTab({items, onSelect, description}) {
       ),
 
       skill === 'archaeology' && h(ArchaeologyCalc, {items}),
+      skill === 'farming' && h(FarmingCalc, {items, onSelect}),
 
       skill === 'smithing' && h('div', null,
         h('div', {style:{display:'flex', gap:4, marginBottom:12}},
@@ -17823,7 +18065,7 @@ function App() {
           tab==='news'    &&h(NewsTab,    {onOpen:url=>window.genius?.openExternal(url),description:TAB_DESCRIPTIONS.news,items:visibleItems,onSelect:handleSelect,toast,onNavigate:setTab}),
           tab==='monster_lookup'&&h(MonsterLookupTab,{description:TAB_DESCRIPTIONS.monster_lookup,monsterShorthands,items,onSelectItem:handleSelect}),
           tab==='alerts'  &&h(AlertsArea, {
-            items,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
+            items,removedItems,alerts,toast,description:TAB_DESCRIPTIONS.alerts,userShorthands,onSelect:handleSelect,
             onSave: upsertAlert,
             onDelete:id=>setAlerts(al=>al.filter(a=>a.id!==id)),
             reminders,
