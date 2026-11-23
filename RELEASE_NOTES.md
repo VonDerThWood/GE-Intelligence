@@ -17,7 +17,7 @@ GEnius now runs on Android, with the same features and data you've got on deskto
 - **Bring your desktop data along.** Settings → Import Backup lets you bring your positions, alerts, and watchlists over from a desktop backup. Just in case you don't want to scan a QR code. But beware: they will not sync like this.
 
 ### First start in about a minute (down from 45)
-New installs no longer have to download roughly 7,400 items of price history, albeit several at a time. Desktop and Android now grab the history in a single file, built from my personal history that has been building up for months, then catch everything up to today in the background. And that history? It's compressed now. The old 1.5GB collection takes up about 76MB. GEnius is helping you profit both in-game and storage capacity wise.
+New installs no longer have to download roughly 7,400 items of price history. Even though it was roughly 2.5 items/second, it still took a ridiculous amount of time. Desktop and Android now grab the history in a single file, built from my personal history that has been building up for months, then catch everything up to today in the background. And that history? It's compressed now. The old 1.5GB collection takes up about 76MB. GEnius is helping you profit both in-game and storage capacity wise.
 
 ### Late-Game Rebalance: GEnius caught up
 The Late-Game Rebalance changed a lot of item availability and production math. GEnius has been updated to match.
