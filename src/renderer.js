@@ -7064,8 +7064,8 @@ const APP_NEWS = [
       'Portfolio → Buy Planner helps you buy up an item across multiple 4-hour limits, including goals spread across several accounts. Keeping track of your true average cost across accounts is a major pain; this does it for you.',
       'Portfolio: added Break-even and Since bought columns, a High alch sell option, and multi-input Convert.',
       'Closed Positions are now grouped by item, so they\'re easier to follow when you\'ve bought, sold, and bought the same item again. Your money has a history, and now it\'s easier to read.',
-      'Items Jagex removes from the GE, including springs, Silverhawk feathers, and portables, stay on your Watchlist and in your Portfolio. They\'re labelled "Removed from GE" instead of disappearing like they owe you money.',
-      'Invention → Items now includes a Make it yourself calculator for Tight springs and Enchanted notepaper, priced using the cheapest live disassembly source.',
+      'Items Jagex removes from the GE, including Silverhawk feathers, portables and Slayer wildcards, stay on your Watchlist and in your Portfolio. They\'re labelled "Removed from GE" instead of disappearing like they owe you money.',
+      'Invention → Items now includes a Make it yourself calculator for Springs and Enchanted notepaper, priced using the cheapest live disassembly source.',
       'Opportunities → Track record grades every high-scoring item based on what its price actually did 1, 7, and 30 days later. A high score is a lead, not a prophecy.',
       'New SPIKE / SLUMP signals based on live prices. Brand-new items no longer get volume badges on day one: having a price and having meaningful trading volume are two different things.',
       'Food now shows heal amounts and cost per life point. The Market tab can hide items below a price you set. Less scrolling past pocket change.',
@@ -14864,13 +14864,16 @@ function computeConversionStats(inputs, output, items) {
 // (matches the wiki module's own approach for combining these) rather than
 // compounding multiplicatively — the difference is negligible at these
 // magnitudes and additive is what the source data itself implies.
+// Portable well / fletcher / crafter and their Brooch of the Gods bonuses were removed
+// with the portables on 2026-11-23 (MTX removal), so their toggles are gone here too.
 const HERBLORE_BUFFS = {
-  portableWell:    {label:"Portable well",            pct:5,    kind:'dupe'},
-  brooch:          {label:"Brooch of the Gods",        pct:5,    kind:'dupe', requires:'portableWell'},
   modifiedMask:    {label:"Modified botanist's mask",  pct:5,    kind:'dupe'},
   botanistsAmulet: {label:"Botanist's amulet",         pct:5,    kind:'dose'},
   factoryOutfit:   {label:"Factory outfit",            pct:12.5, kind:'dose'},
   scrollCleansing: {label:"Scroll of cleansing",       pct:10,   kind:'cost'},
+  // Brooch of the Gods rework (2026-11-23 patch notes): +5% chance to trigger
+  // Dungeoneering scrolls, so Scroll of cleansing goes 10% -> 15%.
+  broochScrolls:   {label:"Brooch of the Gods",        pct:5,    kind:'cost', requires:'scrollCleansing'},
 };
 
 function computePotionStats(r, items, buffs) {
@@ -14880,7 +14883,7 @@ function computePotionStats(r, items, buffs) {
   const doseUpgradeChance = Object.entries(HERBLORE_BUFFS)
     .filter(([k,b]) => b.kind==='dose' && buffs[k])
     .reduce((s,[,b]) => s + b.pct/100, 0);
-  const secondarySavePct = buffs.scrollCleansing ? HERBLORE_BUFFS.scrollCleansing.pct : 0;
+  const secondarySavePct = buffs.scrollCleansing ? HERBLORE_BUFFS.scrollCleansing.pct + (buffs.broochScrolls ? HERBLORE_BUFFS.broochScrolls.pct : 0) : 0;
 
   const isPremadePrimary = /\(\d\)$/.test(r.primary);
   const missing = [];
@@ -15051,10 +15054,8 @@ function MoneyMakerTable({rows, onSelect, itemsByName}) {
 function HerbloreBuffCheckboxes({buffs, setBuffs}) {
   const toggle = key => setBuffs(b => {
     const next = {...b, [key]: !b[key]};
-    // Brooch "needs portable" (per the wiki source data) — uncheck it if
-    // Portable well gets turned off so the state can't silently claim a
-    // bonus that isn't actually active in-game.
-    if (key === 'portableWell' && !next.portableWell) next.brooch = false;
+    // The Brooch only boosts the scroll, so it unchecks with it.
+    if (key === 'scrollCleansing' && !next.scrollCleansing) next.broochScrolls = false;
     return next;
   });
   return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
@@ -15068,7 +15069,7 @@ function HerbloreBuffCheckboxes({buffs, setBuffs}) {
   );
 }
 
-const HERBLORE_BUFF_DEFAULTS = {portableWell:false, brooch:false, modifiedMask:false, botanistsAmulet:false, factoryOutfit:false, scrollCleansing:false};
+const HERBLORE_BUFF_DEFAULTS = {modifiedMask:false, botanistsAmulet:false, factoryOutfit:false, scrollCleansing:false, broochScrolls:false};
 
 // Fletching buffs (Ben, 2026-08-11+2026-08-12) — all four manifest as a
 // bonus to OUTPUT quantity for the same purchased input (whether that's
@@ -15087,12 +15088,10 @@ const HERBLORE_BUFF_DEFAULTS = {portableWell:false, brooch:false, modifiedMask:f
 // 1.1111 x 1.0075 x 1.01) works out to +25.63% — within rounding of Ben's
 // real 25.97% example, not force-fit to match it exactly.
 const FLETCHING_BUFFS = {
-  portableFletcher: {label:"Portable fletcher",        pct:11.11},
-  brooch:            {label:"Brooch of the Gods",        pct:11.11, requires:'portableFletcher'},
   fletchingCape:     {label:"Fletching cape perk",       pct:0.75},
   workroomTier2:     {label:"Ranger's Workroom (tier 2)",pct:1},
 };
-const FLETCHING_BUFF_DEFAULTS = {portableFletcher:false, brooch:false, fletchingCape:false, workroomTier2:false};
+const FLETCHING_BUFF_DEFAULTS = {fletchingCape:false, workroomTier2:false};
 
 // Five Fletching moneymakers Ben confirmed are worth modeling (2026-08-12),
 // each sourced directly from its own wiki Creation table:
@@ -15199,12 +15198,10 @@ const CRAFTING_RECIPES = [
 // deliberately excluded — Ben called it negligible and not worth
 // modeling.
 const CRAFTING_BUFFS = {
-  portableCrafter:   {label:'Portable crafter',           pct:10, kind:'save', appliesTo:['clay','leather']},
-  brooch:            {label:'Brooch of the Gods',         pct:10, kind:'save', appliesTo:['clay','leather'], requires:'portableCrafter'},
   artisansBandana:   {label:"Modified artisan's bandana", pct:5,  kind:'save', appliesTo:['leather']},
   artificersMeasure: {label:"Artificer's measure",        pct:5,  kind:'dupe', appliesTo:['urn']},
 };
-const CRAFTING_BUFF_DEFAULTS = {portableCrafter:false, brooch:false, artisansBandana:false, artificersMeasure:false};
+const CRAFTING_BUFF_DEFAULTS = {artisansBandana:false, artificersMeasure:false};
 
 function craftingBuffChance(buffs, kind, material) {
   return Object.entries(CRAFTING_BUFFS)

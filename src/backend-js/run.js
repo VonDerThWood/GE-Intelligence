@@ -57,7 +57,16 @@ const GE_REMOVED_IDS = {
   35228: GE_MTX_REMOVAL, // Portable brazier
   50443: GE_MTX_REMOVAL, // Portable workbench
   30915: GE_MTX_REMOVAL, // Silverhawk feathers
+  // Found by the scheduled check (research/task_results/alchemiser-rebalance-numbers-nov-2026-2026-11-23.md):
+  // last live trades stop 11:05-11:32 UTC.
+  54792: GE_MTX_REMOVAL, // Slayer Wildcard
+  52861: GE_MTX_REMOVAL, // Oil of enchantment
+  54797: GE_MTX_REMOVAL, // Artisanal gears
+  54798: GE_MTX_REMOVAL, // Fletching cleaner (Inactive)
+  54801: GE_MTX_REMOVAL, // Crafting cleaner (Inactive)
 };
+// The 16 creature Slayer wildcards (Gemstone Dragon ... Abyssal Creature), ids 56786-56861 step 5.
+for (let id = 56786; id <= 56861; id += 5) GE_REMOVED_IDS[id] = GE_MTX_REMOVAL;
 const JUNK_PATTERNS =['%UPDATE_DETECTED%', '%JAGEX_TIMESTAMP%', '%'];
 const _DIGITS_RE = /^\d+$/;
 
