@@ -12370,6 +12370,8 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   const openKey = openPos.map(p => p.id + ':' + (p.date_opened || p.created_at)).join('|');
   const [sinceBought, setSinceBought] = useState({});
   const [expandedItems, setExpandedItems] = useState(() => new Set());
+  // Column sort for open positions (Ben, 2026-11-22). {key, dir}; saved per install.
+  const [posSort, setPosSort] = useState(() => { try { return JSON.parse(localStorage.getItem('genius_pos_sort')) || {key:'added', dir:1}; } catch { return {key:'added', dir:1}; } });
   const [dailyById, setDailyById] = useState({});
   useEffect(() => {
     let stale = false;
@@ -12435,8 +12437,31 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
 
   // Same-item positions group under one row with a chevron (Ben, 2026-11-04). The
   // risk badge sits on the combined stack, since they'd all sell into one market.
-  const posGroups = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
+  const posGroupsAdded = [...openPos.reduce((m, p) => { const k = (p.item_name || '').toLowerCase(); m.set(k, [...(m.get(k) || []), p]); return m; }, new Map()).values()];
   const heldSinceOf = p => dayStartMs(p.date_opened || p.created_at) || null;
+  // Sort keys work on the whole same-item group (its totals), so a stack sorts as one row.
+  const sum = (list, f) => list.reduce((s, p) => s + (f(p) || 0), 0);
+  const POS_SORT = {
+    name:  l => (l[0].item_name || '').toLowerCase(),
+    qty:   l => sum(l, p => p.quantity),
+    cost:  l => sum(l, p => p.costValue),
+    value: l => sum(l, p => p.currentValue),
+    net:   l => sum(l, p => p.netPL),
+    pct:   l => { const c = sum(l, p => p.costValue); return c > 0 ? sum(l, p => p.netPL) / c : 0; },
+    held:  l => -Math.min(...l.map(p => heldSinceOf(p) || Date.now())),
+  };
+  const posGroups = posSort.key === 'added' || !POS_SORT[posSort.key] ? posGroupsAdded
+    : posGroupsAdded.map((l, i) => [l, POS_SORT[posSort.key](l), i]).sort((a, b) => (a[1] < b[1] ? -1 : a[1] > b[1] ? 1 : a[2] - b[2]) * posSort.dir).map(x => x[0]);
+  // Text columns start A-Z; number columns start biggest first. Third tap goes back to the order you added them.
+  const chooseSort = key => setPosSort(s => {
+    const first = key === 'name' ? 1 : -1;
+    const n = s.key !== key ? {key, dir:first} : s.dir === first ? {key, dir:-first} : {key:'added', dir:1};
+    try { localStorage.setItem('genius_pos_sort', JSON.stringify(n)); } catch {}
+    return n;
+  });
+  const sortTh = (key, label, title) =>
+    h('th', {title: (title ? title + '\n\n' : '') + 'Click to sort', onClick:() => chooseSort(key), style:{cursor:'pointer', userSelect:'none'}},
+      label, posSort.key === key ? (posSort.dir > 0 ? ' ↑' : ' ↓') : '');
   const heldText = ts => {
     if (!ts || !isFinite(ts)) return '—';
     const days = Math.floor((Date.now() - ts) / 86400000);
@@ -12846,12 +12871,12 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
         )
       : h('table',{className:'ge-table pt-portfolio'},
           h('thead',null, h('tr',null,
-            h('th',null,'Item'), h('th',{title:'Quantity, and what you paid per item'},'Qty @ cost'),
-            h('th',{title:(priceMode === 'live' ? 'Live sell' : 'GE (listed)') + ' price per item, and the whole position\'s value'}, priceMode === 'live' ? 'Price / value (Live)' : 'Price / value (GE)'),
-            h('th',{title:'Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'},'Net P&L'),
+            sortTh('name','Item'), sortTh('qty','Qty @ cost','Quantity, and what you paid per item'),
+            sortTh('value', priceMode === 'live' ? 'Price / value (Live)' : 'Price / value (GE)', (priceMode === 'live' ? 'Live sell' : 'GE (listed)') + ' price per item, and the whole position\'s value'),
+            sortTh('net','Net P&L','Profit & Loss — what you\'d actually pocket if you sold at the current price right now, after the 2% GE tax — and the same as a % of what you paid.'),
             h('th',{title:'The sell price that breaks even after GE tax, how far away it is, and when the item last traded that high'},'Break-even'),
             h('th',{title:'Highest and lowest daily GE price since you bought, the best profit you could have taken (after tax), and the worst point'},'Since bought'),
-            h('th',{title:'How long you\'ve held it, and your target price'},'Held / target'), h('th',null,'')
+            sortTh('held','Held / target','How long you\'ve held it, and your target price'), h('th',null,'')
           )),
           h('tbody',null, posGroups.flatMap(list => {
             if (list.length === 1) return [positionRow(list[0], false)];
