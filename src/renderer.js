@@ -14543,10 +14543,10 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
 const MONEY_MAKER_SKILLS = [
   // Alphabetical (Ben, 2026-11-09).
   {key:'archaeology',  label:'Archaeology'},
-  {key:'farming',      label:'Farming'},
   {key:'construction', label:'Construction'},
   {key:'crafting',     label:'Crafting'},
   {key:'divination',   label:'Divination'},
+  {key:'farming',      label:'Farming'},
   {key:'fletching',    label:'Fletching'},
   {key:'herblore',     label:'Herblore'},
   {key:'magic',        label:'Magic'},
