@@ -15615,6 +15615,8 @@ function ArchaeologyCalc({items}) {
     // components already taken off.
     const byLower = {};
     for (const it of items) byLower[it.name.toLowerCase()] = it;
+    const divine = buyOf('Divine charge');
+    const autoDaCharge = divine == null ? null : divine / 3000 * 230 / 60;
     const materials = Object.entries(ARCHAEOLOGY_DATA.materials || {}).map(([name, m]) => {
       const total = m.c.reduce((s, x) => s + x[2], 0);
       let value = 0;
@@ -15624,9 +15626,13 @@ function ArchaeologyCalc({items}) {
       }
       const sell = sellOf(name), buy = buyOf(name);
       const net = sell == null ? null : applyTax(sell);
+      const profit = value == null || buy == null ? null : value - buy;
       return { name, level: m.lvl, value, sell: net, buy,
         keepProfit: value == null || net == null ? null : value - net,
-        profit: value == null || buy == null ? null : value - buy,
+        profit,
+        // Same, run through an Auto disassembler mk. II (Ben, 2026-11-23): 230 machine
+        // charge for 60 items an hour = 3.83 charge per item; 1 divine charge = 3,000.
+        machineProfit: profit == null || autoDaCharge == null ? null : profit - autoDaCharge,
         volume: byLower[name.toLowerCase()]?.volume ?? null,
         parts: m.c.map(([k, n, ch]) => `${Math.round((m.always && total ? ch / total : ch) * 100)}% ${k}`).join(', '),
         // Everything it disassembles into, for the chevron (Ben, 2026-11-10).
@@ -15698,7 +15704,9 @@ function ArchaeologyCalc({items}) {
       h('thead', null, h('tr', null, th('name','Material'), th('level','Item level', 'The material’s disassembly level on the wiki, not a requirement'),
         th('value','Components', 'Expected ancient components from one, sold as crates after tax, minus padded parts and protective components'),
         th('sell','Sells for', 'Live sell price after 2% tax'), th('keepProfit','vs selling', 'Disassembling one you already have, instead of selling it'),
-        th('buy','Buy price'), th('profit','Buy to disassemble', 'Buying one at the live price just to disassemble it'), th('volume','Traded/day'))),
+        th('buy','Buy price'), th('profit','Buy to disassemble', 'Buying one at the live price just to disassemble it'),
+        th('machineProfit','By auto disassembler', 'Buy to disassemble, run through an Auto disassembler mk. II: less its machine charge (230 charge per 60 items = 3.83 per item, at the live Divine charge price; 1 divine charge = 3,000 charge). The machine does 1,440 a day.'),
+        th('volume','Traded/day'))),
       h('tbody', null, rows.map(r => h(React.Fragment, {key:r.name}, h('tr', {onClick:()=>toggle('m:'+r.name), style:{cursor:'pointer'}},
         h('td', null, (open['m:'+r.name] ? '▾ ' : '▸ ') + r.name, h('div', {style:{fontSize:10, color:T.textDim}}, r.parts)),
         h('td', null, r.level), h('td', null, fmt.gp(Math.round(r.value))+'gp'),
@@ -15706,8 +15714,9 @@ function ArchaeologyCalc({items}) {
         h('td', {style: r.keepProfit == null ? {} : col(r.keepProfit)}, gp(r.keepProfit)),
         h('td', null, r.buy == null ? '—' : fmt.gp(Math.round(r.buy))+'gp'),
         h('td', {style: r.profit == null ? {} : col(r.profit)}, gp(r.profit)),
+        h('td', {style: r.machineProfit == null ? {} : col(r.machineProfit)}, gp(r.machineProfit)),
         h('td', {style:{color:T.textDim}}, r.volume != null ? r.volume.toLocaleString() : '—')),
-        open['m:'+r.name] && h('tr', null, h('td', {colSpan:8, style:{padding:'6px 10px 10px 22px', fontSize:11}},
+        open['m:'+r.name] && h('tr', null, h('td', {colSpan:9, style:{padding:'6px 10px 10px 22px', fontSize:11}},
           h('div', {style:{color:T.textDim, marginBottom:3}}, r.special.reduce((t, x) => t + x.chance, 0) > 0.99 ? 'Special: always one of these' : 'Special: a chance of one of these'),
           r.special.map(x => h('div', {key:x.name, style:{display:'flex', gap:10}},
             h('span', {style:{minWidth:200}}, `${x.qty} × ${x.name}`), h('span', {style:{minWidth:50}}, Math.round(x.chance*100)+'%'),
