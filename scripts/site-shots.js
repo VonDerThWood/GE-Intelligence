@@ -74,19 +74,29 @@ function fakeData(items) {
     'flips': `window.__geniusTest.goto('flips')`,
     'item': `(window.__geniusTest.goto('market'), new Promise(r => setTimeout(r, 1500)).then(() => window.__geniusTest.openItem('Dragon dart tip')))`,
     'money-makers': `window.__geniusTest.goto('money_makers')`,
+    'watchlist': `window.__geniusTest.goto('watchlist')`,
+    // Phone shots: 412x915 at 2x (824x1830, the size on the site). IS_PHONE is
+    // set once at load, so these run after a reload at phone size (below).
+    'phone-dashboard': `window.__geniusTest.goto('dashboard')`,
+    'phone-portfolio': `window.__geniusTest.goto('portfolio')`,
+    'phone-market': `window.__geniusTest.goto('watchlist')`,
   };
-  for (const [theme, suffix] of [['dark', 'dark'], ['black', 'black']]) {
+  const DESK = { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false };
+  const PHONE = { width: 412, height: 915, deviceScaleFactor: 2, mobile: true };
+  const groups = [[DESK, want.filter(n => !n.startsWith('phone-'))], [PHONE, want.filter(n => n.startsWith('phone-'))]].filter(g => g[1].length);
+  for (const [theme, suffix] of [['dark', 'dark'], ['black', 'black']]) for (const [METRICS, names] of groups) {
+    await send('Emulation.setDeviceMetricsOverride', METRICS);
     await js(`window.genius.getSettings().then(s => window.genius.saveSettings({...s, theme: '${theme}'}))`);
     await js(`(localStorage.setItem('pageGuidesOff','true'), localStorage.removeItem('genius_dash_folds'), localStorage.removeItem('genius_goodnow_open'), location.reload(), true)`).catch(() => {});
     await wait(2000);
     try { ws.close(); } catch {}
     await connect();
-    await send('Emulation.setDeviceMetricsOverride', { width: 1440, height: 900, deviceScaleFactor: 1, mobile: false });
-    await until(`!!window.__geniusTest && document.body.innerText.length > 3000`);
+    await send('Emulation.setDeviceMetricsOverride', METRICS);
+    await until(`!!window.__geniusTest && document.body.innerText.length > (${METRICS.mobile} ? 800 : 3000)`);
     // The theme applies once settings have loaded after the reload; the first
     // shot came out in the wrong theme with only 4s (2026-11-12).
     await wait(10000);
-    for (const name of want) {
+    for (const name of names) {
       if (!SHOTS[name]) { console.log('unknown shot ' + name); continue; }
       // Close any open item panel first (the item shot leaves one open).
       if (name !== 'item') { await js(`([...document.querySelectorAll('button')].find(b => b.textContent.trim() === 'X')?.click(), true)`); await wait(400); }

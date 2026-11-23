@@ -528,7 +528,7 @@ function SignalBadge({signal, label, details, style: extraStyle}) {
 
 /* ─── Helpers ────────────────────────────────────────────────── */
 const fmt = {
-  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (FULL_NUMBERS) return (a >= 1000 ? Math.round(n) : n).toLocaleString(); if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
+  gp:  n => { if (!n && n !== 0) return '—'; const a = Math.abs(n); if (FULL_NUMBERS) return (a >= 1000 ? Math.round(n) : n).toLocaleString(); if (a >= 1e12) return (n/1e12).toFixed(2)+'T'; if (a >= 1e9) return (n/1e9).toFixed(2)+'B'; if (a >= 1e6) return (n/1e6).toFixed(2)+'M'; if (a >= 1e3) return (n/1e3).toFixed(1)+'K'; return n.toLocaleString(); },
   pct: n => (n >= 0 ? '+' : '') + n.toFixed(2) + '%',
   num: n => n ? n.toLocaleString() : '—',
 };
