@@ -15200,8 +15200,18 @@ const CRAFTING_RECIPES = [
 const CRAFTING_BUFFS = {
   artisansBandana:   {label:"Modified artisan's bandana", pct:5,  kind:'save', appliesTo:['leather']},
   artificersMeasure: {label:"Artificer's measure",        pct:5,  kind:'dupe', appliesTo:['urn']},
+  // Scroll of dexterity (wiki, 2026-11-23): saves a material on items needing 3+ of it;
+  // the chance depends on the leather (DEXTERITY_BY_LEATHER). Brooch of the Gods
+  // (2026-11-23 rework) adds 5% to every Dungeoneering scroll's chance.
+  scrollDexterity:   {label:'Scroll of dexterity',        pct:10, pctLabel:'5-25% by leather', kind:'dexterity', appliesTo:['leather']},
+  broochDexterity:   {label:'Brooch of the Gods',         pct:5,  pctLabel:'+5%', kind:'dexterity', appliesTo:['leather'], requires:'scrollDexterity'},
 };
-const CRAFTING_BUFF_DEFAULTS = {artisansBandana:false, artificersMeasure:false};
+const DEXTERITY_BY_LEATHER = {'Green dragon leather':25, 'Blue dragon leather':20, 'Red dragon leather':15, 'Black dragon leather':10, 'Royal dragon leather':5};
+function dexterityChance(buffs, leather) {
+  if (!buffs.scrollDexterity || DEXTERITY_BY_LEATHER[leather] == null) return 0;
+  return (DEXTERITY_BY_LEATHER[leather] + (buffs.broochDexterity ? 5 : 0)) / 100;
+}
+const CRAFTING_BUFF_DEFAULTS = {artisansBandana:false, artificersMeasure:false, scrollDexterity:false, broochDexterity:false};
 
 function craftingBuffChance(buffs, kind, material) {
   return Object.entries(CRAFTING_BUFFS)
@@ -15278,7 +15288,7 @@ const DRAGONHIDE_RECIPES = [
 ];
 
 function computeDragonhideStats(recipe, items, buffs) {
-  const saveChance = craftingBuffChance(buffs, 'save', 'leather');
+  const saveChance = craftingBuffChance(buffs, 'save', 'leather') + dexterityChance(buffs, recipe.leather);
   const leatherPrice = findItemBuyPrice(items, recipe.leather);
   const outPrice = findItemSellPrice(items, recipe.output);
   const missing = [];
@@ -15362,7 +15372,9 @@ function flattenSmithingMats(name, mult = 1, depth = 0) {
   return out;
 }
 // One row per product of `bar`, at live prices (buy materials, sell the product, 2% tax).
-function smithingProductRows(bar, items, priceMode = 'live') {
+// refundPct: Scroll of efficiency (2%, or 7% with the Brooch of the Gods since 2026-11-23):
+// each bar used has that chance of going back to the metal bank, so bars cost (1 - pct).
+function smithingProductRows(bar, items, priceMode = 'live', refundPct = 0) {
   const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
   const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
   const sellOf = n => priceMode === 'ge' ? guideOf(n) : findItemSellPrice(items, n);
@@ -15375,7 +15387,7 @@ function smithingProductRows(bar, items, priceMode = 'live') {
     const missing = [];
     for (const [mat, q] of Object.entries(flat)) {
       const p = buyOf(mat);
-      if (p == null) missing.push(mat); else cost += p * q;
+      if (p == null) missing.push(mat); else cost += p * q * (/ bar$/i.test(mat) ? 1 - refundPct / 100 : 1);
     }
     const sell = sellOf(name);
     if (sell == null) missing.push(name);
@@ -15403,15 +15415,20 @@ function ArchaeologyCalc({items}) {
   const [priceMode, setPriceMode] = useState('live');
   const [level, setLevel] = useState('');
   const [sort, setSort] = useState({key:'profit', dir:-1});
+  // Scroll of restoration: 2% chance to save the archaeological materials (7% with the
+  // Brooch of the Gods since the 2026-11-23 rework), so materials cost (1 - pct).
+  const [restScroll, setRestScroll] = useState(false);
+  const [restBrooch, setRestBrooch] = useState(false);
+  const saveMat = restScroll ? (restBrooch ? 0.07 : 0.02) : 0;
   const data = useMemo(() => {
     const guideOf = n => { const g = itemByName(items, n); return g ? (g.high ?? g.low ?? null) : null; };
     const buyOf = n => priceMode === 'ge' ? guideOf(n) : findItemBuyPrice(items, n);
     const chronote = priceMode === 'ge' ? guideOf('Chronotes') : findItemSellPrice(items, 'Chronotes');
     // A material with no GE price counts as 0 and is named on the row, so nothing gets hidden.
     const unpriced = {};
-    const costOf = a => { let c = 0; for (const [m, q] of a.m) { const p = buyOf(m); if (p == null) unpriced[m] = true; else c += p * q; } return c; };
+    const costOf = a => { let c = 0; for (const [m, q] of a.m) { const p = buyOf(m); if (p == null) unpriced[m] = true; else c += p * q * (1 - saveMat); } return c; };
     const noPrice = a => a.m.map(x => x[0]).filter(m => unpriced[m]);
-    const matsOf = a => { const local = (ARCHAEOLOGY_DATA.hotspots || {})[a.h] || []; return a.m.map(([name, qty]) => { const price = buyOf(name); return { name, qty, price, total: price == null ? null : price * qty, local: local.includes(name) }; }); };
+    const matsOf = a => { const local = (ARCHAEOLOGY_DATA.hotspots || {})[a.h] || []; return a.m.map(([name, qty]) => { const price = buyOf(name); return { name, qty, price, total: price == null ? null : price * qty * (1 - saveMat), local: local.includes(name) }; }); };
     const value = n => chronote == null ? null : applyTax(chronote) * n;
     // Disassembly (Ben, 2026-11-09), using the wiki's Restoration profit module: ancient
     // components are valued by making material crates and selling them (crate price after
@@ -15480,7 +15497,7 @@ function ArchaeologyCalc({items}) {
       collections.push({ name:c.n, by:c.by, level, unpriced:[...missingMats], parts, bonus:c.b, listed, pieces:c.a.length, list:c.a.join(', '), reward:c.r, cost, chronotes:chrono, profit: value(chrono) - cost });
     }
     return { artefacts, collections, materials, crateParts, skipped, chronote };
-  }, [items, priceMode]);
+  }, [items, priceMode, saveMat]);
   const lv = parseInt(level, 10);
   const src = view === 'collections' ? data.collections : view === 'materials' ? data.materials : data.artefacts;
   const rows = src.filter(r => !lv || view === 'materials' || r.level <= lv).sort((a, b) => {
@@ -15510,7 +15527,14 @@ function ArchaeologyCalc({items}) {
       pill(priceMode==='ge', 'GE guide prices', ()=>setPriceMode('ge')),
       h('span', {style:{width:10}}),
       h('label', {style:{fontSize:11, color:T.textDim}}, 'My level ',
-        h('input', {className:'ge-input', type:'number', min:1, max:120, value:level, placeholder:'any', onChange:e=>setLevel(e.target.value), style:{width:60}}))),
+        h('input', {className:'ge-input', type:'number', min:1, max:120, value:level, placeholder:'any', onChange:e=>setLevel(e.target.value), style:{width:60}})),
+      h('span', {style:{width:10}}),
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11}, title:'2% chance to save the archaeological materials when restoring (other ingredients are still used)'},
+        h('input', {type:'checkbox', checked:restScroll, onChange:()=>{ setRestScroll(v=>!v); if (restScroll) setRestBrooch(false); }}),
+        h('span', {style:{color:T.textDim}}, 'Scroll of restoration', h('span', {style:{color:T.gold}}, ' (2%)'))),
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor: restScroll ? 'pointer' : 'not-allowed', opacity: restScroll ? 1 : 0.4, fontSize:11}, title:'+5% on the Scroll of restoration, so 7% (Brooch of the Gods, 23 Nov 2026 rework)'},
+        h('input', {type:'checkbox', checked:restBrooch, disabled:!restScroll, onChange:()=>setRestBrooch(v=>!v)}),
+        h('span', {style:{color:T.textDim}}, 'Brooch of the Gods', h('span', {style:{color:T.gold}}, ' (+5%)')))),
     h(PhoneFold, {style:{fontSize:11, color:T.textDim, marginBottom:10, lineHeight:1.5}},
       (view === 'materials' ? '' : `Restoration materials are counted at the ${priceMode==='ge'?'GE guide':'live buy'} price, even ones you dug up yourself, since you could sell them instead. Chronotes are valued at ${data.chronote != null ? fmt.gp(Math.round(data.chronote))+'gp' : 'their price'} each, after 2% tax. `) +
       (view==='materials' ? `Disassembling single materials for ancient components, sold as material crates after tax. Crate costs are taken off: a small crate takes 25 padded parts and 1 protective component, a large one 100 and 2 (padded parts ${fmt.gp(Math.round(data.crateParts.padded))}gp each, protective components ${fmt.gp(Math.round(data.crateParts.protective))}gp each), and the better of the two is used. "vs selling" is for materials you already have; "Buy to disassemble" is buying them just for this. Daily trading is for the material; the crates are the real limit (large historic crates trade only a few hundred a day).` :
@@ -15568,7 +15592,10 @@ function SmithingFromScratch({items, onSelect}) {
   const [busyOnly, setBusyOnly] = useState(true);
   const [sort, setSort] = useState({key:'perBar', dir:-1});
   const [priceMode, setPriceMode] = useState('live');
-  const all = useMemo(() => smithingProductRows(bar, items, priceMode), [bar, items, priceMode]);
+  const [effScroll, setEffScroll] = useState(false);
+  const [effBrooch, setEffBrooch] = useState(false);
+  const refundPct = effScroll ? (effBrooch ? 7 : 2) : 0;
+  const all = useMemo(() => smithingProductRows(bar, items, priceMode, refundPct), [bar, items, priceMode, refundPct]);
   const rows = useMemo(() => {
     const r = all.filter(x => x.profit != null && (!busyOnly || (x.volume || 0) >= 100));
     return r.sort((a, b) => ((a[sort.key] ?? -Infinity) > (b[sort.key] ?? -Infinity) ? 1 : (a[sort.key] ?? -Infinity) < (b[sort.key] ?? -Infinity) ? -1 : 0) * sort.dir);
@@ -15596,6 +15623,13 @@ function SmithingFromScratch({items, onSelect}) {
     h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer', fontSize:11, marginBottom:10}},
       h('input', {type:'checkbox', checked:busyOnly, onChange:()=>setBusyOnly(v=>!v)}),
       h('span', {style:{color:T.textDim}}, `Only items trading 100+ a day${hidden ? ` (${hidden} hidden)` : ''}`)),
+    h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:10, fontSize:11}},
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor:'pointer'}, title:'Each bar used has a 2% chance of going back to your metal bank'},
+        h('input', {type:'checkbox', checked:effScroll, onChange:()=>{ setEffScroll(v=>!v); if (effScroll) setEffBrooch(false); }}),
+        h('span', {style:{color:T.textDim}}, 'Scroll of efficiency', h('span', {style:{color:T.gold}}, ' (2%)'))),
+      h('label', {style:{display:'flex', alignItems:'center', gap:5, cursor: effScroll ? 'pointer' : 'not-allowed', opacity: effScroll ? 1 : 0.4}, title:'+5% on the Scroll of efficiency, so 7% per bar (Brooch of the Gods, 23 Nov 2026 rework)'},
+        h('input', {type:'checkbox', checked:effBrooch, disabled:!effScroll, onChange:()=>setEffBrooch(v=>!v)}),
+        h('span', {style:{color:T.textDim}}, 'Brooch of the Gods', h('span', {style:{color:T.gold}}, ' (+5%)')))),
     rows.length === 0 ? h('div', {className:'empty'}, h('p', null, 'No priced products for this bar yet.')) :
     h('div', {className:'ge-table-wrap'},
       h('table', {className:'ge-table pt-smith'},
@@ -15711,16 +15745,18 @@ function FletchingBuffCheckboxes({buffs, setBuffs}) {
 function CraftingBuffCheckboxes({buffs, setBuffs}) {
   const toggle = key => setBuffs(b => {
     const next = {...b, [key]: !b[key]};
-    if (key === 'portableCrafter' && !next.portableCrafter) next.brooch = false;
+    if (key === 'scrollDexterity' && !next.scrollDexterity) next.broochDexterity = false;
     return next;
   });
   return h('div', {style:{display:'flex', flexWrap:'wrap', gap:14, marginBottom:12, fontSize:11}},
     Object.entries(CRAFTING_BUFFS).map(([key, b]) => h('label', {
       key, style:{display:'flex', alignItems:'center', gap:5, cursor: (b.requires && !buffs[b.requires]) ? 'not-allowed' : 'pointer', opacity: (b.requires && !buffs[b.requires]) ? 0.4 : 1},
-      title: `${b.pct}% chance ${b.kind==='dupe' ? 'to produce an extra urn' : 'to save a material'}${b.requires ? ' (needs '+CRAFTING_BUFFS[b.requires].label+')' : ''}`,
+      title: key === 'scrollDexterity' ? 'Chance to save a leather on dragonhide bodies and shields: green 25%, blue 20%, red 15%, black 10%, royal 5%'
+        : key === 'broochDexterity' ? '+5% on the Scroll of dexterity (Brooch of the Gods, 23 Nov 2026 rework)'
+        : `${b.pct}% chance ${b.kind==='dupe' ? 'to produce an extra urn' : 'to save a material'}${b.requires ? ' (needs '+CRAFTING_BUFFS[b.requires].label+')' : ''}`,
     },
       h('input', {type:'checkbox', checked:!!buffs[key], disabled: b.requires && !buffs[b.requires], onChange:()=>toggle(key)}),
-      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pct}%)`)),
+      h('span', {style:{color:T.textDim}}, b.label, h('span',{style:{color:T.gold}},` (${b.pctLabel || b.pct + '%'})`)),
     ))
   );
 }
