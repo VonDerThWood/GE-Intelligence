@@ -6775,13 +6775,13 @@ const TENSILE_SOURCES = [
 ];
 const INVENTION_CRAFTS = [
   {
-    id: 'spring', name: 'Tight springs', geItem: 'Spring', level: 43, perCraft: 20,
+    id: 'spring', name: 'Springs', geItem: 'Spring', level: 43, perCraft: 50, // 2026-11-23 rebalance: 60 tensile + 1 subtle = 50 (was 120 + 1 = 20 tight springs)
     // Wiki estimate of disassembly time to gather one batch's components.
-    minutesPerCraft: 6.88,
+    minutesPerCraft: 3.44, // wiki's 6.88 for 120 tensile, halved for the new 60-tensile recipe (estimate)
     use: 'Charge the Spring cleaner (1 spring = 1 charge).',
     unlock: 'Spring cleaner and Tight springs discovery.',
     inputs: [
-      { component: 'Tensile parts', qty: 120, liveSources: TENSILE_SOURCES },
+      { component: 'Tensile parts', qty: 60, liveSources: TENSILE_SOURCES },
       { component: 'Subtle components', qty: 1 },
     ],
   },
@@ -11115,6 +11115,10 @@ function ExpensiveTab({items, selected, onSelect, watchlist, onToggleWatch, thre
 
 /* ─── Alch tab ────────────────────────────────────────────────── */
 const ALCH_DEFAULT_COL_WIDTHS = {name:280, high:110, limit:90, afterTax:110, alch:110, alchProfit:140, alchemiserProfit:170, star:30};
+// Items an Alchemiser mk. II alchs per Divine charge (1 divine charge = 3,000 machine charge).
+// Late-game rebalance, 2026-11-23: 120 charge per hour at 15 items/hour = 8 per item -> 375.
+// Was 150 charge at 25 items/hour = 6 per item -> 500. One Alchemiser per player now.
+const ALCHEMISER_ITEMS_PER_DIVINE_CHARGE = 375;
 
 function AlchTab({items, selected, onSelect, watchlist, onToggleWatch, description}) {
   const [sort, setSort] = useState({key:'alchProfit', dir:-1});
@@ -11130,7 +11134,7 @@ const natureRunePrice = useMemo(() => {
     return liveBuyOf(dc) || 0;
   }, [items]);
 
-  const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
+  const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / ALCHEMISER_ITEMS_PER_DIVINE_CHARGE) : 0;
 
   const alchItems = useMemo(() => {
     return items
@@ -15813,7 +15817,7 @@ function MoneyMakersTab({items, onSelect, description}) {
 
   // Ben (2026-08-12): he doesn't actually sell these — every Onyx/Ascendri
   // bolt he enchants goes straight into an Alchemiser (Invention device,
-  // Divine charge cost / 500 per item, same math the Alch tab already
+  // Divine charge cost / ALCHEMISER_ITEMS_PER_DIVINE_CHARGE per item, same math the Alch tab already
   // uses). Real revenue for him is high alch value, not GE sell price, so
   // this sits alongside the normal sell-based row rather than replacing
   // it — other players who DO sell the enchanted bolts still want that
@@ -15822,7 +15826,7 @@ function MoneyMakersTab({items, onSelect, description}) {
     const natureRunePrice = (items.find(it => it.natureRunePrice) || {}).natureRunePrice || 0;
     const divineChargeItem = items.find(it => it.name && it.name.toLowerCase() === 'divine charge');
     const divineChargePrice = liveBuyOf(divineChargeItem) || 0;
-    const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / 500) : 0;
+    const chargePerItem = divineChargePrice ? Math.round(divineChargePrice / ALCHEMISER_ITEMS_PER_DIVINE_CHARGE) : 0;
     return ENCHANT_BOLT_RECIPES.map(r => {
       const inputCost = findItemBuyPrice(items, r.input);
       const outItem = items.find(it => it.name.toLowerCase() === r.name.toLowerCase());

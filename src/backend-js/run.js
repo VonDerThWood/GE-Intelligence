@@ -44,7 +44,21 @@ async function getDataDir(override = null) {
 
 // ── Prices via WeirdGloop GazBot dump ────────────────────────────────────────
 
-const JUNK_PATTERNS = ['%UPDATE_DETECTED%', '%JAGEX_TIMESTAMP%', '%'];
+// Item id -> time it left the GE, for removals confirmed in patch notes (see the
+// removedItems code in the main fetch). 2026-11-23 late-game rebalance / MTX removal:
+// portables and Silverhawk feathers became untradeable (springs stayed tradeable).
+const GE_MTX_REMOVAL = Date.parse('2026-11-23T11:00:00Z');
+const GE_REMOVED_IDS = {
+  31042: GE_MTX_REMOVAL, // Portable range
+  31043: GE_MTX_REMOVAL, // Portable sawmill
+  31044: GE_MTX_REMOVAL, // Portable well
+  35226: GE_MTX_REMOVAL, // Portable crafter
+  35227: GE_MTX_REMOVAL, // Portable fletcher
+  35228: GE_MTX_REMOVAL, // Portable brazier
+  50443: GE_MTX_REMOVAL, // Portable workbench
+  30915: GE_MTX_REMOVAL, // Silverhawk feathers
+};
+const JUNK_PATTERNS =['%UPDATE_DETECTED%', '%JAGEX_TIMESTAMP%', '%'];
 const _DIGITS_RE = /^\d+$/;
 
 function _toSec(ts) {
@@ -1069,6 +1083,20 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
   // portfolio and alerts look them up and show "Removed from GE".
   let missingItems = existing.missingItems || {};
   let removedItems = existing.removedItems || [];
+  // Known removals from patch notes. Jagex's MTX removal (2026-11-23) made these
+  // untradeable, but the price feeds kept them with frozen prices (last trades right
+  // at update time), so the "missing for a day" check below never fires. Move them
+  // straight to removedItems, keeping their last data.
+  const knownGone = items.filter(it => GE_REMOVED_IDS[it.id]);
+  if (knownGone.length) {
+    items = items.filter(it => !GE_REMOVED_IDS[it.id]);
+    for (const it of knownGone) {
+      if (!removedItems.some(r => r.id === it.id)) {
+        removedItems.push({ ...it, removedFromGe: true, removedAt: GE_REMOVED_IDS[it.id] });
+        console.log(`[run] ${it.name}: removed from the GE (patch notes)`);
+      }
+    }
+  }
   const prevTradeable = (existing.items || []).filter(it => !it.untradeable && it.id);
   if ((args.mode === 'full' || args.mode === 'prices') && !usedFallbackItems &&
       items.filter(it => !it.untradeable).length >= prevTradeable.length * 0.9) {
