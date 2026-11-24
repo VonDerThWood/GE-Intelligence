@@ -659,7 +659,13 @@ window.genius = new Proxy({}, {
     if (typeof prop !== 'string' || prop === 'then') return undefined;
     if (geniusKeys && !geniusKeys.has(prop)) return undefined;
     if (geniusReal && typeof geniusReal[prop] !== 'function') return geniusReal[prop];
-    return (...args) => window.geniusReady.then(g => g[prop](...args));
+    // Called before the API finished loading: if it turns out not to exist on
+    // the phone, resolve to undefined instead of throwing.
+    return (...args) => window.geniusReady.then(g => {
+      if (typeof g[prop] === 'function') return g[prop](...args);
+      console.warn('genius.' + prop + ' is not available on the phone');
+      return g[prop];
+    });
   },
   has(_, prop) { return !geniusKeys || geniusKeys.has(prop); },
 });
