@@ -26051,6 +26051,9 @@
             return k;
           };
           const skipN = target.filter((id) => skip.has(id)).length;
+          if (!historyFetchQueue.length) {
+            return { queued: 0, total: validIds.length, stored: storedOfTarget(), unavailable: skipN };
+          }
           runHistoryQueue((done, total, finished) => {
             onProgress && onProgress({
               done,
@@ -26097,6 +26100,24 @@
             historyVersion++;
           }
           return true;
+        }
+        function historyStaleWarning() {
+          const now = Date.now();
+          let known = 0, stuck = 0;
+          for (const id of historyPopulatedIds) {
+            const ts = historyLatestTs[id];
+            if (!ts) continue;
+            const age = now - ts;
+            if (age > HISTORY_INCREMENTAL_MAX_MS) continue;
+            known++;
+            if (age > 3 * 864e5) stuck++;
+          }
+          if (known < 500 || stuck / known < 0.5) return null;
+          return {
+            at: now,
+            what: "Price history is falling behind",
+            error: `${stuck.toLocaleString()} of ${known.toLocaleString()} items haven't updated in over 3 days. GEnius normally tops them up after each fetch; leaving it open a while usually catches up. If this stays, please report it.`
+          };
         }
         async function refreshStaleHistory(maxItems = 500) {
           if (readOnlyHistory) return { refreshed: 0, skipped: "read-only" };
@@ -30318,7 +30339,10 @@
           noteError,
           compactHistory,
           getHistoryCompact: async () => store2.get("historyCompact", false),
-          getBackgroundErrors: async () => store2.get("backgroundErrors", []),
+          getBackgroundErrors: async () => {
+            const w = historyStaleWarning();
+            return w ? [w, ...store2.get("backgroundErrors", [])] : store2.get("backgroundErrors", []);
+          },
           clearBackgroundErrors: async () => {
             store2.set("backgroundErrors", []);
             return { success: true };
@@ -32563,7 +32587,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "3.0.0",
+        version: "3.0.1",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",
@@ -33304,9 +33328,22 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
     };
   }
   window.geniusReady = buildGenius();
+  var geniusKeys = null;
+  var geniusReal = null;
+  window.geniusReady.then((g) => {
+    geniusReal = g;
+    geniusKeys = new Set(Object.keys(g));
+  }).catch(() => {
+  });
   window.genius = new Proxy({}, {
     get(_, prop) {
+      if (typeof prop !== "string" || prop === "then") return void 0;
+      if (geniusKeys && !geniusKeys.has(prop)) return void 0;
+      if (geniusReal && typeof geniusReal[prop] !== "function") return geniusReal[prop];
       return (...args) => window.geniusReady.then((g) => g[prop](...args));
+    },
+    has(_, prop) {
+      return !geniusKeys || geniusKeys.has(prop);
     }
   });
   function startLiveMonitoring() {

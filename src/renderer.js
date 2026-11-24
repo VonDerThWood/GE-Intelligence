@@ -7033,6 +7033,16 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
+    version: 'v3.0.1',
+    items: [
+      "A small release with one fix that matters: your price history keeps itself up to date again.",
+      "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
+      "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
+      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
+      "Android: the phone app no longer thinks some desktop-only features exist.",
+    ]
+  },
+  {
     version: 'v3.0.0',
     items: [
       "GEnius goes mobile, Money Makers learns to farm, and Jagex took our portables. This is the big one.",
@@ -16941,7 +16951,19 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   // it since an offer's price can be edited in-game.
   const logKey = [nameLow, num('quantity')].join('|');
   const alreadySold = geSoldLog()[logKey] || 0;
-  const newSold = Math.max(0, filled - alreadySold);
+  // Sales of this item already in the Portfolio at about this offer's price, in the
+  // last 14 days, that this reader never logged (typed in by hand, or logged on another
+  // device). Re-reading the offer then logged ALL of its fills again (2026-11-24: a
+  // Dragon hatchet offer logged as 287 sold when only 50 were new, 237 double-counted).
+  const offerEach = filled > 0 ? coins / filled / 0.98 : 0;
+  const priorSales = alreadySold || !(offerEach > 0) ? 0 : (portfolio.positions || [])
+    .filter(p => p.status === 'sold' && (p.item_name || '').toLowerCase() === nameLow
+      && p.sold_at && Date.now() - Date.parse(p.sold_at) < 14 * 86400000
+      && Math.abs((p.sold_price || 0) / offerEach - 1) < 0.01)
+    .reduce((s, p) => s + (p.sold_quantity || p.quantity || 0), 0);
+  const [skipPrior, setSkipPrior] = useState(true);
+  const usePrior = priorSales > 0 && priorSales < filled && skipPrior;
+  const newSold = Math.max(0, filled - alreadySold - (usePrior ? priorSales : 0));
   const finish = async msg => { toast(msg, 'success'); await onSaved(); onClose(); };
   // allowEmpty: a planner goal can start at 0 bought (2026-11-13: capture a
   // big bid right after placing it); a Portfolio position can't.
@@ -17042,6 +17064,9 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
             open.length > 1 && h('label', {style:{display:'block', fontSize:11, color:T.textDim, marginBottom:8}}, 'Which position',
               h('select', {className:'ge-input', value:chosenPos.id, onChange:e=>setPosId(e.target.value), style:{display:'block', width:'100%', marginTop:2}},
                 open.map(p => h('option', {key:p.id, value:p.id}, p.quantity.toLocaleString()+' at '+fmt.gp(Math.round(p.cost_basis)))))),
+            priorSales > 0 && priorSales < filled && h('label', {style:{display:'flex', gap:6, alignItems:'flex-start', fontSize:12, color:'#f0a030', marginBottom:8, cursor:'pointer'}},
+              h('input', {type:'checkbox', checked:skipPrior, onChange:() => setSkipPrior(v => !v), style:{marginTop:2}}),
+              h('span', null, 'Your Portfolio already has '+priorSales.toLocaleString()+' '+(known?.name || f.name)+' sold at this price in the last 2 weeks. If those came from this same offer, only the '+(filled - priorSales).toLocaleString()+' new ones are logged (untick if they were a different offer).')),
             h('div', {style:{fontSize:12, color:T.text, marginBottom:10}},
               alreadySold ? alreadySold.toLocaleString()+' already logged from this offer. ' : '', 'Logs '+Math.min(newSold, chosenPos.quantity).toLocaleString()+' sold.'),
             h('button', {className:'ge-btn gold', onClick:saveSale}, 'Log sale'))

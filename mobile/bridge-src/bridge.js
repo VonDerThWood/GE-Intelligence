@@ -645,10 +645,23 @@ async function buildGenius() {
 // directly without going through this await, since every call already
 // expects a Promise back regardless.
 window.geniusReady = buildGenius();
+// Once the real API is ready, only names it actually has exist here (2026-11-24): this
+// used to hand back a function for ANY name, so desktop-only checks like
+// `window.genius?.cloudStatus` passed on the phone and then failed ("g[prop] is not a
+// function"). Before it's ready, calls still queue up as before. `then` is never a
+// function, so window.genius can't be mistaken for a promise.
+// Plain values (syncRole: 'phone') come through as themselves once ready; they used
+// to come back as a function, so `syncRole === 'phone'` was never true on the phone.
+let geniusKeys = null, geniusReal = null;
+window.geniusReady.then(g => { geniusReal = g; geniusKeys = new Set(Object.keys(g)); }).catch(() => {});
 window.genius = new Proxy({}, {
   get(_, prop) {
+    if (typeof prop !== 'string' || prop === 'then') return undefined;
+    if (geniusKeys && !geniusKeys.has(prop)) return undefined;
+    if (geniusReal && typeof geniusReal[prop] !== 'function') return geniusReal[prop];
     return (...args) => window.geniusReady.then(g => g[prop](...args));
   },
+  has(_, prop) { return !geniusKeys || geniusKeys.has(prop); },
 });
 
 // Mirrors main.js's app.whenReady() startup sequence + startScheduler() —

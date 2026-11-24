@@ -839,6 +839,16 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const target = validIds.map(String);
     const storedOfTarget = () => { let k = 0; for (const id of target) if (historyPopulatedIds.has(id)) k++; return k; };
     const skipN = target.filter(id => skip.has(id)).length;
+    // Nothing to fetch: don't start the queue at all (2026-11-24). The renderer calls
+    // this after EVERY price fetch; an empty run still set historyFetchActive, and the
+    // background refresh (refreshStaleHistory, started at the same moment) gives way to
+    // an active queue after its first item. Result: 1 of 500 stale items refreshed per
+    // fetch, and guide history on the desktop froze from 2026-11-09 for two weeks.
+    // A first start always has ids to fetch (nothing on disk), so the history pack
+    // import inside runHistoryQueue is unaffected.
+    if (!historyFetchQueue.length) {
+      return { queued: 0, total: validIds.length, stored: storedOfTarget(), unavailable: skipN };
+    }
     runHistoryQueue((done, total, finished) => {
       onProgress && onProgress({
         done, total, finished: !!finished, unavailable: skipN + (finished ? target.filter(id => !historyPopulatedIds.has(id) && !skip.has(id)).length : 0),
@@ -893,6 +903,26 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     }
     return true;
   }
+  // A silent stall shows up in Settings > Background problems (2026-11-24). The refresh
+  // once froze for two weeks with no error anywhere (see startHistoryPopulation). Items
+  // whose history ended long ago (older than the incremental window: discontinued or
+  // untraded) don't count; only items that should be topping up and aren't.
+  function historyStaleWarning() {
+    const now = Date.now();
+    let known = 0, stuck = 0;
+    for (const id of historyPopulatedIds) {
+      const ts = historyLatestTs[id];
+      if (!ts) continue;
+      const age = now - ts;
+      if (age > HISTORY_INCREMENTAL_MAX_MS) continue;
+      known++;
+      if (age > 3 * 86400000) stuck++;
+    }
+    if (known < 500 || stuck / known < 0.5) return null;
+    return { at: now, what: 'Price history is falling behind',
+      error: `${stuck.toLocaleString()} of ${known.toLocaleString()} items haven't updated in over 3 days. GEnius normally tops them up after each fetch; leaving it open a while usually catches up. If this stays, please report it.` };
+  }
+
   async function refreshStaleHistory(maxItems = 500) {
     if (readOnlyHistory) return { refreshed: 0, skipped: 'read-only' };
     if (historyRefreshActive || historyFetchActive) return { refreshed: 0, skipped: 'busy' };
@@ -5707,7 +5737,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications: toInbox('almanac', 'dxp_news', getDxpNewsNotifications), parseDxpDates, parseDxpTease,
     getNewsCalendar, extractNewsDates, fetchNewsPage,
     getNewsFeed, getNewsBadgeCount, markNewsRead, getNewsBadgePrefs, setNewsBadgePrefs,
-    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, compactHistory, getHistoryCompact: async () => store.get('historyCompact', false), getBackgroundErrors: async () => store.get('backgroundErrors', []),
+    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, compactHistory, getHistoryCompact: async () => store.get('historyCompact', false), getBackgroundErrors: async () => { const w = historyStaleWarning(); return w ? [w, ...store.get('backgroundErrors', [])] : store.get('backgroundErrors', []); },
     clearBackgroundErrors: async () => { store.set('backgroundErrors', []); return { success: true }; },
     recordNetWorth: withUserData(recordNetWorth), getNetWorthHistory, buildCsvExport: withUserData(buildCsvExport),
     // alerts
