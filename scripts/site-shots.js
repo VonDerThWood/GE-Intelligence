@@ -73,7 +73,8 @@ function fakeData(items) {
     'dashboard': `window.__geniusTest.goto('dashboard')`,
     'flips': `window.__geniusTest.goto('flips')`,
     'item': `(window.__geniusTest.goto('market'), new Promise(r => setTimeout(r, 1500)).then(() => window.__geniusTest.openItem('Dragon dart tip')))`,
-    'money-makers': `window.__geniusTest.goto('money_makers')`,
+    // Farming open (Ben, 2026-11-23): shows the skill pills and the newest calculator.
+    'money-makers': `window.__geniusTest.goto('money_makers').then(() => new Promise(r => setTimeout(r, 1200))).then(() => { const b = [...document.querySelectorAll('.content button')].find(x => x.textContent.trim() === 'Farming'); b && b.click(); return new Promise(r => setTimeout(r, 2000)); })`,
     'watchlist': `window.__geniusTest.goto('watchlist')`,
     // Phone shots: 412x915 at 2x (824x1830, the size on the site). IS_PHONE is
     // set once at load, so these run after a reload at phone size (below).
