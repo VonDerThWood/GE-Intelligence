@@ -1,6 +1,6 @@
 /**
  * Grades the Almanac's recommended DXP plans against REAL trades from the
- * hourly archive (Ben, 2026-11-11). Run after a DXP ends (or during it: legs
+ * hourly archive (2026-11-11). Run after a DXP ends (or during it: legs
  * still in the future show as pending).
  *   node scripts/grade-almanac.js [startDate YYYY-MM-DD]
  * Defaults to the latest DXP in dxp_events.json.
@@ -11,7 +11,7 @@
  * price (medians of the hourly averages, after dropping values more than 3x
  * from the window's median). That's what you'd realistically have got, not
  * the best tick. 2% tax on the sale (none under 50gp).
- * Also graded "with offers" (Ben, 2026-11-13): buy at the instant-SELL price
+ * Also graded "with offers" (2026-11-13): buy at the instant-SELL price
  * and sell at the instant-BUY price, i.e. patient offers instead of paying the
  * spread. Elder seed's instant-buys swung 4.3k-32k in one day while sells sat
  * near 5k, so "instant" alone made the plan look far worse than it was.

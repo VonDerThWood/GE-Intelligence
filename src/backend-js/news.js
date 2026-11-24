@@ -97,7 +97,7 @@ function _escapeRe(s) {
 
 function detectUpdateType(title, description = '') {
   let text = (title + ' ' + description).toLowerCase();
-  // Weekly roundups cover several topics, so no single type fits (Ben,
+  // Weekly roundups cover several topics, so no single type fits (the user,
   // 2026-10-15: 'The Week Ahead: Ghrazi Blood Knights & Harvest Hollow!' was
   // tagged Farming Update). Harvest Hollow is the Halloween event, not farming.
   if (/\b(the week ahead|this week in runescape)\b/.test(text)) return ['Weekly Roundup', []];
@@ -163,7 +163,7 @@ function _pyTitle(s) {
 
 const _GENERIC_SHORT_WORDS = new Set(['ore', 'log', 'bar', 'axe', 'bow', 'kit', 'dye', 'tar', 'oil', 'ash', 'wax']);
 
-// Ben, 2026-08-10: caught for real — "Extreme necromancy (1)" got
+// 2026-08-10: caught for real — "Extreme necromancy (1)" got
 // detected as a mention on a news article that was actually about the
 // API/plugin project, nothing to do with the potion. Same false-positive
 // shape as the Gin/begin bug above, just at the phrase level instead of
@@ -184,7 +184,7 @@ function _stripDose(name) {
 }
 
 // Plain .includes() matched an item name ANYWHERE in the text, including
-// mid-word — confirmed for real (Ben, 2026-08-03): the "Gin" item was
+// mid-word — confirmed for real (2026-08-03): the "Gin" item was
 // matching inside "begin"/"beginning"/"imagine" on every article
 // containing those ordinary English words. _GENERIC_SHORT_WORDS was a
 // denylist for exactly this shape of false positive, but it only covers
@@ -267,7 +267,7 @@ async function fetchRs3News(limit = 20, allItems = null) {
       let title = titleM[1].trim();
       title = title.replace(/&amp;/g, '&').replace(/&apos;/g, "'").replace(/&quot;/g, '"').replace(/&#39;/g, "'")
         // Titles can be double-encoded ("&amp;#8217;"), leaving numeric codes like
-        // &#8217; (curly apostrophe) after the line above (Ben, 2026-11-13).
+        // &#8217; (curly apostrophe) after the line above (2026-11-13).
         .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
         .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)));
       const link = linkM ? linkM[1].trim() : '';
@@ -281,7 +281,7 @@ async function fetchRs3News(limit = 20, allItems = null) {
         date = date.slice(0, 10);
       }
       const [updateType, cats] = detectUpdateType(title);
-      // Ben, 2026-08-10: caught for real — a "Quest / Lore Update" article
+      // 2026-08-10: caught for real — a "Quest / Lore Update" article
       // about the API/plugin project (nothing to do with any specific
       // skill) showed "Extreme Necromancy (1) -9.2%" as its "Market
       // Reaction," just because that item happened to have a FRENZY

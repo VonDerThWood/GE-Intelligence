@@ -6,7 +6,7 @@
   ; returns 0 immediately — no retry loop, no "cannot be closed" dialog.
   ; The new installer then writes fresh files over the (now empty) location.
   ;
-  ; Side effect found for real (Ben, 2026-07-29): since the old version's
+  ; Side effect found for real (2026-07-29): since the old version's
   ; real uninstaller.exe never runs anymore, it never gets the chance to
   ; remove ITS OWN shortcuts or registry uninstall-key entry either. Two
   ; symptoms from that: (1) the old desktop/Start Menu shortcut is
@@ -22,7 +22,7 @@
   Pop $0
 
   ; A flat Sleep here was a guess, not a guarantee — confirmed for real
-  ; (Ben, 2026-07-29): a previous install hit RMDir before Windows had
+  ; (2026-07-29): a previous install hit RMDir before Windows had
   ; actually released GEnius.exe's file handle (taskkill returning doesn't
   ; mean the handle is gone yet), so RMDir couldn't delete the still-open
   ; files and Windows silently queued them for delete-on-next-reboot
@@ -59,7 +59,7 @@
   ; spuriously see the lock as still held, assume another copy is running,
   ; and silently quit before ever creating a window — installer finishes,
   ; checkbox was checked, nothing visibly opens. Confirmed plausible for
-  ; real (Ben, 2026-07-14): intermittent "sometimes opens, sometimes
+  ; real (2026-07-14): intermittent "sometimes opens, sometimes
   ; doesn't, even with Launch checked" is the exact signature of this race.
   nsExec::Exec 'taskkill /F /IM GEnius.exe /T'
   Pop $0

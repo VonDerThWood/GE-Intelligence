@@ -1,5 +1,5 @@
 /**
- * Pre-build script: merges Ben's personal in-app category edits into the
+ * Pre-build script: merges the user's personal in-app category edits into the
  * project's bundled category_overrides.json, so every fresh install gets
  * his corrections automatically — without personal_overrides.json itself
  * needing to be a bundled, reshipped file.
@@ -12,14 +12,14 @@
  * is what caused the category editor's Save to silently no-op in a
  * packaged install: 2026-07-10).
  *
- * This script's OWN job is unchanged in spirit from before: get Ben's
+ * This script's OWN job is unchanged in spirit from before: get the user's
  * local edits into source control before a release. What changed is the
  * destination — instead of copying personal_overrides.json forward as its
  * own separate reshipped file (two files serving one purpose: bulk
  * corrections for every user), his edits get merged directly into
  * category_overrides.json, the one bundled bulk file every install already
  * reads. Personal edits win on conflict, matching the same precedence the
- * app itself uses at runtime. Ben's local personal_overrides.json is left
+ * app itself uses at runtime. The user's local personal_overrides.json is left
  * alone (not cleared) — once merged, it's redundant with category_overrides
  * .json but harmless to keep, and clearing it would just be extra risk for
  * no benefit.

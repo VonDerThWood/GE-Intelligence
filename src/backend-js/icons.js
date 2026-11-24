@@ -6,11 +6,11 @@
  * exact display name happened to match the wiki's real image filename
  * character-for-character, which silently broke for apostrophes,
  * parenthetical variants ("(no rune)"), and any item whose wiki page
- * capitalizes more than just the first word. Ben, 2026-08-13: "If the API
+ * capitalizes more than just the first word. 2026-08-13: "If the API
  * would pull the pictures then that's 100% what we should have done from
  * the start."
  *
- * Two DIFFERENT images per item are resolved and cached separately (Ben,
+ * Two DIFFERENT images per item are resolved and cached separately (the user,
  * 2026-08-13, caught via a screenshot): the wiki's "page image"
  * (prop=pageimages) is the big DETAIL render used for a page's zoomed-in
  * store display — it can look wildly different from what the item

@@ -1,11 +1,11 @@
 /**
  * Builds the history pack new installs download on first start (v3.0.0,
- * Ben 2026-11-11): every item's price history from this PC, in one gzipped
+ * 2026-11-11): every item's price history from this PC, in one gzipped
  * file, instead of ~7,400 separate WeirdGloop requests.
  *   node scripts/build-history-pack.js            -> dist/history-pack.jsonl.gz
  *   node scripts/build-history-pack.js --upload   -> also attaches it to this
  *     version's GitHub release (v<package.json version>), after CI has published it.
- * REQUIRED before every release (Ben, 2026-11-11). The app downloads it from
+ * REQUIRED before every release (2026-11-11). The app downloads it from
  * releases/latest, and tops up the days since it was built by itself.
  */
 const fs = require('fs'), path = require('path'), { execFileSync } = require('child_process');

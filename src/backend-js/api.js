@@ -77,7 +77,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   const itemStatsFile  = path.join(dataDir, 'item_stats.json');
   // PERSONAL overrides specifically, not the bulk/dev-curated
   // category_overrides.json — the in-app editor should only ever touch
-  // Ben's own per-item edits, never the whole catalogue. catalogue.js
+  // The user's own per-item edits, never the whole catalogue. catalogue.js
   // merges both files at category-assignment time (personal wins per item).
   //
   // Lives in dataDir now (a real, always-writable per-user location — same
@@ -85,7 +85,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // data/ like it used to be. That old location required asarUnpack +
   // resolveWritable gymnastics to be writable at all in a packaged install,
   // and was the direct cause of the category editor's Save silently no-op'ing
-  // (2026-07-10). Shipping Ben's corrections to every user's fresh install
+  // (2026-07-10). Shipping the user's corrections to every user's fresh install
   // is now sync-overrides.js's job at build time (it merges this file's
   // content into category_overrides.json, the actual bundled/read-only
   // bulk file, instead of reshipping this file itself) — see that script.
@@ -97,7 +97,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // getSignalTrend's bulk scan), and evicted again once saveHistory()
   // confirms an item is safely on disk. It used to be eagerly fully loaded
   // at startup (loadDirBatched over every per-item file) and NEVER evicted
-  // — confirmed for real (Ben, 2026-08-03) that a full real-device dataset
+  // — confirmed for real (2026-08-03) that a full real-device dataset
   // is ~1.3GB of raw JSON on disk (7,346 items, ~180KB average, largest
   // ~380KB); once parsed into JS objects and held resident for the WHOLE
   // catalogue simultaneously, that's easily 2.5-5GB+ of live heap — far
@@ -139,7 +139,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // retries (usually brand-new items WeirdGloop has no history for yet).
   // Remembered for 24h so the backfill doesn't retry them on every launch
   // and the "Building history" popup can finish instead of sitting at
-  // e.g. 7,348 / 7,360 forever (Ben's phone, 2026-10-11). {id: failedAtMs}
+  // e.g. 7,348 / 7,360 forever (the user's phone, 2026-10-11). {id: failedAtMs}
   const HISTORY_UNAVAILABLE_TTL = 24 * 3600000;
   const recentUnavailable = () => {
     const m = store.get('historyUnavailable', {}) || {}, now = Date.now(), out = new Set();
@@ -176,7 +176,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   let snapshotData = await storage.readJSON(snapshotFile, {});   // { itemId: [{t,p,v}] }
   const itemHistoryCache = new Map();
   const itemStatsCache = new Map();
-  // Session-only, never written to disk (unlike itemStatsCache) — Ben:
+  // Session-only, never written to disk (unlike itemStatsCache) — the user:
   // drop sources are a "quickly check where this comes from" lookup, not
   // something worth persisting across restarts. Still worth caching in
   // memory so re-opening the same item this session doesn't re-fetch.
@@ -242,7 +242,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       existingFiles = await storage.listJSONFiles(historyDir); // migration writes files directly; re-list to pick them up
       // A brand-new desktop install starts in the compact format, so there's
       // nothing to convert later (v3.0.0). The phone does too when its WebView
-      // has CompressionStream (storage-capacitor canCompact, Ben 2026-11-16).
+      // has CompressionStream (storage-capacitor canCompact, 2026-11-16).
       if (existingFiles.length === 0 && canCompactHistory() && !readOnlyHistory) {
         store.set('historyCompact', true);
         store.set('historyCompactDone', Date.now());
@@ -295,7 +295,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // exact math (single O(n) pass for latest/second-latest + a 90-day
   // volume window) so results are identical, just computed without ever
   // holding more than one item's full array in memory at once.
-  // Per-item summary cache for computeHistoryStats (Ben, 2026-10-15): every
+  // Per-item summary cache for computeHistoryStats (2026-10-15): every
   // price fetch used to re-read ALL ~7,400 history files just to recompute
   // these few numbers. Seconds on desktop, but on the phone each read goes
   // through Capacitor's file bridge and the fetch sat behind it for minutes
@@ -315,7 +315,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     let newSummaries = 0;
     const historyVolAvg = {};
     const historyPrevPrice = {};
-    // Ben, 2026-08-09: historyPrevPrice is a CACHED copy of an item's price
+    // 2026-08-09: historyPrevPrice is a CACHED copy of an item's price
     // history — it only refreshes when something actually re-fetches that
     // item (a chart open, a backfill run), not every cycle. For an item
     // nobody's looked at in a while it can be weeks stale (confirmed for
@@ -441,7 +441,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // AV product interfering) can leave res.json() below hanging past that
     // same nominal deadline — the abort's coverage of an in-progress body
     // read isn't a rock-solid guarantee across every fetch implementation.
-    // Confirmed for real (Ben, 2026-07-14): history population sat stuck
+    // Confirmed for real (2026-07-14): history population sat stuck
     // at 99% (7184/7261) for "several minutes" with zero new history files
     // written — a single item wedged the whole queue indefinitely, well
     // past what its 12s/20s timeouts should have allowed. Wrapping the
@@ -463,7 +463,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       if (!res.ok) {
         console.warn(`[history] HTTP ${res.status} fetching item ${itemId} (timeout ${timeoutMs}ms)`);
         if (res.status === 429) {
-          // Real rate limiting from WeirdGloop — confirmed for real (Ben,
+          // Real rate limiting from WeirdGloop — confirmed for real (the user,
           // 2026-08-03) once a full sustained backfill finally ran long
           // enough to actually reach it (every earlier attempt crashed
           // from client-side memory pressure well before this point, so
@@ -535,7 +535,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // loop used, so per-connection request rate against WeirdGloop is
   // unchanged; running HISTORY_FETCH_CONCURRENCY of them at once just
   // overlaps their network wait time instead of one request blocking the
-  // next. Ben asked to speed up the ~20-45 min full-catalogue backfill
+  // next. The user asked to speed up the ~20-45 min full-catalogue backfill
   // (2026-08-02, mobile testing) — real wall-clock improvement without
   // touching the actual per-connection pacing, which is the safer lever
   // than just shortening the 400ms delay itself (that number was chosen
@@ -543,7 +543,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // multiplying request RATE felt riskier than multiplying request
   // COUNT-in-flight).
   //
-  // Ben explicitly asked to push this from an initial 4 up to 12, same
+  // The user explicitly asked to push this from an initial 4 up to 12, same
   // session. That produced two genuine V8 "Ineffective mark-compacts near
   // heap limit" OOM crashes on Android's WebView mid-backfill (confirmed
   // via adb logcat both times) — the first coincided with also changing
@@ -559,7 +559,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // historyData (see that function's own comment), roughly doubling peak
   // memory for no reason. Separately, the emulator's own AVD config
   // turned out to be quite constrained (hw.ramSize 2048MB, vm.heapSize
-  // 228MB) — bumped to 4096MB/512MB (2026-08-02) since Ben's actual
+  // 228MB) — bumped to 4096MB/512MB (2026-08-02) since the user's actual
   // Pixel 8 Pro had never shown this crash at all, strongly suggesting
   // the emulator's low default allocation (not a fundamental app problem)
   // was the real ceiling. Retested at 12 with BOTH real fixes in place
@@ -578,7 +578,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // "[history] HTTP 429" (rate limit) or another V8 OOM if 8 ever crashes
   // too — that would mean the real fix is reducing per-item memory
   // footprint further, not concurrency at all.
-  // Ben, 2026-08-09: 8 was settled on chasing MOBILE-specific crashes (see
+  // 2026-08-09: 8 was settled on chasing MOBILE-specific crashes (see
   // the investigation above) — desktop itself never showed any memory
   // ceiling at any concurrency tested, so it doesn't need to stay this
   // conservative. Bumped desktop to 12; mobile stays at the
@@ -607,7 +607,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       historyFetchActive = false;
     }
   }
-  // First start (v3.0.0, Ben 2026-11-11): instead of ~7,400 paced WeirdGloop
+  // First start (v3.0.0, 2026-11-11): instead of ~7,400 paced WeirdGloop
   // requests (45+ minutes), download one ready-made history pack attached to the latest GitHub release
   // (~1 minute). The normal queue then fetches anything the pack lacked, and
   // the rolling refresh tops up the days since the pack was built. Desktop
@@ -624,7 +624,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (canCompactHistory()) store.set('historyCompact', true); // the importer writes the pack's compact files
     const t = Date.now(), total = historyFetchQueue.length;
     let n = 0;
-    // Developer-only override (Ben, 2026-11-17): if data/dev_history_pack.json
+    // Developer-only override (2026-11-17): if data/dev_history_pack.json
     // holds {"url": "http..."}, download the pack from there instead of GitHub,
     // e.g. a copy served from the PC over adb reverse to test a fresh phone
     // install before any release carries a pack. Normal installs never have it.
@@ -652,7 +652,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return { imported: imported.length };
   }
 
-  // After a pack import (Ben, 2026-11-22): keep the "downloading history" bar
+  // After a pack import (2026-11-22): keep the "downloading history" bar
   // going and top up every item from the pack's date to today in one go, busiest
   // items first (today's GE volume), instead of 50 or 500 per price fetch over
   // hours or days. Each top-up is WeirdGloop's small last-90-days file merged
@@ -740,7 +740,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     await Promise.all(Array.from({length: HISTORY_FETCH_CONCURRENCY}, worker));
 
     // In-session retry for items that failed via fetchHistoryForItemOnce's
-    // hard backstop — confirmed for real (Ben, 2026-08-03) that these
+    // hard backstop — confirmed for real (2026-08-03) that these
     // failures land in one tight burst right near the end of a big
     // backfill (a main-thread GC stall causing a pile of already-running
     // timers to all expire together, not a hard per-item failure), and
@@ -756,7 +756,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     //
     // Still calls onProgress on every attempt, even though `done`/`total`
     // themselves don't move any further here (these items were already
-    // counted as "done" from the main pass) — confirmed for real (Ben,
+    // counted as "done" from the main pass) — confirmed for real (the user,
     // 2026-08-03) that skipping this made the renderer's "Building
     // history" popup visibly freeze for the whole retry phase, which with
     // real HTTP 429 backoff (4s per hit) plus this being where most of
@@ -836,7 +836,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     console.log(`[history] Queue set: ${historyFetchQueue.length} items to fetch`);
 
     // Progress counts only THIS list's items (FIX 2026-10-11): the raw
-    // file count includes items no longer on the GE, so on Ben's desktop
+    // file count includes items no longer on the GE, so on the user's desktop
     // 7,412 files ≥ 7,360 items read as "complete" while 33 new Havenhythe
     // II items had no history at all and were never fetched.
     const target = validIds.map(String);
@@ -854,7 +854,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return { queued: historyFetchQueue.length, total: validIds.length, stored: storedOfTarget(), unavailable: skipN };
   }
 
-  // Rolling background refresh (Ben, 2026-10-06). The regular price fetch
+  // Rolling background refresh (2026-10-06). The regular price fetch
   // never touched per-item history files — only opening a chart (8+ days
   // stale) or the one-time backfill did — so ~7,400 of 7,410 files had
   // been frozen since June. After each price fetch this re-downloads up to
@@ -937,11 +937,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return { refreshed };
   }
 
-  // ─── v3.0.0 history compression (Ben, 2026-11-11) ───────────────────────
+  // ─── v3.0.0 history compression (2026-11-11) ───────────────────────
   // One-time conversion of every data/history/<id>.json to the compact format
   // (storage.compactDirItems: write, read back, compare, then delete the old
   // file). From then on every save writes the compact format. Desktop only for
-  // now; never in test mode (that reads Ben's real history read-only).
+  // now; never in test mode (that reads the user's real history read-only).
   let compactRunning = false;
   async function compactHistory(onProgress) {
     if (readOnlyHistory) return { error: 'read-only (test mode)' };
@@ -1024,7 +1024,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // Used to be treated as permanently complete once built, so any
       // daily price point added by the regular fetch cycle AFTER an item
       // was first cached here never made it in — All-Time Low/High could
-      // silently go stale indefinitely. Confirmed for real (Ben,
+      // silently go stale indefinitely. Confirmed for real (the user,
       // 2026-08-02): Dragon bones' cache hadn't been touched since June
       // 16, missing a genuine new all-time low set on July 27 — the app
       // then displayed a LATER, higher price as "new all-time low"
@@ -1108,7 +1108,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
     // Confirmed for real (2026-06-29): the full computation is genuinely
     // expensive — ~6700 items × full multi-year history each, measured at
-    // ~17s on a fast dev machine and 45-90s on Ben's actual desktop/mobile
+    // ~17s on a fast dev machine and 45-90s on the user's actual desktop/mobile
     // hardware — and every cold app launch used to pay that cost
     // unconditionally before showing anything, since dxpIntelCache is
     // purely in-memory and starts empty every run. DXP timing stats are
@@ -1169,11 +1169,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
             itemNames[String(it.id)] = it.name;
           }
         }
-        // Price statistics use only DXPs since mid-2023 — the window Ben's
+        // Price statistics use only DXPs since mid-2023 — the window the user's
         // Almanac research was verified on (dxp_findings_v2.md: 10, then 11
         // events). The full list back to 2017 exists for predicting WHEN the
         // next DXP lands; the 2017-2022 market behaved too differently to mix
-        // into per-item price patterns (Ben, 2026-10-07). New DXPs are
+        // into per-item price patterns (2026-10-07). New DXPs are
         // included automatically as they happen.
         // Finished DXPs only, once each: the running one has no result yet, and
         // re-announced dates were being counted twice (found 2026-11-04).
@@ -1476,7 +1476,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── Opportunity History ──────────────────────────────────────────────────
-  // (Ben, 2026-10-06) Grades the Opportunity Score against what actually
+  // (2026-10-06) Grades the Opportunity Score against what actually
   // happened next. After every price fetch, any item scoring at or above
   // OPP_RECORD_MIN is recorded (at most once per item per 24h, so a score
   // that stays high all day is one flag, not 96). Outcomes are NOT stored —
@@ -1541,7 +1541,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── Event Impact ─────────────────────────────────────────────────────────
-  // (Ben, 2026-10-06) Game updates as timelines of milestones — roadmap
+  // (2026-10-06) Game updates as timelines of milestones — roadmap
   // mention, dev blog, date announced, release — measured against each
   // affected item's price, Almanac-style: before the first milestone,
   // between each pair of milestones, release day, week after, month after.
@@ -1551,7 +1551,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // News only kept the latest ~15 posts, so every post is now also saved to
   // news_archive.json permanently — future roadmap mentions are never lost.
   const EVENT_MILESTONE_TYPES = ['roadmap', 'devblog', 'date_announced', 'release', 'other'];
-  // Event type decides what gets watched automatically (Ben, 2026-10-06):
+  // Event type decides what gets watched automatically (2026-10-06):
   // any boss release should flag PVM supplies; skilling updates watch the
   // categories picked for them; quests pull their wiki item lists.
   const EVENT_TYPES = ['boss', 'skilling', 'quest', 'area', 'other'];
@@ -1591,7 +1591,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── DXP news watcher ─────────────────────────────────────────────────────
-  // (Ben, 2026-10-07) The Almanac's DXP list comes from the wiki's DXP
+  // (2026-10-07) The Almanac's DXP list comes from the wiki's DXP
   // table, which only gets a row once there's a date — and DXP
   // notifications read that same list, so they could lag the official post
   // by up to a day, right when the anticipation (buy) window opens. This
@@ -1671,7 +1671,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // A DXP "tease" — "Double XP is coming in November!" — with no dates yet
-  // (Ben, 2026-10-07). Returns the expected month as 'YYYY-MM', 'soon' when
+  // (2026-10-07). Returns the expected month as 'YYYY-MM', 'soon' when
   // the post clearly says it's coming but names no month, or null when the
   // post only mentions DXP in passing (a recap, "after DXP ends", a guide).
   function parseDxpTease(text, postDateStr) {
@@ -1701,7 +1701,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (det.some(d => d.url === n.url)) return;
     const summary = (n.title || '') + ' ' + (n.description || '');
     // The mention can be buried in the body of a post about something else
-    // (Ben, 2026-10-22: the November DXP was announced inside "What's
+    // (2026-10-22: the November DXP was announced inside "What's
     // happening with MTX Items"), so check the page text too, not just the
     // title and summary.
     let pageText = prefetchedText || '';
@@ -1759,7 +1759,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // A tease you dismissed counts too (state-machine audit, 2026-11-09).
         if (det.some(d => (d.status === 'teased' || d.status === 'dismissed' || d.status === 'dated') && d.expected === expect)) entry.notified = true;
       } else {
-        entry.notified = true; // passing mention — nothing to tell Ben
+        entry.notified = true; // passing mention — nothing to tell the user
       }
     }
     const latest = store.get('dxpNewsDetections', []);
@@ -1773,7 +1773,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── News calendar ───────────────────────────────────────────────────────
-  // (Ben, 2026-10-07) Every dated line in the official news — roadmaps and
+  // (2026-10-07) Every dated line in the official news — roadmaps and
   // month-ahead posts are mostly "November 15 - 25: Double XP · December 9:
   // 110 Woodcutting & Fletching" — logged and categorized, so GEnius has an
   // upcoming calendar and the dates can feed the Almanac / Game Updates.
@@ -1813,7 +1813,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // A day number must not run into more digits: "November 2024" is not
     // November 20.
     // Nor be the hour of a time: "21 November - 19:00" is not Nov 21 to Dec 19
-    // (Ben, 2026-11-18: stream schedules spread over all of December).
+    // (2026-11-18: stream schedules spread over all of December).
     const D = '(\\d{1,2})(?!\\d|\\s*[:.]\\d)(?:st|nd|rd|th)?';
     const monthIdx = m => MONTHS.findIndex(x => x.startsWith(m.slice(0, 3)));
     const mk = (mon, day) => {
@@ -1886,7 +1886,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return vals.filter(e => e.end || !vals.some(o => o !== e && o.end && o.category === e.category && e.start >= o.start && e.start <= o.end));
   }
 
-  // Cancelled content (Ben, 2026-10-18: Reignited was cancelled but its
+  // Cancelled content (2026-10-18: Reignited was cancelled but its
   // December dates stayed on the calendar). A post saying "we have made the
   // decision to cancel Reignited" / "Reignited has been cancelled" records
   // the name; calendar dates about it from EARLIER posts are then hidden.
@@ -1972,7 +1972,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // celebrate the") and repeat (one post said "December 2nd" four times), so
   // those are merged into one row per post + date, named after the post.
   const CAL_PRIORITY = ['dxp', 'release', 'seasonal', 'marketplace', 'livestream', 'maintenance', 'other'];
-  // pastDays (Ben, 2026-10-18): the calendar's month view also shows dates
+  // pastDays (2026-10-18): the calendar's month view also shows dates
   // earlier in the month; everything else wants upcoming only (default 0).
   // ─── Almanac buy and sell flags (almanac-signals.js) ──────────────────────
   // dxp_intelligence.json is about 30 MB, so it's read at most hourly and only
@@ -2098,7 +2098,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return { enabled: true, includeWatched: true, ...store.get('updateRiskSettings', {}) };
   }
   async function setUpdateRiskSettings(s) { store.set('updateRiskSettings', s); }
-  // New drop sources for items you hold or watch (Ben, 2026-11-13: Blood Knights
+  // New drop sources for items you hold or watch (2026-11-13: Blood Knights
   // started dropping Elder seed x5 and it fell ~90% in four days).
   async function getDropSourceNotifications() {
     if (store.get('dropSourceAlerts', true) === false) return [];
@@ -2150,7 +2150,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     const PAGE_TITLE = /RuneScape\s*-\s*RuneScape|^News\s*-\s/i; // a page title picked up as a label
     const goodLabel = l => l && !PAGE_TITLE.test(l) && l.length <= 70 && !/^[\d:.,]/.test(l) && /^[A-Z"']/.test(l) && !GENERIC.test(l.trim())
       && !/\b(is|are|the|a|an|to|of|and|on|by|in|for|until|from|will|be|at|with)$/i.test(l.trim())   // a cut-off sentence
-      // ...or the start of one: "But of course" became a Dec 2 release (Ben, 2026-11-18)
+      // ...or the start of one: "But of course" became a Dec 2 release (2026-11-18)
       && !/^(but|and|so|or|also|however|of course|then|now|still|yet|as|if|when|while|although|though|plus|this|that|it|we|you|they)\b/i.test(l.trim());
     const out = upcoming.filter(e => e.kind === 'list' && goodLabel(e.label));
     const groups = new Map();
@@ -2170,10 +2170,10 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── News feed (redesigned News tab) ─────────────────────────────────────
-  // (Ben, 2026-10-07) Each archived post, tagged with what GEnius found in
+  // (2026-10-07) Each archived post, tagged with what GEnius found in
   // it: DXP teased/announced, calendar dates (by category), items you hold
   // or watch, a linked Game Update — plus read/unread. The sidebar badge
-  // counts only unread posts matching the kinds Ben has ticked (relevant-
+  // counts only unread posts matching the kinds the user has ticked (relevant-
   // only, so it means something when it shows).
   const NEWS_BADGE_DEFAULTS = { dxp: true, release: true, seasonal: true, holds: true, watch: true, linked: true,
     marketplace: false, livestream: false, maintenance: false, all: false };
@@ -2217,12 +2217,12 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       if (m.title) eventByTitle[norm(m.title)] = ev.name;
     }
     // Release posts ("…Are Here!", "Out now", …) get the GE items that first
-    // appeared within -2..+5 days of the post (Ben, 2026-10-12: the Blood
+    // appeared within -2..+5 days of the post (2026-10-12: the Blood
     // Knights post said "Nothing for GEnius" though it added 3 tradeable
     // drops — mentions only check the title + short description, and new
     // items aren't on the item list when the post is first saved).
     const RELEASE_TITLE = /\b(is|are) here\b|out now|now live|is live|\blaunch(es|ed)?\b|\breleased\b|has arrived|available now/i;
-    // "Name Release" frees up player names. It isn't a game release (Ben, 2026-11-03).
+    // "Name Release" frees up player names. It isn't a game release (2026-11-03).
     const NOT_GAME_RELEASE = /\bname release\b/i;
     let snapStart = Infinity;
     for (const arr of Object.values(snapshotData)) if (arr.length && arr[0].t < snapStart) snapStart = arr[0].t;
@@ -2479,7 +2479,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── Chart analysis (phase 1: trend + where today sits) ─────────────────
-  // Ben, 2026-10-08: rules-based readings for one item, each shown with its
+  // 2026-10-08: rules-based readings for one item, each shown with its
   // own track record on this item's history, so a reading is never just an
   // assertion. Same rule as the update research: evidence, not assumptions.
   //   reliable = enough independent past cases AND the outcome beat what the
@@ -2545,8 +2545,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     let same = 0, cnt = 0;
     // Week-over-week: the guide itself often only updates every 2-3 days.
     for (let d = Math.max(first + 7, today - 182); d <= today; d += 7) if (p[d] > 0 && p[d - 7] > 0) { cnt++; if (p[d] === p[d - 7]) same++; }
-    // 6. Alch value line (Ben, 2026-10-08/09): high alch − that day's nature
-    //    rune price. Whether it acts as a FLOOR depends on the item (Ben:
+    // 6. Alch value line (2026-10-08/09): high alch − that day's nature
+    //    rune price. Whether it acts as a FLOOR depends on the item (the user:
     //    things made to be alched — salvages, Dragon hatchets — hold it;
     //    battlestaves/longbows live below it). Measured per item as the
     //    share of days in the last 3 years the guide stayed at/above
@@ -2570,7 +2570,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         let lastN = NaN; for (let d = 0; d < n; d++) { if (!isNaN(np[d])) lastN = np[d]; else np[d] = lastN; }
         // held = within 3% of or above (classification only — guide noise
         // and nature-rune swings keep pinned items a hair under); belowDays
-        // = strictly below, shown to the user as-is (Ben, 2026-10-09: the
+        // = strictly below, shown to the user as-is (2026-10-09: the
         // old rounded "100% at or above" hid a real dip to 31.0k).
         let held = 0, days = 0, belowDays = 0, lowest = null;
         for (let d = Math.max(first, today - 1095); d <= today; d++) {
@@ -2580,7 +2580,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
           if (p[d] < fl) { belowDays++; const g = p[d] / fl - 1; if (!lowest || g < lowest.gap) lowest = { gap: g, price: p[d], date: new Date((d + day0) * DAYMS).toISOString().slice(0, 10) }; }
         }
         const heldShare = days ? held / days : null;
-        // Cutoff (Ben, 2026-10-09): no line for items that never get near
+        // Cutoff (2026-10-09): no line for items that never get near
         // their alch value (party hats, crackers, Dragon Rider lance...).
         // Shown only if the price came within 25% of it in the last 3 years.
         let minNear = Infinity;
@@ -2593,7 +2593,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     };
 
     // Items pinned to their alch floor barely move, so they read as
-    // 'illiquid' — still show the alch line for them (Ben, 2026-10-09).
+    // 'illiquid' — still show the alch line for them (2026-10-09).
     if (cnt < 10 || same / cnt > 0.5) { const o = { ...out, status: 'illiquid' }; await alchInfo(o); return o; }
     const rel = (d0, d1) => { if (!(p[d0] > 0 && p[d1] > 0)) return null; const m = mkt(d0, d1); return m == null ? null : (p[d1] / p[d0] - 1) * 100 - m; };
     // Reliable needs a one-sided binomial test vs the item's own base rate
@@ -2604,7 +2604,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       const share = nCases ? k / nCases : 0;
       const pval = nCases ? binomTail(k, nCases, Math.min(0.95, Math.max(0.05, base))) : 1;
       const reliable = nCases >= 10 && share >= 0.6 && share - base >= 0.1 && pval < 0.01;
-      // Opposite (Ben's Steel arrow test, 2026-10-09): a strong result the
+      // Opposite (the user's Steel arrow test, 2026-10-09): a strong result the
       // OTHER way — e.g. after rises it kept rising 5/19 vs 51% usual — is
       // evidence too ("tends to reverse"), not a "weak" reading.
       const qb = Math.min(0.95, Math.max(0.05, base));
@@ -2616,7 +2616,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // 1. Trend vs market (30 and 90 days). Track record: after past 30-day
     //    moves in the same direction and of similar size, did the next 30
     //    days continue that direction (vs market)?
-    // 1gp steps (Ben's Steel arrow test): on cheap items one coin is a
+    // 1gp steps (the user's Steel arrow test): on cheap items one coin is a
     // several-% move, so a move only counts if it's at least 2 coins.
     const coins = (d0, d1) => p[d0] > 0 && p[d1] > 0 ? Math.abs(p[d1] - p[d0]) : 0;
     const tickPct = 100 / p[today];
@@ -2792,7 +2792,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       return { k, n: nC, base: nC ? E / nC : 0.5, z, pUp: 1 - normCdf(z), pDown: normCdf(z), cases };
     };
 
-    // 5. Dip recovery (Ben's idea): dip = X% below the 14-day high (2+
+    // 5. Dip recovery (the user's idea): dip = X% below the 14-day high (2+
     //    coins); recovered = climbed back X/(1−X) (the same % it fell)
     //    within 30 days. 3 sizes tried → Bonferroni (p < 0.01/3).
     let bestDip = null; const dipAll = [];
@@ -2829,7 +2829,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // 7. Volume now vs normal — descriptive. Plus "myth notes": when a
     //    textbook volume pattern is happening now, say what it actually did
     //    across ~1,000 GE items (pooled, market-relative, 30 days after).
-    //    Ben: GEnius should be open about rules that don't hold here.
+    //    The user: GEnius should be open about rules that don't hold here.
     const vBefore = vAvg(today - 74, today - 15), v7 = vAvg(today - 6, today), v14 = vAvg(today - 13, today);
     if (vBefore && v7) {
       const p7 = pMove(today - 7, today), p14 = pMove(today - 14, today);
@@ -2865,7 +2865,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return out;
   }
 
-  // ─── Ask about this item (Ben, 2026-10-09) ─────────────────────────────
+  // ─── Ask about this item (2026-10-09) ─────────────────────────────
   // Fill-in-the-blank questions answered from saved daily guide prices (+
   // volume, live prices for the flip check). Answers are exact counts and
   // dates — never rounded claims (same rule as the alch-line fix).
@@ -3133,7 +3133,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       links: await eventLinks(event, [...rows.filter(r => r.id).map(r => r.id), ...(newItems || []).map(r => r.id), ...(cw?.rows || []).map(r => r.id)]) };
   }
 
-  // New links an update created (Ben, 2026-10-06). Only items the SAME
+  // New links an update created (2026-10-06). Only items the SAME
   // update touched are compared (named items, drops, new items, category
   // movers — a few dozen, not 7,400), which is what keeps a short window
   // from filling up with coincidences (a whole-catalogue version matched
@@ -3206,9 +3206,9 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return result;
   }
 
-  // Items that launched WITH an update (Ben, 2026-10-06): first GE price
+  // Items that launched WITH an update (2026-10-06): first GE price
   // within -2..+5 days of release. They have no "before" price, so they're
-  // tracked from their first price instead — Ben's rule of thumb is they
+  // tracked from their first price instead — the user's rule of thumb is they
   // spike on release and mostly fade within a month or two.
   const NEW_ITEM_POINTS = [['d7', 7], ['d30', 30], ['d60', 60]];
   async function newItemsFor(event, allItems) {
@@ -3300,7 +3300,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return releases;
   }
 
-  // ─── New-source drops (Ben, 2026-11-13) ───────────────────────────────────
+  // ─── New-source drops (2026-11-13) ───────────────────────────────────
   // A new boss's drop table isn't known before release, but players fill in
   // its wiki page within hours. Every refresh, read the drop tables of releases
   // from the last 60 days (the Launches list) and flag every tradeable item
@@ -3350,7 +3350,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     for (const rel of Object.values(doc.releases)) for (const [id, it] of Object.entries(rel.items)) {
       if (!map[id] || rel.date > map[id].date) map[id] = { release: rel.name, date: rel.date, page: rel.page, firstSeen: it.firstSeen, quantity: it.quantity, rarity: it.rarity };
     }
-    // Is the ITEM new, or an old item with a new source? (Ben, 2026-11-13: Elder seed
+    // Is the ITEM new, or an old item with a new source? (2026-11-13: Elder seed
     // isn't new, Blood Knights just started dropping it.) Prices from more than a week
     // before the release mean the item already existed.
     for (const [id, m] of Object.entries(map)) {
@@ -3381,7 +3381,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return out;
   }
 
-  // Ben's rule across every event: of the new items with a 60-day price,
+  // The user's rule across every event: of the new items with a 60-day price,
   // how many ended below their first price, and the median change.
   async function getNewItemsSummary() {
     const parsed = await storage.readJSON(dataFile, null);
@@ -3434,7 +3434,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // Runecrafting talisman spike), drowning out the event's own effect.
         const len = ph.to - ph.from;
         if (out[ph.key] == null || ph.market == null || len > 60 * DAY) continue;
-        // "Unusual for this item" (Ben, 2026-10-06): coincidental movers
+        // "Unusual for this item" (2026-10-06): coincidental movers
         // were topping the list. Compare the move with this item's own
         // moves over same-length windows in the year before the event —
         // a habitually jumpy item moving 20% scores low, a normally flat
@@ -3457,7 +3457,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── Similar items ────────────────────────────────────────────────────────
-  // (Ben, 2026-10-06) Which items' prices move together. Built once a day in
+  // (2026-10-06) Which items' prices move together. Built once a day in
   // the background: every item's weekly % change over the last two years
   // (from saved history + snapshots), with the whole market's weekly move
   // subtracted first — otherwise everything "correlates" during a market-
@@ -3513,7 +3513,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     }
   }
 
-  // Daily Almanac recompute (Ben, 2026-10-07): GEnius often stays open for
+  // Daily Almanac recompute (2026-10-07): GEnius often stays open for
   // days, so a newly announced DXP (picked up by the daily wiki check) and
   // the day's refreshed history get folded in without a manual Refresh.
   async function maybeRefreshAlmanac() {
@@ -3778,7 +3778,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // ─── Drop sources ────────────────────────────────────────────────────────
   // "Where does this come from" lookup for the detail panel — click-to-fetch
   // only (never auto-loaded like getItemStats above), and never persisted to
-  // disk (dropSourcesCache is session-only). Ben: this is for spot-checking
+  // disk (dropSourcesCache is session-only). The user: this is for spot-checking
   // unusual items, not something that needs to survive a restart.
   //
   // The wiki's drop table is server-rendered from a Cargo query (not
@@ -3929,7 +3929,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // present, prefer it over our own computed sum below (see why in
   // parseMonsterDrops's Rare/Gem drop table comment).
   //
-  // Two bugs found for real on Vindicta & Gorvek (Ben, 2026-07-2x):
+  // Two bugs found for real on Vindicta & Gorvek (2026-07-2x):
   // (1) the span's content is "191,878 coins" — number AND the word
   // "coins" both inside the span — not the bare number the old regex
   // required immediately before the closing tag, so it silently matched
@@ -3953,7 +3953,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return Number.isFinite(n) ? n : null;
   }
 
-  // Confirmed for real on Vindicta & Gorvek (Ben, 2026-07-2x): a page with
+  // Confirmed for real on Vindicta & Gorvek (2026-07-2x): a page with
   // separate "Drops (normal mode)" and "Drops (hard mode)" headings (same
   // pattern as General Graardor, K'ril Tsutsaroth, etc.) was having BOTH
   // sections' item-drops tables scanned indiscriminately across the whole
@@ -4094,7 +4094,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // across rows regardless of quantity. geValueText: the wiki's own
         // displayed total-value text (a range like "13,530–18,040" whenever
         // quantity is a range, or a single number when it's fixed) — shown
-        // as-is in the UI rather than an "average" that loses the range Ben
+        // as-is in the UI rather than an "average" that loses the range the user
         // specifically wanted kept visible. livePrice is null whenever
         // GEnius has no live price for this item, in which case the UI falls
         // back to displaying/summing the GE price instead.
@@ -4104,7 +4104,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
     // Dedupe by item name WITHIN this one mode's section, keeping only the
     // row with the HIGHEST drop probability. Confirmed for real on Vindicta
-    // & Gorvek (Ben, 2026-07-2x): every item was listed twice within the
+    // & Gorvek (2026-07-2x): every item was listed twice within the
     // SAME normal-mode section, once from a "0% reputation" table and once
     // from a "100% reputation" table (reputation boosted drop rates) — e.g.
     // Dragon Rider lance at both 1/460 and 1/255. Summing both into the
@@ -4338,7 +4338,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // A product's full ingredient list is only reliably complete on the
   // PRODUCT's own page (its "Creation" section's recipe-table infobox) —
-  // confirmed for real (Ben, 2026-08-02): Dark Shard of Leng's own
+  // confirmed for real (2026-08-02): Dark Shard of Leng's own
   // Products-table row (on whichever single fragment item's page you're
   // looking at, e.g. Dark ice shard) only lists that ONE fragment as a
   // material, even though the real recipe needs THREE more (Glacor
@@ -4402,7 +4402,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         // Grimy -> Clean, just not guaranteed complete for multi-material
         // recipes) if the product's page has no parseable Creation table
         // OR that table's recipe doesn't actually consume the source item
-        // at all — confirmed for real (Ben, 2026-08-02) on Compost: its
+        // at all — confirmed for real (2026-08-02) on Compost: its
         // own Creation section documents ONE representative/generic
         // recipe (whatever herb the wiki editor happened to use as the
         // example), since compost bins accept almost any raw ingredient,
@@ -4589,7 +4589,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return run;
   };
 
-  // ─── Net worth over time (Ben, 2026-11-10) ───────────────────────────────
+  // ─── Net worth over time (2026-11-10) ───────────────────────────────
   // One row per local day: what open positions would sell for at the live sell
   // price after tax (guide price if no believable live price), plus their cost.
   // Today's row is overwritten after each fetch, so it ends the day current.
@@ -4619,7 +4619,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return Object.entries(doc.days).sort(([a], [b]) => a.localeCompare(b)).map(([date, v]) => ({ date, ...v }));
   }
 
-  // ─── Spreadsheet export (Ben, 2026-11-10) ───────────────────────────────
+  // ─── Spreadsheet export (2026-11-10) ───────────────────────────────
   // Plain CSV text per sheet; the desktop asks for a folder and writes the files.
   function toCsv(rows, cols) {
     const cell = v => { if (v == null) return ''; const s = String(v); return /[",\n\r]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -4667,7 +4667,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // when a NEW sale happened — so a stretch with zero sales meant the
     // day/week/month buckets just sat frozen at whatever the last real
     // sale was, indefinitely, since nothing else ever re-checked the
-    // date (Ben, 2026-09-09: "I haven't sold anything in like a week...
+    // date (2026-09-09: "I haven't sold anything in like a week...
     // Today/Week/Month all showing the same 1.22M"). Running the same
     // check on every plain read fixes that — the buckets now correctly
     // zero out once their window has actually passed, sale or no sale.
@@ -4689,7 +4689,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── Buy planner ──────────────────────────────────────────────────────────
-  // Goals for slowly accumulating an item under its GE buy limit (Ben,
+  // Goals for slowly accumulating an item under its GE buy limit (the user,
   // 2026-10-06, from the dragon hatchet grind). Stored inside the portfolio
   // file so backups/imports carry them. The user only ever enters RUNNING
   // TOTALS (total bought + total gp spent, both shown on the GE offer) —
@@ -4727,7 +4727,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   function syncGoalPosition(p, goal) {
     if (!goal.linked || !(goal.bought > 0)) return;
     // Units already sold out of this goal's position live on as sold
-    // positions; the open one only holds what's left (Ben, 2026-10-31:
+    // positions; the open one only holds what's left (2026-10-31:
     // updating totals after selling 20 whips put all 46 back as held).
     let soldQty = 0, soldCost = 0;
     for (const x of p.positions) {
@@ -4761,7 +4761,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Two ways to call it:
   //   { id, bought, spent }  one offer: the goal's totals directly
-  //   { id, offers }         several offers for the same item (Ben,
+  //   { id, offers }         several offers for the same item (the user,
   //     2026-10-20: one per account, since buy limits are per account).
   //     Each offer is { id, label, bought, spent } with that offer's own
   //     running totals; the goal's totals become their sum.
@@ -4818,7 +4818,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // renderer's saleNet() so the Sell preview and the recorded sale agree.
   const saleNet = (price, qty) => price >= 50 ? Math.round(price * qty * 0.98) : price * qty;
 
-  // alch: true (Ben, 2026-10-26) = high alched instead of sold. sell_price is
+  // alch: true (2026-10-26) = high alched instead of sold. sell_price is
   // then the alch value minus a nature rune, and there's no GE tax.
   // Position ids are timestamps; two changes in the same millisecond used to be
   // able to share one (state-machine audit, 2026-11-09).
@@ -4861,7 +4861,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return { success:true, tax, realized_pl };
   }
 
-  // Item-A-becomes-item-B tracking (Ben, 2026-08-09) — distinct from
+  // Item-A-becomes-item-B tracking (2026-08-09) — distinct from
   // sellPosition on purpose: no GE tax, no realized P&L, since no cash
   // actually changes hands in a conversion. The converted-away quantity
   // gets its own closed-out entry (status 'converted', same split-on-
@@ -4869,8 +4869,8 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // there's a real record of what happened to it, and a new open
   // position is created for the output item with its cost basis computed
   // as (converted input's cost + any extra conversion cost) / output
-  // quantity — the exact division Ben was doing by hand before.
-  // extraInputs (Ben, 2026-10-26): more positions used up by the same
+  // quantity — the exact division the user was doing by hand before.
+  // extraInputs (2026-10-26): more positions used up by the same
   // conversion, e.g. bolt tips + bolts fletched into tipped bolts. Each
   // { id, quantity } is closed out like the main input and its cost goes into
   // the new item's cost basis.
@@ -5019,7 +5019,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     if (changed) await storage.writeJSON(alertsFile, alerts, { pretty: true });
   }
 
-  // "Stopped falling" (Ben, 2026-11-10, watching Malachi's tooth): from the saved
+  // "Stopped falling" (2026-11-10, watching Malachi's tooth): from the saved
   // live daily prices (complete UTC days, mid of buy and sell). True when the item
   // fell at least alert.pct% from its 30-day high to its lowest day, has made no
   // new low for 3+ days, and is still within 10% of that low (not already bounced).
@@ -5087,12 +5087,12 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // this ONLY existed in run.js's checkAlerts(), which sent to Discord and
   // nothing else: no desktop notification, no fired-state tracking, and if
   // no webhook was configured (the common case), a triggered alert was
-  // silently discarded with zero observable effect. Caught for real (Ben,
+  // silently discarded with zero observable effect. Caught for real (the user,
   // 2026-08-05): a genuine "Dragon bones below 950gp" alert existed in
   // alerts.json but produced nothing when forced to evaluate, confirming
   // the gap.
   //
-  // Edge-triggered, not one-shot (corrected same session — Ben: "the
+  // Edge-triggered, not one-shot (corrected same session — the user: "the
   // alerts should stay active regardless if they fire or not"). `active`
   // tracks whether the condition was true as of the LAST check — a
   // notification only fires on the false→true transition, not on every
@@ -5191,14 +5191,14 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Silent safety net against the settings-write race (see storage.js's
   // createKVStore comment) and against GEnius getting force-killed with a
-  // write still in flight — confirmed for real (Ben, 2026-07-29): the
+  // write still in flight — confirmed for real (2026-07-29): the
   // watchlist went from 18 items down to 2 after a force-kill mid-session,
   // with no way to recover except an unrelated manual export from a month
   // earlier. This takes a small snapshot of just watchlist + settings
   // (not portfolio/alerts/overrides — those already have their own atomic
   // writes and are large/change constantly, this is specifically for the
   // small, easy-to-lose, rarely-resaved stuff), one file per CALENDAR DAY
-  // (not per launch — Ben's ask, 2026-07-29, was a 15-day rolling window,
+  // (not per launch — the user's ask, 2026-07-29, was a 15-day rolling window,
   // and multiple launches in one day would just be the same day's snapshot
   // getting overwritten, not extra generations piling up). Anything older
   // than 15 days gets pruned once a new day's backup is written.
@@ -5247,7 +5247,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     await storage.writeJSON(todayPath, snapshot, { pretty: true });
   }
 
-  // ─── Food heal amounts (Ben, 2026-10-13) ────────────────────────────────
+  // ─── Food heal amounts (2026-10-13) ────────────────────────────────
   // From the wiki's "Food" page table (LP per use / LP over time / total
   // LP) — item pages only mention heals in prose. Cached a week.
   const foodHealsFile = path.join(dataDir, 'food_heals.json');
@@ -5275,7 +5275,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     foodHealsMem = cache || { at: Date.now(), foods: {} };
     return foodHealsMem;
   }
-  // Fallback for foods not in the table yet (new Havenhythe II foods, Ben
+  // Fallback for foods not in the table yet (new Havenhythe II foods, the user
   // 2026-10-13): the item page's own sentence, e.g. Claret crab "heals
   // 950 + 8% life points" → text "950 + 8%". Cached per item for a week
   // (including "not food", so non-food items don't refetch every open).
@@ -5303,7 +5303,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     return v;
   }
 
-  // ─── Restore from a daily auto-backup (Ben, 2026-10-11) ──────────────────
+  // ─── Restore from a daily auto-backup (2026-10-11) ──────────────────
   // Auto-backups share the import bundle format, so restore reuses
   // applyImportBundle. Before restoring, the CURRENT state is saved as a
   // "pre-restore" snapshot in the same folder, so any restore can be undone
@@ -5542,7 +5542,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Periodic snapshot of every OPEN position's live buy/sell and GE market
   // price, unlike getWatchlistDigest above which only fires on a threshold
-  // crossing — Ben's ask (2026-07-29) was a plain periodic status check
+  // crossing — the user's ask (2026-07-29) was a plain periodic status check
   // (defaulting to 15 minutes, matching the price auto-refresh), not
   // an anomaly alert, so every open position gets a line every time this
   // fires, regardless of whether anything moved.
@@ -5557,7 +5557,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Notification text for the portfolio digest. Windows/Android only show
   // the first few lines, so the total goes in the title and positions are
-  // listed biggest gain/loss first, one short line each. Ben found the old
+  // listed biggest gain/loss first, one short line each. The user found the old
   // "GE x | Buy y | Sell z (P/L)" lines jumbled (2026-10-20).
   // Mirrored in mobile/runners/background.js.
   function digestMessage(rows, totalPL, totalValue) {
@@ -5606,7 +5606,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Plain date-triggered reminders, no price involved. Fires once the day
   // arrives, then marked fired so it never repeats.
-  // Inbox (Ben, 2026-11-04): every notification GEnius pushes stays here until
+  // Inbox (2026-11-04): every notification GEnius pushes stays here until
   // the user clears it. kind picks the dot: upcoming, almanac, mine, digest.
   const INBOX_MAX = 300;
   function addToInbox(kind, source, notes, replace) {

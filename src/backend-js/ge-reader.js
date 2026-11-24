@@ -1,5 +1,5 @@
 /**
- * GE offer reader (Ben, 2026-11-04): turns OCR text from an opened Grand Exchange
+ * GE offer reader (2026-11-04): turns OCR text from an opened Grand Exchange
  * offer into { side, name, quantity, price, filled, coins }. Dev mode only.
  * Reads the offer's detail screen, because that's what shows the real coins spent.
  * OCR can be wrong, so the app always shows the result for checking before saving.
@@ -49,7 +49,7 @@ function parseOffer(text, itemNames = []) {
 
   // "bought 12,397 so far for 71,282,750 coins", "sold 8,173 so far and received
   // 24,429,097 coins". The sold figure is after GE tax. A FINISHED offer drops the
-  // "so far": "You sold 50,000 and received 318,451,000 coins" (Ben, 2026-11-13:
+  // "so far": "You sold 50,000 and received 318,451,000 coins" (2026-11-13:
   // his completed Orgone sale read as 0 sold).
   const fills = text && String(text).match(/\b(bought|sold)\s+([\d,]+)\s+(?:so\s+far\s+)?(?:for|and\s+received)\s+([\d,]+)\s+coins/i);
   if (fills) {

@@ -1,6 +1,6 @@
 /**
  * cloud-sync.js: sync through one file in the user's own Google Drive
- * (Ben, 2026-11-10: phone sync away from home, no GEnius server, no account of ours).
+ * (2026-11-10: phone sync away from home, no GEnius server, no account of ours).
  *
  * Every device reads the shared file, merges it with its own data and writes the
  * result back. It uses the same three-way merge as home-Wi-Fi sync
@@ -96,7 +96,7 @@ function createDriveTransport({ getToken, store, fetchImpl = (...a) => fetch(...
     const token = await getToken();
     const go = () => fetchImpl(url, { ...opts, headers: { ...(opts.headers || {}), Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(30000) });
     let res = await go();
-    // Google's servers have brief hiccups (502/503/429; Ben, 2026-11-13): wait and retry once.
+    // Google's servers have brief hiccups (502/503/429; 2026-11-13): wait and retry once.
     if (res.status >= 500 || res.status === 429) { await new Promise(r => setTimeout(r, 3000)); res = await go(); }
     if (!res.ok) {
       // An error page is HTML, not a message: say what happened in one line.

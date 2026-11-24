@@ -4,11 +4,11 @@
  *   category_overrides.json - bulk/dev-curated, edited directly in the
  *     project (e.g. via build_overrides.js or hand edits) — the ONLY file
  *     bundled with the app. Every fresh install starts from this alone.
- *   personal_overrides.json - Ben's individual per-item edits made through
+ *   personal_overrides.json - the user's individual per-item edits made through
  *     the in-app Settings category editor. Lives in the caller's dataDir
  *     (passed into reloadOverrides() below) — an ordinary per-user runtime
  *     file, same as alerts.json/portfolio.json, NOT bundled with the app at
- *     all. Getting Ben's corrections into everyone's install is
+ *     all. Getting the user's corrections into everyone's install is
  *     sync-overrides.js's job at build time: it merges his local copy of
  *     this file INTO category_overrides.json before packaging, rather than
  *     this file being reshipped as itself — seemed clever at the time to
@@ -146,7 +146,7 @@ const CATEGORY_RULES = {
   ],
 
   // --- Prayer ---
-  // Narrowed scope (Ben, 2026-06-28): bones, ashes, Powder of burials, and
+  // Narrowed scope (2026-06-28): bones, ashes, Powder of burials, and
   // Perfect juju prayer potion only — actual prayer-training consumables,
   // not anything that happens to give a passive prayer bonus or a prayer
   // restore effect as a side feature. Previously this list also matched
@@ -196,7 +196,7 @@ const CATEGORY_RULES = {
 
   // --- Cosmetics (renamed from Overrides/Titles) ---
   // The keyword list itself was fine as a broad catch-all (tokens,
-  // titles, makeover, hairstyle, etc.) — Ben's actual ask was narrower:
+  // titles, makeover, hairstyle, etc.) — the user's actual ask was narrower:
   // among items that are ALSO Treasure Trails rewards, only the dyes
   // should keep the Cosmetics tag too; every other TT reward that
   // happens to match one of these generic keywords (e.g. "blessed"
@@ -408,9 +408,9 @@ const CATEGORY_RULES = {
   ],
 
   // --- Skilling: Artisan (Smithing + Crafting + Fletching +
-  // Construction merged — Ben's call: all four are "make stuff out of
+  // Construction merged — the user's call: all four are "make stuff out of
   // raw materials" and didn't need to be four separate tabs. Herblore
-  // and Archaeology are technically the same kind of skill but Ben
+  // and Archaeology are technically the same kind of skill but the user
   // wants those kept as their own tabs — they're "involved enough to
   // deserve it.") ---
   artisan: [
@@ -458,7 +458,7 @@ const CATEGORY_RULES = {
     // "ration" alone (meant for "Field ration") is a substring of
     // "restoration"/"acceleration" — was silently tagging Archaeology's
     // Portent of restoration I-X and Powerburst of acceleration as food.
-    // Confirmed for real (Ben, 2026-07-14) auditing the Food category.
+    // Confirmed for real (2026-07-14) auditing the Food category.
     "cooked", "field ration", "chilli",
     "summer pie", "wild pie", "fish pie", "admiral pie",
     "mushroom potato", "egg and tomato",
@@ -604,7 +604,7 @@ function _applyExclusive(cats, nameLower = "", skipLowTierHeuristic = false) {
     )
   );
   if (hasLowTier) {
-    // Ben, 2026-08-06: TT items should NOT retain their base combat
+    // 2026-08-06: TT items should NOT retain their base combat
     // category once low_tier applies — they should show as Treasure
     // Trails only, same as every other low-tier item (e.g. Robin Hood
     // hat should be treasure_trails+low_tier, not
@@ -618,7 +618,7 @@ function _applyExclusive(cats, nameLower = "", skipLowTierHeuristic = false) {
 }
 
 
-// Archaeology is its own world (Ben, 2026-11-15: "Anything tagged archaeology should not be
+// Archaeology is its own world (2026-11-15: "Anything tagged archaeology should not be
 // in any other tab"): materials and artefacts that also match other rules show only under
 // Archaeology. Only Rares can sit beside it (hero items like Guildmaster Tony's
 // mattock = Rares + Archaeology).
@@ -641,7 +641,7 @@ function _assignCategories(name) {
   //    "rune platebody (g)" with explicit secondary categories aren't short-
   //    circuited by the TT-suffix pre-check below.
   if (nameLower in OVERRIDES) {
-    // Hand-picked cross-references (Ben, 2026-10-09): an override that lists
+    // Hand-picked cross-references (2026-10-09): an override that lists
     // Rares PLUS other categories keeps all of them (e.g. hero items:
     // Guildmaster Tony's mattock = Rares + Archaeology). Name-rule matches
     // stay exclusive.
@@ -685,7 +685,7 @@ function _assignCategories(name) {
   // 3. Keyword rules in priority order
   const assigned = [];
   for (const category of CATEGORY_PRIORITY) {
-    // Ben: TT items shouldn't bleed into Artisan specifically — e.g.
+    // The user: TT items shouldn't bleed into Artisan specifically — e.g.
     // "Ring of trees" (TT reward) also matches artisan's generic "ring
     // of" jewelry keyword, "Ruby Cane" matches artisan's "ruby" gem
     // keyword. Other TT+category combos (Construction via "Gilded ...
@@ -693,7 +693,7 @@ function _assignCategories(name) {
     // intentional/useful, not reported as wrong, so this is scoped to
     // just the one pairing that was actually flagged.
     if (category === "artisan" && assigned.includes("treasure_trails")) continue;
-    // Ben, 2026-08-06: "Zamorakian title scroll (X)" etc. were showing up
+    // 2026-08-06: "Zamorakian title scroll (X)" etc. were showing up
     // in Archaeology — archaeology's god-name keywords ("zamorakian",
     // "saradominist", "kharidian") are meant to catch actual dig relics,
     // but they also match the god-name PREFIX on unrelated title scrolls
@@ -705,12 +705,12 @@ function _assignCategories(name) {
     // ambiguity.
     if (category === "archaeology" && nameLower.includes("title scroll")) continue;
     // Same idea for Cosmetics: its keyword list is intentionally broad
-    // (tokens/titles/makeover/"blessed"/etc, kept as-is per Ben — "all
+    // (tokens/titles/makeover/"blessed"/etc, kept as-is per the user — "all
     // of those tokens and stuff were fine before"). But a TT reward
     // that happens to match one of those generic words (e.g. "Blessed
     // dragonhide body (Zamorak)" matching "blessed") should show as
     // Treasure Trails ONLY, not also Cosmetics — dyes are the one
-    // exception Ben wants kept, and dyes are handled entirely through
+    // exception the user wants kept, and dyes are handled entirely through
     // manual category_overrides.json entries (not this keyword list at
     // all), so blocking the keyword path here doesn't affect them.
     if (category === "cosmetics" && assigned.includes("treasure_trails")) continue;

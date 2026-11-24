@@ -1,6 +1,6 @@
 /**
  * live-history.js: keeps the wiki's daily live buy/sell prices and volumes on
- * disk for good (Ben, 2026-11-02: "the same way we save the GE price data").
+ * disk for good (2026-11-02: "the same way we save the GE price data").
  *
  * The wiki only serves roughly the last 3-6 months, and older days vanish, so
  * every complete UTC day is saved as soon as we can get it. One request covers
@@ -118,7 +118,7 @@ function createLiveHistory({ dataDir, platform = 'desktop' }) {
     return out;
   }
 
-  // "Still falling" at live prices, for many items in one pass (Ben, 2026-11-12):
+  // "Still falling" at live prices, for many items in one pass (2026-11-12):
   // ids whose lowest daily average instant-sell over the last `days` days came
   // within the last `recentDays`. Needs 30+ days of data for an item. Reads each
   // month file once, however many ids.
@@ -144,7 +144,7 @@ function createLiveHistory({ dataDir, platform = 'desktop' }) {
     return Object.keys(low).filter(id => low[id].n >= 30 && low[id].date >= recentCut);
   }
 
-  // An item's NORMAL price (Ben, 2026-11-13: a DXP spike nearly set his bids
+  // An item's NORMAL price (2026-11-13: a DXP spike nearly set his bids
   // ~60% above normal): median daily instant-buy and instant-sell over the last
   // 90 days, plus the lowest daily instant-sell in the last year.
   async function getNormal(id, days = 90) {

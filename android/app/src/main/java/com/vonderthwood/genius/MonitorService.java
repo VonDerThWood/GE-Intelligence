@@ -22,14 +22,14 @@ import androidx.work.WorkManager;
 import io.ionic.backgroundrunner.plugin.RunnerWorker;
 
 /**
- * "Live monitoring" (Ben, 2026-10-15): an optional foreground service that
+ * "Live monitoring" (2026-10-15): an optional foreground service that
  * runs GEnius's background check (mobile/runners/background.js: price
  * alerts, watchlist + portfolio digests, DXP, reminders) on the user's fetch
  * interval, instead of whenever WorkManager's battery-saving schedule gets
- * to it (1-4h apart on Ben's phone, longer with Battery Saver on).
+ * to it (1-4h apart on the user's phone, longer with Battery Saver on).
  *
  * It triggers the background runner rather than the app's own web page:
- * tested on Ben's Pixel 8 Pro (Android 16), the WebView page is fully
+ * tested on the user's Pixel 8 Pro (Android 16), the WebView page is fully
  * frozen while GEnius is off screen (timers and network callbacks never
  * run, even with this service keeping the process alive), so the page's
  * own 15-minute fetch can't be relied on in the background.

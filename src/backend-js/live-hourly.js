@@ -1,6 +1,6 @@
 /**
  * live-hourly.js: keeps the wiki's HOURLY live buy/sell prices and volumes on
- * disk for good (Ben, 2026-11-07). Daily averages flatten spikes: a scrimshaw
+ * disk for good (2026-11-07). Daily averages flatten spikes: a scrimshaw
  * that sold at 20m for an hour still averages ~14m for the day. The wiki keeps
  * about 100 days of hours, then they're gone, so the Almanac needs its own copy.
  *

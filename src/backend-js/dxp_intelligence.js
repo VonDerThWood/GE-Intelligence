@@ -42,7 +42,7 @@ const BUNDLED_EVENTS = require('./data/dxp_events.json').map(e => [...e]);
 // ─── RS Wiki auto-fetch ───────────────────────────────────────────────────────
 
 const WIKI_DXP_URL = 'https://runescape.wiki/api.php?action=parse&page=Double+XP&prop=wikitext&format=json&origin=*';
-// Daily, not weekly (Ben, 2026-10-07): a new DXP should reach the Almanac
+// Daily, not weekly (2026-10-07): a new DXP should reach the Almanac
 // within a day of its announcement. One small wiki request.
 const WIKI_REFRESH_MS = 24 * 3600000;
 const WIKI_CACHE_FILE = 'dxp_events_wiki.json';
@@ -363,18 +363,18 @@ function bestBuySellDays(points, parsed = null, events = null) {
   };
 }
 
-// Would this item's plan have made money? (Ben, 2026-11-05) Replays it through each
+// Would this item's plan have made money? (2026-11-05) Replays it through each
 // finished DXP, choosing the days from earlier DXPs only, after the 2% tax. The app's
 // old profit figure combined separate typical highs and lows, so it never came from a
 // real trade: Yak-hide showed +58gp but lost 5.7% in a typical replay. Control is the
 // same trade 45 days earlier, to catch what's only drift. GUIDE prices: old DXPs have
 // no live history, so real fills will be worse. research/dxp_plan_backtest has the study.
 const REPLAY_MIN_PRIOR = 5, REPLAY_MIN_TESTS = 8, REPLAY_DAY_WINDOW = 12;
-// early = the New Items tab (Ben, 2026-11-05): same tests for items without the 13 DXPs
+// early = the New Items tab (2026-11-05): same tests for items without the 13 DXPs
 // a full replay needs (5 to learn the days, 8 to test), learning from as few as 2. It
 // reports what it finds but never passes, so these items stay out of Recommendations.
 // Bump whenever what's saved in dxp_intelligence.json changes shape, so an updated app
-// rebuilds it at once instead of showing the old file (Ben, 2026-11-05: replays and
+// rebuilds it at once instead of showing the old file (2026-11-05: replays and
 // New Items stayed empty after updating until a manual Refresh).
 const ALMANAC_DATA_VERSION = 3;
 const REPLAY_FULL_DXPS =REPLAY_MIN_PRIOR + REPLAY_MIN_TESTS;

@@ -1,6 +1,6 @@
 /**
  * update-risks.js: warns when an upcoming game update could affect something
- * Ben holds or watches, while there's still time to act (Ben, 2026-11-02: he
+ * The user holds or watches, while there's still time to act (2026-11-02: he
  * almost sold 93k magic frames before the 120 Construction release).
  *
  * Risk information only: says what's changing and how much gp is exposed,
@@ -24,7 +24,7 @@ const NOTIFY_NAMES_PER_GROUP = 3;
 const GROUP_ORDER = { held: 0, watched: 1, other: 2 };
 
 // Items tied to a skill, so a post about the skill flags them without naming
-// them (Ben, 2026-11-03: a Construction post should have flagged his magic
+// them (2026-11-03: a Construction post should have flagged his magic
 // frames). A passing mention doesn't count: the skill must be in the post's
 // title, or named at least RELATED_MIN_MENTIONS times.
 const RELATED_MIN_MENTIONS = 3;
@@ -125,14 +125,14 @@ function findRisks({ updates = [], posts = [], holdings = [], watched = [], cata
     }
   }
   // Holdings, then watched, then the rest. Within each, items a post actually
-  // names come before merely related ones (Ben, 2026-11-03), biggest exposure first.
+  // names come before merely related ones (2026-11-03), biggest exposure first.
   const named = r => (r.kind === 'related' ? 1 : 0);
   return risks.sort((a, b) => GROUP_ORDER[a.group] - GROUP_ORDER[b.group] || named(a) - named(b) || b.value - a.value || a.itemName.localeCompare(b.itemName));
 }
 
 // One notification per update, listing what's newly exposed. `notified` is the
 // list of keys already told about. Holdings of some size always notify; watched
-// items (Ben, 2026-11-02: he may be about to trade them) unless switched off.
+// items (2026-11-02: he may be about to trade them) unless switched off.
 // A merely related watched item stays quiet: there can be a lot of those.
 function buildNotifications(risks, notified, { includeWatched = true } = {}) {
   const fresh = risks.filter(r => (r.value >= MIN_NOTIFY_GP || (includeWatched && r.watched && r.kind !== 'related')) && !notified.includes(r.key));

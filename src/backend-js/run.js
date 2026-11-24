@@ -123,7 +123,7 @@ async function fetchLivePrices() {
       console.log(`[prices] 24h volume fetch failed (non-fatal): ${e.message}`);
     }
 
-    // Yesterday's full-day average (UTC day), one request (Ben, 2026-10-13):
+    // Yesterday's full-day average (UTC day), one request (2026-10-13):
     // the live daily change used to need GEnius's OWN snapshot from ~24h
     // earlier, which rarely existed when the laptop hibernates during the
     // day ("Live daily Δ: Building…" on 0 of 7,479 items). The wiki's 24h
@@ -175,7 +175,7 @@ async function fetchLivePrices() {
 }
 
 // The price one side of the market is really trading at. /latest is only the
-// single most recent trade (Ben, 2026-11-03: Soul rune's was 200gp while 205k
+// single most recent trade (2026-11-03: Soul rune's was 200gp while 205k
 // traded around 1,045 that same hour; 46% of liquid items were 20%+ off their
 // daily average this way). So: the last hour's average if that hour saw real
 // trading, else the last 24 hours', and the lone latest trade only for items
@@ -304,7 +304,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
   // Build previous volume lookups from last fetch (EMA fallback for items without history)
   const EMA_ALPHA = 0.08;
   const prevAvgVolume = {};
-  // When GEnius first saw each item (Ben, 2026-10-13: Malachi's tooth/claw
+  // When GEnius first saw each item (2026-10-13: Malachi's tooth/claw
   // showed FRENZY on day one — a brand-new item's "average" volume is just
   // its first day or two of trading, so any normal day looks like a spike).
   const prevFirstSeen = {};
@@ -424,7 +424,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       members = itemData.members ?? false;
 
       // Price change — dump's last field first, then history fallback.
-      // Ben, 2026-08-09: caught for real on Water rune — dump's "last" said
+      // 2026-08-09: caught for real on Water rune — dump's "last" said
       // 52gp (implying -50% change_1d) while both our own tracked history
       // AND the live-price feed agreed the real recent price never left
       // 25-28gp. The dump's "last" field can go stale on cheap,
@@ -521,7 +521,7 @@ async function fetchPrices(dataDir, webhookUrl = null, existingItems = null, his
       it.change_1d_live = it.livePrevDayAvg && nowMid
         ? pyRound(((nowMid - it.livePrevDayAvg) / it.livePrevDayAvg) * 100, 2)
         : computeLiveChange1d(snapshots, it.id, price);
-      // SPIKE / SLUMP (Ben, 2026-10-13): the live-price twins of SURGE/DUMP
+      // SPIKE / SLUMP (2026-10-13): the live-price twins of SURGE/DUMP
       // (which use the GE guide's daily change). Kept separate so the
       // guide-based track record isn't mixed with a different definition,
       // and so the two can be compared (live history back to July 2026).
@@ -618,7 +618,7 @@ const DISTRIB_VOL_MIN = 2.5;
 // removed-2026-08-05 comment below for why. A flat unit-count floor
 // (formerly MIN_VOL_ABS = 5000) systematically excluded every high-value
 // item from volume-based signals/scoring regardless of real trading
-// activity: confirmed for real (Ben, 2026-08-05) that Fractured Staff of
+// activity: confirmed for real (2026-08-05) that Fractured Staff of
 // Armadyl, Noxious scythe, Ascension crossbow, Seismic wand, and Staff of
 // Sliske all NEVER cleared 5000 units/day despite each moving hundreds of
 // millions to tens of billions of gp/day (Fractured Staff of Armadyl:
@@ -642,7 +642,7 @@ const VOL_QUIET_MAX = 0.9;
 const VOL_THIN_MAX = 0.5;
 // MANIPULATED-specific floor, separate from the general hasAvg/turnover
 // gate — a volume RATIO computed from a tiny baseline is just noise, not
-// evidence of manipulation. Confirmed for real (Ben, 2026-08-06): of 43
+// evidence of manipulation. Confirmed for real (2026-08-06): of 43
 // items flagged MANIPULATED, ~27 had avgVolume under 20 — e.g. "Dragon
 // ring token" (avgVol 1, vol 8, ratio 8.0x) — going from 1 trade/day to
 // 8 isn't manipulation, it's just what a 1-unit average looks like on a
@@ -650,17 +650,17 @@ const VOL_THIN_MAX = 0.5;
 // longsword, Beer glass, etc.) look like genuinely meaningful flags by
 // comparison. Picked directly from that real distribution, not guessed.
 const MANIPULATED_MIN_AVG_VOL = 20;
-// Ben, 2026-07-27: 20% swing between the listed GE price and real live
+// 2026-07-27: 20% swing between the listed GE price and real live
 // buy/sell (the wiki's real-time prices API — see fetchLivePrices above),
 // gated on a minimum absolute gp gap so it doesn't fire on cheap items
 // where 20% is a trivial few gp. Same gp-floor pattern as SURGE/DUMP's
 // absChgGp >= 1000 check above.
 const DISCREPANCY_PCT_MIN = 20;
 const DISCREPANCY_MIN_GP = 1000;
-// Ben, 2026-08-06: OVERPRICED/UNDERPRICED was firing on ~40% of the
+// 2026-08-06: OVERPRICED/UNDERPRICED was firing on ~40% of the
 // catalogue. Root cause confirmed directly from real data — a single
 // isolated trade (an impatient buyer throwing a wildly over/under offer
-// on something nobody really trades, Ben's own real example: a bronze
+// on something nobody really trades, the user's own real example: a bronze
 // longsword instabought for 1m by someone who didn't want to wait) can
 // itself make the live price look "backed" by real gp turnover, so
 // turnover alone doesn't catch it. Requires BOTH real trade count and
@@ -680,9 +680,9 @@ const LIVE_LIQUID_MIN_TURNOVER_GP = 25000;
 // percentile of live-vs-GE ratio among illiquid items (checked directly):
 // the bulk of real thin-market noise sits under that, then the
 // distribution explodes into obvious nonsense (90th pct 54x, 99th pct
-// 7576x) — matches the same elbow as Ben's bronze longsword example.
+// 7576x) — matches the same elbow as the user's bronze longsword example.
 const LIVE_SANITY_BAND = 5;
-// Ben, 2026-08-06: exempted from both checks above — extremely rare,
+// 2026-08-06: exempted from both checks above — extremely rare,
 // high-value gear (his examples: Infinity robes, Demonic title scrolls)
 // legitimately trades at prices wildly divergent from GE with 0-2 units
 // in 24h, because almost nobody does the content that drops them. A
@@ -773,7 +773,7 @@ function runSignals(items) {
     // have diverged by 20%+ — independent of SURGE/DUMP above (those
     // compare today's price to yesterday's; this compares the listed
     // price to what people are ACTUALLY paying/getting right now).
-    // Ben's real example that prompted this: some rare-drop "Furniture
+    // The user's real example that prompted this: some rare-drop "Furniture
     // plans" items are listed at a stale ~3-5M gp GE default while real
     // live trades show them worth a fraction of that.
     if ((item.liveBuy != null || item.liveSell != null) && gePrice0 > 0 && isLiveTrusted(item, gePrice0)) {
@@ -853,7 +853,7 @@ function runSignals(items) {
       const profit = alch - buy - natureRunePrice;
       if (profit > 0) score += Math.min(10, profit / buy * 100);
     }
-    // Ben, 2026-08-09: an OVERPRICED item (GE price diverged significantly
+    // 2026-08-09: an OVERPRICED item (GE price diverged significantly
     // above the real live price) could still hit 100/100 here — the
     // momentum/DUMP points above are measured off change_1d, which is
     // itself derived from that same untrustworthy GE price, so a "great
@@ -1081,7 +1081,7 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
     }
   }
 
-  // Items removed from the GE (Ben, 2026-10-28: Jagex is removing Silverhawk
+  // Items removed from the GE (2026-10-28: Jagex is removing Silverhawk
   // feathers, springs, the portables... next month). The item list is
   // rebuilt from the dump every fetch, so a removed item would silently
   // vanish: gone from the watchlist, and worth 0 (-100%) in the portfolio.

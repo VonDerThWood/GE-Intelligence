@@ -25,7 +25,7 @@ assert(core, "GEnius: could not load core/genius_core")
 local M = {}
 
 -- How close (as a fraction of the price) counts as "at the market" rather
--- than above or below it. 1% (Ben, 2026-10-19: small gaps are normal GE noise) stops tiny
+-- than above or below it. 1% (2026-10-19: small gaps are normal GE noise) stops tiny
 -- differences, like 1gp on a
 -- 1,000gp item, from being shown as a mismatch. Maybe a setting later.
 local AT_MARKET_TOLERANCE = 0.01

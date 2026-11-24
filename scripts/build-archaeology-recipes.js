@@ -1,5 +1,5 @@
 /**
- * Rebuilds ARCHAEOLOGY_DATA in src/renderer.js from the RuneScape Wiki (Ben, 2026-11-09):
+ * Rebuilds ARCHAEOLOGY_DATA in src/renderer.js from the RuneScape Wiki (2026-11-09):
  * every restored artefact (level, listed chronotes, restoration materials) and every
  * collection (collector, level, set-bonus chronotes, other recurring reward, artefacts).
  *   node scripts/build-archaeology-recipes.js
@@ -89,7 +89,7 @@ async function pages(titles) {
   }
   console.log('hotspots', Object.keys(hotspots).length);
 
-  // Materials: what disassembling one gives (Ben, 2026-11-10). The wiki's
+  // Materials: what disassembling one gives (2026-11-10). The wiki's
   // Disassembly box lists ancient components as e.g. "Historic components[1]{16/100}",
   // with alwaysgivesaspecialmaterial = yes meaning exactly one of them per material.
   const matNames = [...new Set(Object.values(artefacts).flatMap(a => a.m.map(m => m[0])))];
@@ -104,7 +104,7 @@ async function pages(titles) {
     if (!comps.length) continue;
     materials[name] = { lvl: num(field(box, 'level') || 0), always: /yes/i.test(field(box, 'alwaysgivesaspecialmaterial') || ''), c: comps };
   }
-  // The full breakdown (Ben, 2026-11-10: "show ALL of the materials"): base junk
+  // The full breakdown (2026-11-10: "show ALL of the materials"): base junk
   // chance, how many normal materials per disassembly, and each one's chance,
   // read from the rendered Disassembly section of the material's page.
   for (const name of Object.keys(materials)) {

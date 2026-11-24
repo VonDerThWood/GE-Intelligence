@@ -49,7 +49,7 @@ jobs:
         shell: pwsh
 
       # Patch notes come from RELEASE_NOTES.md, written and committed before
-      # tagging (Ben, 2026-10-31: v2.8.0 went out without them). The build
+      # tagging (2026-10-31: v2.8.0 went out without them). The build
       # fails if that file is still the previous version's notes, rather
       # than publishing stale ones. Install and safety info is added below.
       - name: Write release notes
@@ -93,7 +93,7 @@ jobs:
 
       # Uploads the installer to VirusTotal (~70 antivirus engines) and
       # appends the public scan link to the release notes, so cautious
-      # players can check it without trusting us (Ben, 2026-10-20).
+      # players can check it without trusting us (2026-10-20).
       # Needs the repository secret VT_API_KEY (free VirusTotal account ->
       # profile -> API key; GitHub repo -> Settings -> Secrets and variables
       # -> Actions -> New repository secret). Without it this step fails but

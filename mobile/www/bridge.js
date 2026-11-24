@@ -21800,7 +21800,7 @@
           "inquisitor's"
         ],
         // --- Prayer ---
-        // Narrowed scope (Ben, 2026-06-28): bones, ashes, Powder of burials, and
+        // Narrowed scope (2026-06-28): bones, ashes, Powder of burials, and
         // Perfect juju prayer potion only — actual prayer-training consumables,
         // not anything that happens to give a passive prayer bonus or a prayer
         // restore effect as a side feature. Previously this list also matched
@@ -21873,7 +21873,7 @@
         ],
         // --- Cosmetics (renamed from Overrides/Titles) ---
         // The keyword list itself was fine as a broad catch-all (tokens,
-        // titles, makeover, hairstyle, etc.) — Ben's actual ask was narrower:
+        // titles, makeover, hairstyle, etc.) — the user's actual ask was narrower:
         // among items that are ALSO Treasure Trails rewards, only the dyes
         // should keep the Cosmetics tag too; every other TT reward that
         // happens to match one of these generic keywords (e.g. "blessed"
@@ -22261,9 +22261,9 @@
           "clean "
         ],
         // --- Skilling: Artisan (Smithing + Crafting + Fletching +
-        // Construction merged — Ben's call: all four are "make stuff out of
+        // Construction merged — the user's call: all four are "make stuff out of
         // raw materials" and didn't need to be four separate tabs. Herblore
-        // and Archaeology are technically the same kind of skill but Ben
+        // and Archaeology are technically the same kind of skill but the user
         // wants those kept as their own tabs — they're "involved enough to
         // deserve it.") ---
         artisan: [
@@ -22380,7 +22380,7 @@
           // "ration" alone (meant for "Field ration") is a substring of
           // "restoration"/"acceleration" — was silently tagging Archaeology's
           // Portent of restoration I-X and Powerburst of acceleration as food.
-          // Confirmed for real (Ben, 2026-07-14) auditing the Food category.
+          // Confirmed for real (2026-07-14) auditing the Food category.
           "cooked",
           "field ration",
           "chilli",
@@ -24541,23 +24541,23 @@
               },
               {
                 name: "Trimmed masterwork melee helm",
-                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+                effect: "Pushed to tier 100 to match the other two sets (2026-11-09). Price already jumped ~30% at the start of November."
               },
               {
                 name: "Trimmed masterwork melee platebody",
-                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+                effect: "Pushed to tier 100 to match the other two sets (2026-11-09). Price already jumped ~30% at the start of November."
               },
               {
                 name: "Trimmed masterwork melee platelegs",
-                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+                effect: "Pushed to tier 100 to match the other two sets (2026-11-09). Price already jumped ~30% at the start of November."
               },
               {
                 name: "Trimmed masterwork melee gloves",
-                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+                effect: "Pushed to tier 100 to match the other two sets (2026-11-09). Price already jumped ~30% at the start of November."
               },
               {
                 name: "Trimmed masterwork melee boots",
-                effect: "Pushed to tier 100 to match the other two sets (Ben, 2026-11-09). Price already jumped ~30% at the start of November."
+                effect: "Pushed to tier 100 to match the other two sets (2026-11-09). Price already jumped ~30% at the start of November."
               }
             ]
           }
@@ -33039,7 +33039,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       getSettings: () => ({
         discordWebhook: store.get("discordWebhook", ""),
         fetchInterval: store.get("fetchInterval", 15),
-        // Phones default to black (OLED screens; Ben, 2026-11-20). The GE-inspired theme
+        // Phones default to black (OLED screens; 2026-11-20). The GE-inspired theme
         // stays in Settings. Desktop keeps its own default in main.js.
         theme: store.get("theme", "black"),
         notifications: store.get("notifications", true),

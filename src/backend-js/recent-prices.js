@@ -1,6 +1,6 @@
 /**
  * recent-prices.js: average instant-buy and instant-sell prices over the most
- * recent trading, for every item at once (Ben, 2026-11-12: "take the last
+ * recent trading, for every item at once (2026-11-12: "take the last
  * several trades on each side, average them out").
  *
  * The wiki doesn't expose single trades, only windows: average price and how
@@ -16,7 +16,7 @@
  */
 const BASE = 'https://prices.runescape.wiki/api/v2/rs/';
 const HEADERS = { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' };
-const MIN_UNITS = 5;        // Ben: at least 5 per side
+const MIN_UNITS = 5;        // The user: at least 5 per side
 const TARGET_UNITS = 20;    // stop walking back once both sides have this many
 const MAX_HOURS = 6;
 const FIVE_MIN_HOURS = 2;   // 5-minute blocks this far back, hourly before
@@ -57,7 +57,7 @@ function createRecentPrices() {
     await new Promise(r => setTimeout(r, GAP_MS));
   }
 
-  // ── Hourly volume per side (Ben, 2026-11-17, idea from a cloud session) ──
+  // ── Hourly volume per side (2026-11-17, idea from a cloud session) ──
   // Daily volume says an item trades, not that YOUR offer will fill: a buy
   // offer fills from instant-SELLERS, a sell offer from instant-BUYERS, and the
   // two can differ 100x (Bomb vial, one hour on Nov 16: 14,041 vs 101). So keep
@@ -131,7 +131,7 @@ function createRecentPrices() {
         if (bN >= TARGET_UNITS && sN >= TARGET_UNITS) break;
       }
       if (bN < MIN_UNITS || sN < MIN_UNITS) continue;
-      // Middle price weighted by units (Ben, 2026-11-12: Ring of Fortune's one
+      // Middle price weighted by units (2026-11-12: Ring of Fortune's one
       // 10m buy dragged a plain average to 4.4m on a 1m item). lo/hi let the
       // app flag a side whose prices are all over the place.
       const bs = side(bPts), ss = side(sPts);

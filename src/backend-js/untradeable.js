@@ -22,7 +22,7 @@ const _DIR = __dirname;
 // readJSON returned null (no such file) forcing a live re-fetch every time,
 // and the write at the bottom of load() then threw (no such directory),
 // which — unguarded — discarded the freshly-fetched items entirely rather
-// than just failing to persist them. Reported by Ben as the Almanac
+// than just failing to persist them. Reported by the user as the Almanac
 // Components pill going empty on every launch of the installed app, plus
 // the repeated full-app freezes: two live wiki-page fetches + regex parses
 // on EVERY price-fetch cycle, forever, since the cache could never actually

@@ -278,7 +278,7 @@ async function fetchCategoriesBatch(titles) {
   // own internal response-size limit even with cllimit=100 per page — when
   // that happens the response includes a `continue` token and some pages
   // come back with an EMPTY categories list, not an error and not
-  // page.missing, just silently truncated. Confirmed for real (Ben,
+  // page.missing, just silently truncated. Confirmed for real (the user,
   // 2026-08-02): a 50-title batch that happened to include several
   // heavily-categorized pages returned Cannonball with 0 categories, even
   // though it has 27 when queried alone — this single-shot version never
@@ -298,7 +298,7 @@ async function fetchCategoriesBatch(titles) {
       action: 'query',
       titles: titles.join('|'),
       prop: 'categories',
-      // 'max' (not a fixed number) — confirmed for real (Ben, 2026-08-02):
+      // 'max' (not a fixed number) — confirmed for real (2026-08-02):
       // with cllimit=100, a 50-title batch needing many categories per
       // page (Adamant spear alone has 35+) legitimately needed MORE than
       // 10 continuation rounds to ever reach every page's categories —
@@ -315,7 +315,7 @@ async function fetchCategoriesBatch(titles) {
     });
     let data;
     // One retry after a short backoff before giving up on this whole
-    // request — confirmed for real (Ben, 2026-08-02): a transient failure
+    // request — confirmed for real (2026-08-02): a transient failure
     // on 3 consecutive batches mid-run silently wiped every item in them
     // (Adamant spear/claws/armoured boots included, despite genuinely
     // having Melee weapons/Melee armour categories on the wiki) with no
@@ -454,7 +454,7 @@ async function buildOverrides(items, limit = 0) {
     // first 50 candidates" limit — silently slicing to the first 50 here
     // meant every candidate past that cutoff was never even requested and
     // got reported as "not found on wiki" despite the page existing.
-    // Confirmed for real (Ben, 2026-08-02): Cannonball, plain arrowheads,
+    // Confirmed for real (2026-08-02): Cannonball, plain arrowheads,
     // and unstrung bows all came back "not on wiki" this way. Chunk
     // allTitles into 50-title API calls instead and merge every chunk's
     // results, so nothing gets dropped just because of where it fell in

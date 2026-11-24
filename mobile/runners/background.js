@@ -33,7 +33,7 @@ const DXP_SEASON_ANCHORS = [
 
 // CapacitorKV.get returns null (not {value: null}) for a key that was never
 // set, so reading .value straight off it crashed the whole check on its
-// first run (Ben's phone, 2026-10-15: "TypeError: cannot read property
+// first run (the user's phone, 2026-10-15: "TypeError: cannot read property
 // 'value' of null" from rb_portfolioDigestLastSent).
 function kvGet(key) {
   const r = CapacitorKV.get(key);
@@ -150,7 +150,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       const st = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (st && st.isActive) { resolve(); return; }
     } catch (e) { /* no app state available: carry on */ }
-    // When the background last checked, shown in the app's header (Ben,
+    // When the background last checked, shown in the app's header (the user,
     // 2026-10-26: "8341 minutes since last fetch" while his notifications
     // were actually current).
     CapacitorKV.set('rb_lastRunAt', String(Date.now()));
@@ -162,7 +162,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
     const portfolioPositions = getJSON('rb_portfolioPositions', []);
     const portfolioSettings = getJSON('rb_portfolioSettings', { enabled: false, intervalHours: 0.25 });
     const reminders = getJSON('rb_reminders', []);
-    // Price alerts the background can check on its own (Ben, 2026-10-15:
+    // Price alerts the background can check on its own (2026-10-15:
     // "it doesn't do stuff in the background at all"). Signal/alch/score
     // alerts need the full app's analysis, so they still wait for it.
     const BG_CONDITIONS = ['above', 'below', 'live_above', 'live_below', 'pct_up', 'pct_down'];

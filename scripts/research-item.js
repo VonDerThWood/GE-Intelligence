@@ -1,5 +1,5 @@
 /**
- * One-command item research (Ben, 2026-11-11), for Claude sessions here and
+ * One-command item research (2026-11-11), for Claude sessions here and
  * in the cloud: "what does X's price look like?"
  *   node scripts/research-item.js "dragon bones"     (or an item id)
  *   node scripts/research-item.js "dragon bones" --months 24
@@ -8,7 +8,7 @@
  * GEnius's archive, the GE guide-price history (saved history, with any
  * missing recent days fetched from WeirdGloop), ranges and trends, the alch
  * floor, flip margin after tax, how it moved around past Double XP weekends,
- * the Almanac's verdict if present, and Ben's open position if he holds it.
+ * the Almanac's verdict if present, and the user's open position if he holds it.
  * Reads %APPDATA%\GEnius\data (in the cloud: APPDATA points at GEnius-private/appdata).
  * Works offline from the saved data alone; live parts say so when unreachable.
  */
@@ -170,7 +170,7 @@ const get = async url => { const r = await fetch(url, { headers: UA, signal: Abo
   }
   if (item.signals && item.signals.length) console.log('GEnius signals: ' + item.signals.map(s => s.type || s.label || JSON.stringify(s)).join(', '));
 
-  // ── Ben's position ──
+  // ── the user's position ──
   const pf = readJSON('portfolio.json');
   const mine = (pf && pf.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === item.name.toLowerCase());
   if (mine.length) {

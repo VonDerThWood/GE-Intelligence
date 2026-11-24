@@ -20,8 +20,8 @@ let store;
 let api;
 const isDev = process.argv.includes('--dev');
 
-// Test mode (Ben, 2026-10-06) — for Claude to drive the app from scripts
-// (Chrome DevTools Protocol on --remote-debugging-port) while Ben's own
+// Test mode (2026-10-06) — for Claude to drive the app from scripts
+// (Chrome DevTools Protocol on --remote-debugging-port) while the user's own
 // GEnius keeps running. Launch: `npm run test-mode`. It runs as a fully
 // separate instance with its own userData folder (GEnius-test), refreshed
 // from a snapshot of the real data on every launch, so nothing done in a
@@ -135,12 +135,12 @@ function createWindow() {
     if (/^https?:\/\//.test(url)) shell.openExternal(url);
     return { action: 'deny' };
   });
-  // Test mode opens without stealing focus from whatever Ben is doing.
+  // Test mode opens without stealing focus from whatever the user is doing.
   mainWindow.once('ready-to-show', () => { isTestMode ? mainWindow.showInactive() : mainWindow.show(); });
   // Safety net — 'ready-to-show' not firing leaves the window permanently
   // invisible while createTray() below still runs unconditionally, which
   // looks exactly like "the app only opens to the tray." Confirmed
-  // plausible for real (Ben, 2026-07-14): a fresh install's first launch
+  // plausible for real (2026-07-14): a fresh install's first launch
   // is the one moment antivirus real-time scanning hits every file for the
   // very first time — we already measured that exact effect costing
   // real seconds elsewhere in this app (history file loading). If the
@@ -216,7 +216,7 @@ function runFetch(mode = 'prices') {
     // wait is exactly the part that can silently take minutes right after
     // a cold boot (antivirus scanning ~7,300 history files for the first
     // time), and the renderer's "Fetch Now" button had no way to know a
-    // fetch was even in progress during it (Ben, 2026-08-13: an auto-
+    // fetch was even in progress during it (2026-08-13: an auto-
     // launch fetch that was actually still running just looked stuck,
     // since only a manually-clicked Fetch Now ever set the button's own
     // local "fetching" state).
@@ -470,7 +470,7 @@ ipcMain.handle('get-data', () => {
   // The post-launch auto-fetch used to fire on a blind 3s setTimeout from
   // app.whenReady — fine on a warm relaunch (renderer mounts well within
   // 3s, same-day testing all confirmed it firing correctly), but a real
-  // miss Ben hit (2026-08-13): right after a full Windows restart, cold
+  // miss the user hit (2026-08-13): right after a full Windows restart, cold
   // disk caches and antivirus scanning fresh files can push renderer
   // mount noticeably past 3s. If the fetch (or its failure) fires before
   // the renderer's fetch-complete/fetch-error listeners are registered,
@@ -505,7 +505,7 @@ ipcMain.handle('fetch-now', async (_, mode) => {
   try {
     await runFetch(mode || 'prices');
     if (!mode || mode === 'full') store.set('lastNewsFetch', Date.now());
-    // Ben, 2026-08-09: a manual Fetch Now never re-checked alerts/reminders/
+    // 2026-08-09: a manual Fetch Now never re-checked alerts/reminders/
     // digests against the fresh data it just pulled — only the scheduler's
     // own interval tick and the 8s post-launch timer did. Confirmed for
     // real: a score-based alert whose condition was already true sat
@@ -642,7 +642,7 @@ ipcMain.handle('export-data', async () => {
   }
 });
 
-// Spreadsheet export (Ben, 2026-11-10): pick a folder, write one CSV per sheet.
+// Spreadsheet export (2026-11-10): pick a folder, write one CSV per sheet.
 ipcMain.handle('export-csv', async () => {
   const { dialog } = require('electron');
   const { filePaths, canceled } = await dialog.showOpenDialog({ title: 'Choose a folder for the spreadsheets', properties: ['openDirectory', 'createDirectory'] });
@@ -795,7 +795,7 @@ ipcMain.handle('get-inbox', () => api.getInbox());
 ipcMain.handle('test-seed-inbox', (_, list) => { if (isTestMode) store.set('inbox', list); });
 ipcMain.handle('mark-inbox-read', (_, kind, upTo) => api.markInboxRead(kind, upTo));
 ipcMain.handle('clear-inbox', (_, id) => api.clearInbox(id));
-// Ctrl+F find bar (Ben, 2026-11-09): Chromium's own find-in-page, results sent back.
+// Ctrl+F find bar (2026-11-09): Chromium's own find-in-page, results sent back.
 ipcMain.handle('find-in-page', async (e, text, opts) => {
   if (!text) { e.sender.stopFindInPage('clearSelection'); return null; }
   return e.sender.findInPage(text, opts || {});
@@ -867,7 +867,7 @@ ipcMain.handle('get-item-timeseries', async (_, itemId) => api.getItemTimeseries
 // current`, which fires an "update available" notification any time the
 // two differ AT ALL, including when the local build is actually AHEAD of
 // the last published GitHub release (e.g. a version bump that hasn't been
-// tagged/pushed yet). Caught by Ben seeing a "v1.6.0 is available" prompt
+// tagged/pushed yet). Caught by the user seeing a "v1.6.0 is available" prompt
 // while already running the newer v1.7.0.
 function isNewerVersion(latest, current) {
   const a = latest.split('.').map(Number);

@@ -1,6 +1,6 @@
 /**
  * Retakes GitHub Pages screenshots from a running TEST MODE window, with FAKE
- * portfolio / watchlist / alerts / net worth so Ben's real holdings never go
+ * portfolio / watchlist / alerts / net worth so the user's real holdings never go
  * public. Both themes: Classic (saved as <name>-dark.png) and Dark (<name>-black.png).
  *
  *   npm run test-mode            (in another terminal; test mode copies real data)
@@ -15,7 +15,7 @@ const OUT = path.join(__dirname, '..', 'docs', 'assets', 'shots');
 const TEST_DATA = path.join(process.env.APPDATA, 'GEnius-test', 'data');
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
-// ── Fake data: ordinary items at believable prices, nothing of Ben's ──
+// ── Fake data: ordinary items at believable prices, nothing of the user's ──
 function fakeData(items) {
   const by = n => items.find(i => i.name === n);
   const now = Date.now(), day = 86400000;
@@ -73,7 +73,7 @@ function fakeData(items) {
     'dashboard': `window.__geniusTest.goto('dashboard')`,
     'flips': `window.__geniusTest.goto('flips')`,
     'item': `(window.__geniusTest.goto('market'), new Promise(r => setTimeout(r, 1500)).then(() => window.__geniusTest.openItem('Dragon dart tip')))`,
-    // Farming open (Ben, 2026-11-23): shows the skill pills and the newest calculator.
+    // Farming open (2026-11-23): shows the skill pills and the newest calculator.
     'money-makers': `window.__geniusTest.goto('money_makers').then(() => new Promise(r => setTimeout(r, 1200))).then(() => { const b = [...document.querySelectorAll('.content button')].find(x => x.textContent.trim() === 'Farming'); b && b.click(); return new Promise(r => setTimeout(r, 2000)); })`,
     'watchlist': `window.__geniusTest.goto('watchlist')`,
     // Phone shots: 412x915 at 2x (824x1830, the size on the site). IS_PHONE is
@@ -104,7 +104,7 @@ function fakeData(items) {
       await js(SHOTS[name]);
       await wait(name === 'flips' ? 1000 : 3500);
       // Every visible row needs its risk worked out: a "—" or "…" in the Risk column
-      // made the Nov 12 shot look like items had no rating (Ben caught it).
+      // made the Nov 12 shot look like items had no rating (the user caught it).
       if (name === 'flips') await until(`[...document.querySelectorAll('.pt-flips tbody tr')].slice(0, 14).every(tr => { const t = tr.children[1]?.textContent.trim(); return t && t !== '—' && t !== '…'; })`, 180000);
       // Fill time comes from hourly volume that loads in the background (2026-11-18).
       if (name === 'flips') await until(`(() => { const t = document.querySelector('.pt-flips'); const c = [...t.querySelectorAll('thead th')].findIndex(th => /Fill time/.test(th.textContent)); return c >= 0 && [...t.querySelectorAll('tbody tr')].slice(0, 10).filter(tr => /\\d/.test(tr.children[c]?.textContent || '')).length >= 8; })()`, 180000);

@@ -1,6 +1,6 @@
 /**
  * history-format.js: the compact on-disk format for per-item price history
- * (v3.0.0, Ben 2026-11-11). Lossless: decode(encode(points)) is exactly the
+ * (v3.0.0, 2026-11-11). Lossless: decode(encode(points)) is exactly the
  * original list of { timestamp, price, volume }.
  *
  * Old files (data/history/<id>.json) write every day as
@@ -9,7 +9,7 @@
  * each column as differences from the previous value (dates are almost always
  * exactly one day apart, prices move a little), which then zips very well:
  *   { "f": 1, "t": [first, +86400000, ...], "p": [first, +8, -3, ...], "v": [...] }
- * About 55x smaller than the old files across Ben's 7,467 items.
+ * About 55x smaller than the old files across the user's 7,467 items.
  *
  * Anything that doesn't fit (a missing or non-numeric value, an extra field)
  * is stored as-is ({ f: 0, raw: points }), so nothing can ever be lost.

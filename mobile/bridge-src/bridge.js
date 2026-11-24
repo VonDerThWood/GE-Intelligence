@@ -50,7 +50,7 @@ async function ensureApi() {
       store = await storage.createKVStore(DATA_DIR + '/config.json');
       api = await createGeniusApi({ dataDir: DATA_DIR, store, platform: 'mobile' });
       api.loadHistory(); // background, same as desktop — window/UI doesn't wait on it
-      // v3.0.0 (Ben, 2026-11-16): convert price history to the compact format
+      // v3.0.0 (2026-11-16): convert price history to the compact format
       // once, in the background, like desktop's main.js. Much slower than on a
       // PC (each file crosses the native bridge), so it waits 30s after load and
       // just resumes next launch if the app is closed or put away mid-way
@@ -143,7 +143,7 @@ function isQuietNow(q = quietHoursSetting()) {
 async function fireNotification(title, body) {
   await ensureNotificationPermission();
   try {
-    // Quiet hours (Ben, 2026-10-18): still shown, but on the silent channel
+    // Quiet hours (2026-10-18): still shown, but on the silent channel
     // (created in MainActivity.java) so the phone doesn't buzz all night.
     const quiet = isQuietNow();
     await LocalNotifications.schedule({
@@ -434,7 +434,7 @@ async function buildGenius() {
     getSettings: () => ({
       discordWebhook:     store.get('discordWebhook', ''),
       fetchInterval:      store.get('fetchInterval', 15),
-      // Phones default to black (OLED screens; Ben, 2026-11-20). The GE-inspired theme
+      // Phones default to black (OLED screens; 2026-11-20). The GE-inspired theme
       // stays in Settings. Desktop keeps its own default in main.js.
       theme:              store.get('theme', 'black'),
       notifications:      store.get('notifications', true),
@@ -708,7 +708,7 @@ async function startScheduler() {
 // Ask for notification permission up front (Android 13+). It used to be
 // asked only when the app itself first showed a notification, so the
 // background runner's alerts were silently dropped on a phone that had
-// never been asked (Ben, 2026-10-15: POST_NOTIFICATIONS granted=false).
+// never been asked (2026-10-15: POST_NOTIFICATIONS granted=false).
 // Asked 5s in, once the window is up: asking during startup was dropped by
 // Android (the dialog never appeared).
 setTimeout(() => ensureNotificationPermission(), 5000);

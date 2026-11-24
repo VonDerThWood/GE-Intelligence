@@ -1,5 +1,5 @@
 /**
- * Almanac buy and sell flags (Ben, 2026-11-04): turns the stored DXP patterns in
+ * Almanac buy and sell flags (2026-11-04): turns the stored DXP patterns in
  * dxp_intelligence.json into "start selling now" / "start buying now" rows.
  *
  * Three patterns, each measured in days from a DXP's first day:
@@ -50,7 +50,7 @@ function estimateNextStart(events, today) {
   const starts = events.map(e => toMs(e[1])).slice(-9);
   const gaps = starts.slice(1).map((s, i) => s - starts[i]);
   if (!gaps.length) return null;
-  // From 2026 on there are 2 DXPs a year, not 4 (Ben, 2026-11-13), so the old
+  // From 2026 on there are 2 DXPs a year, not 4 (2026-11-13), so the old
   // ~3-month median gap would guess the next one far too early.
   const gap = starts[starts.length - 1] >= toMs('2026-01-01') ? 182 * DAY : median(gaps);
   let next = starts[starts.length - 1] + gap;

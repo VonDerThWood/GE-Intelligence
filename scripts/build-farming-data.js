@@ -1,5 +1,5 @@
 /**
- * Rebuilds FARMING_DATA in src/renderer.js from the RuneScape Wiki (Ben, 2026-11-23):
+ * Rebuilds FARMING_DATA in src/renderer.js from the RuneScape Wiki (2026-11-23):
  * every herb, vine herb, flower, vine flower and allotment seed, with what the wiki's own
  * Farming yield calculator uses (Bucket:Infobox_seed, Module:SkillUtils/SeedData, and the
  * patch_type each seed page passes to {{Farming yield calculator}}).
@@ -13,7 +13,7 @@ const UA = { 'User-Agent': 'GEnius farming data builder (github.com/VonDerThWood
 const api = async q => (await fetch('https://runescape.wiki/api.php?format=json&' + new URLSearchParams(q), { headers: UA })).json();
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-// Patches in scope (Ben, 2026-11-23): herbs, flowers, allotments. Trees, cacti, fruit trees
+// Patches in scope (2026-11-23): herbs, flowers, allotments. Trees, cacti, fruit trees
 // etc. keep producing until cleared, so they're left out.
 const PATCHES = {
   'Herb patch': 'herb', 'Herb patch (Wilderness)': 'herb', 'Vine herb patch': 'herb',

@@ -1,6 +1,6 @@
 /**
  * Rebuilds SMITHING_PRODUCTS in src/renderer.js from the RuneScape Wiki's
- * "Products" table on each bar's page (Ben, 2026-11-08). Anvil recipes only:
+ * "Products" table on each bar's page (2026-11-08). Anvil recipes only:
  * no smelting, Superheat or Invention. Run again after Jagex changes Smithing:
  *   node scripts/build-smithing-recipes.js
  * Output format, per bar: [outputQty, outputName, [[material, qty], ...]]

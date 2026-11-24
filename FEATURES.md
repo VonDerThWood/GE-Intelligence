@@ -1,5 +1,5 @@
 # GEnius — RS3 Grand Exchange Market Intelligence
-### Developer: WoodWorks (Ben) | GitHub: VonDerThWood/GE-Intelligence
+### Developer: WoodWorks (the user) | GitHub: VonDerThWood/GE-Intelligence
 ### Google Play Developer Account: WoodWorks ($25 fee paid)
 
 ---
@@ -22,7 +22,7 @@ portfolio tracking, alch opportunities, price history charts, and market signals
 
 ### CRITICAL quirks — things that will seem wrong but aren't
 
-1. **`npm start` is BROKEN.** `isDev` detection doesn't work in dev mode. Ben's
+1. **`npm start` is BROKEN.** `isDev` detection doesn't work in dev mode. The user's
    workflow is ALWAYS: edit → `npm run build` (as Administrator) → install exe → test.
    Never suggest `npm start`.
 

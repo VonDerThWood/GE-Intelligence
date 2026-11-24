@@ -1,6 +1,6 @@
 /**
  * google-auth.js: "Sign in with Google" for the desktop app, for Google Drive
- * sync (Ben, 2026-11-10). Main process only.
+ * sync (2026-11-10). Main process only.
  *
  * Google's recommended flow for desktop apps: the browser opens Google's own
  * sign-in page, which sends the user back to a one-time local address
@@ -10,7 +10,7 @@
  * Scope is drive.file: GEnius can only see files it created itself (its one sync
  * file), not the rest of the user's Drive. Plus "email", to show which account.
  *
- * The OAuth client (from Ben's Google Cloud project, see GOOGLE_DRIVE_SETUP.md)
+ * The OAuth client (from the user's Google Cloud project, see GOOGLE_DRIVE_SETUP.md)
  * lives in google-oauth.json next to the app data. For a desktop client Google
  * says the "secret" is not treated as secret. The refresh token is encrypted with
  * Windows' own protection (Electron safeStorage) before it's stored.

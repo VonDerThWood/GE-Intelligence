@@ -1,6 +1,6 @@
 /**
  * Trial of the v3.0.0 history compression on a COPY of the real history
- * (Ben, 2026-11-11). Never touches data/history itself.
+ * (2026-11-11). Never touches data/history itself.
  *   node scripts/trial-history-compression.js [historyDir]
  * For every item file: pack -> JSON -> gzip -> write to a temp folder,
  * then read back -> gunzip -> unpack and check it is EXACTLY the original.

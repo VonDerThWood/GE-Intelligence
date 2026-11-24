@@ -10,7 +10,7 @@ const patches = [
     // @capacitor/background-runner declares Notification.channelId but never
     // reads it from the JS options, so background notifications always went
     // to the default (sound + vibration) channel. GEnius quiet hours need to
-    // send them to its silent channel instead (Ben, 2026-10-18).
+    // send them to its silent channel instead (2026-10-18).
     file: 'node_modules/@capacitor/background-runner/android/src/main/java/io/ionic/backgroundrunner/plugin/api/Notification.kt',
     anchor: 'actionTypeId = jsonObject.optString("actionTypeId", null)',
     insert: '        channelId = jsonObject.optString("channelId", null) // patched by scripts/patch-capacitor.js',

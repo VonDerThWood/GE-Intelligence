@@ -5,8 +5,8 @@
  *
  * Distinct from every other signal GEnius computes — this is Jagex's own
  * official ranking, not something derived from the WeirdGloop dump or the
- * wiki's live-price API. Ben's ask (2026-08-10): a RS3 YouTuber covers
- * these two pages weekly, and Ben wants them surfaced in the app both
+ * wiki's live-price API. The user's ask (2026-08-10): a RS3 YouTuber covers
+ * these two pages weekly, and the user wants them surfaced in the app both
  * because they're genuinely useful and as a way to put GEnius in front of
  * that audience.
  *

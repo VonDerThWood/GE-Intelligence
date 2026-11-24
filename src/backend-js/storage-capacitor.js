@@ -90,7 +90,7 @@ async function listJSONFiles(dirPath) {
   }
 }
 
-// ─── Compact per-item history on the phone (v3.0.0, Ben 2026-11-16) ─────────
+// ─── Compact per-item history on the phone (v3.0.0, 2026-11-16) ─────────
 // Same files as desktop (storage.js): <id>.json.gz = gzip(JSON of
 // history-format pack()). Node's zlib isn't here, so the WebView's built-in
 // CompressionStream / DecompressionStream do the gzip. Files go through the
@@ -259,7 +259,7 @@ async function createKVStore() {
 // Filesystem plugin against Directory.Data, always writable). A plain
 // passthrough matches storage.js's own behavior for any path that
 // doesn't contain "app.asar" in the first place. Confirmed for real
-// (Ben, 2026-08-02): this function was simply missing here entirely —
+// (2026-08-02): this function was simply missing here entirely —
 // untradeable.js calls storage.resolveWritable(...) at MODULE LOAD TIME
 // (not inside a function), so requiring it crashed the whole bridge
 // bundle before the app ever got off the ground, on every launch — "0gp,
@@ -267,7 +267,7 @@ async function createKVStore() {
 // the crash happened before api.js even finished initializing.
 function resolveWritable(filePath) { return filePath; }
 
-// ─── History pack on the phone (Ben, 2026-11-15) ────────────────────────
+// ─── History pack on the phone (2026-11-15) ────────────────────────
 // Same pack desktop uses (storage.js importHistoryPack, built by
 // scripts/build-history-pack.js): gzipped lines "<id>\t<packed JSON>", ending
 // "#end\t<count>\t<built ISO date>". The phone can't do it the desktop way:

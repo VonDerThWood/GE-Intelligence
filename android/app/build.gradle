@@ -16,7 +16,7 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // Release signing (Ben, 2026-11-19): reads android/keystore.properties, which is
+    // Release signing (2026-11-19): reads android/keystore.properties, which is
     // gitignored and holds storeFile / storePassword / keyAlias / keyPassword.
     // Without it, release builds come out unsigned (debug builds are unaffected).
     def ksFile = rootProject.file('keystore.properties')

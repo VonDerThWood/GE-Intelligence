@@ -1,6 +1,6 @@
 /**
  * drop-sources.js: watches where items DROP from, and warns when a new source
- * appears (Ben, 2026-11-13). The Ghrazi Blood Knights (released 2026-10-12)
+ * appears (2026-11-13). The Ghrazi Blood Knights (released 2026-10-12)
  * drop Elder seed x5 as a common drop, and Elder seed fell ~90% (34k -> ~3k)
  * in four days; Arch-Glacor did the same to Summoning focus in 2021. A new
  * boss with a stacked drop can wipe out an item, so GEnius checks the wiki's

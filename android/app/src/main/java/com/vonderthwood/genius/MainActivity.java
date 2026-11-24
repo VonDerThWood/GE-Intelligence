@@ -8,7 +8,7 @@ import android.os.Bundle;
 import com.getcapacitor.BridgeActivity;
 
 public class MainActivity extends BridgeActivity {
-    // Quiet hours (Ben, 2026-10-18): notifications during the user's quiet
+    // Quiet hours (2026-10-18): notifications during the user's quiet
     // hours go to this channel, so they still appear in the shade but make
     // no sound and don't vibrate. Used by both the app (LocalNotifications)
     // and the background runner (channelId, see scripts/patch-capacitor.js).
@@ -23,7 +23,7 @@ public class MainActivity extends BridgeActivity {
         hideSystemBars();
     }
 
-    // Full screen (Ben, 2026-11-18): the status and navigation bars sat on top
+    // Full screen (2026-11-18): the status and navigation bars sat on top
     // of pop-ups (the welcome tour title, the history progress line). Hide both;
     // a swipe from the edge shows them briefly, then they hide again.
     private void hideSystemBars() {

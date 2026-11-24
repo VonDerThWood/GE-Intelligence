@@ -4,7 +4,7 @@
 
 GEnius: RS3 Grand Exchange Hub
 
-(Ben, 2026-11-21. The launcher icon on phones still says "GEnius".)
+(2026-11-21. The launcher icon on phones still says "GEnius".)
 
 ## Short description (max 80)
 

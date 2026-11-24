@@ -55,7 +55,7 @@ function resolveWritable(filePath) {
   return filePath.slice(0, idx) + 'app.asar.unpacked' + path.sep + filePath.slice(idx + marker.length);
 }
 
-// Each save gets its own temp file (Ben, 2026-11-16 Background problems: two saves of
+// Each save gets its own temp file (2026-11-16 Background problems: two saves of
 // history_summary_cache.json at once shared one .tmp; the first rename moved it and the
 // second failed with ENOENT). Same final rename, so the file is still never half-written.
 let tmpSeq = 0;
@@ -65,7 +65,7 @@ async function atomicWrite(filePath, data) {
   const tmp = tmpName(filePath);
   await fs.promises.writeFile(tmp, data, 'utf8');
   // Windows: antivirus/indexer briefly holding the file makes rename fail
-  // with EPERM/EBUSY/EACCES. Seen for real (Ben, 2026-10-08): one such
+  // with EPERM/EBUSY/EACCES. Seen for real (2026-10-08): one such
   // failure on portfolio.json at startup blanked the whole UI. Retry for
   // up to ~2s before giving up.
   for (let i = 0; ; i++) {
@@ -125,7 +125,7 @@ async function listJSONFiles(dirPath) {
   }
 }
 
-// ─── Compact per-item history (v3.0.0, Ben 2026-11-11) ───────────────────
+// ─── Compact per-item history (v3.0.0, 2026-11-11) ───────────────────
 // history-format.js packs a history into columns of differences; gzipped it's
 // ~27x smaller and exactly lossless. Readers accept both formats, preferring
 // the compressed file when both exist.
@@ -198,7 +198,7 @@ async function compactDirItems(dirPath, { onProgress, shouldStop } = {}) {
   return { converted: done - failed.length, failed, total: olds.length };
 }
 
-// ─── History pack (v3.0.0, Ben 2026-11-11) ──────────────────────────────
+// ─── History pack (v3.0.0, 2026-11-11) ──────────────────────────────
 // One gzipped file holding every item's compact history, so a new install
 // reads one download instead of ~7,400 WeirdGloop requests (45+ min -> ~1).
 // Format, one line each: "<id>\t<compact JSON from history-format pack()>",
@@ -369,7 +369,7 @@ async function createKVStore(filePath) {
   // Tracks in-flight writes so `flush()` can wait for them — needed because
   // set() below fires its disk write without making the caller wait, so a
   // process killed (or quitting) right after a set() can lose that write
-  // entirely. Confirmed for real (Ben, 2026-07-29): a devMode toggle was
+  // entirely. Confirmed for real (2026-07-29): a devMode toggle was
   // lost because the app got force-killed (taskkill, for a rebuild/
   // relaunch cycle) before this write had actually landed on disk.
   let pending = Promise.resolve();
@@ -381,7 +381,7 @@ async function createKVStore(filePath) {
       data[key] = value;
       // Re-read the file fresh right before writing, rather than blindly
       // overwriting with this instance's in-memory snapshot from startup.
-      // Confirmed for real (Ben, 2026-07-17): watchlist and dxpWatchlist
+      // Confirmed for real (2026-07-17): watchlist and dxpWatchlist
       // both went completely empty after a night of repeated rebuild/
       // reinstall/relaunch cycles — the old behavior wrote the WHOLE
       // in-memory object back out on every .set(), so if two instances
