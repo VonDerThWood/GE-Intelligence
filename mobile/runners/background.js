@@ -366,7 +366,12 @@ addEventListener('checkNotifications', async (resolve, reject) => {
           const weekPct = pctChange(w.id, 7);
           const dayHit = dayPct != null && Math.abs(dayPct) >= watchlistSettings.dailyThresholdPct;
           const weekHit = weekPct != null && Math.abs(weekPct) >= watchlistSettings.trendThresholdPct;
-          if (dayHit || weekHit) movers.push({ name: w.name, dayPct, weekPct, dayHit, weekHit });
+          // The synced name falls back to the bare id when the app's item list
+          // lacked the item; the price dump always carries the real name.
+          const dumpEntry = dump[String(w.id)];
+          const name = (w.name && w.name !== String(w.id)) ? w.name
+            : ((dumpEntry && typeof dumpEntry === 'object' && dumpEntry.name) || w.name);
+          if (dayHit || weekHit) movers.push({ name, dayPct, weekPct, dayHit, weekHit });
         }
 
         if (movers.length) {

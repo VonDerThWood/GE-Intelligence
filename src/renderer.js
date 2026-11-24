@@ -7040,6 +7040,7 @@ const APP_NEWS = [
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
       "Android: the phone app no longer thinks some desktop-only features exist.",
+      "Android: watchlist notifications show item names again, not bare item numbers (items that left the GE lost their names).",
     ]
   },
   {
