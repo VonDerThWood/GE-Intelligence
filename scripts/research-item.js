@@ -8,7 +8,7 @@
  * GEnius's archive, the GE guide-price history (saved history, with any
  * missing recent days fetched from WeirdGloop), ranges and trends, the alch
  * floor, flip margin after tax, how it moved around past Double XP weekends,
- * the Almanac's verdict if present, and the user's open position if he holds it.
+ * the Almanac's verdict if present, and the user's open position if one is held.
  * Reads %APPDATA%\GEnius\data (in the cloud: APPDATA points at GEnius-private/appdata).
  * Works offline from the saved data alone; live parts say so when unreachable.
  */

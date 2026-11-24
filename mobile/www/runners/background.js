@@ -2,7 +2,7 @@
  * @capacitor/background-runner script — executes via Android WorkManager
  * (and iOS BGTaskScheduler) on a periodic schedule even when GEnius isn't
  * open, without a foreground service or persistent notification (the
- * battery-drain tradeoff the user explicitly ruled out). This runs in a
+ * battery-drain tradeoff explicitly ruled out). This runs in a
  * separate, restricted JS context: no require(), no DOM, no Filesystem
  * plugin — only fetch, CapacitorKV (its own small string KV store,
  * unrelated to the main app's Preferences-backed store), CapacitorNotifications,
@@ -33,7 +33,7 @@ const DXP_SEASON_ANCHORS = [
 
 // CapacitorKV.get returns null (not {value: null}) for a key that was never
 // set, so reading .value straight off it crashed the whole check on its
-// first run (the user's phone, 2026-10-15: "TypeError: cannot read property
+// first run (a real phone, 2026-10-15: "TypeError: cannot read property
 // 'value' of null" from rb_portfolioDigestLastSent).
 function kvGet(key) {
   const r = CapacitorKV.get(key);
@@ -150,8 +150,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       const st = typeof raw === 'string' ? JSON.parse(raw) : raw;
       if (st && st.isActive) { resolve(); return; }
     } catch (e) { /* no app state available: carry on */ }
-    // When the background last checked, shown in the app's header (the user,
-    // 2026-10-26: "8341 minutes since last fetch" while his notifications
+    // When the background last checked, shown in the app's header (// 2026-10-26: "8341 minutes since last fetch" while his notifications
     // were actually current).
     CapacitorKV.set('rb_lastRunAt', String(Date.now()));
 

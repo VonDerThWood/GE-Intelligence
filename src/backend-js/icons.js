@@ -10,8 +10,7 @@
  * would pull the pictures then that's 100% what we should have done from
  * the start."
  *
- * Two DIFFERENT images per item are resolved and cached separately (the user,
- * 2026-08-13, caught via a screenshot): the wiki's "page image"
+ * Two DIFFERENT images per item are resolved and cached separately (* 2026-08-13, caught via a screenshot): the wiki's "page image"
  * (prop=pageimages) is the big DETAIL render used for a page's zoomed-in
  * store display — it can look wildly different from what the item
  * actually looks like in-game inventory (drop shadows, different angle,

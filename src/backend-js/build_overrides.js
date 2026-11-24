@@ -278,8 +278,7 @@ async function fetchCategoriesBatch(titles) {
   // own internal response-size limit even with cllimit=100 per page — when
   // that happens the response includes a `continue` token and some pages
   // come back with an EMPTY categories list, not an error and not
-  // page.missing, just silently truncated. Confirmed for real (the user,
-  // 2026-08-02): a 50-title batch that happened to include several
+  // page.missing, just silently truncated. Confirmed for real (// 2026-08-02): a 50-title batch that happened to include several
   // heavily-categorized pages returned Cannonball with 0 categories, even
   // though it has 27 when queried alone — this single-shot version never
   // checked for or followed that continuation, so anything cut off this

@@ -196,7 +196,7 @@ const CATEGORY_RULES = {
 
   // --- Cosmetics (renamed from Overrides/Titles) ---
   // The keyword list itself was fine as a broad catch-all (tokens,
-  // titles, makeover, hairstyle, etc.) — the user's actual ask was narrower:
+  // titles, makeover, hairstyle, etc.) — a real ask was narrower:
   // among items that are ALSO Treasure Trails rewards, only the dyes
   // should keep the Cosmetics tag too; every other TT reward that
   // happens to match one of these generic keywords (e.g. "blessed"
@@ -685,7 +685,7 @@ function _assignCategories(name) {
   // 3. Keyword rules in priority order
   const assigned = [];
   for (const category of CATEGORY_PRIORITY) {
-    // The user: TT items shouldn't bleed into Artisan specifically — e.g.
+    // TT items shouldn't bleed into Artisan specifically — e.g.
     // "Ring of trees" (TT reward) also matches artisan's generic "ring
     // of" jewelry keyword, "Ruby Cane" matches artisan's "ruby" gem
     // keyword. Other TT+category combos (Construction via "Gilded ...

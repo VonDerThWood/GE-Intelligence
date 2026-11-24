@@ -796,7 +796,7 @@ const LIVE_LOOKBACKS = [
 // Carries the last known value forward across null buckets (no trade that
 // interval) instead of breaking the line — confirmed this is what the
 // wiki's own chart does visually; leaving true gaps produced a mess of
-// disconnected floating dashes on illiquid items (the user caught this for
+// disconnected floating dashes on illiquid items (caught this for
 // real). Leading nulls before the first real value stay null (nothing to
 // carry yet).
 function _forwardFill(series) {
@@ -851,8 +851,7 @@ function LiveTimeseriesChart({data}) {
   // maps to the FULL viewBox width `w`, but the plotted line only spans
   // [PAD_L, w-PAD_R] within that. Using the raw cursor fraction across
   // the whole width (ignoring padding) put the highlighted point
-  // noticeably left of the actual cursor — confirmed for real (the user,
-  // 2026-07-30): had to drag the mouse well past a point for the
+  // noticeably left of the actual cursor — confirmed for real (// 2026-07-30): had to drag the mouse well past a point for the
   // highlight to catch up to it.
   const onMove = e => {
     const rect = svgRef.current.getBoundingClientRect();
@@ -3336,7 +3335,7 @@ function ScoreInfoPopup({item, onClose, pos}) {
 }
 
 // One button in the item panel instead of separate Alert/Remind buttons —
-// The user: the two-button header row was overflowing/getting cut off on
+// the two-button header row was overflowing/getting cut off on
 // narrower panel widths. A single button opening a pill-tab popup (default
 // Alert, switch to Reminder) fits the same functionality into far less
 // header-row space.
@@ -3439,7 +3438,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
   const [similar, setSimilar] = useState(null);
   useEffect(() => { setSimilar(null); }, [item?.id]);
   // Drop sources — deliberately NOT auto-fetched like wikiStats above.
-  // The user: this is a click-to-check lookup for unusual items, not something
+  // this is a click-to-check lookup for unusual items, not something
   // that should fire a wiki request on every item click.
   const [quickAlertPos, setQuickAlertPos] = useState(null); // null = closed, {left,top,...} once open
   // "Turns into" — unlike Drop sources above, this IS auto-fetched on open
@@ -3789,7 +3788,7 @@ function DetailPanel({item, watchlist, onToggleWatch, onToggleHide, hiddenItems,
             ['Price',         gpFmt(item.high || item.low)+' gp'],
             ['After 2% tax', item.low ? gpFmt(applyTax(item.low))+' gp' : '—'],
             // "950 + 8%" foods: also show the amount at 99 Constitution
-            // (9,900 base LP) — the user: most players are endgame with max HP.
+            // (9,900 base LP) — most players are endgame with max HP.
             ...(foodHeal && !foodHeal.total && foodHeal.text ? (() => {
               const m = foodHeal.text.match(/^([0-9,]+)\s*\+\s*([0-9.]+)%$/);
               const at99 = m ? Number(m[1].replace(/,/g, '')) + Number(m[2]) / 100 * 9900 : null;
@@ -4676,8 +4675,7 @@ function ItemTable({items, selected, onSelect, watchlist = [], onToggleWatch = (
   // needs it too — referencing priceMode before this existed threw a
   // "Cannot access before initialization" TDZ error on every render,
   // crashing any tab that uses ItemTable (Cosmetics, Melee, Magic, etc,
-  // not just Market) to a blank screen. Confirmed for real (the user,
-  // 2026-07-29): reproduced by switching to the Cosmetics tab.
+  // not just Market) to a blank screen. Confirmed for real (// 2026-07-29): reproduced by switching to the Cosmetics tab.
   const [priceMode, setPriceMode] = useState(() => {
     try { return localStorage.getItem('genius_price_col_mode') === 'live' ? 'live' : 'ge'; } catch { return 'ge'; }
   });
@@ -4983,7 +4981,7 @@ const TOP_MOVERS_PILLS = [
   {key:'live_fall', label:'Live Trade ↓', source:'live', dir:'fall'},
 ];
 
-// Inline expandable Dashboard section, not a modal — the user: "there's no
+// Inline expandable Dashboard section, not a modal — "there's no
 // reason to make anyone change to a new page ... we could just scroll
 // down their normal page." Two genuinely different data sources shown
 // side by side: Jagex's own official GE Top 100 (their listed price,
@@ -6766,7 +6764,7 @@ function MachineCalculators({items, onSelect, onNavigate}) {
 // 2026-10-28). Component prices are the wiki's material prices GEnius
 // already loads (untradeable.js), except where liveSources is given: then
 // the component is priced from the cheapest item to disassemble at its LIVE
-// instant-buy price (the user: guide prices understate it, tensile ~632 vs ~740).
+// instant-buy price (guide prices understate it, tensile ~632 vs ~740).
 // Tensile parts per disassembly, no junk reduction ("rate per item" on the
 // wiki's Calculator:Disassembly by material/Tensile, checked 2026-10-28).
 const TENSILE_SOURCES = [
@@ -7848,7 +7846,7 @@ function alertSummary(a) {
 // past threshold) surfaces first with a green edge, Armed (has fired
 // before, currently quiet, will fire again on the next crossing) with a
 // gold edge, Never fired (brand new, no history yet) with a neutral edge.
-// The user: the flat list "feels chaotic" — grouping by what actually matters
+// the flat list "feels chaotic" — grouping by what actually matters
 // right now (is this thing making noise or not) fixes that more than any
 // amount of per-row polish would.
 const ALERT_GROUPS = [
@@ -8084,7 +8082,7 @@ function AlertsTab({items, removedItems, alerts, onSave, onDelete, toast, descri
 // Items explicitly named in DXP_DEBUNKED_THEORIES below as confirmed noise
 // — hard-excluded from Confirmed/Negligible/Speculative/Recommendations
 // regardless of which specific phase happens to clear the volume floor.
-// The user caught "Logs" still surfacing in Recommendations via a different
+// Caught "Logs" still surfacing in Recommendations via a different
 // phase than the one flagged as noise — the per-phase volume check alone
 // wasn't enough once an item has ANY phase that narrowly clears 0.5x, so
 // this is a second, simpler filter: if we've told users in Debunked
@@ -8122,8 +8120,7 @@ const ALMANAC_CONFIDENCE_THRESHOLD = 0.7; // 7/10 or higher = Confirmed, below =
 const NEGLIGIBLE_NET_PROFIT_PCT = 2;
 const NEGLIGIBLE_MEDIAN_PCT = 3;
 // Absolute floor, separate from the percentage check above — a high %
-// return on a tiny buy-limit item still nets a trivial total profit (the user:
-// "why are we showing items with a profit per buy limit as low as 27k?").
+// return on a tiny buy-limit item still nets a trivial total profit (// "why are we showing items with a profit per buy limit as low as 27k?").
 // Below this, treat as negligible regardless of how clean the % looks.
 const NEGLIGIBLE_PROFIT_FOR_LIMIT_GP = 100000;
 // Per-item explanation of WHICH negligible threshold an item actually
@@ -8202,7 +8199,7 @@ const DXP_DEBUNKED_THEORIES = [
 // the actual point of this research is finding where the bottom and top are,
 // not reporting a hypothetical loss on a buy-limit's worth of units.
 // Profit is computed NET of GE tax (applyTax, defined above) — this was
-// missing entirely until the user caught it 2026-06-24; the raw sell-buy
+// missing entirely until it was caught it 2026-06-24; the raw sell-buy
 // difference overstates every single trade idea in this tab by ~2%.
 function buildTradeIdea(timing, price, limit, replay) {
   if (!timing || !price) return null;
@@ -8217,7 +8214,7 @@ function buildTradeIdea(timing, price, limit, replay) {
   const netSellPrice = applyTax(sellPrice);
   const profitPerItem = netSellPrice - buyPrice;
   // "Profit (buy limit)" is literally profit per item * the bare buy limit —
-  // one full limit's worth of units (the user: "if my buy limit is 10k and I can
+  // one full limit's worth of units ("if my buy limit is 10k and I can
   // make 1k per item, the profit per buy limit is 10m. That's how it should
   // show."). Deliberately NOT scaled by any assumed holding window — how
   // long someone actually leaves an offer open varies too much per player
@@ -8787,7 +8784,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       // Brilliant energy, etc — all explicitly named in Debunked Theories),
       // not a real signal. This floor was applied throughout the
       // qualitative research write-up but was never wired into the live
-      // computation until the user caught it testing the recommendation engine
+      // computation until it was caught it testing the recommendation engine
       // 2026-06-24 — without it, Confirmed/Recommendations could surface
       // items the research itself already debunked.
       if (ph.avg_vol_ratio != null && ph.avg_vol_ratio < 0.5) continue;
@@ -8845,12 +8842,12 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
     if (budget > 0) pool = pool.filter(r => r.trade.buyPrice <= budget); // can afford at least one unit
     // Ranked by total gp payout (Profit (buy limit)), not ROI — most
     // players care more about "how much total gp can this make me" than
-    // squeezing out the best % return on a thin-limit item (the user: "I can
+    // squeezing out the best % return on a thin-limit item ("I can
     // double my money on this one, but it's only 1k profit each... we
     // don't care about ROI, we want the GP").
     pool = [...pool].sort((a, b) => (b.trade.profitForLimit ?? -Infinity) - (a.trade.profitForLimit ?? -Infinity));
     // Diversify across categories — without this, the best-payout items
-    // are often clustered in one skill/category (the user: "most of my
+    // are often clustered in one skill/category ("most of my
     // investments are the bombs at the moment"), so the top N slots could
     // all be the same category by coincidence. Cap how many slots any one
     // category can claim on the first pass; if too few categories have
@@ -8997,7 +8994,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
       if (q && !r.name?.toLowerCase().includes(q)) return false;
       // While searching, ignore the tier pill entirely and show matches
       // from every tier (Confirmed/Negligible/Speculative) plus anything
-      // on the watchlist — the user: "search should just bring the item up
+      // on the watchlist — "search should just bring the item up
       // regardless of what tab it's in." Each match gets a tier tag in
       // the table instead, so you can still see where it'd normally live.
       if (q) return true;
@@ -12426,7 +12423,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     if (!sb) return h('td', {style:{color:T.textDim}}, '—');
     // Shown PER ITEM: a position stores one quantity + one average cost, not
     // when each unit was bought, so a "best total" would wrongly assume
-    // today's full quantity was already held back then (the user: had 200k
+    // today's full quantity was already held back then (had 200k
     // vulnerability bombs at the March high, not today's 300k). Totals stay
     // in the tooltip, labelled as using the current quantity.
     const cost = pos.cost_basis * pos.quantity;
@@ -12615,8 +12612,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     // real sales — a Convert never sets realized_pl at all (it's a cost-
     // basis carry-forward, not a close-out, see api.js's convertPosition),
     // so it read as an automatic 0/loss and silently cut real win streaks
-    // short whenever a convert happened to sit in the middle of one (the user,
-    // 2026-08-13: "The 'hot streak' thing in portfolio... Converting broke
+    // short whenever a convert happened to sit in the middle of one (// 2026-08-13: "The 'hot streak' thing in portfolio... Converting broke
     // it" — confirmed, reported streak of 19 was being undercounted this
     // way). totalRealized still sums over closedPos (sold + converted) —
     // converts correctly contribute 0 there either way, so no bug to fix.
@@ -12798,7 +12794,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
   // a real, repeating pattern, but the opposite of "stable thing to add to
   // a diversified portfolio." Even after the confidence-floor fix below,
   // Omni guard (necromancy, ~164M gp) still squeaked past at exactly the
-  // 70% bar — the user: "we should avoid suggesting high tier combat items,
+  // 70% bar — "we should avoid suggesting high tier combat items,
   // they're generally extremely volatile and gradually decline over time."
   // Gating combat-style gear above a price floor specifically (rather than
   // banning the categories outright) keeps cheap/stable melee-etc. items
@@ -12811,7 +12807,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     const overweightCategories = new Set(
       categoryAllocations.filter(c => c.pct >= UNDEREXPOSED_CATEGORY_PCT && c.category !== 'rares').map(c => c.category)
     );
-    // Same "Confirmed" confidence bar as the main Almanac table (the user caught
+    // Same "Confirmed" confidence bar as the main Almanac table (caught
     // this: Elite Dracolich hauberk got suggested with only a bare 50%
     // directional majority — below the 70% bar that would normally tag it
     // Speculative — purely because its astronomical price x buy-limit made
@@ -12954,7 +12950,7 @@ function PortfolioTab({items, removedItems, portfolio, onSavePosition, onDeleteP
     // trade-idea engine to FIND worthwhile items in underexposed
     // categories, but deliberately doesn't show the DXP profit/timing
     // figures here — those imply a short-term flip, and Portfolio isn't
-    // necessarily that (the user: "the portfolio isn't always for short term
+    // necessarily that ("the portfolio isn't always for short term
     // flips and trades... just some item suggestions"). Just the item and
     // category, nothing tying it to a buy/sell day.
     diversificationSuggestions.length > 0 && h('div',{style:{padding:'12px',marginTop:4,borderTop:`1px solid ${T.border}`}},
@@ -14125,7 +14121,7 @@ const FLIP_MIN_PROFIT_FOR_LIMIT = 1000000;
 const FLIP_SANITY_LOW = 0.5;  // live sell price can't sit too far UNDER
                                // the item's own established GE price
                                // (catches a fluke/glitch dump), for any item
-// The user caught a real gap in an earlier version of this check: Medium
+// Caught a real gap in an earlier version of this check: Medium
 // plated necronium salvage passed at 1.72x GE price (under a flat 2x
 // cap that used to apply to every item) even though its whole economic
 // purpose is alching — alch value (250,000gp) essentially equals its
@@ -14161,7 +14157,7 @@ const FLIP_ALCH_ANCHOR_LOW = 0.8; // alch must be at least 80% of the guide pric
 // real player behavior. Caught for real (2026-07-31): Geyser Titan
 // scroll (Boil), GE price 270gp, got Flagged for "overpaying vs. alch
 // value" even though nobody would ever price-anchor that item off
-// alching to begin with. The user's own rough estimate for where alching
+// alching to begin with. A rough estimate for where alching
 // stops being worth the effort.
 const FLIP_ALCH_MIN_GE_PRICE = 1000;
 // Removing the flat ceiling above (2026-07-30) opened a different hole,
@@ -14219,7 +14215,7 @@ const FLIP_OVERPAY_RATIO = 1.5; // buy vs sell AND vs guide (2026-11-13: Elder s
 // make liveBuy and liveSell agree with each other perfectly (same person
 // controls both sides), which sails straight past every check above —
 // none of them look at whether the price shape is "off," because it
-// isn't. What's off instead is the volume itself: the user's real example,
+// isn't. What's off instead is the volume itself: a real example,
 // Gardening trowel going from an average of ~1 trade/day to 88 on the
 // day of a 1M-gp print. FRENZY doesn't catch this either — it requires
 // vol >= 5,000 absolute AND the item's GE price to be >= 900gp, both of
@@ -14387,7 +14383,7 @@ function FlipsTab({items, selected, onSelect, watchlist, onToggleWatch, onToggle
   const [pillTab, setPillTab] = useState('flips'); // 'flips' (all) | 'r0' | 'r1' | 'r2' (risk level) | 'flagged'
   const [sort, setSort] = useState({key:'realisticProfit', dir:-1});
   const [page, setPage] = useState(0);
-  // Defaults to 1M+ (the user: "That would cut it down from over 900 results
+  // Defaults to 1M+ ("That would cut it down from over 900 results
   // significantly") — this is a filter on Profit (buy limit), i.e. one
   // full buy-limit's worth of margin, not the per-item margin itself.
   const [minProfit, setMinProfit] = useState(1000000);
@@ -14582,7 +14578,7 @@ const MONEY_MAKER_SKILLS = [
 // Archaeology potion) had unreliable/incomplete data from the table parse
 // and are left out rather than guessed at.
 //
-// Output is priced at (3) dose per the user's correction ("most outputs are 3
+// Output is priced at (3) dose on request ("most outputs are 3
 // dose") — where `primary` is itself a premade lower-tier potion (already
 // carries its own "(3)" suffix, e.g. "Super attack (3)"), that potion's
 // own live price is used directly with no Vial of water added (the vial
@@ -14766,7 +14762,7 @@ function findItemPrice(items, name) {
 // (the same failure mode OVERPRICED/UNDERPRICED already watches for at a
 // much tighter 20% threshold — this uses a much looser 5x band so it only
 // rejects genuinely broken values, not real volatility like the Voice of
-// Seren supply-flood swings the user confirmed are legitimate on Summoning
+// Seren supply-flood swings confirmed are legitimate on Summoning
 // scrolls).
 function _sanityLivePrice(live, gePrice) {
   if (live == null) return null;
@@ -14946,7 +14942,7 @@ function computePotionStats(r, items, buffs) {
 // its OWN buy limit, not some flat number — a potion with a 2,000 buy
 // limit and 1,500 daily volume is thin even though 1,500 sounds like a
 // lot, since one player alone could nearly exhaust a day's trading in a
-// single limit-full buy. The user's ask (2026-07-29): "if it's rather low, like
+// single limit-full buy. Asked (2026-07-29): "if it's rather low, like
 // a single buy limit or less, it should probably be ignored." Falls back
 // to Flips' flat FLIP_MIN_VOLUME floor only when an item has no buy limit
 // on record at all, so a missing limit can't accidentally wave through an
@@ -14957,7 +14953,7 @@ function hasRealVolume(volume, limit) {
 }
 
 // Per-dose economics for a single potion across its (1)/(2)/(3)/(4) doses
-// and its 6-dose flask, per the user's request (2026-07-29): break every
+// and its 6-dose flask, on request (2026-07-29): break every
 // tradeable form down to a price-per-dose so decanting (converting
 // between dose counts, a free Herblore-adjacent action) can be checked
 // for profit. The flask's per-dose price backs out the cost of an empty
@@ -15116,7 +15112,7 @@ const FLETCHING_BUFFS = {
 };
 const FLETCHING_BUFF_DEFAULTS = {fletchingCape:false, workroomTier2:false};
 
-// Five Fletching moneymakers the user confirmed are worth modeling (2026-08-12),
+// Five Fletching moneymakers confirmed are worth modeling (2026-08-12),
 // each sourced directly from its own wiki Creation table:
 //   - Ascendri bolts: Ascension bolts + Hydrix bolt tips -> Ascendri bolts
 //     (runescape.wiki/w/Ful_arrow's sibling page; genuinely unprofitable
@@ -15862,7 +15858,7 @@ function computeSmithingBarStats(recipe, items, varrockOn) {
 // Summoning pouch -> scroll (2026-08-12), sourced directly from
 // runescape.wiki/w/Calculator:Summoning/Scrolls — 82 of the page's 89
 // rows (Nihils and the deacon/executioner/brawler demon pouches excluded
-// per the user's ask). Each pouch makes 10 scrolls normally, 12 during Voice
+// per the request). Each pouch makes 10 scrolls normally, 12 during Voice
 // of Seren (the "VoS Profit/Loss" column) — the user specifically wants the
 // VoS figures modeled, not the baseline 10.
 const SUMMONING_SCROLL_RECIPES = [
@@ -16005,8 +16001,7 @@ function MoneyMakersTab({items, onSelect, description}) {
         rows.push({ label: `${c.input} → ${c.output} (Machine, ${fmt.gp(chargeCost)}gp charge)`, itemName: c.output, stats: adjusted });
       }
     }
-    // Refined-plank -> Wooden frame chain, Fort Forinthry sawmill (the user,
-    // 2026-08-11): 4 Plank -> 1 Refined planks -> (3 Refined planks) 1
+    // Refined-plank -> Wooden frame chain, Fort Forinthry sawmill (// 2026-08-11): 4 Plank -> 1 Refined planks -> (3 Refined planks) 1
     // Wooden frame, i.e. 12 Plank per frame overall. Modeled as a single
     // combined conversion since "most people do not sell the refined
     // versions" — buy 12 Plank, sell 1 Wooden frame, skipping the
@@ -16276,8 +16271,7 @@ function MoneyMakersTab({items, onSelect, description}) {
 
 /* ─── Tab descriptions ───────────────────────────────────────── */
 // ─── Buy Planner ─────────────────────────────────────────────────────────────
-// Goals for slowly accumulating an item under its 4-hour GE buy limit (the user,
-// 2026-10-06 — born from the dragon hatchet grind, 630 bought and counting).
+// Goals for slowly accumulating an item under its 4-hour GE buy limit (// 2026-10-06 — born from the dragon hatchet grind, 630 bought and counting).
 // The user only ever enters running totals (total bought + total gp spent,
 // both visible on the GE offer); everything else is derived. Three finish
 // estimates, because "full limit every 4h" is rarely what actually happens:
@@ -17400,8 +17394,7 @@ function App() {
   // call already having items — which is empty on a genuine first launch
   // (no latest.json exists yet; the initial price fetch fires 3s later
   // and takes real time to complete), so the whole check got skipped
-  // permanently rather than just delayed. Confirmed for real (the user,
-  // 2026-08-02, across several fresh mobile installs tonight): the
+  // permanently rather than just delayed. Confirmed for real (// 2026-08-02, across several fresh mobile installs tonight): the
   // "Building history" popup never showed up on a true first launch, only
   // on the SECOND one, once latest.json already had real data from the
   // completed first-launch fetch. Extracted so onFetchComplete can also
@@ -17437,8 +17430,7 @@ function App() {
       // Always ask the backend to queue whichever of THESE items lack
       // history (it skips ones already on disk) instead of comparing raw
       // counts — the file count includes delisted items, which hid 33 new
-      // Havenhythe II items with no history at all (FIX 2026-10-11, the user:
-      // "new items don't download automatically"). The popup only shows
+      // Havenhythe II items with no history at all (FIX 2026-10-11, // "new items don't download automatically"). The popup only shows
       // when something was actually queued, seeded from the backend's real
       // stored-of-these count (never a per-session counter from 0 — see
       // SESSION_LOG.md, 2026-06-26).

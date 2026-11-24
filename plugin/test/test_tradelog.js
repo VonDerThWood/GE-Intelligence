@@ -65,7 +65,7 @@ let t = find(`{[1]=${shards(1)}}`, `{[1]=${shards(3)}}`);
 check('partial fill: count', t.length, 1);
 check('partial fill: qty', t[0].qty, 2);
 check('partial fill: gross', t[0].gross, 1370000000);
-check('partial fill: net (after 2%)', t[0].net, 1342600000);   // The user's real sale, 2026-10-16
+check('partial fill: net (after 2%)', t[0].net, 1342600000);   // A real sale, 2026-10-16
 check('partial fill: tax', t[0].tax, 27400000);
 check('partial fill: slot', t[0].slot, 1);
 

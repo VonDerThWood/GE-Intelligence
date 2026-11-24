@@ -773,7 +773,7 @@ function runSignals(items) {
     // have diverged by 20%+ — independent of SURGE/DUMP above (those
     // compare today's price to yesterday's; this compares the listed
     // price to what people are ACTUALLY paying/getting right now).
-    // The user's real example that prompted this: some rare-drop "Furniture
+    // A real example that prompted this: some rare-drop "Furniture
     // plans" items are listed at a stale ~3-5M gp GE default while real
     // live trades show them worth a fraction of that.
     if ((item.liveBuy != null || item.liveSell != null) && gePrice0 > 0 && isLiveTrusted(item, gePrice0)) {

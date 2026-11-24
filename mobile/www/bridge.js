@@ -21873,7 +21873,7 @@
         ],
         // --- Cosmetics (renamed from Overrides/Titles) ---
         // The keyword list itself was fine as a broad catch-all (tokens,
-        // titles, makeover, hairstyle, etc.) — the user's actual ask was narrower:
+        // titles, makeover, hairstyle, etc.) — a real ask was narrower:
         // among items that are ALSO Treasure Trails rewards, only the dyes
         // should keep the Cosmetics tag too; every other TT reward that
         // happens to match one of these generic keywords (e.g. "blessed"

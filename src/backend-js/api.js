@@ -139,7 +139,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // retries (usually brand-new items WeirdGloop has no history for yet).
   // Remembered for 24h so the backfill doesn't retry them on every launch
   // and the "Building history" popup can finish instead of sitting at
-  // e.g. 7,348 / 7,360 forever (the user's phone, 2026-10-11). {id: failedAtMs}
+  // e.g. 7,348 / 7,360 forever (a real phone, 2026-10-11). {id: failedAtMs}
   const HISTORY_UNAVAILABLE_TTL = 24 * 3600000;
   const recentUnavailable = () => {
     const m = store.get('historyUnavailable', {}) || {}, now = Date.now(), out = new Set();
@@ -176,8 +176,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   let snapshotData = await storage.readJSON(snapshotFile, {});   // { itemId: [{t,p,v}] }
   const itemHistoryCache = new Map();
   const itemStatsCache = new Map();
-  // Session-only, never written to disk (unlike itemStatsCache) — the user:
-  // drop sources are a "quickly check where this comes from" lookup, not
+  // Session-only, never written to disk (unlike itemStatsCache) — // drop sources are a "quickly check where this comes from" lookup, not
   // something worth persisting across restarts. Still worth caching in
   // memory so re-opening the same item this session doesn't re-fetch.
   const dropSourcesCache = new Map();
@@ -463,8 +462,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       if (!res.ok) {
         console.warn(`[history] HTTP ${res.status} fetching item ${itemId} (timeout ${timeoutMs}ms)`);
         if (res.status === 429) {
-          // Real rate limiting from WeirdGloop — confirmed for real (the user,
-          // 2026-08-03) once a full sustained backfill finally ran long
+          // Real rate limiting from WeirdGloop — confirmed for real (// 2026-08-03) once a full sustained backfill finally ran long
           // enough to actually reach it (every earlier attempt crashed
           // from client-side memory pressure well before this point, so
           // "no 429s ever seen" wasn't actually evidence the API had no
@@ -535,7 +533,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // loop used, so per-connection request rate against WeirdGloop is
   // unchanged; running HISTORY_FETCH_CONCURRENCY of them at once just
   // overlaps their network wait time instead of one request blocking the
-  // next. The user asked to speed up the ~20-45 min full-catalogue backfill
+  // next. Asked to speed up the ~20-45 min full-catalogue backfill
   // (2026-08-02, mobile testing) — real wall-clock improvement without
   // touching the actual per-connection pacing, which is the safer lever
   // than just shortening the 400ms delay itself (that number was chosen
@@ -543,7 +541,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // multiplying request RATE felt riskier than multiplying request
   // COUNT-in-flight).
   //
-  // The user explicitly asked to push this from an initial 4 up to 12, same
+  // Explicitly requested to push this from an initial 4 up to 12, same
   // session. That produced two genuine V8 "Ineffective mark-compacts near
   // heap limit" OOM crashes on Android's WebView mid-backfill (confirmed
   // via adb logcat both times) — the first coincided with also changing
@@ -559,7 +557,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // historyData (see that function's own comment), roughly doubling peak
   // memory for no reason. Separately, the emulator's own AVD config
   // turned out to be quite constrained (hw.ramSize 2048MB, vm.heapSize
-  // 228MB) — bumped to 4096MB/512MB (2026-08-02) since the user's actual
+  // 228MB) — bumped to 4096MB/512MB (2026-08-02) since a real
   // Pixel 8 Pro had never shown this crash at all, strongly suggesting
   // the emulator's low default allocation (not a fundamental app problem)
   // was the real ceiling. Retested at 12 with BOTH real fixes in place
@@ -756,8 +754,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     //
     // Still calls onProgress on every attempt, even though `done`/`total`
     // themselves don't move any further here (these items were already
-    // counted as "done" from the main pass) — confirmed for real (the user,
-    // 2026-08-03) that skipping this made the renderer's "Building
+    // counted as "done" from the main pass) — confirmed for real (// 2026-08-03) that skipping this made the renderer's "Building
     // history" popup visibly freeze for the whole retry phase, which with
     // real HTTP 429 backoff (4s per hit) plus this being where most of
     // the backstop failures land, could be a genuinely long silent
@@ -836,7 +833,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     console.log(`[history] Queue set: ${historyFetchQueue.length} items to fetch`);
 
     // Progress counts only THIS list's items (FIX 2026-10-11): the raw
-    // file count includes items no longer on the GE, so on the user's desktop
+    // file count includes items no longer on the GE, so on a real desktop
     // 7,412 files ≥ 7,360 items read as "complete" while 33 new Havenhythe
     // II items had no history at all and were never fetched.
     const target = validIds.map(String);
@@ -1024,8 +1021,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       // Used to be treated as permanently complete once built, so any
       // daily price point added by the regular fetch cycle AFTER an item
       // was first cached here never made it in — All-Time Low/High could
-      // silently go stale indefinitely. Confirmed for real (the user,
-      // 2026-08-02): Dragon bones' cache hadn't been touched since June
+      // silently go stale indefinitely. Confirmed for real (// 2026-08-02): Dragon bones' cache hadn't been touched since June
       // 16, missing a genuine new all-time low set on July 27 — the app
       // then displayed a LATER, higher price as "new all-time low"
       // simply because it beat that stale (too-high) cached minimum.
@@ -1108,7 +1104,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
     // Confirmed for real (2026-06-29): the full computation is genuinely
     // expensive — ~6700 items × full multi-year history each, measured at
-    // ~17s on a fast dev machine and 45-90s on the user's actual desktop/mobile
+    // ~17s on a fast dev machine and 45-90s on a real desktop/mobile
     // hardware — and every cold app launch used to pay that cost
     // unconditionally before showing anything, since dxpIntelCache is
     // purely in-memory and starts empty every run. DXP timing stats are
@@ -2546,8 +2542,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // Week-over-week: the guide itself often only updates every 2-3 days.
     for (let d = Math.max(first + 7, today - 182); d <= today; d += 7) if (p[d] > 0 && p[d - 7] > 0) { cnt++; if (p[d] === p[d - 7]) same++; }
     // 6. Alch value line (2026-10-08/09): high alch − that day's nature
-    //    rune price. Whether it acts as a FLOOR depends on the item (the user:
-    //    things made to be alched — salvages, Dragon hatchets — hold it;
+    //    rune price. Whether it acts as a FLOOR depends on the item (//    things made to be alched — salvages, Dragon hatchets — hold it;
     //    battlestaves/longbows live below it). Measured per item as the
     //    share of days in the last 3 years the guide stayed at/above
     //    floor − 3%. Checked 2026-10-09: 27 of 159 near-floor items held it
@@ -2829,7 +2824,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     // 7. Volume now vs normal — descriptive. Plus "myth notes": when a
     //    textbook volume pattern is happening now, say what it actually did
     //    across ~1,000 GE items (pooled, market-relative, 30 days after).
-    //    The user: GEnius should be open about rules that don't hold here.
+    //    GEnius should be open about rules that don't hold here.
     const vBefore = vAvg(today - 74, today - 15), v7 = vAvg(today - 6, today), v14 = vAvg(today - 13, today);
     if (vBefore && v7) {
       const p7 = pMove(today - 7, today), p14 = pMove(today - 14, today);
@@ -3778,7 +3773,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // ─── Drop sources ────────────────────────────────────────────────────────
   // "Where does this come from" lookup for the detail panel — click-to-fetch
   // only (never auto-loaded like getItemStats above), and never persisted to
-  // disk (dropSourcesCache is session-only). The user: this is for spot-checking
+  // disk (dropSourcesCache is session-only). This is for spot-checking
   // unusual items, not something that needs to survive a restart.
   //
   // The wiki's drop table is server-rendered from a Cargo query (not
@@ -4689,8 +4684,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   }
 
   // ─── Buy planner ──────────────────────────────────────────────────────────
-  // Goals for slowly accumulating an item under its GE buy limit (the user,
-  // 2026-10-06, from the dragon hatchet grind). Stored inside the portfolio
+  // Goals for slowly accumulating an item under its GE buy limit (// 2026-10-06, from the dragon hatchet grind). Stored inside the portfolio
   // file so backups/imports carry them. The user only ever enters RUNNING
   // TOTALS (total bought + total gp spent, both shown on the GE offer) —
   // individual fill prices aren't visible in-game, and the average is exact
@@ -4761,8 +4755,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Two ways to call it:
   //   { id, bought, spent }  one offer: the goal's totals directly
-  //   { id, offers }         several offers for the same item (the user,
-  //     2026-10-20: one per account, since buy limits are per account).
+  //   { id, offers }         several offers for the same item (//     2026-10-20: one per account, since buy limits are per account).
   //     Each offer is { id, label, bought, spent } with that offer's own
   //     running totals; the goal's totals become their sum.
   async function updateBuyGoalTotals({ id, bought, spent, offers }) {
@@ -5087,12 +5080,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // this ONLY existed in run.js's checkAlerts(), which sent to Discord and
   // nothing else: no desktop notification, no fired-state tracking, and if
   // no webhook was configured (the common case), a triggered alert was
-  // silently discarded with zero observable effect. Caught for real (the user,
-  // 2026-08-05): a genuine "Dragon bones below 950gp" alert existed in
+  // silently discarded with zero observable effect. Caught for real (// 2026-08-05): a genuine "Dragon bones below 950gp" alert existed in
   // alerts.json but produced nothing when forced to evaluate, confirming
   // the gap.
   //
-  // Edge-triggered, not one-shot (corrected same session — the user: "the
+  // Edge-triggered, not one-shot (corrected same session — "the
   // alerts should stay active regardless if they fire or not"). `active`
   // tracks whether the condition was true as of the LAST check — a
   // notification only fires on the false→true transition, not on every
@@ -5198,7 +5190,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // (not portfolio/alerts/overrides — those already have their own atomic
   // writes and are large/change constantly, this is specifically for the
   // small, easy-to-lose, rarely-resaved stuff), one file per CALENDAR DAY
-  // (not per launch — the user's ask, 2026-07-29, was a 15-day rolling window,
+  // (not per launch — the request, 2026-07-29, was a 15-day rolling window,
   // and multiple launches in one day would just be the same day's snapshot
   // getting overwritten, not extra generations piling up). Anything older
   // than 15 days gets pruned once a new day's backup is written.
@@ -5542,7 +5534,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // Periodic snapshot of every OPEN position's live buy/sell and GE market
   // price, unlike getWatchlistDigest above which only fires on a threshold
-  // crossing — the user's ask (2026-07-29) was a plain periodic status check
+  // crossing — asked (2026-07-29) was a plain periodic status check
   // (defaulting to 15 minutes, matching the price auto-refresh), not
   // an anomaly alert, so every open position gets a line every time this
   // fires, regardless of whether anything moved.

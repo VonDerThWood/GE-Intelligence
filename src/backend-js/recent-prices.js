@@ -16,7 +16,7 @@
  */
 const BASE = 'https://prices.runescape.wiki/api/v2/rs/';
 const HEADERS = { 'User-Agent': 'GEnius/1.0 (github.com/VonDerThWood/GE-Intelligence)' };
-const MIN_UNITS = 5;        // The user: at least 5 per side
+const MIN_UNITS = 5;        // at least 5 per side
 const TARGET_UNITS = 20;    // stop walking back once both sides have this many
 const MAX_HOURS = 6;
 const FIVE_MIN_HOURS = 2;   // 5-minute blocks this far back, hourly before

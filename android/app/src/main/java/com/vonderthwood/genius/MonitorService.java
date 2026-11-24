@@ -26,7 +26,7 @@ import io.ionic.backgroundrunner.plugin.RunnerWorker;
  * runs GEnius's background check (mobile/runners/background.js: price
  * alerts, watchlist + portfolio digests, DXP, reminders) on the user's fetch
  * interval, instead of whenever WorkManager's battery-saving schedule gets
- * to it (1-4h apart on the user's phone, longer with Battery Saver on).
+ * to it (1-4h apart on a real phone, longer with Battery Saver on).
  *
  * It triggers the background runner rather than the app's own web page:
  * tested on the user's Pixel 8 Pro (Android 16), the WebView page is fully
