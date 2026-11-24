@@ -4,7 +4,7 @@
 
 This is the big one.
 
-GEnius is officially an Android app, currently in closed testing on Google Play. Desktop gets a whole pile of new tools, the app has been brought up to speed with the Late-Game Rebalance, and we've made some pretty substantial improvements under the hood. If you want to get in on the closed testing beta, please contact me. I'm in need of testers!
+GEnius is officially an Android app, currently in closed testing on Google Play. Desktop gets a whole pile of new tools, the app has been brought up to speed with the Late-Game Rebalance, and we've made some pretty substantial improvements under the hood. If you want to get in on the closed testing beta, please contact me at **vonderthwood@gmail.com**. I'm in need of testers!
 
 There's a lot here. Let's get into it.
 
