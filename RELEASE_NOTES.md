@@ -16,6 +16,16 @@ GEnius now runs on Android, with the same features and data you've got on deskto
 - **Actually built for a phone.** Pull down to refresh, bigger chart numbers, full-width search results, quantities in your Portfolio, and a proper full-screen layout without the status bar getting in the way. Notifications are now called Push Notifications. Because that's what they are.
 - **Bring your desktop data along.** Settings → Import Backup lets you bring your positions, alerts, and watchlists over from a desktop backup. Just in case you don't want to scan a QR code. But beware: they will not sync like this.
 
+### The Almanac, put to the test
+We've been saying the DXP Almanac is built on historical data. Now we've put its predictions up against the November Double XP event using actual live trades, not guide prices. Turns out, patience makes a pretty big difference.
+
+- **Graded at live prices.** Every recommended DXP plan was checked against what actually traded during the event, with the 2% GE tax included. Using patient offers, 29 of 33 plans made money, averaging +12.6%. Buying and selling instantly at the going price? Just 16 of 33 made money, with an average return of -0.2%. The takeaway: these plans reward patience. Paying the spread can eat the profit entirely.
+- **Sell-first plans came out ahead.** Plans that started by selling performed better than those that started by buying.
+- **Seasonal predictions got a reality check.** Halloween 2026 was graded against the Seasonal tab's predictions. 12 of 20 calls held up. The 7 that didn't are now labelled **Broke in 2026**, rated Speculative, and include an explanation of what actually happened. Pumpkin crash estimates were also corrected to match reality: approximately -50%.
+- **Two DXPs a year.** The next-DXP estimate now assumes a six-month gap, reflecting Jagex's new schedule instead of the old three-month assumption.
+
+*The Almanac makes predictions. Now it has receipts to back those predictions up.*
+
 ### First start in about a minute (down from 45)
 New installs no longer have to download roughly 7,400 items of price history. Even though it was roughly 2.5 items/second, it still took a ridiculous amount of time. Desktop and Android now grab the history in a single file, built from my personal history that has been building up for months, then catch everything up to today in the background. And that history? It's compressed now. The old 1.5GB collection takes up about 76MB. GEnius is helping you profit both in-game and storage capacity wise.
 
