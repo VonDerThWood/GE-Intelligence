@@ -2777,11 +2777,15 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
         const cutoff = latestTs - days*24*60*60*1000;
         const pt = sorted.find(p => getTs(p) >= cutoff);
         if (!pt || !pt.price) return null;
+        // History must really reach back that far (else the oldest point would pose as "1y").
+        if (getTs(sorted[0]) > cutoff + 30*24*60*60*1000) return null;
         const chg = ((currentPrice - pt.price) / pt.price) * 100;
         const gp  = Math.round(currentPrice - pt.price);
         return {chg: Math.round(chg*100)/100, gp};
       };
-      setTrends({d7:calc(7), d30:calc(30), d90:calc(90)});
+      // 1y/3y too (tester, 2026-11-25): an item up 24% in 90 days but down 15% over the
+      // year and 42% over 3 years only showed the green short-term boxes.
+      setTrends({d7:calc(7), d30:calc(30), d90:calc(90), y1:calc(365), y3:calc(1095)});
     });
   }, [itemId, currentPrice, untradeable]);
 
@@ -2790,6 +2794,8 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
     ['7d',  trends.d7],
     ['30d', trends.d30],
     ['90d', trends.d90],
+    ['1y',  trends.y1],
+    ['3y',  trends.y3],
   ].filter(([,v]) => v != null);
   if (!entries.length) return null;
 
@@ -2960,8 +2966,17 @@ function TradePriceBox({item, livePrice, gpFmt}) {
              'buy at ', g(lo), ', sell at ', g(hi), ' = +' + f(Math.round(margin)) + 'gp each after 2% tax',
              // profitForLimit isn't computed for items that don't qualify (too little
              // trading), which showed "+NaNgp per 2 buy limit" (2026-11-16).
-             item.limit ? ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
-             '. The Flips tab leaves it out: ', stats.disqualifyReason]
+             // Per buy limit only when a limit can fill within a day; a slow item showed
+             // "+240M per 100 buy limit" on ~70 trades a day (tester, 2026-11-25).
+             (() => {
+               if (!item.limit) return '';
+               const fl0 = flipFill(item, item.limit, margin);
+               if (fl0.hours != null && fl0.hours > 24) return fl0.profit4h > 0 ? ` (about +${f(Math.round(fl0.profit4h))}gp per 4 hours at its trading pace)` : '';
+               return ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)`;
+             })(),
+             '. The Flips tab leaves it out: ', stats.disqualifyReason,
+             item.liveLatest?.buy && item.liveLatest?.sell && applyTax(item.liveLatest.buy) - item.liveLatest.sell <= 0
+               ? h('div', {key:'lt', style:{color:'#e08030', marginTop:3}}, `⚠ The latest trades show no margin (buy ${f(item.liveLatest.sell)}gp, sell ${f(item.liveLatest.buy)}gp): these averages include older trades.`) : null]
     ),
     // How long it would really take (2026-11-17: "possible but very slow").
     (() => {
@@ -3173,6 +3188,10 @@ function GoodRightNow({items, onSelect, onNavigate}) {
 // of just staying silent about it.
 function FlipMarginBlock({item}) {
   const stats = useMemo(() => computeFlipStats(item), [item]);
+  // Averages cover up to 6 hours; on a slow item the newest trades can already have
+  // closed the gap (Alchemical onyx: +2.4M on averages, -10K on the latest trades).
+  const latest = item.liveLatest;
+  const latestGone = !!(stats.qualifies && latest?.buy && latest?.sell && applyTax(latest.buy) - latest.sell <= 0);
   return h('div', {style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
     h('div', {style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:8}}, 'FLIP MARGIN'),
     !stats.qualifies
@@ -3187,11 +3206,23 @@ function FlipMarginBlock({item}) {
               h('div', {style:{color:T.textDim, marginBottom:2}}, 'ROI'),
               h('div', {style:{color: stats.roiPct>=5 ? T.green : T.text, fontWeight:'bold'}}, stats.roiPct.toFixed(2)+'%')
             ),
-            h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}},
-              h('div', {style:{color:T.textDim, marginBottom:2}}, 'Profit (buy limit)'),
-              h('div', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(stats.profitForLimit)+'gp')
+            // Realistic, not margin x limit: a 100-limit item that trades ~70 a day showed
+            // "240M per buy limit" (tester report, 2026-11-25). Same figure Flips sorts by.
+            h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}, title:'Margin × the smaller of the buy limit and a typical day\'s volume. A full buy limit would be ' + fmt.gp(stats.profitForLimit) + 'gp.'},
+              h('div', {style:{color:T.textDim, marginBottom:2}}, 'Realistic profit'),
+              h('div', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(Math.round(stats.realisticProfit))+'gp')
+            ),
+            h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}, title: fillTitle({...item, fillHours: stats.fillHours, buyHours: stats.buyHours, sellHours: stats.sellHours})},
+              h('div', {style:{color:T.textDim, marginBottom:2}}, 'Fill time'),
+              h('div', {style:{color: fillColor(stats.fillHours), fontWeight:'bold'}}, fmtHours(stats.fillHours))
             ),
           ),
+          h('div', {style:{fontSize:11, color:T.textDim, marginBottom:4}},
+            'Buy at ', h('span', {style:{color:'#e08030'}, title:avgTitle(item, 'sell')}, fmt.gp(item.liveSell)+'gp'),
+            ', sell at ', h('span', {style:{color:T.green}, title:avgTitle(item, 'buy')}, fmt.gp(item.liveBuy)+'gp'),
+            ' (averages of recent trades).'),
+          latestGone && h('div', {style:{fontSize:11, color:'#e08030', marginBottom:4}},
+            '⚠ The latest trades show no margin (buy ' + fmt.gp(latest.sell) + ', sell ' + fmt.gp(latest.buy) + '). The averages may be out of date; check the live chart before buying.'),
           h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic'}}, 'This item currently qualifies for the Flips leaderboard — same numbers shown there.')
         )
   );
@@ -7043,6 +7074,7 @@ const APP_NEWS = [
       "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
+      "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
       "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
       "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
       "Android: the phone app no longer thinks some desktop-only features exist.",
