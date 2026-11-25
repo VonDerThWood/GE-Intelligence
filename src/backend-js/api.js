@@ -5194,7 +5194,13 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // ─── Misc ────────────────────────────────────────────────────────────────
   async function getData() {
     try {
-      const parsed = await storage.readJSON(dataFile, { items: [], timestamp: null });
+      let parsed = await storage.readJSON(dataFile, { items: [], timestamp: null });
+      // The phone overwrites latest.json in place, so a read during a save can come back
+      // unparseable (= the empty fallback). Try once more before reporting no items.
+      if (!parsed.items?.length) {
+        await new Promise(r => setTimeout(r, 750));
+        parsed = await storage.readJSON(dataFile, { items: [], timestamp: null });
+      }
       if (parsed.items) {
         for (const it of parsed.items) {
           if (it.untradeable && it.change_1d == null) {

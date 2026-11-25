@@ -7043,7 +7043,7 @@ const APP_NEWS = [
       "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
-      "Search says prices are still loading if you type before the first fetch finishes, instead of showing nothing. Background problems older than 7 days drop off by themselves.",
+      "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
       "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
       "Android: the phone app no longer thinks some desktop-only features exist.",
       "Android: watchlist notifications show item names again, not bare item numbers (items that left the GE lost their names).",
@@ -17626,7 +17626,10 @@ function App() {
       setFetching(false); setLastUpdate(d.timestamp);
       window.genius.getData().then(data => {
         console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
-        if (data.items)   setItems(data.items);
+        // Never swap a loaded list for an empty one: on the phone a read that lands mid-save
+        // comes back empty, which killed search until the next fetch (tester report, 2026-11-24).
+        if (data.items?.length) setItems(data.items);
+        else { console.warn('[GEnius] getData after fetch returned no items; keeping the current list'); return; }
         window.dispatchEvent(new Event('genius-recent-refresh'));
         setRemovedItems(data.removedItems || []);
         if (data.news)    setNews(data.news);
