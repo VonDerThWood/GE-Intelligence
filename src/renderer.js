@@ -7125,21 +7125,20 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
-    version: 'v3.0.1',
+    version: 'v3.1.0',
     items: [
-      "A small release with one fix that matters: your price history keeps itself up to date again.",
-      "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
-      "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
-      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
-      "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
+      "Tester feedback, put to work: moving averages on the chart, an Almanac that tells you what to offer and until when, and price history that keeps itself up to date again.",
       "Price chart: new Lines row with 30, 90 and 200-day moving averages, plus the 90-day median the Almanac bids at.",
       "Almanac: \"Buy now\" and \"Sell now\" are now \"Bid ~X until <date>\" and \"List at ~X by <date>\". Bids use the item's 90-day median, which beat buying instantly in testing.",
       "Almanac notifications now reach your phone: on by default (unless you turned them off), with their own section in Settings → Notifications.",
-      "Almanac: buy ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
-      "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
+      "Almanac: bid ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
+      "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
+      "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
+      "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
+      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
       "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
-      "Android: the phone app no longer thinks some desktop-only features exist.",
-      "Android: watchlist notifications show item names again, not bare item numbers (items that left the GE lost their names).",
+      "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
+      "Android: files are saved safely (written in full, then swapped in), the phone app no longer thinks some desktop-only features exist, and watchlist notifications show item names again, not bare item numbers.",
     ]
   },
   {
