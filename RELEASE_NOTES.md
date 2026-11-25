@@ -11,6 +11,10 @@ GEnius keeps every item's price history topped up in the background after each f
 ### Logging sales from the GE reader
 - If your Portfolio already has recent sales of an item at the same price (logged by hand or on another device), the GE reader now warns you before logging an offer's sales again, and logs only the new ones. This stops an offer's earlier fills being counted twice.
 
+### Small fixes
+- Search: if you type before the first price fetch has finished, the search list now says prices are still loading, instead of showing nothing (which looked like search was broken).
+- Settings → Background problems: entries older than 7 days now drop off by themselves, so old, already-fixed errors don't hang around.
+
 ### Money Makers
 - Construction: plank machine rows showed the manual row's Profit/Limit, ignoring the machine's charge cost. Fixed (Elder planks: 30.7M → 22.3M per limit). The charge now shows in whole coins ("337gp", not "337.035gp").
 

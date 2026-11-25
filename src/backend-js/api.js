@@ -5737,7 +5737,11 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
     getDxpNewsDetections, resolveDxpNews, getDxpNewsNotifications: toInbox('almanac', 'dxp_news', getDxpNewsNotifications), parseDxpDates, parseDxpTease,
     getNewsCalendar, extractNewsDates, fetchNewsPage,
     getNewsFeed, getNewsBadgeCount, markNewsRead, getNewsBadgePrefs, setNewsBadgePrefs,
-    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, compactHistory, getHistoryCompact: async () => store.get('historyCompact', false), getBackgroundErrors: async () => { const w = historyStaleWarning(); return w ? [w, ...store.get('backgroundErrors', [])] : store.get('backgroundErrors', []); },
+    archiveNews, getEvents, saveEvent, deleteEvent, getEventSuggestions, dismissEventSuggestion, getEventImpact, getQuestItems, getNewItemsSummary, getContentDrops, getSimilarItems, getChartAnalysis, askItem, listAutoBackups, restoreAutoBackup: withUserData(restoreAutoBackup), getFoodHeal, maybeBuildSimilarityTable, maybeRefreshAlmanac, prepareForQuit, noteError, compactHistory, getHistoryCompact: async () => store.get('historyCompact', false), getBackgroundErrors: async () => {
+      // Entries older than 7 days drop off by themselves: week-old, already-fixed errors
+      // kept showing until Clear was pressed (2026-11-24).
+      const recent = (store.get('backgroundErrors', []) || []).filter(e => Date.now() - (e.at || 0) < 7 * 86400000);
+      const w = historyStaleWarning(); return w ? [w, ...recent] : recent; },
     clearBackgroundErrors: async () => { store.set('backgroundErrors', []); return { success: true }; },
     recordNetWorth: withUserData(recordNetWorth), getNetWorthHistory, buildCsvExport: withUserData(buildCsvExport),
     // alerts

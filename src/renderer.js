@@ -2194,7 +2194,10 @@ function useSearch(items, userShorthands = {}) {
 
 function GESearchBar({items, onSelect, userShorthands}) {
   const s = useSearch(items, userShorthands);
-  const showDrop = s.focused && s.results.length > 0;
+  // No items yet (first fetch still running): say so instead of showing nothing, which
+  // looked like search was broken (tester report, 2026-11-24).
+  const stillLoading = !items || items.length === 0;
+  const showDrop = s.focused && (s.results.length > 0 || (stillLoading && s.query.length > 0));
   // Portaled to document.body (2026-08-12, real bug caught live):
   // this dropdown used to render as a normal position:absolute child of
   // .ge-search-wrap, nested inside .ge-header. Its own z-index:100 only
@@ -2268,6 +2271,7 @@ function GESearchBar({items, onSelect, userShorthands}) {
     s.query && h('button',{className:'ge-search-clear',onClick:()=>s.setQuery('')},'x'),
     showDrop && dropPos && createPortal(
       h('div',{className:'ge-search-results', style:{position:'fixed', top:dropPos.top, left:dropPos.left, width:dropPos.width, right:'auto', zIndex:9999}},
+        stillLoading && h('div',{className:'ge-result-item', style:{color:T.textDim, fontStyle:'italic', cursor:'default'}}, 'Prices are still loading. Search works once the first fetch finishes.'),
         s.results.map((it,i) =>
           h('div',{
             key:it.id,
@@ -7039,6 +7043,7 @@ const APP_NEWS = [
       "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
+      "Search says prices are still loading if you type before the first fetch finishes, instead of showing nothing. Background problems older than 7 days drop off by themselves.",
       "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
       "Android: the phone app no longer thinks some desktop-only features exist.",
       "Android: watchlist notifications show item names again, not bare item numbers (items that left the GE lost their names).",
