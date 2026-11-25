@@ -275,10 +275,20 @@ addEventListener('checkNotifications', async (resolve, reject) => {
       });
       if (due.length) {
         const sells = due.filter(r => r.action === 'sell'), buys = due.filter(r => r.action === 'buy');
-        const names = list => list.slice(0, 3).map(r => r.name).join(', ') + (list.length > 3 ? `, and ${list.length - 3} more` : '');
-        const title = 'Almanac: ' + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(', ');
+        // Same text as buildDigest (almanac-signals.js); formatting by hand, since this
+        // engine's locale support is limited.
+        const shortGp = n => n >= 1e9 ? (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B' : n >= 1e6 ? (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M'
+          : n >= 1e4 ? (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K' : String(Math.round(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+        const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+        const shortDay = d => MON[parseInt(d.slice(5, 7), 10) - 1] + ' ' + parseInt(d.slice(8, 10), 10);
+        const one = r => {
+          const p = r.action === 'sell' ? r.listAt : r.bid, d = r.action === 'sell' ? r.listBy : r.bidUntil;
+          return r.name + (p ? ` ~${shortGp(p)}` : '') + (d ? ` ${r.action === 'sell' ? 'by' : 'until'} ${shortDay(d)}` : '');
+        };
+        const names = list => list.slice(0, 3).map(one).join(', ') + (list.length > 3 ? `, and ${list.length - 3} more` : '');
+        const title = 'Almanac: ' + [sells.length && `${sells.length} to list`, buys.length && `${buys.length} to bid on`].filter(Boolean).join(', ');
         const clean = buys.filter(r => !r.declinePct), sliding = buys.filter(r => r.declinePct);
-        const body = [sells.length && `Sell now: ${names(sells)}`, clean.length && `Buy now: ${names(clean)}`,
+        const body = [sells.length && `List: ${names(sells)}`, clean.length && `Bid: ${names(clean)}`,
           sliding.length && `Long decline (down 15%+ over 6 months, still falling): ${names(sliding)}`].filter(Boolean).join('\n');
         queue(title, body, 'almanac', 'almanac_digest', due.map(r => r.key));
         for (const r of due) seen[r.key] = Date.now();

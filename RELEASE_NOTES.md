@@ -17,6 +17,12 @@ Tester feedback: an item up 24% in 90 days looked like a riser, even though it's
 - **Flip margin** shows a realistic profit and how long a buy limit takes to fill, instead of "margin × buy limit" (which promised 240M on an item that trades about 70 a day). It also shows the prices it used, and warns when the latest trades show no margin.
 - **What to offer** no longer quotes a per-buy-limit profit for items that would take days to fill, and gives the same latest-trades warning.
 
+### Almanac: bid and list, at a price, by a date
+"Buy now" and "Sell now" are gone. Each flag now says what to offer and until when:
+- **Bid ~X each, until about <date>**: the item's 90-day median, never above today's live prices. Tested on the November DXP with the Almanac's own flags: bidding like this made a typical +11.7% per flag, against +4.0% for buying instantly.
+- **List at ~X each, by about <date>**: its 90-day median plus its usual DXP rise, never below what buyers pay now or your break-even.
+- Notifications read the same way: "Bid: Teak logs ~191 until Dec 4".
+
 ### Almanac: long declines
 - "Buy now" ideas now warn when an item is in a long decline: down 15% or more over 6 months and still falling. Past DXP rises may not beat a steady slide.
 - **Almanac notifications now reach your phone.** The switch for them was off by default and hidden on the Almanac's DXP tab, labelled as if it only covered your DXP watchlist. It's now **on by default** (unless you turned it off yourself) and has its own place in **Settings → Notifications → Almanac**.

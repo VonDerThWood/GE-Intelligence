@@ -2050,10 +2050,33 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       watched: [...store.get('watchlist', []), ...store.get('dxpWatchlist', [])] });
     // Live price check: has it already used up half its usual rise?
     const monthAgo = Date.now() - 30 * 86400000;
+    // Offer prices (Ben, 2026-11-25): "bid ~X until <date>" / "list at ~X by <date>"
+    // instead of "buy now" / "sell now". Bid = the 90-day median (guide), never above
+    // today's instant-sell: Ben's rule, which beat buying instantly on live prices in the
+    // bid backtest (research/dxp_plan_backtest/bids-findings.md). Bids stay open 7 days,
+    // as tested. List = the 90-day median plus the item's usual DXP rise, never below
+    // what buyers pay right now or your break-even.
+    const ninetyAgo = Date.now() - 90 * 86400000;
+    const plusDays = (day, n) => new Date(Date.parse(day + 'T00:00:00Z') + n * 86400000).toISOString().slice(0, 10);
     for (const r of [...out.now, ...out.soon]) {
-      if (r.action !== 'buy' || !r.peak || !r.liveBuy) continue;
+      if (r.action !== 'buy' && r.action !== 'sell') continue;
       const points = await getHistoryPoints(r.id);
       evictHistory(r.id);
+      const p90 = (points || []).filter(p => p.timestamp >= ninetyAgo && p.price).map(p => p.price).sort((a, b) => a - b);
+      const med90 = p90.length >= 30 ? p90[Math.floor(p90.length / 2)] : null;
+      if (r.action === 'sell') {
+        if (med90) {
+          const target = Math.round(med90 * (1 + (r.peak || 0) / 100));
+          r.listAt = Math.max(target, r.liveBuy || 0, r.breakEven || 0);
+        }
+        r.listBy = r.day;
+        continue;
+      }
+      // Never above either live price: when instant-sell sits above instant-buy for a
+      // moment, capping at instant-sell alone gave "bid 207" next to "live buy 204".
+      if (med90) r.bid = Math.round(Math.min(med90, ...[r.liveSell, r.liveBuy].filter(v => v > 0)));
+      r.bidUntil = plusDays(r.day, 7);
+      if (!r.peak || !r.liveBuy) continue;
       // Steady decline (tester, 2026-11-25): the DXP pattern can still say "buy" on an
       // item sliding for months, and the slide can eat the usual rise. Ben's rule: a
       // long decline = down 15%+ over 6 months AND still down over the last 3 (so a

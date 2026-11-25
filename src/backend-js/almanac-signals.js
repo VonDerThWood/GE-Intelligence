@@ -210,21 +210,37 @@ function computeSignals({ intel, events, items, holdings = [], watched = [], tod
 }
 
 // New "act now" rows become one digest notification, your own items named first.
+// 1234 -> "1.2K", 1234567 -> "1.23M" (notification text). Same in background.js.
+function shortGp(n) {
+  if (n >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, '') + 'B';
+  if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, '') + 'M';
+  if (n >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, '') + 'K';
+  return Math.round(n).toLocaleString('en-US');
+}
+// "2026-12-03" -> "Dec 3"
+function shortDay(d) {
+  return new Date(d + 'T12:00:00Z').toLocaleString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });
+}
+
 function buildDigest(rows) {
   if (!rows.length) return null;
   const sells = rows.filter(r => r.action === 'sell');
   const buys = rows.filter(r => r.action === 'buy');
+  // Offer prices, not "buy/sell now" (Ben, 2026-11-25): "Teak logs ~341 until Dec 3".
   const names = list => {
-    const shown = list.slice(0, 3).map(r => r.name);
+    const shown = list.slice(0, 3).map(r => {
+      const p = r.action === 'sell' ? r.listAt : r.bid, d = r.action === 'sell' ? r.listBy : r.bidUntil;
+      return r.name + (p ? ` ~${shortGp(p)}` : '') + (d ? ` ${r.action === 'sell' ? 'by' : 'until'} ${shortDay(d)}` : '');
+    });
     return shown.join(', ') + (list.length > 3 ? `, and ${list.length - 3} more` : '');
   };
-  const title = 'Almanac: ' + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(', ');
+  const title = 'Almanac: ' + [sells.length && `${sells.length} to list`, buys.length && `${buys.length} to bid on`].filter(Boolean).join(', ');
   // Buys in a long decline go on their own last line (Ben, 2026-11-25): still listed,
   // but below the cleaner picks. Same text in mobile/runners/background.js.
   const clean = buys.filter(r => !r.declinePct), sliding = buys.filter(r => r.declinePct);
-  const body = [sells.length && `Sell now: ${names(sells)}`, clean.length && `Buy now: ${names(clean)}`,
+  const body = [sells.length && `List: ${names(sells)}`, clean.length && `Bid: ${names(clean)}`,
     sliding.length && `Long decline (down 15%+ over 6 months, still falling): ${names(sliding)}`].filter(Boolean).join('\n');
   return { title, body };
 }
 
-module.exports = { computeSignals, buildDigest, uniqueEvents, estimateNextStart };
+module.exports = { computeSignals, buildDigest, uniqueEvents, estimateNextStart, patternsFor }; // patternsFor: research backtests (2026-11-25)

@@ -7075,6 +7075,7 @@ const APP_NEWS = [
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
       "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
+      "Almanac: \"Buy now\" and \"Sell now\" are now \"Bid ~X until <date>\" and \"List at ~X by <date>\". Bids use the item's 90-day median, which beat buying instantly in testing.",
       "Almanac notifications now reach your phone: on by default (unless you turned them off), with their own section in Settings → Notifications.",
       "Almanac: buy ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
       "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
@@ -16901,7 +16902,7 @@ function AlmanacFlagsBar({scope = 'yours'}) {
     onClick:()=>{ _alertsInitialPill = 'almanac'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
     h('span', {style:{flex:1}}, '🌱 ', h('b', {style:{color:NOTIF_MARKS.almanac.color}}, 'Almanac'), ' says of your items: ',
-      [sells && sells+' to sell now', buys && buys+' to buy now'].filter(Boolean).join(', ')),
+      [sells && sells+' to list', buys && buys+' to bid on'].filter(Boolean).join(', ')),
     h('span', {style:{color:NOTIF_MARKS.almanac.color}}, 'View all →'));
 }
 
@@ -16925,9 +16926,19 @@ function AlmanacFlagsView({items, onSelect}) {
     return bits.join(' · ');
   };
   const label = r => {
-    if (r.action === 'buy' && r.priceHigh) return ['Buy now, price high', '#f0a030', 'Already '+r.runUpPct+'% above its usual price this month, so much of the rise may be gone.'];
-    if (r.belowBreakEven) return ['Sell now, below break-even', '#f0a030', 'The usual exit time is here, but live sell is below your break-even.'];
-    return r.action === 'sell' ? ['Sell now', '#e05050'] : ['Buy now', '#4caf50'];
+    // "Bid / List", not "Buy / Sell now" (Ben, 2026-11-25): offers at a price, by a date.
+    if (r.action === 'buy' && r.priceHigh) return ['Bid, price high', '#f0a030', 'Already '+r.runUpPct+'% above its usual price this month, so much of the rise may be gone.'];
+    if (r.belowBreakEven) return ['List, below break-even', '#f0a030', 'The usual exit time is here, but live sell is below your break-even.'];
+    return r.action === 'sell' ? ['List', '#e05050'] : ['Bid', '#4caf50'];
+  };
+  // Ben's bid rule (90-day median, never above today's instant-sell) beat buying
+  // instantly in the live backtest: research/dxp_plan_backtest/bids-findings.md.
+  const offerLine = r => {
+    if (r.action === 'sell' && r.listAt) return h('div', {style:{color:'#e05050', fontSize:12, marginTop:2}, title:'Its 90-day median plus its usual DXP rise, never below what buyers pay now or your break-even.'},
+      'List at ~' + fmt.gp(r.listAt) + ' each, by about ' + fmtDayShort(r.listBy) + '.');
+    if (r.action === 'buy' && r.bid) return h('div', {style:{color:'#4caf50', fontSize:12, marginTop:2}, title:'Its 90-day median, never above today\'s instant-sell. In testing, bids like this beat buying instantly.'},
+      'Bid ~' + fmt.gp(r.bid) + ' each, until about ' + fmtDayShort(r.bidUntil) + '.');
+    return null;
   };
   const nowRow = r => {
     const [text, color, warn] = label(r);
@@ -16936,6 +16947,7 @@ function AlmanacFlagsView({items, onSelect}) {
       h('div', {style:{flex:1, minWidth:0}},
         nameEl(r),
         h('div', {style:{color:T.text}}, r.evidence),
+        offerLine(r),
         warn && h('div', {style:{color, fontSize:12}}, warn),
         r.action === 'buy' && r.declinePct && h('div', {style:{color:'#f0a030', fontSize:12}},
           '⚠ Long decline: down ' + r.declinePct + '% over 6 months and still falling. The DXP rise is measured on past years and may not beat the slide.'),
@@ -16945,7 +16957,7 @@ function AlmanacFlagsView({items, onSelect}) {
   const soonRow = r => h('div', {key:r.key, style:{padding:'8px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:8, alignItems:'flex-start'}},
     star(r),
     h('div', {style:{flex:1, minWidth:0}}, nameEl(r), h('div', {style:{color:T.textDim, fontSize:12}},
-      (r.action === 'sell' ? 'Start selling' : 'Start buying')+' in about '+r.inDays+' day'+(r.inDays===1?'':'s')+(r.estimated?' (estimated)':''))),
+      (r.action === 'sell' ? 'Start listing' : 'Start bidding')+' in about '+r.inDays+' day'+(r.inDays===1?'':'s')+(r.estimated?' (estimated)':''))),
     h('span', {style:{color:T.textDim, fontSize:12, whiteSpace:'nowrap'}}, fmtDayShort(r.day)));
   const section = (title, list, row, color) => list.length > 0 && h('div', {style:{marginBottom:18}},
     h('div', {className:'ge-section-head', style:color ? {color} : undefined}, title+' ('+list.length+')'), list.map(row));
@@ -16958,8 +16970,8 @@ function AlmanacFlagsView({items, onSelect}) {
         next ? 'Next Double XP: '+fmtDayShort(next.start)+(next.end ? ' to '+fmtDayShort(next.end) : '')+(next.estimated ? ' (estimated from past gaps, not announced).' : '.') : '',
         ' Timing comes from how each item moved around past DXPs, on guide prices. Past patterns can break, so check the live price first.'),
       !data.now.length && !data.soon.length && h('div', {className:'empty'}, h('p', null, 'Nothing flagged right now.')),
-      section('Start selling now', sells, nowRow, '#e05050'),
-      section('Start buying now', buys, nowRow, '#4caf50'),
+      section('List now', sells, nowRow, '#e05050'),
+      section('Bid now', buys, nowRow, '#4caf50'),
       section('Coming up: your portfolio', inGroup('held'), soonRow),
       section('Coming up: your watchlists', inGroup('watched'), soonRow),
       section('Coming up: everything else', inGroup('other'), soonRow)));

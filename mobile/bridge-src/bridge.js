@@ -176,7 +176,7 @@ async function syncRunnerState() {
     const withNames = (ids) => ids.map(id => ({ id, name: namesById[String(id)] || String(id) }));
 
     const signals = await a.getAlmanacSignals().catch(() => ({ now: [], soon: [] }));
-    const almanacRows = [...signals.now, ...signals.soon].map(r => ({ key: r.key, name: r.name, action: r.action, day: r.day, estimated: r.estimated, declinePct: r.declinePct }));
+    const almanacRows = [...signals.now, ...signals.soon].map(r => ({ key: r.key, name: r.name, action: r.action, day: r.day, estimated: r.estimated, declinePct: r.declinePct, bid: r.bid, bidUntil: r.bidUntil, listAt: r.listAt, listBy: r.listBy }));
 
     const events = await storage.readJSON(DATA_DIR + '/dxp_events.json', []).catch(() => []);
 
