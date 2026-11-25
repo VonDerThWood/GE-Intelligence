@@ -7039,6 +7039,7 @@ const APP_NEWS = [
       "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
+      "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
       "Android: the phone app no longer thinks some desktop-only features exist.",
       "Android: watchlist notifications show item names again, not bare item numbers (items that left the GE lost their names).",
     ]
@@ -16005,10 +16006,14 @@ function MoneyMakersTab({items, onSelect, description}) {
       const manualStats = computeConversionStats([{name:c.input, qty:1}], {name:c.output, qty:1}, items);
       if (manualStats.missing.length === 0) rows.push({ label: `${c.input} → ${c.output} (Manual, free)`, itemName: c.output, stats: manualStats });
 
-      const chargeCost = plankMachine.chargePerItem * chargeGpRate;
+      // Whole gp: a fractional charge printed as "337.035gp" read like 337 thousand (Ben, 2026-11-24).
+      const chargeCost = Math.round(plankMachine.chargePerItem * chargeGpRate);
       const machineStats = computeConversionStats([{name:c.input, qty:1}], {name:c.output, qty:1}, items);
       if (machineStats.missing.length === 0) {
-        const adjusted = { ...machineStats, cost: machineStats.cost + chargeCost, margin: machineStats.margin != null ? machineStats.margin - chargeCost : null };
+        const margin = machineStats.margin != null ? machineStats.margin - chargeCost : null;
+        // Profit/limit must follow the charge-adjusted margin (it showed the manual row's figure).
+        const profitPerLimit = (margin != null && machineStats.bindingLimit != null) ? margin * machineStats.bindingLimit : null;
+        const adjusted = { ...machineStats, cost: machineStats.cost + chargeCost, margin, profitPerLimit };
         rows.push({ label: `${c.input} → ${c.output} (Machine, ${fmt.gp(chargeCost)}gp charge)`, itemName: c.output, stats: adjusted });
       }
     }
