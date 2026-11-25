@@ -11,6 +11,12 @@ GEnius keeps every item's price history topped up in the background after each f
 ### Logging sales from the GE reader
 - If your Portfolio already has recent sales of an item at the same price (logged by hand or on another device), the GE reader now warns you before logging an offer's sales again, and logs only the new ones. This stops an offer's earlier fills being counted twice.
 
+### Price chart: moving averages and the 90-day median
+Tester request. The price chart has a new **Lines** row:
+- **30, 90 and 200-day moving averages**: the trend at a glance. A price stuck under its 200-day line for months is a long decline.
+- **90-day median (bid)**, dashed: the middle price of the last 90 days, day by day. Its latest point is what the Almanac bids.
+- Hover a line to see its value today. Your choices are remembered.
+
 ### Item panel: the bigger picture
 Tester feedback: an item up 24% in 90 days looked like a riser, even though it's down 15% on the year and 42% over three.
 - Price changes now show **1 year and 3 years** next to 7, 30 and 90 days.

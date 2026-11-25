@@ -1098,6 +1098,14 @@ function ImageModal({name, detailUrl, fallbackUrl, onClose}) {
   );
 }
 
+// Chart lines (2026-11-25). Guide-price history. med90 = the Almanac's bid rule.
+const CHART_OVERLAYS = [
+  {key:'ma30',  short:'30d avg',  label:'30-day moving average',  color:'#64b5f6', tip:'Average price over the last 30 days, each day. Price above it = rising lately; below = falling.'},
+  {key:'ma90',  short:'90d avg',  label:'90-day moving average',  color:'#ffb74d', tip:'Average price over the last 90 days, each day: the medium-term trend.'},
+  {key:'ma200', short:'200d avg', label:'200-day moving average', color:'#4db6ac', tip:'Average price over the last 200 days, each day: the long-term trend. A price stuck under it for months is a long decline.'},
+  {key:'med90', short:'90d median (bid)', label:'90-day median', color:'#4caf50', dash:'5,3', tip:'Middle price of the last 90 days, each day. Today\'s value is what the Almanac bids (never above live prices). Less thrown off by one-day spikes than an average.'},
+];
+
 function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOverlay}) {
   const [range, setRange] = useState(30);
   // Chart analysis phase 2: typical-range band + tested levels drawn on the
@@ -1214,6 +1222,30 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
     const cutoff = latestTs - range * 24 * 60 * 60 * 1000;
     return combined.filter(p => getTs(p) >= cutoff);
   }, [history, snapshots, range]);
+
+  // Moving averages + rolling 90-day median (tester + Ben, 2026-11-25). Worked out on
+  // the item's FULL guide history, so a 200-day average is right even on the 30d view,
+  // then drawn over whatever is on screen. The 90-day median is the Almanac's bid
+  // (research/dxp_plan_backtest/bids-findings.md): its last point is today's bid basis.
+  const [overlays, setOverlays] = useState(() => { try { return JSON.parse(localStorage.getItem('genius_chart_overlays') || '{}') || {}; } catch { return {}; } });
+  const toggleOverlay = k => setOverlays(prev => { const next = {...prev, [k]: !prev[k]}; try { localStorage.setItem('genius_chart_overlays', JSON.stringify(next)); } catch {} return next; });
+  const overlaySeries = useMemo(() => {
+    if (!history || !history.length || !Object.values(overlays).some(Boolean)) return null;
+    const getTs = p => typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
+    const byDay = {};
+    for (const p of history) { const pr = p.price ?? p.high ?? p.low; if (!pr) continue; const d = new Date(getTs(p)).toDateString(); if (!byDay[d] || getTs(p) > byDay[d].t) byDay[d] = {t:getTs(p), v:pr}; }
+    const days = Object.entries(byDay).sort((a, b) => a[1].t - b[1].t);
+    const vals = days.map(d => d[1].v);
+    const out = {};
+    const ma = n => { const r = new Array(vals.length).fill(null); let sum = 0; for (let i = 0; i < vals.length; i++) { sum += vals[i]; if (i >= n) sum -= vals[i - n]; if (i >= n - 1) r[i] = sum / n; } return r; };
+    const series = {};
+    if (overlays.ma30) series.ma30 = ma(30);
+    if (overlays.ma90) series.ma90 = ma(90);
+    if (overlays.ma200) series.ma200 = ma(200);
+    if (overlays.med90) { const r = new Array(vals.length).fill(null); for (let i = 89; i < vals.length; i++) { const w = vals.slice(i - 89, i + 1).sort((a, b) => a - b); r[i] = w[45]; } series.med90 = r; }
+    days.forEach(([d], i) => { const row = {}; for (const k in series) row[k] = series[k][i]; out[d] = row; });
+    return out;
+  }, [history, overlays]);
 
   // Which range currently supports scroll/arrow/pinch zoom, and what array
   // it zooms into — (2026-08-12): zoom only ever worked on All Time
@@ -1564,6 +1596,15 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
         h('span', null, '⏳ Fetching price history...')
       ),
 
+      // Moving averages + 90-day median toggles (saved on this device)
+      !loading && history && h('div', {style:{display:'flex', alignItems:'center', gap:6, padding:'6px 4px 2px', fontSize:11, flexWrap:'wrap'}},
+        h('span', {style:{color:T.textDim}}, 'Lines:'),
+        CHART_OVERLAYS.map(o => h('button', {key:o.key, onClick:() => toggleOverlay(o.key), title:o.tip,
+          style:{padding:'2px 8px', fontSize:11, cursor:'pointer', borderRadius:3, display:'inline-flex', alignItems:'center', gap:5,
+            background: overlays[o.key] ? 'rgba(201,168,76,0.15)' : 'transparent',
+            border: '1px solid ' + (overlays[o.key] ? o.color : T.border), color: overlays[o.key] ? T.text : T.textDim}},
+          h('span', {style:{display:'inline-block', width:14, borderTop: '2px ' + (o.dash ? 'dashed' : 'solid') + ' ' + o.color}}), o.short))),
+
       // Date range row (all-time only)
       chartView === 'alltime' && timeseries && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'6px 4px 2px', fontSize:11}},
         h('span', {style:{color:T.textDim}}, 'From'),
@@ -1773,6 +1814,22 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
               prices.length > 0 && h('circle', {key:'cur', cx:px(prices.length-1), cy:py(prices[prices.length-1]), r:3, fill:priceColor, pointerEvents:'none'}),
             ],
             chartMode === 'candle' && candleElements,
+            overlaySeries && CHART_OVERLAYS.filter(o => overlays[o.key]).map(o => {
+              const tsOfP = p => typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
+              const clampY = y => Math.max(PAD, Math.min(PH - PAD, y));
+              let d = '', pen = false, last = null;
+              activePoints.forEach((p, i) => {
+                // Days only in GEnius's own snapshots (not in guide history yet) carry the
+                // last value on, so the line doesn't break near the right edge.
+                const v = overlaySeries[new Date(tsOfP(p)).toDateString()]?.[o.key] ?? last;
+                if (v == null) { pen = false; return; }
+                d += (pen ? ' L ' : ' M ') + px(i).toFixed(1) + ' ' + clampY(py(v)).toFixed(1); pen = true; last = v;
+              });
+              if (!d) return null;
+              return h('g', {key:'ov-' + o.key},
+                h('path', {d, fill:'none', stroke:o.color, strokeWidth:1.3, strokeDasharray:o.dash || 'none', opacity:0.9, pointerEvents:'none'}),
+                h('path', {d, fill:'none', stroke:'transparent', strokeWidth:8, style:{cursor:'help'}}, h('title', null, o.label + (last != null ? ': ' + fmt.gp(Math.round(last)) + 'gp now' : '') + '. ' + o.tip)));
+            }),
           ),
           // Volume bars
           h('div', {style:{display:'flex', alignItems:'center', gap:8, marginLeft:YLAB+PAD, marginTop:4}},
@@ -7075,6 +7132,7 @@ const APP_NEWS = [
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
       "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
+      "Price chart: new Lines row with 30, 90 and 200-day moving averages, plus the 90-day median the Almanac bids at.",
       "Almanac: \"Buy now\" and \"Sell now\" are now \"Bid ~X until <date>\" and \"List at ~X by <date>\". Bids use the item's 90-day median, which beat buying instantly in testing.",
       "Almanac notifications now reach your phone: on by default (unless you turned them off), with their own section in Settings → Notifications.",
       "Almanac: buy ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
