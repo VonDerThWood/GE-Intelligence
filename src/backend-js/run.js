@@ -997,6 +997,11 @@ async function main(argv = (typeof process !== 'undefined' ? process.argv.slice(
       console.log(`[run] fetchPrices returned 0 items but ${existingItems.length} existing items are on disk — keeping the existing data instead of overwriting it with an empty result.`);
       items = existingItems;
       usedFallbackItems = true;
+    } else if (fetched.length === 0) {
+      // Download failed AND the saved file couldn't be read (or there is none): don't save
+      // an empty price list over whatever is on disk (slow phone connection, 2026-11-24).
+      console.log('[run] fetchPrices returned 0 items and no saved items could be read: not saving.');
+      return { pricesFailed: true };
     } else {
       items = fetched;
     }

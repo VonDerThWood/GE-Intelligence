@@ -45,9 +45,22 @@ async function atomicWrite(filePath, data) {
   // in one native call (no partial-write window visible to JS the way a
   // multi-step streamed write would have) — there's no separate temp-file/
   // rename step available (or needed) the way Node's fs exposes one.
+  // 2026-11-24: writeFile overwrites in place, so a read during the save got half a
+  // file (a tester's search went blank: latest.json read mid-save came back empty), and
+  // Android killing the app mid-save could leave a truncated file. Write a temp file
+  // beside it, then rename it over the real one, as desktop does. If rename isn't
+  // possible, fall back to the old direct write so saving never stops working.
   const path = relativize(filePath);
-  await Filesystem.writeFile({ path, data, directory: ROOT, encoding: Encoding.UTF8, recursive: true });
+  const tmp = `${path}.${++tmpSeq}.tmp`;
+  try {
+    await Filesystem.writeFile({ path: tmp, data, directory: ROOT, encoding: Encoding.UTF8, recursive: true });
+    await Filesystem.rename({ from: tmp, to: path, directory: ROOT, toDirectory: ROOT });
+  } catch (e) {
+    try { await Filesystem.deleteFile({ path: tmp, directory: ROOT }); } catch {}
+    await Filesystem.writeFile({ path, data, directory: ROOT, encoding: Encoding.UTF8, recursive: true });
+  }
 }
+let tmpSeq = 0;
 
 async function readJSON(filePath, fallback = null) {
   try {

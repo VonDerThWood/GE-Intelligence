@@ -12,7 +12,7 @@ GEnius keeps every item's price history topped up in the background after each f
 - If your Portfolio already has recent sales of an item at the same price (logged by hand or on another device), the GE reader now warns you before logging an offer's sales again, and logs only the new ones. This stops an offer's earlier fills being counted twice.
 
 ### Small fixes
-- Search could stop showing results for a while after a price fetch (seen on opening the app after a few days away): the item list could be swapped for an empty one if prices were read while still being saved. It now keeps the list it has and tries the read again.
+- Search could stop showing results for a while after a price fetch (seen on opening the app after a few days away): the item list could be swapped for an empty one if prices were read while still being saved. It now keeps the list it has and tries the read again. On Android, files are now saved safely (written in full first, then swapped in), so a read can't catch one half-saved, and closing the app mid-save can't leave a broken file.
 - Search: if you type before the very first price fetch has finished, the search list now says prices are still loading, instead of showing nothing.
 - Settings → Background problems: entries older than 7 days now drop off by themselves, so old, already-fixed errors don't hang around.
 
