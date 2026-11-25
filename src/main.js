@@ -570,7 +570,7 @@ ipcMain.handle('get-dxp-watchlist', () => store.get('dxpWatchlist', []));
 ipcMain.handle('set-dxp-watchlist', (_, list) => { store.set('dxpWatchlist', list); return { success: true }; });
 
 ipcMain.handle('get-dxp-notification-settings', () => store.get('dxpNotificationSettings', {
-  enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+  enabled: true, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
 }));
 ipcMain.handle('set-dxp-notification-settings', (_, settings) => {
   store.set('dxpNotificationSettings', settings);

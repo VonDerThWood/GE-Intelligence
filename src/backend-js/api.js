@@ -2075,7 +2075,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   // One digest for flags that are new since the last one.
   async function getAlmanacNotifications() {
-    const settings = store.get('dxpNotificationSettings', { enabled: false, buyAlerts: true, sellAlerts: true });
+    const settings = store.get('dxpNotificationSettings', { enabled: true, buyAlerts: true, sellAlerts: true });
     if (!settings.enabled) return [];
     const { now } = await getAlmanacSignals();
     const log = store.get('almanacDigestLog', {});
@@ -2362,7 +2362,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
   // Immediate "DXP announced" notification for each new detection, using
   // the existing DXP notification settings (enabled + announce alerts).
   async function getDxpNewsNotifications() {
-    const settings = store.get('dxpNotificationSettings', { enabled: false, announceAlerts: true });
+    const settings = store.get('dxpNotificationSettings', { enabled: true, announceAlerts: true });
     const det = store.get('dxpNewsDetections', []);
     const out = [];
     let changed = false;
@@ -5403,7 +5403,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
         overpricedThreshold: store.get('overpricedThreshold', 30),
         navOrder:           store.get('navOrder', []),
         dxpNotificationSettings: store.get('dxpNotificationSettings', {
-          enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+          enabled: true, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
         }),
         watchlistNotificationSettings: store.get('watchlistNotificationSettings', {
           enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
@@ -5463,7 +5463,7 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
 
   async function getDxpNotifications() {
     const settings = store.get('dxpNotificationSettings', {
-      enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+      enabled: true, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
     });
     if (!settings.enabled) return [];
 

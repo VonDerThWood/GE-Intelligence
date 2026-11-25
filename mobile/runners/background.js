@@ -156,7 +156,7 @@ addEventListener('checkNotifications', async (resolve, reject) => {
 
     const watchlist = getJSON('rb_watchlist', []);
     const dxpEvents = getJSON('rb_dxpEvents', []);
-    const dxpSettings = getJSON('rb_dxpSettings', { enabled: false });
+    const dxpSettings = getJSON('rb_dxpSettings', { enabled: true });
     const watchlistSettings = getJSON('rb_watchlistSettings', { enabled: false });
     const portfolioPositions = getJSON('rb_portfolioPositions', []);
     const portfolioSettings = getJSON('rb_portfolioSettings', { enabled: false, intervalHours: 0.25 });

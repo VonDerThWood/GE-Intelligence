@@ -19,6 +19,7 @@ Tester feedback: an item up 24% in 90 days looked like a riser, even though it's
 
 ### Almanac: long declines
 - "Buy now" ideas now warn when an item is in a long decline: down 15% or more over 6 months and still falling. Past DXP rises may not beat a steady slide.
+- **Almanac notifications now reach your phone.** The switch for them was off by default and hidden on the Almanac's DXP tab, labelled as if it only covered your DXP watchlist. It's now **on by default** (unless you turned it off yourself) and has its own place in **Settings → Notifications → Almanac**.
 - Almanac notifications list those items last, on their own "Long decline" line, below the other buy ideas.
 
 ### Small fixes

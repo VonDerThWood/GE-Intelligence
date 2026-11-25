@@ -203,7 +203,7 @@ async function syncRunnerState() {
         almanacSeen: store.get('almanacDigestLog', {}),
         dxpEvents: events,
         dxpSettings: store.get('dxpNotificationSettings', {
-          enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+          enabled: true, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
         }),
         watchlistSettings: store.get('watchlistNotificationSettings', {
           enabled: false, dailyThresholdPct: 5, trendThresholdPct: 7,
@@ -469,7 +469,7 @@ async function buildGenius() {
     getDxpWatchlist: () => store.get('dxpWatchlist', []),
     setDxpWatchlist: (list) => { store.set('dxpWatchlist', list); syncRunnerState(); return { success: true }; },
     getDxpNotificationSettings: () => store.get('dxpNotificationSettings', {
-      enabled: false, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
+      enabled: true, buyAlerts: true, sellAlerts: true, announceAlerts: true, windowApproachingAlerts: true,
     }),
     setDxpNotificationSettings: (s) => { store.set('dxpNotificationSettings', s); syncRunnerState(); return { success: true }; },
 

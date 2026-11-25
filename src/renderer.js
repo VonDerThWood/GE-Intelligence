@@ -7075,6 +7075,7 @@ const APP_NEWS = [
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
       "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
       "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
+      "Almanac notifications now reach your phone: on by default (unless you turned them off), with their own section in Settings → Notifications.",
       "Almanac: buy ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
       "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
       "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
@@ -8712,7 +8713,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
   const [dxpWatchlist, setDxpWatchlistState] = useState([]);
-  const [notifSettings, setNotifSettings] = useState({enabled:false, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
+  const [notifSettings, setNotifSettings] = useState({enabled:true, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
   const [riskTolerance, setRiskTolerance] = useState('safe'); // 'safe' | 'risky'
   const [budgetInput, setBudgetInput] = useState('');
   const [slotsInput, setSlotsInput] = useState(String(GE_SLOTS));
@@ -9176,7 +9177,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           type:'checkbox', checked:!!notifSettings.enabled,
           onChange:e => updateNotifSettings({enabled:e.target.checked}),
         }),
-        '🔔 Notify me about my DXP watchlist',
+        '🔔 Almanac notifications (also in Settings → Notifications)',
       ),
       notifSettings.enabled && h('div', {style:{display:'flex', gap:14, flexWrap:'wrap', paddingLeft:24}},
         [
@@ -10548,6 +10549,17 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       return next;
     });
   };
+  // Almanac flags (same setting as the Almanac DXP tab's box). It used to live only
+  // there, worded as "my DXP watchlist", so phones never had it on (Ben, 2026-11-25).
+  const [almanacNotif, setAlmanacNotif] = useState({enabled:true, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
+  useEffect(() => { window.genius?.getDxpNotificationSettings?.().then(w => w && setAlmanacNotif(w)); }, []);
+  const updateAlmanacNotif = patch => {
+    setAlmanacNotif(prev => {
+      const next = {...prev, ...patch};
+      window.genius?.setDxpNotificationSettings?.(next);
+      return next;
+    });
+  };
   const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7, intervalHours:24});
   useEffect(() => { window.genius?.getWatchlistNotificationSettings?.().then(w => w && setWatchNotif(w)); }, []);
   const updateWatchNotif = patch => {
@@ -10825,6 +10837,18 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     ),
     window.genius?.setLiveMonitoring && h(BackgroundModeSetting, {toast}),
     window.genius?.setQuietHours && h(QuietHoursSetting),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Almanac'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
+        'One notification when the Almanac flags something to buy or sell now (the same flags as Notifications → Almanac), plus Double XP news.'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:8}},
+        h('input',{type:'checkbox',checked:!!almanacNotif.enabled,onChange:e=>updateAlmanacNotif({enabled:e.target.checked})}),
+        h('span',null,'Almanac notifications')),
+      h('div',{style:{display:'flex',gap:14,flexWrap:'wrap',paddingLeft:24,opacity:almanacNotif.enabled?1:0.5}},
+        [['buyAlerts','Buy flags'],['sellAlerts','Sell flags'],['announceAlerts','DXP announced'],['windowApproachingAlerts','DXP usually announced soon']].map(([k,l]) =>
+          h('label',{key:k,className:'row',style:{gap:6,cursor:'pointer',fontSize:12}},
+            h('input',{type:'checkbox',disabled:!almanacNotif.enabled,checked:!!almanacNotif[k],onChange:e=>updateAlmanacNotif({[k]:e.target.checked})}), l)))
+    ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Watchlist Digest'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
