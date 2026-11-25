@@ -277,7 +277,9 @@ addEventListener('checkNotifications', async (resolve, reject) => {
         const sells = due.filter(r => r.action === 'sell'), buys = due.filter(r => r.action === 'buy');
         const names = list => list.slice(0, 3).map(r => r.name).join(', ') + (list.length > 3 ? `, and ${list.length - 3} more` : '');
         const title = 'Almanac: ' + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(', ');
-        const body = [sells.length && `Sell now: ${names(sells)}`, buys.length && `Buy now: ${names(buys)}`].filter(Boolean).join('\n');
+        const clean = buys.filter(r => !r.declinePct), sliding = buys.filter(r => r.declinePct);
+        const body = [sells.length && `Sell now: ${names(sells)}`, clean.length && `Buy now: ${names(clean)}`,
+          sliding.length && `Long decline (down 15%+ over 6 months, still falling): ${names(sliding)}`].filter(Boolean).join('\n');
         queue(title, body, 'almanac', 'almanac_digest', due.map(r => r.key));
         for (const r of due) seen[r.key] = Date.now();
         setJSON('rb_almanacSeen', seen);

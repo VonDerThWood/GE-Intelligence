@@ -219,7 +219,11 @@ function buildDigest(rows) {
     return shown.join(', ') + (list.length > 3 ? `, and ${list.length - 3} more` : '');
   };
   const title = 'Almanac: ' + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(', ');
-  const body = [sells.length && `Sell now: ${names(sells)}`, buys.length && `Buy now: ${names(buys)}`].filter(Boolean).join('\n');
+  // Buys in a long decline go on their own last line (Ben, 2026-11-25): still listed,
+  // but below the cleaner picks. Same text in mobile/runners/background.js.
+  const clean = buys.filter(r => !r.declinePct), sliding = buys.filter(r => r.declinePct);
+  const body = [sells.length && `Sell now: ${names(sells)}`, clean.length && `Buy now: ${names(clean)}`,
+    sliding.length && `Long decline (down 15%+ over 6 months, still falling): ${names(sliding)}`].filter(Boolean).join('\n');
   return { title, body };
 }
 

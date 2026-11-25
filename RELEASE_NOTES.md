@@ -19,6 +19,7 @@ Tester feedback: an item up 24% in 90 days looked like a riser, even though it's
 
 ### Almanac: long declines
 - "Buy now" ideas now warn when an item is in a long decline: down 15% or more over 6 months and still falling. Past DXP rises may not beat a steady slide.
+- Almanac notifications list those items last, on their own "Long decline" line, below the other buy ideas.
 
 ### Small fixes
 - Search could stop showing results for a while after a price fetch (seen on opening the app after a few days away): the item list could be swapped for an empty one if prices were read while still being saved. It now keeps the list it has and tries the read again. On Android, files are now saved safely (written in full first, then swapped in), so a read can't catch one half-saved, and closing the app mid-save can't leave a broken file.
