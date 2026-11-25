@@ -2054,6 +2054,16 @@ async function createGeniusApi({ dataDir, store, platform = 'desktop', historyDi
       if (r.action !== 'buy' || !r.peak || !r.liveBuy) continue;
       const points = await getHistoryPoints(r.id);
       evictHistory(r.id);
+      // Steady decline (tester, 2026-11-25): the DXP pattern can still say "buy" on an
+      // item sliding for months, and the slide can eat the usual rise. Ben's rule: a
+      // long decline = down 15%+ over 6 months AND still down over the last 3 (so a
+      // one-off crash that's been recovering isn't flagged). Guide-price history.
+      const priceAt = days => { const t = Date.now() - days * 86400000; const p = (points || []).find(q => q.price && q.timestamp >= t); return p ? p.price : null; };
+      if ((points || [])[0]?.timestamp <= Date.now() - 170 * 86400000) {
+        const p6 = priceAt(182), p3 = priceAt(91);
+        const d6 = p6 ? (r.liveBuy - p6) / p6 * 100 : null, d3 = p3 ? (r.liveBuy - p3) / p3 * 100 : null;
+        if (d6 != null && d3 != null && d6 <= -15 && d3 < 0) r.declinePct = Math.round(-d6);
+      }
       const recent = (points || []).filter(p => p.timestamp >= monthAgo && p.price).map(p => p.price).sort((a, b) => a - b);
       if (!recent.length) continue;
       const usual = recent[Math.floor(recent.length / 2)];

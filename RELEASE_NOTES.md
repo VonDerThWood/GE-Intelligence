@@ -17,6 +17,9 @@ Tester feedback: an item up 24% in 90 days looked like a riser, even though it's
 - **Flip margin** shows a realistic profit and how long a buy limit takes to fill, instead of "margin × buy limit" (which promised 240M on an item that trades about 70 a day). It also shows the prices it used, and warns when the latest trades show no margin.
 - **What to offer** no longer quotes a per-buy-limit profit for items that would take days to fill, and gives the same latest-trades warning.
 
+### Almanac: long declines
+- "Buy now" ideas now warn when an item is in a long decline: down 15% or more over 6 months and still falling. Past DXP rises may not beat a steady slide.
+
 ### Small fixes
 - Search could stop showing results for a while after a price fetch (seen on opening the app after a few days away): the item list could be swapped for an empty one if prices were read while still being saved. It now keeps the list it has and tries the read again. On Android, files are now saved safely (written in full first, then swapped in), so a read can't catch one half-saved, and closing the app mid-save can't leave a broken file.
 - Search: if you type before the very first price fetch has finished, the search list now says prices are still loading, instead of showing nothing.
