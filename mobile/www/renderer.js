@@ -853,9 +853,13 @@ function LiveTimeseriesChart({data}) {
   // the whole width (ignoring padding) put the highlighted point
   // noticeably left of the actual cursor — confirmed for real (// 2026-07-30): had to drag the mouse well past a point for the
   // highlight to catch up to it.
+  // Touch: dragging a finger scrubs through the points, like the GE price chart
+  // (tester, 2026-11-25: only tapping worked here). Mouse and finger share this.
   const onMove = e => {
+    const clientX = e.touches ? e.touches[0]?.clientX : e.clientX;
+    if (clientX == null) return;
     const rect = svgRef.current.getBoundingClientRect();
-    const svgX = ((e.clientX - rect.left) / rect.width) * w;
+    const svgX = ((clientX - rect.left) / rect.width) * w;
     const frac = (svgX - PAD_L) / chartW;
     const i = Math.round(frac * (pts.length - 1));
     setHoverIdx(Math.max(0, Math.min(pts.length-1, i)));
@@ -863,8 +867,10 @@ function LiveTimeseriesChart({data}) {
 
   return h('div', {style:{position:'relative'}},
     h('svg', {
-      ref: svgRef, viewBox:`0 0 ${w} ${ht + gap + volHt}`, style:{width:'100%', height:'auto', display:'block', cursor:'crosshair'},
+      ref: svgRef, viewBox:`0 0 ${w} ${ht + gap + volHt}`, style:{width:'100%', height:'auto', display:'block', cursor:'crosshair', touchAction:'pan-y'},
       onMouseMove: onMove, onMouseLeave: () => setHoverIdx(null),
+      // pan-y: up/down still scrolls the page; sideways drags scrub the chart.
+      onTouchStart: onMove, onTouchMove: onMove,
     },
       // Price lines
       h('path', {d:lineFor(buys),  fill:'none', stroke:T.green,  strokeWidth:1.5}),
@@ -890,8 +896,10 @@ function LiveTimeseriesChart({data}) {
     h('div', {style:{display:'flex', justifyContent:'space-between', padding:`2px ${PAD_R}px 0 ${PAD_L}px`, fontSize:9, color:T.textDim}},
       labelIdxs.map(i => h('span', {key:i}, fmtTime(pts[i].timestamp)))
     ),
+    // Sits on the side away from the point being looked at, so it never covers it
+    // (tester, 2026-11-25): right half -> box on the left, left half -> on the right.
     hoverIdx !== null && h('div', {style:{
-      position:'absolute', top:8, right:8,
+      position:'absolute', top:8, ...(hoverIdx > (pts.length - 1) / 2 ? {left:8} : {right:8}),
       background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
       padding:'5px 10px', fontSize:11, color:T.text, pointerEvents:'none', zIndex:10,
       boxShadow:'0 2px 8px rgba(0,0,0,0.5)'
@@ -1098,6 +1106,14 @@ function ImageModal({name, detailUrl, fallbackUrl, onClose}) {
   );
 }
 
+// Chart lines (2026-11-25). Guide-price history. med90 = the Almanac's bid rule.
+const CHART_OVERLAYS = [
+  {key:'ma30',  short:'30d avg',  label:'30-day moving average',  color:'#64b5f6', tip:'Average price over the last 30 days, each day. Price above it = rising lately; below = falling.'},
+  {key:'ma90',  short:'90d avg',  label:'90-day moving average',  color:'#ffb74d', tip:'Average price over the last 90 days, each day: the medium-term trend.'},
+  {key:'ma200', short:'200d avg', label:'200-day moving average', color:'#4db6ac', tip:'Average price over the last 200 days, each day: the long-term trend. A price stuck under it for months is a long decline.'},
+  {key:'med90', short:'90d median (bid)', label:'90-day median', color:'#4caf50', dash:'5,3', tip:'Middle price of the last 90 days, each day. Today\'s value is what the Almanac bids (never above live prices). Less thrown off by one-day spikes than an average.'},
+];
+
 function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOverlay}) {
   const [range, setRange] = useState(30);
   // Chart analysis phase 2: typical-range band + tested levels drawn on the
@@ -1214,6 +1230,30 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
     const cutoff = latestTs - range * 24 * 60 * 60 * 1000;
     return combined.filter(p => getTs(p) >= cutoff);
   }, [history, snapshots, range]);
+
+  // Moving averages + rolling 90-day median (tester + Ben, 2026-11-25). Worked out on
+  // the item's FULL guide history, so a 200-day average is right even on the 30d view,
+  // then drawn over whatever is on screen. The 90-day median is the Almanac's bid
+  // (research/dxp_plan_backtest/bids-findings.md): its last point is today's bid basis.
+  const [overlays, setOverlays] = useState(() => { try { return JSON.parse(localStorage.getItem('genius_chart_overlays') || '{}') || {}; } catch { return {}; } });
+  const toggleOverlay = k => setOverlays(prev => { const next = {...prev, [k]: !prev[k]}; try { localStorage.setItem('genius_chart_overlays', JSON.stringify(next)); } catch {} return next; });
+  const overlaySeries = useMemo(() => {
+    if (!history || !history.length || !Object.values(overlays).some(Boolean)) return null;
+    const getTs = p => typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
+    const byDay = {};
+    for (const p of history) { const pr = p.price ?? p.high ?? p.low; if (!pr) continue; const d = new Date(getTs(p)).toDateString(); if (!byDay[d] || getTs(p) > byDay[d].t) byDay[d] = {t:getTs(p), v:pr}; }
+    const days = Object.entries(byDay).sort((a, b) => a[1].t - b[1].t);
+    const vals = days.map(d => d[1].v);
+    const out = {};
+    const ma = n => { const r = new Array(vals.length).fill(null); let sum = 0; for (let i = 0; i < vals.length; i++) { sum += vals[i]; if (i >= n) sum -= vals[i - n]; if (i >= n - 1) r[i] = sum / n; } return r; };
+    const series = {};
+    if (overlays.ma30) series.ma30 = ma(30);
+    if (overlays.ma90) series.ma90 = ma(90);
+    if (overlays.ma200) series.ma200 = ma(200);
+    if (overlays.med90) { const r = new Array(vals.length).fill(null); for (let i = 89; i < vals.length; i++) { const w = vals.slice(i - 89, i + 1).sort((a, b) => a - b); r[i] = w[45]; } series.med90 = r; }
+    days.forEach(([d], i) => { const row = {}; for (const k in series) row[k] = series[k][i]; out[d] = row; });
+    return out;
+  }, [history, overlays]);
 
   // Which range currently supports scroll/arrow/pinch zoom, and what array
   // it zooms into — (2026-08-12): zoom only ever worked on All Time
@@ -1564,6 +1604,15 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
         h('span', null, '⏳ Fetching price history...')
       ),
 
+      // Moving averages + 90-day median toggles (saved on this device)
+      !loading && history && h('div', {style:{display:'flex', alignItems:'center', gap:6, padding:'6px 4px 2px', fontSize:11, flexWrap:'wrap'}},
+        h('span', {style:{color:T.textDim}}, 'Lines:'),
+        CHART_OVERLAYS.map(o => h('button', {key:o.key, onClick:() => toggleOverlay(o.key), title:o.tip,
+          style:{padding:'2px 8px', fontSize:11, cursor:'pointer', borderRadius:3, display:'inline-flex', alignItems:'center', gap:5,
+            background: overlays[o.key] ? 'rgba(201,168,76,0.15)' : 'transparent',
+            border: '1px solid ' + (overlays[o.key] ? o.color : T.border), color: overlays[o.key] ? T.text : T.textDim}},
+          h('span', {style:{display:'inline-block', width:14, borderTop: '2px ' + (o.dash ? 'dashed' : 'solid') + ' ' + o.color}}), o.short))),
+
       // Date range row (all-time only)
       chartView === 'alltime' && timeseries && h('div', {style:{display:'flex', alignItems:'center', gap:8, padding:'6px 4px 2px', fontSize:11}},
         h('span', {style:{color:T.textDim}}, 'From'),
@@ -1773,6 +1822,22 @@ function ChartModal({item, onClose, dateFormat, populatedHistoryIds, showDxpOver
               prices.length > 0 && h('circle', {key:'cur', cx:px(prices.length-1), cy:py(prices[prices.length-1]), r:3, fill:priceColor, pointerEvents:'none'}),
             ],
             chartMode === 'candle' && candleElements,
+            overlaySeries && CHART_OVERLAYS.filter(o => overlays[o.key]).map(o => {
+              const tsOfP = p => typeof p.timestamp === 'number' ? p.timestamp * (p.timestamp < 1e12 ? 1000 : 1) : new Date(p.timestamp).getTime();
+              const clampY = y => Math.max(PAD, Math.min(PH - PAD, y));
+              let d = '', pen = false, last = null;
+              activePoints.forEach((p, i) => {
+                // Days only in GEnius's own snapshots (not in guide history yet) carry the
+                // last value on, so the line doesn't break near the right edge.
+                const v = overlaySeries[new Date(tsOfP(p)).toDateString()]?.[o.key] ?? last;
+                if (v == null) { pen = false; return; }
+                d += (pen ? ' L ' : ' M ') + px(i).toFixed(1) + ' ' + clampY(py(v)).toFixed(1); pen = true; last = v;
+              });
+              if (!d) return null;
+              return h('g', {key:'ov-' + o.key},
+                h('path', {d, fill:'none', stroke:o.color, strokeWidth:1.3, strokeDasharray:o.dash || 'none', opacity:0.9, pointerEvents:'none'}),
+                h('path', {d, fill:'none', stroke:'transparent', strokeWidth:8, style:{cursor:'help'}}, h('title', null, o.label + (last != null ? ': ' + fmt.gp(Math.round(last)) + 'gp now' : '') + '. ' + o.tip)));
+            }),
           ),
           // Volume bars
           h('div', {style:{display:'flex', alignItems:'center', gap:8, marginLeft:YLAB+PAD, marginTop:4}},
@@ -2194,7 +2259,10 @@ function useSearch(items, userShorthands = {}) {
 
 function GESearchBar({items, onSelect, userShorthands}) {
   const s = useSearch(items, userShorthands);
-  const showDrop = s.focused && s.results.length > 0;
+  // No items yet (first fetch still running): say so instead of showing nothing, which
+  // looked like search was broken (tester report, 2026-11-24).
+  const stillLoading = !items || items.length === 0;
+  const showDrop = s.focused && (s.results.length > 0 || (stillLoading && s.query.length > 0));
   // Portaled to document.body (2026-08-12, real bug caught live):
   // this dropdown used to render as a normal position:absolute child of
   // .ge-search-wrap, nested inside .ge-header. Its own z-index:100 only
@@ -2268,6 +2336,7 @@ function GESearchBar({items, onSelect, userShorthands}) {
     s.query && h('button',{className:'ge-search-clear',onClick:()=>s.setQuery('')},'x'),
     showDrop && dropPos && createPortal(
       h('div',{className:'ge-search-results', style:{position:'fixed', top:dropPos.top, left:dropPos.left, width:dropPos.width, right:'auto', zIndex:9999}},
+        stillLoading && h('div',{className:'ge-result-item', style:{color:T.textDim, fontStyle:'italic', cursor:'default'}}, 'Prices are still loading. Search works once the first fetch finishes.'),
         s.results.map((it,i) =>
           h('div',{
             key:it.id,
@@ -2773,11 +2842,15 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
         const cutoff = latestTs - days*24*60*60*1000;
         const pt = sorted.find(p => getTs(p) >= cutoff);
         if (!pt || !pt.price) return null;
+        // History must really reach back that far (else the oldest point would pose as "1y").
+        if (getTs(sorted[0]) > cutoff + 30*24*60*60*1000) return null;
         const chg = ((currentPrice - pt.price) / pt.price) * 100;
         const gp  = Math.round(currentPrice - pt.price);
         return {chg: Math.round(chg*100)/100, gp};
       };
-      setTrends({d7:calc(7), d30:calc(30), d90:calc(90)});
+      // 1y/3y too (tester, 2026-11-25): an item up 24% in 90 days but down 15% over the
+      // year and 42% over 3 years only showed the green short-term boxes.
+      setTrends({d7:calc(7), d30:calc(30), d90:calc(90), y1:calc(365), y3:calc(1095)});
     });
   }, [itemId, currentPrice, untradeable]);
 
@@ -2786,6 +2859,8 @@ function PriceTrendBadges({itemId, currentPrice, onOpenChart, untradeable}) {
     ['7d',  trends.d7],
     ['30d', trends.d30],
     ['90d', trends.d90],
+    ['1y',  trends.y1],
+    ['3y',  trends.y3],
   ].filter(([,v]) => v != null);
   if (!entries.length) return null;
 
@@ -2956,8 +3031,17 @@ function TradePriceBox({item, livePrice, gpFmt}) {
              'buy at ', g(lo), ', sell at ', g(hi), ' = +' + f(Math.round(margin)) + 'gp each after 2% tax',
              // profitForLimit isn't computed for items that don't qualify (too little
              // trading), which showed "+NaNgp per 2 buy limit" (2026-11-16).
-             item.limit ? ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)` : '',
-             '. The Flips tab leaves it out: ', stats.disqualifyReason]
+             // Per buy limit only when a limit can fill within a day; a slow item showed
+             // "+240M per 100 buy limit" on ~70 trades a day (tester, 2026-11-25).
+             (() => {
+               if (!item.limit) return '';
+               const fl0 = flipFill(item, item.limit, margin);
+               if (fl0.hours != null && fl0.hours > 24) return fl0.profit4h > 0 ? ` (about +${f(Math.round(fl0.profit4h))}gp per 4 hours at its trading pace)` : '';
+               return ` (+${f(Math.round(Number.isFinite(stats.profitForLimit) ? stats.profitForLimit : margin * item.limit))}gp per ${item.limit.toLocaleString()} buy limit)`;
+             })(),
+             '. The Flips tab leaves it out: ', stats.disqualifyReason,
+             item.liveLatest?.buy && item.liveLatest?.sell && applyTax(item.liveLatest.buy) - item.liveLatest.sell <= 0
+               ? h('div', {key:'lt', style:{color:'#e08030', marginTop:3}}, `⚠ The latest trades show no margin (buy ${f(item.liveLatest.sell)}gp, sell ${f(item.liveLatest.buy)}gp): these averages include older trades.`) : null]
     ),
     // How long it would really take (2026-11-17: "possible but very slow").
     (() => {
@@ -3169,6 +3253,10 @@ function GoodRightNow({items, onSelect, onNavigate}) {
 // of just staying silent about it.
 function FlipMarginBlock({item}) {
   const stats = useMemo(() => computeFlipStats(item), [item]);
+  // Averages cover up to 6 hours; on a slow item the newest trades can already have
+  // closed the gap (Alchemical onyx: +2.4M on averages, -10K on the latest trades).
+  const latest = item.liveLatest;
+  const latestGone = !!(stats.qualifies && latest?.buy && latest?.sell && applyTax(latest.buy) - latest.sell <= 0);
   return h('div', {style:{marginTop:16, borderTop:`1px solid ${T.border}`, paddingTop:12}},
     h('div', {style:{fontSize:11, fontWeight:'bold', color:T.textDim, letterSpacing:'0.05em', marginBottom:8}}, 'FLIP MARGIN'),
     !stats.qualifies
@@ -3183,11 +3271,23 @@ function FlipMarginBlock({item}) {
               h('div', {style:{color:T.textDim, marginBottom:2}}, 'ROI'),
               h('div', {style:{color: stats.roiPct>=5 ? T.green : T.text, fontWeight:'bold'}}, stats.roiPct.toFixed(2)+'%')
             ),
-            h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}},
-              h('div', {style:{color:T.textDim, marginBottom:2}}, 'Profit (buy limit)'),
-              h('div', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(stats.profitForLimit)+'gp')
+            // Realistic, not margin x limit: a 100-limit item that trades ~70 a day showed
+            // "240M per buy limit" (tester report, 2026-11-25). Same figure Flips sorts by.
+            h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}, title:'Margin × the smaller of the buy limit and a typical day\'s volume. A full buy limit would be ' + fmt.gp(stats.profitForLimit) + 'gp.'},
+              h('div', {style:{color:T.textDim, marginBottom:2}}, 'Realistic profit'),
+              h('div', {style:{color:T.goldBright, fontWeight:'bold'}}, fmt.gp(Math.round(stats.realisticProfit))+'gp')
+            ),
+            h('div', {style:{flex:1, background:'rgba(0,0,0,0.2)', borderRadius:3, padding:'5px 8px'}, title: fillTitle({...item, fillHours: stats.fillHours, buyHours: stats.buyHours, sellHours: stats.sellHours})},
+              h('div', {style:{color:T.textDim, marginBottom:2}}, 'Fill time'),
+              h('div', {style:{color: fillColor(stats.fillHours), fontWeight:'bold'}}, fmtHours(stats.fillHours))
             ),
           ),
+          h('div', {style:{fontSize:11, color:T.textDim, marginBottom:4}},
+            'Buy at ', h('span', {style:{color:'#e08030'}, title:avgTitle(item, 'sell')}, fmt.gp(item.liveSell)+'gp'),
+            ', sell at ', h('span', {style:{color:T.green}, title:avgTitle(item, 'buy')}, fmt.gp(item.liveBuy)+'gp'),
+            ' (averages of recent trades).'),
+          latestGone && h('div', {style:{fontSize:11, color:'#e08030', marginBottom:4}},
+            '⚠ The latest trades show no margin (buy ' + fmt.gp(latest.sell) + ', sell ' + fmt.gp(latest.buy) + '). The averages may be out of date; check the live chart before buying.'),
           h('div', {style:{fontSize:10, color:T.textDim, fontStyle:'italic'}}, 'This item currently qualifies for the Flips leaderboard — same numbers shown there.')
         )
   );
@@ -7033,13 +7133,20 @@ function MarketTab({items: allItems, selected, onSelect, description}) {
 
 const APP_NEWS = [
   {
-    version: 'v3.0.1',
+    version: 'v3.1.0',
     items: [
-      "A small release with one fix that matters: your price history keeps itself up to date again.",
+      "Tester feedback, put to work: moving averages on the chart, an Almanac that tells you what to offer and until when, and price history that keeps itself up to date again.",
+      "Price chart: new Lines row with 30, 90 and 200-day moving averages, plus the 90-day median the Almanac bids at. Live price detail: drag a finger to move through the times, and the info box moves out of the way of the line.",
+      "Almanac: \"Buy now\" and \"Sell now\" are now \"Bid ~X until <date>\" and \"List at ~X by <date>\". Bids use the item's 90-day median, which beat buying instantly in testing.",
+      "Almanac notifications now reach your phone: on by default (unless you turned them off), with their own section in Settings → Notifications.",
+      "Almanac: bid ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
+      "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
       "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
-      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
-      "Android: the phone app no longer thinks some desktop-only features exist.",
+      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice. It also recognises an offer by item and price, so adding items to a selling offer no longer re-logs everything.",
+      "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
+      "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
+      "Android: files are saved safely (written in full, then swapped in), the phone app no longer thinks some desktop-only features exist, and watchlist notifications show item names again, not bare item numbers.",
     ]
   },
   {
@@ -8672,7 +8779,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
   const [expanded, setExpanded] = useState(null);
   const [search, setSearch] = useState('');
   const [dxpWatchlist, setDxpWatchlistState] = useState([]);
-  const [notifSettings, setNotifSettings] = useState({enabled:false, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
+  const [notifSettings, setNotifSettings] = useState({enabled:true, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
   const [riskTolerance, setRiskTolerance] = useState('safe'); // 'safe' | 'risky'
   const [budgetInput, setBudgetInput] = useState('');
   const [slotsInput, setSlotsInput] = useState(String(GE_SLOTS));
@@ -9136,7 +9243,7 @@ function DXPIntelTab({items, onSelect, userShorthands, toast}) {
           type:'checkbox', checked:!!notifSettings.enabled,
           onChange:e => updateNotifSettings({enabled:e.target.checked}),
         }),
-        '🔔 Notify me about my DXP watchlist',
+        '🔔 Almanac notifications (also in Settings → Notifications)',
       ),
       notifSettings.enabled && h('div', {style:{display:'flex', gap:14, flexWrap:'wrap', paddingLeft:24}},
         [
@@ -10508,6 +10615,17 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
       return next;
     });
   };
+  // Almanac flags (same setting as the Almanac DXP tab's box). It used to live only
+  // there, worded as "my DXP watchlist", so phones never had it on (Ben, 2026-11-25).
+  const [almanacNotif, setAlmanacNotif] = useState({enabled:true, buyAlerts:true, sellAlerts:true, announceAlerts:true, windowApproachingAlerts:true});
+  useEffect(() => { window.genius?.getDxpNotificationSettings?.().then(w => w && setAlmanacNotif(w)); }, []);
+  const updateAlmanacNotif = patch => {
+    setAlmanacNotif(prev => {
+      const next = {...prev, ...patch};
+      window.genius?.setDxpNotificationSettings?.(next);
+      return next;
+    });
+  };
   const [watchNotif, setWatchNotif] = useState({enabled:false, dailyThresholdPct:5, trendThresholdPct:7, intervalHours:24});
   useEffect(() => { window.genius?.getWatchlistNotificationSettings?.().then(w => w && setWatchNotif(w)); }, []);
   const updateWatchNotif = patch => {
@@ -10785,6 +10903,18 @@ function SettingsTab({settings, onChange, toast, hiddenItems, onUnhide, items, u
     ),
     window.genius?.setLiveMonitoring && h(BackgroundModeSetting, {toast}),
     window.genius?.setQuietHours && h(QuietHoursSetting),
+    h('div',{style:{marginBottom:20}},
+      h('div',{className:'ge-section-head'},'Almanac'),
+      h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
+        'One notification when the Almanac flags something to buy or sell now (the same flags as Notifications → Almanac), plus Double XP news.'),
+      h('label',{className:'row',style:{gap:8,cursor:'pointer',marginBottom:8}},
+        h('input',{type:'checkbox',checked:!!almanacNotif.enabled,onChange:e=>updateAlmanacNotif({enabled:e.target.checked})}),
+        h('span',null,'Almanac notifications')),
+      h('div',{style:{display:'flex',gap:14,flexWrap:'wrap',paddingLeft:24,opacity:almanacNotif.enabled?1:0.5}},
+        [['buyAlerts','Buy flags'],['sellAlerts','Sell flags'],['announceAlerts','DXP announced'],['windowApproachingAlerts','DXP usually announced soon']].map(([k,l]) =>
+          h('label',{key:k,className:'row',style:{gap:6,cursor:'pointer',fontSize:12}},
+            h('input',{type:'checkbox',disabled:!almanacNotif.enabled,checked:!!almanacNotif[k],onChange:e=>updateAlmanacNotif({[k]:e.target.checked})}), l)))
+    ),
     h('div',{style:{marginBottom:20}},
       h('div',{className:'ge-section-head'},'Watchlist Digest'),
       h('div',{style:{fontSize:11,color:T.textDim,marginBottom:8}},
@@ -16004,10 +16134,14 @@ function MoneyMakersTab({items, onSelect, description}) {
       const manualStats = computeConversionStats([{name:c.input, qty:1}], {name:c.output, qty:1}, items);
       if (manualStats.missing.length === 0) rows.push({ label: `${c.input} → ${c.output} (Manual, free)`, itemName: c.output, stats: manualStats });
 
-      const chargeCost = plankMachine.chargePerItem * chargeGpRate;
+      // Whole gp: a fractional charge printed as "337.035gp" read like 337 thousand (Ben, 2026-11-24).
+      const chargeCost = Math.round(plankMachine.chargePerItem * chargeGpRate);
       const machineStats = computeConversionStats([{name:c.input, qty:1}], {name:c.output, qty:1}, items);
       if (machineStats.missing.length === 0) {
-        const adjusted = { ...machineStats, cost: machineStats.cost + chargeCost, margin: machineStats.margin != null ? machineStats.margin - chargeCost : null };
+        const margin = machineStats.margin != null ? machineStats.margin - chargeCost : null;
+        // Profit/limit must follow the charge-adjusted margin (it showed the manual row's figure).
+        const profitPerLimit = (margin != null && machineStats.bindingLimit != null) ? margin * machineStats.bindingLimit : null;
+        const adjusted = { ...machineStats, cost: machineStats.cost + chargeCost, margin, profitPerLimit };
         rows.push({ label: `${c.input} → ${c.output} (Machine, ${fmt.gp(chargeCost)}gp charge)`, itemName: c.output, stats: adjusted });
       }
     }
@@ -16833,7 +16967,7 @@ function AlmanacFlagsBar({scope = 'yours'}) {
     onClick:()=>{ _alertsInitialPill = 'almanac'; window.dispatchEvent(new CustomEvent('genius-goto', {detail:'alerts'})); },
   },
     h('span', {style:{flex:1}}, '🌱 ', h('b', {style:{color:NOTIF_MARKS.almanac.color}}, 'Almanac'), ' says of your items: ',
-      [sells && sells+' to sell now', buys && buys+' to buy now'].filter(Boolean).join(', ')),
+      [sells && sells+' to list', buys && buys+' to bid on'].filter(Boolean).join(', ')),
     h('span', {style:{color:NOTIF_MARKS.almanac.color}}, 'View all →'));
 }
 
@@ -16857,9 +16991,19 @@ function AlmanacFlagsView({items, onSelect}) {
     return bits.join(' · ');
   };
   const label = r => {
-    if (r.action === 'buy' && r.priceHigh) return ['Buy now, price high', '#f0a030', 'Already '+r.runUpPct+'% above its usual price this month, so much of the rise may be gone.'];
-    if (r.belowBreakEven) return ['Sell now, below break-even', '#f0a030', 'The usual exit time is here, but live sell is below your break-even.'];
-    return r.action === 'sell' ? ['Sell now', '#e05050'] : ['Buy now', '#4caf50'];
+    // "Bid / List", not "Buy / Sell now" (Ben, 2026-11-25): offers at a price, by a date.
+    if (r.action === 'buy' && r.priceHigh) return ['Bid, price high', '#f0a030', 'Already '+r.runUpPct+'% above its usual price this month, so much of the rise may be gone.'];
+    if (r.belowBreakEven) return ['List, below break-even', '#f0a030', 'The usual exit time is here, but live sell is below your break-even.'];
+    return r.action === 'sell' ? ['List', '#e05050'] : ['Bid', '#4caf50'];
+  };
+  // Ben's bid rule (90-day median, never above today's instant-sell) beat buying
+  // instantly in the live backtest: research/dxp_plan_backtest/bids-findings.md.
+  const offerLine = r => {
+    if (r.action === 'sell' && r.listAt) return h('div', {style:{color:'#e05050', fontSize:12, marginTop:2}, title:'Its 90-day median plus its usual DXP rise, never below what buyers pay now or your break-even.'},
+      'List at ~' + fmt.gp(r.listAt) + ' each, by about ' + fmtDayShort(r.listBy) + '.');
+    if (r.action === 'buy' && r.bid) return h('div', {style:{color:'#4caf50', fontSize:12, marginTop:2}, title:'Its 90-day median, never above today\'s instant-sell. In testing, bids like this beat buying instantly.'},
+      'Bid ~' + fmt.gp(r.bid) + ' each, until about ' + fmtDayShort(r.bidUntil) + '.');
+    return null;
   };
   const nowRow = r => {
     const [text, color, warn] = label(r);
@@ -16868,14 +17012,17 @@ function AlmanacFlagsView({items, onSelect}) {
       h('div', {style:{flex:1, minWidth:0}},
         nameEl(r),
         h('div', {style:{color:T.text}}, r.evidence),
+        offerLine(r),
         warn && h('div', {style:{color, fontSize:12}}, warn),
+        r.action === 'buy' && r.declinePct && h('div', {style:{color:'#f0a030', fontSize:12}},
+          '⚠ Long decline: down ' + r.declinePct + '% over 6 months and still falling. The DXP rise is measured on past years and may not beat the slide.'),
         h('div', {style:{fontSize:11, color:T.textDim, marginTop:2}}, details(r))),
       h('span', {className:'cat-tag', style:{color, borderColor:color, whiteSpace:'nowrap'}}, text));
   };
   const soonRow = r => h('div', {key:r.key, style:{padding:'8px 0', borderTop:'1px solid '+T.borderDim, fontSize:13, lineHeight:1.5, display:'flex', gap:8, alignItems:'flex-start'}},
     star(r),
     h('div', {style:{flex:1, minWidth:0}}, nameEl(r), h('div', {style:{color:T.textDim, fontSize:12}},
-      (r.action === 'sell' ? 'Start selling' : 'Start buying')+' in about '+r.inDays+' day'+(r.inDays===1?'':'s')+(r.estimated?' (estimated)':''))),
+      (r.action === 'sell' ? 'Start listing' : 'Start bidding')+' in about '+r.inDays+' day'+(r.inDays===1?'':'s')+(r.estimated?' (estimated)':''))),
     h('span', {style:{color:T.textDim, fontSize:12, whiteSpace:'nowrap'}}, fmtDayShort(r.day)));
   const section = (title, list, row, color) => list.length > 0 && h('div', {style:{marginBottom:18}},
     h('div', {className:'ge-section-head', style:color ? {color} : undefined}, title+' ('+list.length+')'), list.map(row));
@@ -16888,8 +17035,8 @@ function AlmanacFlagsView({items, onSelect}) {
         next ? 'Next Double XP: '+fmtDayShort(next.start)+(next.end ? ' to '+fmtDayShort(next.end) : '')+(next.estimated ? ' (estimated from past gaps, not announced).' : '.') : '',
         ' Timing comes from how each item moved around past DXPs, on guide prices. Past patterns can break, so check the live price first.'),
       !data.now.length && !data.soon.length && h('div', {className:'empty'}, h('p', null, 'Nothing flagged right now.')),
-      section('Start selling now', sells, nowRow, '#e05050'),
-      section('Start buying now', buys, nowRow, '#4caf50'),
+      section('List now', sells, nowRow, '#e05050'),
+      section('Bid now', buys, nowRow, '#4caf50'),
       section('Coming up: your portfolio', inGroup('held'), soonRow),
       section('Coming up: your watchlists', inGroup('watched'), soonRow),
       section('Coming up: everything else', inGroup('other'), soonRow)));
@@ -16947,10 +17094,16 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
   const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
   const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
-  // Identifies the offer, so re-reading it only logs what's new. Price stays out of
-  // it since an offer's price can be edited in-game.
-  const logKey = [nameLow, num('quantity')].join('|');
-  const alreadySold = geSoldLog()[logKey] || 0;
+  // Identifies the offer, so re-reading it only logs what's new. Item + PRICE
+  // (2026-11-25): Ben's Dragon hatchet offer ran for weeks at 63K while he kept adding
+  // hatchets to it, and every quantity change looked like a new offer, so its whole
+  // "sold so far" was logged again (130 extra). Old item+quantity records still count.
+  // An edited price makes a new key; the Portfolio check below catches that case.
+  // If the offer shows fewer sold than logged, it's a new offer at the same price.
+  const logKey = [nameLow, '@' + num('price')].join('|');
+  const _log = geSoldLog();
+  let alreadySold = _log[logKey] ?? _log[[nameLow, num('quantity')].join('|')] ?? 0;
+  if (alreadySold > filled) alreadySold = 0;
   // Sales of this item already in the Portfolio at about this offer's price, in the
   // last 14 days, that this reader never logged (typed in by hand, or logged on another
   // device). Re-reading the offer then logged ALL of its fills again (2026-11-24: a
@@ -17615,7 +17768,10 @@ function App() {
       setFetching(false); setLastUpdate(d.timestamp);
       window.genius.getData().then(data => {
         console.log('[GEnius] getData after fetch returned:', data?.items?.length ?? 0, 'items');
-        if (data.items)   setItems(data.items);
+        // Never swap a loaded list for an empty one: on the phone a read that lands mid-save
+        // comes back empty, which killed search until the next fetch (tester report, 2026-11-24).
+        if (data.items?.length) setItems(data.items);
+        else { console.warn('[GEnius] getData after fetch returned no items; keeping the current list'); return; }
         window.dispatchEvent(new Event('genius-recent-refresh'));
         setRemovedItems(data.removedItems || []);
         if (data.news)    setNews(data.news);
@@ -17848,6 +18004,8 @@ function App() {
       setShowTour(false); // the first-run tour would block every scripted test
       const wait = ms => new Promise(r => setTimeout(r, ms));
       window.__geniusTest = {
+        // Opens the GE reader with a made-up offer (test mode only).
+        geOffer: o => setGeOffer({...o, readAt:Date.now()}),
         tabs: () => NAV.filter(n => n.id).map(n => n.id),
         goto: async id => { setTab(id); await wait(500); return testStateRef.current.tab; },
         openItem: async name => {

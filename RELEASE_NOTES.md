@@ -48,4 +48,4 @@ GEnius keeps every item's price history topped up in the background after each f
 - Fixed a behind-the-scenes mix-up where the phone app thought some desktop-only features existed. Settings on the phone now shows the right sections.
 - Watchlist notifications no longer show a bare item number (like "52861") instead of the item's name.
 
-**GEnius v3.1.0. Your testers talked; the Almanac listened.**
+**GEnius v3.1.0: The testers have spoken, and the Almanac listened.**

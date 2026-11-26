@@ -1743,8 +1743,19 @@
       }
       async function atomicWrite(filePath, data) {
         const path = relativize(filePath);
-        await Filesystem2.writeFile({ path, data, directory: ROOT, encoding: Encoding2.UTF8, recursive: true });
+        const tmp = `${path}.${++tmpSeq}.tmp`;
+        try {
+          await Filesystem2.writeFile({ path: tmp, data, directory: ROOT, encoding: Encoding2.UTF8, recursive: true });
+          await Filesystem2.rename({ from: tmp, to: path, directory: ROOT, toDirectory: ROOT });
+        } catch (e) {
+          try {
+            await Filesystem2.deleteFile({ path: tmp, directory: ROOT });
+          } catch {
+          }
+          await Filesystem2.writeFile({ path, data, directory: ROOT, encoding: Encoding2.UTF8, recursive: true });
+        }
       }
+      var tmpSeq = 0;
       async function readJSON(filePath, fallback = null) {
         try {
           const path = relativize(filePath);
@@ -23856,19 +23867,36 @@
           lastDxp: last ? { start: last[1], end: last[2] } : null
         };
       }
+      function shortGp(n) {
+        if (n >= 1e9) return (n / 1e9).toFixed(2).replace(/\.?0+$/, "") + "B";
+        if (n >= 1e6) return (n / 1e6).toFixed(2).replace(/\.?0+$/, "") + "M";
+        if (n >= 1e4) return (n / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+        return Math.round(n).toLocaleString("en-US");
+      }
+      function shortDay(d) {
+        return (/* @__PURE__ */ new Date(d + "T12:00:00Z")).toLocaleString("en-US", { month: "short", day: "numeric", timeZone: "UTC" });
+      }
       function buildDigest(rows) {
         if (!rows.length) return null;
         const sells = rows.filter((r) => r.action === "sell");
         const buys = rows.filter((r) => r.action === "buy");
         const names = (list) => {
-          const shown = list.slice(0, 3).map((r) => r.name);
+          const shown = list.slice(0, 3).map((r) => {
+            const p = r.action === "sell" ? r.listAt : r.bid, d = r.action === "sell" ? r.listBy : r.bidUntil;
+            return r.name + (p ? ` ~${shortGp(p)}` : "") + (d ? ` ${r.action === "sell" ? "by" : "until"} ${shortDay(d)}` : "");
+          });
           return shown.join(", ") + (list.length > 3 ? `, and ${list.length - 3} more` : "");
         };
-        const title = "Almanac: " + [sells.length && `${sells.length} to sell now`, buys.length && `${buys.length} to buy now`].filter(Boolean).join(", ");
-        const body = [sells.length && `Sell now: ${names(sells)}`, buys.length && `Buy now: ${names(buys)}`].filter(Boolean).join("\n");
+        const title = "Almanac: " + [sells.length && `${sells.length} to list`, buys.length && `${buys.length} to bid on`].filter(Boolean).join(", ");
+        const clean = buys.filter((r) => !r.declinePct), sliding = buys.filter((r) => r.declinePct);
+        const body = [
+          sells.length && `List: ${names(sells)}`,
+          clean.length && `Bid: ${names(clean)}`,
+          sliding.length && `Long decline (down 15%+ over 6 months, still falling): ${names(sliding)}`
+        ].filter(Boolean).join("\n");
         return { title, body };
       }
-      module.exports = { computeSignals, buildDigest, uniqueEvents, estimateNextStart };
+      module.exports = { computeSignals, buildDigest, uniqueEvents, estimateNextStart, patternsFor };
     }
   });
 
@@ -26974,10 +27002,35 @@
             watched: [...store2.get("watchlist", []), ...store2.get("dxpWatchlist", [])]
           });
           const monthAgo = Date.now() - 30 * 864e5;
+          const ninetyAgo = Date.now() - 90 * 864e5;
+          const plusDays = (day, n) => new Date(Date.parse(day + "T00:00:00Z") + n * 864e5).toISOString().slice(0, 10);
           for (const r of [...out.now, ...out.soon]) {
-            if (r.action !== "buy" || !r.peak || !r.liveBuy) continue;
+            if (r.action !== "buy" && r.action !== "sell") continue;
             const points = await getHistoryPoints(r.id);
             evictHistory(r.id);
+            const p90 = (points || []).filter((p) => p.timestamp >= ninetyAgo && p.price).map((p) => p.price).sort((a, b) => a - b);
+            const med90 = p90.length >= 30 ? p90[Math.floor(p90.length / 2)] : null;
+            if (r.action === "sell") {
+              if (med90) {
+                const target = Math.round(med90 * (1 + (r.peak || 0) / 100));
+                r.listAt = Math.max(target, r.liveBuy || 0, r.breakEven || 0);
+              }
+              r.listBy = r.day;
+              continue;
+            }
+            if (med90) r.bid = Math.round(Math.min(med90, ...[r.liveSell, r.liveBuy].filter((v) => v > 0)));
+            r.bidUntil = plusDays(r.day, 7);
+            if (!r.peak || !r.liveBuy) continue;
+            const priceAt = (days) => {
+              const t = Date.now() - days * 864e5;
+              const p = (points || []).find((q) => q.price && q.timestamp >= t);
+              return p ? p.price : null;
+            };
+            if ((points || [])[0]?.timestamp <= Date.now() - 170 * 864e5) {
+              const p6 = priceAt(182), p3 = priceAt(91);
+              const d6 = p6 ? (r.liveBuy - p6) / p6 * 100 : null, d3 = p3 ? (r.liveBuy - p3) / p3 * 100 : null;
+              if (d6 != null && d3 != null && d6 <= -15 && d3 < 0) r.declinePct = Math.round(-d6);
+            }
             const recent = (points || []).filter((p) => p.timestamp >= monthAgo && p.price).map((p) => p.price).sort((a, b) => a - b);
             if (!recent.length) continue;
             const usual = recent[Math.floor(recent.length / 2)];
@@ -26990,7 +27043,7 @@
           return out;
         }
         async function getAlmanacNotifications() {
-          const settings = store2.get("dxpNotificationSettings", { enabled: false, buyAlerts: true, sellAlerts: true });
+          const settings = store2.get("dxpNotificationSettings", { enabled: true, buyAlerts: true, sellAlerts: true });
           if (!settings.enabled) return [];
           const { now } = await getAlmanacSignals();
           const log = store2.get("almanacDigestLog", {});
@@ -27257,7 +27310,7 @@
           return { success: true };
         }
         async function getDxpNewsNotifications() {
-          const settings = store2.get("dxpNotificationSettings", { enabled: false, announceAlerts: true });
+          const settings = store2.get("dxpNotificationSettings", { enabled: true, announceAlerts: true });
           const det = store2.get("dxpNewsDetections", []);
           const out = [];
           let changed = false;
@@ -29809,7 +29862,11 @@
         }
         async function getData() {
           try {
-            const parsed = await storage2.readJSON(dataFile, { items: [], timestamp: null });
+            let parsed = await storage2.readJSON(dataFile, { items: [], timestamp: null });
+            if (!parsed.items?.length) {
+              await new Promise((r) => setTimeout(r, 750));
+              parsed = await storage2.readJSON(dataFile, { items: [], timestamp: null });
+            }
             if (parsed.items) {
               for (const it of parsed.items) {
                 if (it.untradeable && it.change_1d == null) {
@@ -29985,7 +30042,7 @@
               overpricedThreshold: store2.get("overpricedThreshold", 30),
               navOrder: store2.get("navOrder", []),
               dxpNotificationSettings: store2.get("dxpNotificationSettings", {
-                enabled: false,
+                enabled: true,
                 buyAlerts: true,
                 sellAlerts: true,
                 announceAlerts: true,
@@ -30031,7 +30088,7 @@
         ];
         async function getDxpNotifications() {
           const settings = store2.get("dxpNotificationSettings", {
-            enabled: false,
+            enabled: true,
             buyAlerts: true,
             sellAlerts: true,
             announceAlerts: true,
@@ -30340,8 +30397,9 @@
           compactHistory,
           getHistoryCompact: async () => store2.get("historyCompact", false),
           getBackgroundErrors: async () => {
+            const recent = (store2.get("backgroundErrors", []) || []).filter((e) => Date.now() - (e.at || 0) < 7 * 864e5);
             const w = historyStaleWarning();
-            return w ? [w, ...store2.get("backgroundErrors", [])] : store2.get("backgroundErrors", []);
+            return w ? [w, ...recent] : recent;
           },
           clearBackgroundErrors: async () => {
             store2.set("backgroundErrors", []);
@@ -32463,6 +32521,9 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
             console.log(`[run] fetchPrices returned 0 items but ${existingItems.length} existing items are on disk \u2014 keeping the existing data instead of overwriting it with an empty result.`);
             items = existingItems;
             usedFallbackItems = true;
+          } else if (fetched.length === 0) {
+            console.log("[run] fetchPrices returned 0 items and no saved items could be read: not saving.");
+            return { pricesFailed: true };
           } else {
             items = fetched;
           }
@@ -32587,7 +32648,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       module.exports = {
         name: "genius-ge-intelligence",
         productName: "GEnius",
-        version: "3.0.1",
+        version: "3.1.0",
         description: "RuneScape 3 Grand Exchange Market Intelligence",
         main: "src/main.js",
         author: "VonDerThWood",
@@ -32811,7 +32872,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       const namesById = Object.fromEntries((data.items || []).map((i) => [String(i.id), i.name]));
       const withNames = (ids) => ids.map((id) => ({ id, name: namesById[String(id)] || String(id) }));
       const signals = await a.getAlmanacSignals().catch(() => ({ now: [], soon: [] }));
-      const almanacRows = [...signals.now, ...signals.soon].map((r) => ({ key: r.key, name: r.name, action: r.action, day: r.day, estimated: r.estimated }));
+      const almanacRows = [...signals.now, ...signals.soon].map((r) => ({ key: r.key, name: r.name, action: r.action, day: r.day, estimated: r.estimated, declinePct: r.declinePct, bid: r.bid, bidUntil: r.bidUntil, listAt: r.listAt, listBy: r.listBy }));
       const events = await storage.readJSON(DATA_DIR + "/dxp_events.json", []).catch(() => []);
       const idByName = Object.fromEntries((data.items || []).map((i) => [i.name.toLowerCase(), i.id]));
       const openPositions = (portfolio.positions || []).filter((p) => p.status === "open").map((p) => ({ id: idByName[(p.item_name || "").toLowerCase()], name: p.item_name, quantity: p.quantity, costBasis: p.cost_basis })).filter((p) => p.id != null);
@@ -32824,7 +32885,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
           almanacSeen: store.get("almanacDigestLog", {}),
           dxpEvents: events,
           dxpSettings: store.get("dxpNotificationSettings", {
-            enabled: false,
+            enabled: true,
             buyAlerts: true,
             sellAlerts: true,
             announceAlerts: true,
@@ -33106,7 +33167,7 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
         return { success: true };
       },
       getDxpNotificationSettings: () => store.get("dxpNotificationSettings", {
-        enabled: false,
+        enabled: true,
         buyAlerts: true,
         sellAlerts: true,
         announceAlerts: true,
@@ -33340,7 +33401,11 @@ ${win}d: ${rises.length} rises / ${falls.length} falls \u2014 top rise: ${rises[
       if (typeof prop !== "string" || prop === "then") return void 0;
       if (geniusKeys && !geniusKeys.has(prop)) return void 0;
       if (geniusReal && typeof geniusReal[prop] !== "function") return geniusReal[prop];
-      return (...args) => window.geniusReady.then((g) => g[prop](...args));
+      return (...args) => window.geniusReady.then((g) => {
+        if (typeof g[prop] === "function") return g[prop](...args);
+        console.warn("genius." + prop + " is not available on the phone");
+        return g[prop];
+      });
     },
     has(_, prop) {
       return !geniusKeys || geniusKeys.has(prop);
