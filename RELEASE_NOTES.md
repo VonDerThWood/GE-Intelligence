@@ -32,6 +32,7 @@ GEnius keeps every item's price history topped up in the background after each f
 
 ### Logging sales from the GE reader
 - If your Portfolio already has recent sales of an item at the same price (logged by hand or on another device), the GE reader now warns you before logging an offer's sales again, and logs only the new ones. This stops an offer's earlier fills being counted twice.
+- The reader now recognises an offer by its item and price, so adding more items to an offer that's already selling no longer makes it log everything sold so far again.
 
 ### Money Makers
 - Construction: plank machine rows showed the manual row's Profit/Limit, ignoring the machine's charge cost. Fixed (Elder planks: 30.7M → 22.3M per limit). The charge now shows in whole coins ("337gp", not "337.035gp").

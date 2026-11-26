@@ -7135,7 +7135,7 @@ const APP_NEWS = [
       "Item panel: price changes now include 1 year and 3 years, so a short rise inside a long fall is easy to spot. Flip margin shows a realistic profit and fill time instead of margin × buy limit, and warns when the latest trades show no margin.",
       "Since early November, the background top-up of price history got stuck after one item per fetch, so guide-price history behind charts, the Almanac and signals slowly went stale (live prices were fine). Fixed: a few hours of normal use brings everything back up to date, and nothing was lost.",
       "Settings → Background problems now warns you if most of your price history falls more than 3 days behind, so a stall like that can't hide again.",
-      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice.",
+      "GE reader: if your Portfolio already has recent sales of an item at the same price, it warns you and logs only the new ones, so an offer's earlier fills aren't counted twice. It also recognises an offer by item and price, so adding items to a selling offer no longer re-logs everything.",
       "Money Makers → Construction: plank machine rows now take the machine's charge off Profit/Limit (it showed the manual figure), and the charge shows in whole coins.",
       "Search no longer goes blank for a while after a price fetch (prices read mid-save could empty the item list). It also says prices are still loading if you type before the very first fetch finishes. Background problems older than 7 days drop off by themselves.",
       "Android: files are saved safely (written in full, then swapped in), the phone app no longer thinks some desktop-only features exist, and watchlist notifications show item names again, not bare item numbers.",
@@ -17086,10 +17086,16 @@ function GeReaderModal({offer, items, toast, onClose, onSaved}) {
   const chosenOffer = offers.find(o => o.id === offerId) || guessOffer;
   const open = (portfolio.positions || []).filter(p => p.status === 'open' && (p.item_name || '').toLowerCase() === nameLow);
   const chosenPos = open.find(p => p.id === posId) || [...open].sort((a, b) => b.quantity - a.quantity)[0];
-  // Identifies the offer, so re-reading it only logs what's new. Price stays out of
-  // it since an offer's price can be edited in-game.
-  const logKey = [nameLow, num('quantity')].join('|');
-  const alreadySold = geSoldLog()[logKey] || 0;
+  // Identifies the offer, so re-reading it only logs what's new. Item + PRICE
+  // (2026-11-25): Ben's Dragon hatchet offer ran for weeks at 63K while he kept adding
+  // hatchets to it, and every quantity change looked like a new offer, so its whole
+  // "sold so far" was logged again (130 extra). Old item+quantity records still count.
+  // An edited price makes a new key; the Portfolio check below catches that case.
+  // If the offer shows fewer sold than logged, it's a new offer at the same price.
+  const logKey = [nameLow, '@' + num('price')].join('|');
+  const _log = geSoldLog();
+  let alreadySold = _log[logKey] ?? _log[[nameLow, num('quantity')].join('|')] ?? 0;
+  if (alreadySold > filled) alreadySold = 0;
   // Sales of this item already in the Portfolio at about this offer's price, in the
   // last 14 days, that this reader never logged (typed in by hand, or logged on another
   // device). Re-reading the offer then logged ALL of its fills again (2026-11-24: a
@@ -17990,6 +17996,8 @@ function App() {
       setShowTour(false); // the first-run tour would block every scripted test
       const wait = ms => new Promise(r => setTimeout(r, ms));
       window.__geniusTest = {
+        // Opens the GE reader with a made-up offer (test mode only).
+        geOffer: o => setGeOffer({...o, readAt:Date.now()}),
         tabs: () => NAV.filter(n => n.id).map(n => n.id),
         goto: async id => { setTab(id); await wait(500); return testStateRef.current.tab; },
         openItem: async name => {
