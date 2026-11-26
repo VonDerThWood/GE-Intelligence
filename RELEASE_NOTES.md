@@ -7,6 +7,7 @@ Tester request. The price chart has a new **Lines** row:
 - **30, 90 and 200-day moving averages**: the trend at a glance. A price stuck under its 200-day line for months is a long decline.
 - **90-day median (bid)**, dashed: the middle price of the last 90 days, day by day. Its latest point is what the Almanac bids.
 - Hover a line to see its value today. Your choices are remembered.
+- **Live price detail** (tester request): on phones, drag your finger along the chart to move through the times, instead of only tapping. The info box now moves to the other side of the chart from where you're looking, so it never covers the line.
 
 ### Almanac: bid and list, at a price, by a date
 "Buy now" and "Sell now" are gone. Each flag now says what to offer and until when:

@@ -853,9 +853,13 @@ function LiveTimeseriesChart({data}) {
   // the whole width (ignoring padding) put the highlighted point
   // noticeably left of the actual cursor — confirmed for real (// 2026-07-30): had to drag the mouse well past a point for the
   // highlight to catch up to it.
+  // Touch: dragging a finger scrubs through the points, like the GE price chart
+  // (tester, 2026-11-25: only tapping worked here). Mouse and finger share this.
   const onMove = e => {
+    const clientX = e.touches ? e.touches[0]?.clientX : e.clientX;
+    if (clientX == null) return;
     const rect = svgRef.current.getBoundingClientRect();
-    const svgX = ((e.clientX - rect.left) / rect.width) * w;
+    const svgX = ((clientX - rect.left) / rect.width) * w;
     const frac = (svgX - PAD_L) / chartW;
     const i = Math.round(frac * (pts.length - 1));
     setHoverIdx(Math.max(0, Math.min(pts.length-1, i)));
@@ -863,8 +867,10 @@ function LiveTimeseriesChart({data}) {
 
   return h('div', {style:{position:'relative'}},
     h('svg', {
-      ref: svgRef, viewBox:`0 0 ${w} ${ht + gap + volHt}`, style:{width:'100%', height:'auto', display:'block', cursor:'crosshair'},
+      ref: svgRef, viewBox:`0 0 ${w} ${ht + gap + volHt}`, style:{width:'100%', height:'auto', display:'block', cursor:'crosshair', touchAction:'pan-y'},
       onMouseMove: onMove, onMouseLeave: () => setHoverIdx(null),
+      // pan-y: up/down still scrolls the page; sideways drags scrub the chart.
+      onTouchStart: onMove, onTouchMove: onMove,
     },
       // Price lines
       h('path', {d:lineFor(buys),  fill:'none', stroke:T.green,  strokeWidth:1.5}),
@@ -890,8 +896,10 @@ function LiveTimeseriesChart({data}) {
     h('div', {style:{display:'flex', justifyContent:'space-between', padding:`2px ${PAD_R}px 0 ${PAD_L}px`, fontSize:9, color:T.textDim}},
       labelIdxs.map(i => h('span', {key:i}, fmtTime(pts[i].timestamp)))
     ),
+    // Sits on the side away from the point being looked at, so it never covers it
+    // (tester, 2026-11-25): right half -> box on the left, left half -> on the right.
     hoverIdx !== null && h('div', {style:{
-      position:'absolute', top:8, right:8,
+      position:'absolute', top:8, ...(hoverIdx > (pts.length - 1) / 2 ? {left:8} : {right:8}),
       background:T.panel2, border:`1px solid ${T.border}`, borderRadius:4,
       padding:'5px 10px', fontSize:11, color:T.text, pointerEvents:'none', zIndex:10,
       boxShadow:'0 2px 8px rgba(0,0,0,0.5)'
@@ -7128,7 +7136,7 @@ const APP_NEWS = [
     version: 'v3.1.0',
     items: [
       "Tester feedback, put to work: moving averages on the chart, an Almanac that tells you what to offer and until when, and price history that keeps itself up to date again.",
-      "Price chart: new Lines row with 30, 90 and 200-day moving averages, plus the 90-day median the Almanac bids at.",
+      "Price chart: new Lines row with 30, 90 and 200-day moving averages, plus the 90-day median the Almanac bids at. Live price detail: drag a finger to move through the times, and the info box moves out of the way of the line.",
       "Almanac: \"Buy now\" and \"Sell now\" are now \"Bid ~X until <date>\" and \"List at ~X by <date>\". Bids use the item's 90-day median, which beat buying instantly in testing.",
       "Almanac notifications now reach your phone: on by default (unless you turned them off), with their own section in Settings → Notifications.",
       "Almanac: bid ideas warn when an item is in a long decline (down 15%+ over 6 months and still falling), and notifications list those last, on their own line.",
