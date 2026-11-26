@@ -11,7 +11,7 @@ Tester request. The price chart has a new **Lines** row:
 
 ### Almanac: bid and list, at a price, by a date
 "Buy now" and "Sell now" are gone. Each flag now says what to offer and until when:
-- **Bid ~X each, until about <date>**: the item's 90-day median, never above today's live prices. Tested on the November DXP with the Almanac's own flags: bidding like this made a typical +11.7% per flag, against +4.0% for buying instantly.
+- **Bid ~X each, until about <date>**: the item's 90-day median, never above today's live prices. In a backtest on the November 2026 DXP's live prices (14 Almanac buy flags, each sold at its usual DXP peak), the median return per flag was +11.7% when bidding like this (unfilled bids counted as 0), against +4.0% when buying instantly. That's one DXP and a small sample, so treat it as encouraging, not proven.
 - **List at ~X each, by about <date>**: its 90-day median plus its usual DXP rise, never below what buyers pay now or your break-even.
 - Notifications read the same way: "Bid: Teak logs ~191 until Dec 4".
 
